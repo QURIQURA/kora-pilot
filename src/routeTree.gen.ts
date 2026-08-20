@@ -9,40 +9,46 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedExperimentsRouteImport } from './routes/_authenticated/experiments'
 import { Route as AuthenticatedFormulasRouteImport } from './routes/_authenticated/formulas'
 import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
 import { Route as AuthenticatedReferencesRouteImport } from './routes/_authenticated/references'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedExperimentsRoute =
   AuthenticatedExperimentsRouteImport.update({
-    id: '/_authenticated/experiments',
+    id: '/experiments',
     path: '/experiments',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedFormulasRoute = AuthenticatedFormulasRouteImport.update({
-  id: '/_authenticated/formulas',
+  id: '/formulas',
   path: '/formulas',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
-  id: '/_authenticated/knowledge',
+  id: '/knowledge',
   path: '/knowledge',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedReferencesRoute = AuthenticatedReferencesRouteImport.update({
-  id: '/_authenticated/references',
+  id: '/references',
   path: '/references',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
-  id: '/_authenticated/settings',
+  id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof AuthenticatedRouteRouteWithChildren
   '/experiments': typeof AuthenticatedExperimentsRoute
   '/formulas': typeof AuthenticatedFormulasRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
@@ -50,6 +56,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof AuthenticatedRouteRouteWithChildren
   '/experiments': typeof AuthenticatedExperimentsRoute
   '/formulas': typeof AuthenticatedFormulasRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/experiments': typeof AuthenticatedExperimentsRoute
   '/_authenticated/formulas': typeof AuthenticatedFormulasRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
@@ -67,11 +75,23 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/experiments' | '/formulas' | '/knowledge' | '/references' | '/settings'
+    | '/'
+    | '/experiments'
+    | '/formulas'
+    | '/knowledge'
+    | '/references'
+    | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/experiments' | '/formulas' | '/knowledge' | '/references' | '/settings'
+  to:
+    | '/'
+    | '/experiments'
+    | '/formulas'
+    | '/knowledge'
+    | '/references'
+    | '/settings'
   id:
     | '__root__'
+    | '/_authenticated'
     | '/_authenticated/experiments'
     | '/_authenticated/formulas'
     | '/_authenticated/knowledge'
@@ -80,6 +100,57 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+}
+
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/experiments': {
+      id: '/_authenticated/experiments'
+      path: '/experiments'
+      fullPath: '/experiments'
+      preLoaderRoute: typeof AuthenticatedExperimentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/formulas': {
+      id: '/_authenticated/formulas'
+      path: '/formulas'
+      fullPath: '/formulas'
+      preLoaderRoute: typeof AuthenticatedFormulasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/knowledge': {
+      id: '/_authenticated/knowledge'
+      path: '/knowledge'
+      fullPath: '/knowledge'
+      preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/references': {
+      id: '/_authenticated/references'
+      path: '/references'
+      fullPath: '/references'
+      preLoaderRoute: typeof AuthenticatedReferencesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+  }
+}
+
+interface AuthenticatedRouteRouteChildren {
   AuthenticatedExperimentsRoute: typeof AuthenticatedExperimentsRoute
   AuthenticatedFormulasRoute: typeof AuthenticatedFormulasRoute
   AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
@@ -87,52 +158,19 @@ export interface RootRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
 }
 
-declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/_authenticated/experiments': {
-      id: '/_authenticated/experiments'
-      path: '/experiments'
-      fullPath: '/experiments'
-      preLoaderRoute: typeof AuthenticatedExperimentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/formulas': {
-      id: '/_authenticated/formulas'
-      path: '/formulas'
-      fullPath: '/formulas'
-      preLoaderRoute: typeof AuthenticatedFormulasRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/knowledge': {
-      id: '/_authenticated/knowledge'
-      path: '/knowledge'
-      fullPath: '/knowledge'
-      preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/references': {
-      id: '/_authenticated/references'
-      path: '/references'
-      fullPath: '/references'
-      preLoaderRoute: typeof AuthenticatedReferencesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-  }
-}
-
-const rootRouteChildren: RootRouteChildren = {
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedExperimentsRoute: AuthenticatedExperimentsRoute,
   AuthenticatedFormulasRoute: AuthenticatedFormulasRoute,
   AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
   AuthenticatedReferencesRoute: AuthenticatedReferencesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
+const rootRouteChildren: RootRouteChildren = {
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
