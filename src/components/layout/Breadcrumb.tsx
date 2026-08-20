@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
+import { useBreadcrumbSegments, type CrumbSegment } from "./breadcrumb-context";
 
 export function Breadcrumb() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const override = useBreadcrumbSegments();
   const [expanded, setExpanded] = useState(false);
 
-  const segments = buildSegments(pathname);
+  const segments: CrumbSegment[] = override ?? buildSegments(pathname);
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-background px-4 py-3 md:px-6">
@@ -35,19 +37,22 @@ export function Breadcrumb() {
               return null;
             }
 
+            const className = cn(
+              "label-caps transition-colors",
+              isLast
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            );
+
             return (
-              <li key={segment.path} className="flex items-center">
-                <Link
-                  to={segment.path}
-                  className={cn(
-                    "label-caps transition-colors",
-                    isLast
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {segment.label}
-                </Link>
+              <li key={`${segment.label}-${index}`} className="flex items-center">
+                {segment.path ? (
+                  <Link to={segment.path} className={className}>
+                    {segment.label}
+                  </Link>
+                ) : (
+                  <span className={className}>{segment.label}</span>
+                )}
                 {!isLast && (
                   <span className="ml-2 text-muted-foreground">/</span>
                 )}
@@ -60,9 +65,9 @@ export function Breadcrumb() {
   );
 }
 
-function buildSegments(pathname: string): { label: string; path: string }[] {
+function buildSegments(pathname: string): CrumbSegment[] {
   const parts = pathname.split("/").filter(Boolean);
-  const segments: { label: string; path: string }[] = [{ label: "PILOT", path: "/" }];
+  const segments: CrumbSegment[] = [{ label: "PILOT", path: "/" }];
   let currentPath = "";
 
   for (const part of parts) {
