@@ -4,6 +4,7 @@ import { cn } from "../../lib/utils";
 const TOP_ITEMS = [
   { label: "DASHBOARD", to: "/" },
   { label: "PRODUCTS", to: "/products" },
+  { label: "COMPONENTS", to: "/components" },
   { label: "FORMULAS", to: "/formulas" },
   { label: "EXPERIMENTS", to: "/experiments" },
   { label: "KNOWLEDGE", to: "/knowledge" },

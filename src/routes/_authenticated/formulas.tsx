@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { EmptyState } from "../components/EmptyState";
+import { EmptyState } from "@/components/EmptyState";
 
-export const Route = createFileRoute("/formulas")({
+export const Route = createFileRoute("/_authenticated/formulas")({
   head: () => ({
     meta: [
       { title: "PILOT — Formulas" },
