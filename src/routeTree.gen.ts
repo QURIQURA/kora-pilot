@@ -18,6 +18,7 @@ import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authentica
 import { Route as AuthenticatedReferencesRouteImport } from './routes/_authenticated/references'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedComponentsIndexRouteImport } from './routes/_authenticated/components/index'
+import { Route as AuthenticatedComponentsComponentIdRouteImport } from './routes/_authenticated/components/$componentId'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedProductsProductIdRouteImport } from './routes/_authenticated/products/$productId'
 
@@ -67,6 +68,12 @@ const AuthenticatedComponentsIndexRoute =
     path: '/components/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedComponentsComponentIdRoute =
+  AuthenticatedComponentsComponentIdRouteImport.update({
+    id: '/components/$componentId',
+    path: '/components/$componentId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProductsIndexRoute =
   AuthenticatedProductsIndexRouteImport.update({
     id: '/products/',
@@ -88,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components/': typeof AuthenticatedComponentsIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
@@ -100,6 +108,7 @@ export interface FileRoutesByTo {
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components': typeof AuthenticatedComponentsIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
@@ -114,6 +123,7 @@ export interface FileRoutesById {
   '/_authenticated/references': typeof AuthenticatedReferencesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
   '/_authenticated/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/_authenticated/components/': typeof AuthenticatedComponentsIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/knowledge'
     | '/references'
     | '/settings'
+    | '/components/$componentId'
     | '/products/$productId'
     | '/components/'
     | '/products/'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/references'
     | '/settings'
     | '/'
+    | '/components/$componentId'
     | '/products/$productId'
     | '/components'
     | '/products'
@@ -153,6 +165,7 @@ export interface FileRouteTypes {
     | '/_authenticated/references'
     | '/_authenticated/settings'
     | '/_authenticated/'
+    | '/_authenticated/components/$componentId'
     | '/_authenticated/products/$productId'
     | '/_authenticated/components/'
     | '/_authenticated/products/'
@@ -228,6 +241,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedComponentsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/components/$componentId': {
+      id: '/_authenticated/components/$componentId'
+      path: '/components/$componentId'
+      fullPath: '/components/$componentId'
+      preLoaderRoute: typeof AuthenticatedComponentsComponentIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/products/': {
       id: '/_authenticated/products/'
       path: '/products'
@@ -252,6 +272,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedReferencesRoute: typeof AuthenticatedReferencesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedComponentsComponentIdRoute: typeof AuthenticatedComponentsComponentIdRoute
   AuthenticatedProductsProductIdRoute: typeof AuthenticatedProductsProductIdRoute
   AuthenticatedComponentsIndexRoute: typeof AuthenticatedComponentsIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
@@ -264,6 +285,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedReferencesRoute: AuthenticatedReferencesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedComponentsComponentIdRoute:
+    AuthenticatedComponentsComponentIdRoute,
   AuthenticatedProductsProductIdRoute: AuthenticatedProductsProductIdRoute,
   AuthenticatedComponentsIndexRoute: AuthenticatedComponentsIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,

@@ -31,6 +31,7 @@ export const DEFAULT_TARGET_KEYS = [
 ] as const;
 
 export interface TargetAttribute {
+  [key: string]: string | undefined;
   key: string;
   value: string;
   note?: string;
