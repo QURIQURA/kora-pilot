@@ -19,6 +19,7 @@ import { Route as AuthenticatedReferencesRouteImport } from './routes/_authentic
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedComponentsIndexRouteImport } from './routes/_authenticated/components/index'
 import { Route as AuthenticatedComponentsComponentIdRouteImport } from './routes/_authenticated/components/$componentId'
+import { Route as AuthenticatedIngredientsIndexRouteImport } from './routes/_authenticated/ingredients/index'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedProductsProductIdRouteImport } from './routes/_authenticated/products/$productId'
 
@@ -74,6 +75,12 @@ const AuthenticatedComponentsComponentIdRoute =
     path: '/components/$componentId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedIngredientsIndexRoute =
+  AuthenticatedIngredientsIndexRouteImport.update({
+    id: '/ingredients/',
+    path: '/ingredients/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProductsIndexRoute =
   AuthenticatedProductsIndexRouteImport.update({
     id: '/products/',
@@ -98,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components/': typeof AuthenticatedComponentsIndexRoute
+  '/ingredients/': typeof AuthenticatedIngredientsIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -111,6 +119,7 @@ export interface FileRoutesByTo {
   '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components': typeof AuthenticatedComponentsIndexRoute
+  '/ingredients': typeof AuthenticatedIngredientsIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
 }
 export interface FileRoutesById {
@@ -126,6 +135,7 @@ export interface FileRoutesById {
   '/_authenticated/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
   '/_authenticated/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/_authenticated/components/': typeof AuthenticatedComponentsIndexRoute
+  '/_authenticated/ingredients/': typeof AuthenticatedIngredientsIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
 }
 export interface FileRouteTypes {
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/components/$componentId'
     | '/products/$productId'
     | '/components/'
+    | '/ingredients/'
     | '/products/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/components/$componentId'
     | '/products/$productId'
     | '/components'
+    | '/ingredients'
     | '/products'
   id:
     | '__root__'
@@ -168,6 +180,7 @@ export interface FileRouteTypes {
     | '/_authenticated/components/$componentId'
     | '/_authenticated/products/$productId'
     | '/_authenticated/components/'
+    | '/_authenticated/ingredients/'
     | '/_authenticated/products/'
   fileRoutesById: FileRoutesById
 }
@@ -248,6 +261,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedComponentsComponentIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/ingredients/': {
+      id: '/_authenticated/ingredients/'
+      path: '/ingredients'
+      fullPath: '/ingredients/'
+      preLoaderRoute: typeof AuthenticatedIngredientsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/products/': {
       id: '/_authenticated/products/'
       path: '/products'
@@ -275,6 +295,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedComponentsComponentIdRoute: typeof AuthenticatedComponentsComponentIdRoute
   AuthenticatedProductsProductIdRoute: typeof AuthenticatedProductsProductIdRoute
   AuthenticatedComponentsIndexRoute: typeof AuthenticatedComponentsIndexRoute
+  AuthenticatedIngredientsIndexRoute: typeof AuthenticatedIngredientsIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
 }
 
@@ -289,6 +310,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedComponentsComponentIdRoute,
   AuthenticatedProductsProductIdRoute: AuthenticatedProductsProductIdRoute,
   AuthenticatedComponentsIndexRoute: AuthenticatedComponentsIndexRoute,
+  AuthenticatedIngredientsIndexRoute: AuthenticatedIngredientsIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
 }
 
