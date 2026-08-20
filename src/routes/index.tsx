@@ -1,23 +1,46 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { EmptyState } from "../components/EmptyState";
+import { widgets } from "../widgets/registry";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "PILOT — Dashboard" },
+      { name: "description", content: "PILOT dashboard for personal pastry R&D" },
+      { property: "og:title", content: "PILOT — Dashboard" },
+      {
+        property: "og:description",
+        content: "PILOT dashboard for personal pastry R&D",
+      },
+    ],
+  }),
+  component: DashboardPage,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function DashboardPage() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
+    <div className="space-y-6">
+      <div className="border-b border-border pb-4">
+        <h1 className="label-caps text-foreground">DASHBOARD</h1>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {widgets.map((widget) => (
+          <div
+            key={widget.id}
+            className="border border-border bg-card p-4 md:p-5"
+          >
+            <h2 className="label-caps mb-4 text-muted-foreground">
+              {widget.title}
+            </h2>
+            <widget.component />
+          </div>
+        ))}
+      </div>
+
+      <EmptyState
+        message="NO ACTIVE PRODUCTS YET"
+        actionLabel="+ CREATE PRODUCT"
       />
     </div>
   );
