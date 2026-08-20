@@ -20,6 +20,7 @@ import {
   type ProductStatus,
   type TargetAttribute,
 } from "@/lib/pilot";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import {
@@ -75,7 +76,7 @@ function ProductDetailPage() {
   };
 
   const updateProduct = useMutation({
-    mutationFn: async (patch: Record<string, unknown>) => {
+    mutationFn: async (patch: TablesUpdate<"products">) => {
       const { error } = await supabase
         .from("products")
         .update(patch)

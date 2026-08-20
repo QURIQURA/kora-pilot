@@ -20,7 +20,6 @@ import { EmptyState } from "@/components/EmptyState";
 import {
   Field,
   PageHeader,
-  SectionCard,
   StatusBadge,
   buttonClass,
   inputClass,
@@ -319,5 +318,3 @@ function CreateProductDialog({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
-
-export { SectionCard };
