@@ -165,7 +165,7 @@ function CategoryRow({
 }: {
   category: Category;
   depth: number;
-  usage?: CategoryUsage;
+  usage?: CategoryUsage | undefined;
   onRename: (name: string) => void;
   onColor: (color: string) => void;
   onDelete: () => void;
@@ -221,7 +221,7 @@ function DeleteCategoryDialog({
   onConfirm,
 }: {
   category: Category;
-  usage?: CategoryUsage;
+  usage?: CategoryUsage | undefined;
   categories: Category[];
   pending: boolean;
   onCancel: () => void;
