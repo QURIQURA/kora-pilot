@@ -20,6 +20,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedComponentsIndexRouteImport } from './routes/_authenticated/components/index'
 import { Route as AuthenticatedComponentsComponentIdRouteImport } from './routes/_authenticated/components/$componentId'
 import { Route as AuthenticatedIngredientsIndexRouteImport } from './routes/_authenticated/ingredients/index'
+import { Route as AuthenticatedIngredientsIngredientIdRouteImport } from './routes/_authenticated/ingredients/$ingredientId'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedProductsProductIdRouteImport } from './routes/_authenticated/products/$productId'
 
@@ -81,6 +82,12 @@ const AuthenticatedIngredientsIndexRoute =
     path: '/ingredients/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedIngredientsIngredientIdRoute =
+  AuthenticatedIngredientsIngredientIdRouteImport.update({
+    id: '/ingredients/$ingredientId',
+    path: '/ingredients/$ingredientId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProductsIndexRoute =
   AuthenticatedProductsIndexRouteImport.update({
     id: '/products/',
@@ -103,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
+  '/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components/': typeof AuthenticatedComponentsIndexRoute
   '/ingredients/': typeof AuthenticatedIngredientsIndexRoute
@@ -117,6 +125,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
   '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
+  '/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components': typeof AuthenticatedComponentsIndexRoute
   '/ingredients': typeof AuthenticatedIngredientsIndexRoute
@@ -133,6 +142,7 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
+  '/_authenticated/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
   '/_authenticated/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/_authenticated/components/': typeof AuthenticatedComponentsIndexRoute
   '/_authenticated/ingredients/': typeof AuthenticatedIngredientsIndexRoute
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/references'
     | '/settings'
     | '/components/$componentId'
+    | '/ingredients/$ingredientId'
     | '/products/$productId'
     | '/components/'
     | '/ingredients/'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/'
     | '/components/$componentId'
+    | '/ingredients/$ingredientId'
     | '/products/$productId'
     | '/components'
     | '/ingredients'
@@ -178,6 +190,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/'
     | '/_authenticated/components/$componentId'
+    | '/_authenticated/ingredients/$ingredientId'
     | '/_authenticated/products/$productId'
     | '/_authenticated/components/'
     | '/_authenticated/ingredients/'
@@ -268,6 +281,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIngredientsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/ingredients/$ingredientId': {
+      id: '/_authenticated/ingredients/$ingredientId'
+      path: '/ingredients/$ingredientId'
+      fullPath: '/ingredients/$ingredientId'
+      preLoaderRoute: typeof AuthenticatedIngredientsIngredientIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/products/': {
       id: '/_authenticated/products/'
       path: '/products'
@@ -293,6 +313,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedComponentsComponentIdRoute: typeof AuthenticatedComponentsComponentIdRoute
+  AuthenticatedIngredientsIngredientIdRoute: typeof AuthenticatedIngredientsIngredientIdRoute
   AuthenticatedProductsProductIdRoute: typeof AuthenticatedProductsProductIdRoute
   AuthenticatedComponentsIndexRoute: typeof AuthenticatedComponentsIndexRoute
   AuthenticatedIngredientsIndexRoute: typeof AuthenticatedIngredientsIndexRoute
@@ -308,6 +329,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedComponentsComponentIdRoute:
     AuthenticatedComponentsComponentIdRoute,
+  AuthenticatedIngredientsIngredientIdRoute:
+    AuthenticatedIngredientsIngredientIdRoute,
   AuthenticatedProductsProductIdRoute: AuthenticatedProductsProductIdRoute,
   AuthenticatedComponentsIndexRoute: AuthenticatedComponentsIndexRoute,
   AuthenticatedIngredientsIndexRoute: AuthenticatedIngredientsIndexRoute,
