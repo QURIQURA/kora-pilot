@@ -9,201 +9,130 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as ExperimentsRouteImport } from './routes/experiments'
-import { Route as FormulasRouteImport } from './routes/formulas'
-import { Route as IngredientsRouteImport } from './routes/ingredients'
-import { Route as KnowledgeRouteImport } from './routes/knowledge'
-import { Route as ProductsRouteImport } from './routes/products'
-import { Route as ReferencesRouteImport } from './routes/references'
-import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as AuthenticatedExperimentsRouteImport } from './routes/_authenticated/experiments'
+import { Route as AuthenticatedFormulasRouteImport } from './routes/_authenticated/formulas'
+import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
+import { Route as AuthenticatedReferencesRouteImport } from './routes/_authenticated/references'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ExperimentsRoute = ExperimentsRouteImport.update({
-  id: '/experiments',
-  path: '/experiments',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FormulasRoute = FormulasRouteImport.update({
-  id: '/formulas',
+const AuthenticatedExperimentsRoute =
+  AuthenticatedExperimentsRouteImport.update({
+    id: '/_authenticated/experiments',
+    path: '/experiments',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AuthenticatedFormulasRoute = AuthenticatedFormulasRouteImport.update({
+  id: '/_authenticated/formulas',
   path: '/formulas',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IngredientsRoute = IngredientsRouteImport.update({
-  id: '/ingredients',
-  path: '/ingredients',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const KnowledgeRoute = KnowledgeRouteImport.update({
-  id: '/knowledge',
+const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
+  id: '/_authenticated/knowledge',
   path: '/knowledge',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProductsRoute = ProductsRouteImport.update({
-  id: '/products',
-  path: '/products',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReferencesRoute = ReferencesRouteImport.update({
-  id: '/references',
+const AuthenticatedReferencesRoute = AuthenticatedReferencesRouteImport.update({
+  id: '/_authenticated/references',
   path: '/references',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/_authenticated/settings',
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/experiments': typeof ExperimentsRoute
-  '/formulas': typeof FormulasRoute
-  '/ingredients': typeof IngredientsRoute
-  '/knowledge': typeof KnowledgeRoute
-  '/products': typeof ProductsRoute
-  '/references': typeof ReferencesRoute
-  '/settings': typeof SettingsRoute
+  '/experiments': typeof AuthenticatedExperimentsRoute
+  '/formulas': typeof AuthenticatedFormulasRoute
+  '/knowledge': typeof AuthenticatedKnowledgeRoute
+  '/references': typeof AuthenticatedReferencesRoute
+  '/settings': typeof AuthenticatedSettingsRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/experiments': typeof ExperimentsRoute
-  '/formulas': typeof FormulasRoute
-  '/ingredients': typeof IngredientsRoute
-  '/knowledge': typeof KnowledgeRoute
-  '/products': typeof ProductsRoute
-  '/references': typeof ReferencesRoute
-  '/settings': typeof SettingsRoute
+  '/experiments': typeof AuthenticatedExperimentsRoute
+  '/formulas': typeof AuthenticatedFormulasRoute
+  '/knowledge': typeof AuthenticatedKnowledgeRoute
+  '/references': typeof AuthenticatedReferencesRoute
+  '/settings': typeof AuthenticatedSettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/experiments': typeof ExperimentsRoute
-  '/formulas': typeof FormulasRoute
-  '/ingredients': typeof IngredientsRoute
-  '/knowledge': typeof KnowledgeRoute
-  '/products': typeof ProductsRoute
-  '/references': typeof ReferencesRoute
-  '/settings': typeof SettingsRoute
+  '/_authenticated/experiments': typeof AuthenticatedExperimentsRoute
+  '/_authenticated/formulas': typeof AuthenticatedFormulasRoute
+  '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
+  '/_authenticated/references': typeof AuthenticatedReferencesRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/'
-    | '/experiments'
-    | '/formulas'
-    | '/ingredients'
-    | '/knowledge'
-    | '/products'
-    | '/references'
-    | '/settings'
+    '/experiments' | '/formulas' | '/knowledge' | '/references' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/experiments'
-    | '/formulas'
-    | '/ingredients'
-    | '/knowledge'
-    | '/products'
-    | '/references'
-    | '/settings'
+  to: '/experiments' | '/formulas' | '/knowledge' | '/references' | '/settings'
   id:
     | '__root__'
-    | '/'
-    | '/experiments'
-    | '/formulas'
-    | '/ingredients'
-    | '/knowledge'
-    | '/products'
-    | '/references'
-    | '/settings'
+    | '/_authenticated/experiments'
+    | '/_authenticated/formulas'
+    | '/_authenticated/knowledge'
+    | '/_authenticated/references'
+    | '/_authenticated/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  ExperimentsRoute: typeof ExperimentsRoute
-  FormulasRoute: typeof FormulasRoute
-  IngredientsRoute: typeof IngredientsRoute
-  KnowledgeRoute: typeof KnowledgeRoute
-  ProductsRoute: typeof ProductsRoute
-  ReferencesRoute: typeof ReferencesRoute
-  SettingsRoute: typeof SettingsRoute
+  AuthenticatedExperimentsRoute: typeof AuthenticatedExperimentsRoute
+  AuthenticatedFormulasRoute: typeof AuthenticatedFormulasRoute
+  AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
+  AuthenticatedReferencesRoute: typeof AuthenticatedReferencesRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/experiments': {
-      id: '/experiments'
+    '/_authenticated/experiments': {
+      id: '/_authenticated/experiments'
       path: '/experiments'
       fullPath: '/experiments'
-      preLoaderRoute: typeof ExperimentsRouteImport
+      preLoaderRoute: typeof AuthenticatedExperimentsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/formulas': {
-      id: '/formulas'
+    '/_authenticated/formulas': {
+      id: '/_authenticated/formulas'
       path: '/formulas'
       fullPath: '/formulas'
-      preLoaderRoute: typeof FormulasRouteImport
+      preLoaderRoute: typeof AuthenticatedFormulasRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/ingredients': {
-      id: '/ingredients'
-      path: '/ingredients'
-      fullPath: '/ingredients'
-      preLoaderRoute: typeof IngredientsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/knowledge': {
-      id: '/knowledge'
+    '/_authenticated/knowledge': {
+      id: '/_authenticated/knowledge'
       path: '/knowledge'
       fullPath: '/knowledge'
-      preLoaderRoute: typeof KnowledgeRouteImport
+      preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/products': {
-      id: '/products'
-      path: '/products'
-      fullPath: '/products'
-      preLoaderRoute: typeof ProductsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/references': {
-      id: '/references'
+    '/_authenticated/references': {
+      id: '/_authenticated/references'
       path: '/references'
       fullPath: '/references'
-      preLoaderRoute: typeof ReferencesRouteImport
+      preLoaderRoute: typeof AuthenticatedReferencesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings': {
-      id: '/settings'
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
       path: '/settings'
       fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  ExperimentsRoute: ExperimentsRoute,
-  FormulasRoute: FormulasRoute,
-  IngredientsRoute: IngredientsRoute,
-  KnowledgeRoute: KnowledgeRoute,
-  ProductsRoute: ProductsRoute,
-  ReferencesRoute: ReferencesRoute,
-  SettingsRoute: SettingsRoute,
+  AuthenticatedExperimentsRoute: AuthenticatedExperimentsRoute,
+  AuthenticatedFormulasRoute: AuthenticatedFormulasRoute,
+  AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
+  AuthenticatedReferencesRoute: AuthenticatedReferencesRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
