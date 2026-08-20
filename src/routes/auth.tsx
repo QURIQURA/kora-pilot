@@ -9,7 +9,6 @@ import {
 } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/auth")({
-  ssr: false,
   head: () => ({
     meta: [
       { title: "PILOT — Sign In" },
