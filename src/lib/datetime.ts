@@ -41,11 +41,13 @@ export function toLocalDateString(date: Date = new Date()): string {
  * 날짜 파트를 숫자로 분해한 후 Date(year, month-1, day)로 생성한다.
  */
 export function parseLocalDate(dateStr: string): Date {
-  const match = /^\d{4}-\d{2}-\d{2}$/.exec(dateStr);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   if (!match) {
     throw new Error(`Invalid date string: ${dateStr}. Expected YYYY-MM-DD.`);
   }
-  const [year, month, day] = dateStr.split("-").map(Number);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
   return new Date(year, month - 1, day);
 }
 
