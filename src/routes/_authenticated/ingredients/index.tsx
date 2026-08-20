@@ -9,7 +9,7 @@ import {
   ingredientFunctionsQuery,
   ingredientsQuery,
 } from "@/lib/queries";
-import { categoryPathLabel, flattenCategories } from "@/lib/pilot";
+import { categoryPathLabel } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";

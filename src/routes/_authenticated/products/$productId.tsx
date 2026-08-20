@@ -15,7 +15,6 @@ import {
 import {
   categoryPath,
   DEFAULT_TARGET_KEYS,
-  flattenCategories,
   parseTarget,
   PRODUCT_STATUSES,
   type ProductStatus,

@@ -10,7 +10,7 @@ import {
   ingredientFunctionsQuery,
   ingredientQuery,
 } from "@/lib/queries";
-import { categoryPath, flattenCategories } from "@/lib/pilot";
+import { categoryPath } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";
