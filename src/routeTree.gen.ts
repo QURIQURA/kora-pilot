@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedExperimentsRouteImport } from './routes/_authenticated/experiments'
 import { Route as AuthenticatedFormulasRouteImport } from './routes/_authenticated/formulas'
 import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
@@ -18,6 +19,11 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedExperimentsRoute =
@@ -49,6 +55,7 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
   '/experiments': typeof AuthenticatedExperimentsRoute
   '/formulas': typeof AuthenticatedFormulasRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
   '/experiments': typeof AuthenticatedExperimentsRoute
   '/formulas': typeof AuthenticatedFormulasRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
@@ -66,6 +74,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
   '/_authenticated/experiments': typeof AuthenticatedExperimentsRoute
   '/_authenticated/formulas': typeof AuthenticatedFormulasRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
@@ -76,6 +85,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/auth'
     | '/experiments'
     | '/formulas'
     | '/knowledge'
@@ -84,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/auth'
     | '/experiments'
     | '/formulas'
     | '/knowledge'
@@ -92,6 +103,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
+    | '/auth'
     | '/_authenticated/experiments'
     | '/_authenticated/formulas'
     | '/_authenticated/knowledge'
@@ -101,6 +113,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -110,6 +123,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/experiments': {
@@ -171,6 +191,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
