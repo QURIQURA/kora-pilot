@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { EmptyState } from "../components/EmptyState";
+import { EmptyState } from "@/components/EmptyState";
 
-export const Route = createFileRoute("/references")({
+export const Route = createFileRoute("/_authenticated/references")({
   head: () => ({
     meta: [
       { title: "PILOT — References" },

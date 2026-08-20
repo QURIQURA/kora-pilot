@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { EmptyState } from "../components/EmptyState";
+import { EmptyState } from "@/components/EmptyState";
 
-export const Route = createFileRoute("/experiments")({
+export const Route = createFileRoute("/_authenticated/experiments")({
   head: () => ({
     meta: [
       { title: "PILOT — Experiments" },
