@@ -44,7 +44,7 @@ function NavItem({
   onClick,
 }: {
   item: { label: string; to: string };
-  onClick?: () => void;
+  onClick?: (() => void) | undefined;
 }) {
   return (
     <Link
