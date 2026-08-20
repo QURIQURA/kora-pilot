@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { CategorySelect } from "@/components/pilot/CategorySelect";
 import {
   categoriesQuery,
   componentsQuery,
@@ -14,7 +15,6 @@ import {
 import {
   categoryPath,
   DEFAULT_TARGET_KEYS,
-  flattenCategories,
   parseTarget,
   PRODUCT_STATUSES,
   type ProductStatus,
@@ -164,20 +164,12 @@ function ProductDetailPage() {
               </option>
             ))}
           </select>
-          <select
+          <CategorySelect
             className={selectClass + " w-auto"}
             value={data.category_id ?? ""}
-            onChange={(e) =>
-              updateProduct.mutate({ category_id: e.target.value || null })
-            }
-          >
-            <option value="">NO CATEGORY</option>
-            {flattenCategories(categoryList).map(({ category, depth }) => (
-              <option key={category.id} value={category.id}>
-                {`${"— ".repeat(depth)}${category.name}`}
-              </option>
-            ))}
-          </select>
+            onChange={(id) => updateProduct.mutate({ category_id: id || null })}
+            emptyLabel="NO CATEGORY"
+          />
         </div>
       </div>
 
@@ -610,20 +602,12 @@ function AddComponentPanel({
             NO MATCH
           </p>
           <Field label="CATEGORY (OPTIONAL)">
-            <select
+            <CategorySelect
               className={selectClass}
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-            >
-              <option value="">—</option>
-              {flattenCategories(categories.data ?? []).map(
-                ({ category, depth }) => (
-                  <option key={category.id} value={category.id}>
-                    {`${"— ".repeat(depth)}${category.name}`}
-                  </option>
-                )
-              )}
-            </select>
+              onChange={setCategoryId}
+              emptyLabel="—"
+            />
           </Field>
           <button
             type="button"

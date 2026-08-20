@@ -178,3 +178,55 @@ export async function currentUserId(): Promise<string> {
   if (error || !data.user) throw new Error("Not signed in");
   return data.user.id;
 }
+
+export interface CategoryUsage {
+  products: number;
+  components: number;
+  ingredients: number;
+  children: number;
+  total: number;
+}
+
+export const categoryUsageQuery = () =>
+  queryOptions({
+    queryKey: ["category_usage"],
+    queryFn: async (): Promise<Record<string, CategoryUsage>> => {
+      const [products, components, ingredients, categories] = await Promise.all([
+        supabase.from("products").select("category_id"),
+        supabase.from("components").select("category_id"),
+        supabase.from("ingredients").select("category_id"),
+        supabase.from("categories").select("parent_id"),
+      ]);
+      const map: Record<string, CategoryUsage> = {};
+      const bump = (id: string | null, key: keyof CategoryUsage) => {
+        if (!id) return;
+        const entry =
+          map[id] ??
+          (map[id] = {
+            products: 0,
+            components: 0,
+            ingredients: 0,
+            children: 0,
+            total: 0,
+          });
+        (entry[key] as number) += 1;
+        entry.total += 1;
+      };
+      for (const row of unwrap(products)) bump(row.category_id, "products");
+      for (const row of unwrap(components)) bump(row.category_id, "components");
+      for (const row of unwrap(ingredients)) bump(row.category_id, "ingredients");
+      for (const row of unwrap(categories)) bump(row.parent_id, "children");
+      return map;
+    },
+  });
+
+export const tagUsageQuery = () =>
+  queryOptions({
+    queryKey: ["tag_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(await supabase.from("product_tags").select("tag_id"));
+      const map: Record<string, number> = {};
+      for (const row of rows) map[row.tag_id] = (map[row.tag_id] ?? 0) + 1;
+      return map;
+    },
+  });

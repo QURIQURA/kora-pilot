@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { CategorySelect } from "@/components/pilot/CategorySelect";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import {
   categoriesQuery,
@@ -9,7 +10,7 @@ import {
   ingredientFunctionsQuery,
   ingredientQuery,
 } from "@/lib/queries";
-import { categoryPath, flattenCategories } from "@/lib/pilot";
+import { categoryPath } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";
@@ -146,18 +147,12 @@ function IngredientDetailPage() {
             UPDATED {formatDateTime(data.updated_at)}
           </p>
         </div>
-        <select
+        <CategorySelect
           className={selectClass + " w-auto"}
           value={data.category_id ?? ""}
-          onChange={(e) => update.mutate({ category_id: e.target.value || null })}
-        >
-          <option value="">NO CATEGORY</option>
-          {flattenCategories(categoryList).map(({ category, depth }) => (
-            <option key={category.id} value={category.id}>
-              {`${"— ".repeat(depth)}${category.name}`}
-            </option>
-          ))}
-        </select>
+          onChange={(id) => update.mutate({ category_id: id || null })}
+          emptyLabel="NO CATEGORY"
+        />
       </div>
 
       <SectionCard title="FUNCTIONS">

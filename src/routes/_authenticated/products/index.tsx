@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { CategorySelect } from "@/components/pilot/CategorySelect";
 import {
   categoriesQuery,
   currentUserId,
@@ -268,20 +269,12 @@ function CreateProductDialog({ onClose }: { onClose: () => void }) {
             />
           </Field>
           <Field label="CATEGORY">
-            <select
+            <CategorySelect
               className={selectClass}
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-            >
-              <option value="">—</option>
-              {flattenCategories(categories.data ?? []).map(
-                ({ category, depth }) => (
-                  <option key={category.id} value={category.id}>
-                    {`${"— ".repeat(depth)}${category.name}`}
-                  </option>
-                )
-              )}
-            </select>
+              onChange={setCategoryId}
+              emptyLabel="—"
+            />
           </Field>
           <Field label="STATUS">
             <select
