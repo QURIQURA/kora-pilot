@@ -10,7 +10,9 @@ WANN-PLANNER 코드베이스를 스냅샷으로 열어 확인했습니다. 해�
 
 - `--background #F5F4F1`, `--foreground #1A1A18`, `--border/--input #D4D3CE`, `--muted-foreground` 는 중간 그레이 (oklch 표기)
 - `--radius: 0`(사실상 sharp), 그림자/그라데이션 토큰 미사용
-- 폰트: `__root.tsx` head에 Google Fonts `<link>` (DM Mono 300, IBM Plex Mono 300/400) → `@theme`에 `--font-mono`, `--font-display`
+- 폰트: `__root.tsx` head에 Google Fonts `<link>` — DM Mono 300, IBM Plex Mono 300/400/500
+  - `@theme`에 `--font-body: "DM Mono", monospace`, `--font-mono: "IBM Plex Mono", monospace`
+  - 기본 본문은 DM Mono Light 300, 라벨/코드/네비게이션은 IBM Plex Mono
 - `@utility label-caps`: UPPERCASE + letter-spacing, 라벨 전용
 
 ## 2. 날짜/시간 유틸 (가장 먼저)
