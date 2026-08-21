@@ -96,6 +96,158 @@ export type Database = {
           },
         ]
       }
+      formula_version_ingredients: {
+        Row: {
+          amount: number
+          created_at: string
+          formula_version_id: string
+          id: string
+          ingredient_id: string
+          note: string | null
+          sort_order: number
+          unit: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          formula_version_id: string
+          id?: string
+          ingredient_id: string
+          note?: string | null
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          formula_version_id?: string
+          id?: string
+          ingredient_id?: string
+          note?: string | null
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formula_version_ingredients_formula_version_id_fkey"
+            columns: ["formula_version_id"]
+            isOneToOne: false
+            referencedRelation: "formula_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formula_version_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      formula_versions: {
+        Row: {
+          change_reason: string | null
+          change_summary: string | null
+          created_at: string
+          default_mould_id: string | null
+          formula_id: string
+          id: string
+          notes: string | null
+          status: Database["public"]["Enums"]["formula_status"]
+          updated_at: string
+          user_id: string
+          version_number: number
+          yield_quantity: number | null
+        }
+        Insert: {
+          change_reason?: string | null
+          change_summary?: string | null
+          created_at?: string
+          default_mould_id?: string | null
+          formula_id: string
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["formula_status"]
+          updated_at?: string
+          user_id: string
+          version_number?: number
+          yield_quantity?: number | null
+        }
+        Update: {
+          change_reason?: string | null
+          change_summary?: string | null
+          created_at?: string
+          default_mould_id?: string | null
+          formula_id?: string
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["formula_status"]
+          updated_at?: string
+          user_id?: string
+          version_number?: number
+          yield_quantity?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formula_versions_default_mould_id_fkey"
+            columns: ["default_mould_id"]
+            isOneToOne: false
+            referencedRelation: "moulds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formula_versions_formula_id_fkey"
+            columns: ["formula_id"]
+            isOneToOne: false
+            referencedRelation: "formulas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      formulas: {
+        Row: {
+          component_id: string | null
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          component_id?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          component_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formulas_component_id_fkey"
+            columns: ["component_id"]
+            isOneToOne: false
+            referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ingredient_function_links: {
         Row: {
           created_at: string
@@ -208,6 +360,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      moulds: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          shape_size: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          shape_size?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          shape_size?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       product_components: {
         Row: {
@@ -372,6 +554,12 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      formula_status:
+        | "DRAFT"
+        | "TESTING"
+        | "CURRENT"
+        | "SUPERSEDED"
+        | "ARCHIVED"
       product_status: "IDEA" | "ACTIVE" | "TESTING" | "STABLE" | "ARCHIVED"
     }
     CompositeTypes: {
@@ -500,6 +688,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      formula_status: ["DRAFT", "TESTING", "CURRENT", "SUPERSEDED", "ARCHIVED"],
       product_status: ["IDEA", "ACTIVE", "TESTING", "STABLE", "ARCHIVED"],
     },
   },
