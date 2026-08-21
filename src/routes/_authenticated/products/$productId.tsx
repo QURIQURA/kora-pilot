@@ -23,6 +23,7 @@ import {
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
+import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
 import {
   Field,
   NextPhaseSection,
@@ -242,7 +243,7 @@ function ProductDetailPage() {
       </SectionCard>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <NextPhaseSection title="FORMULAS" />
+        <ProductFormulasSection productId={productId} />
         <NextPhaseSection title="EXPERIMENTS" />
         <NextPhaseSection title="OBSERVATIONS" />
         <NextPhaseSection title="KNOWLEDGE" />

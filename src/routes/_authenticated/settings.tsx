@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { TagManager } from "@/components/pilot/TagManager";
+import { MouldManager } from "@/components/pilot/MouldManager";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -25,6 +26,7 @@ function SettingsPage() {
       </div>
       <CategoryManager />
       <TagManager />
+      <MouldManager />
     </div>
   );
 }

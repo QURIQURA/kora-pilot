@@ -230,3 +230,122 @@ export const tagUsageQuery = () =>
       return map;
     },
   });
+
+/* ── PHASE 3 — MOULDS / FORMULAS ─────────────────────────────── */
+
+import type {
+  Formula,
+  FormulaVersion,
+  Mould,
+} from "@/lib/formula";
+
+export const mouldsQuery = () =>
+  queryOptions({
+    queryKey: ["moulds"],
+    queryFn: async (): Promise<Mould[]> =>
+      unwrap(await supabase.from("moulds").select("*").order("name")),
+  });
+
+/** 몰드별 사용 횟수 (formula_versions.default_mould_id) */
+export const mouldUsageQuery = () =>
+  queryOptions({
+    queryKey: ["mould_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(
+        await supabase.from("formula_versions").select("default_mould_id")
+      );
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.default_mould_id)
+          map[row.default_mould_id] = (map[row.default_mould_id] ?? 0) + 1;
+      }
+      return map;
+    },
+  });
+
+export interface FormulaListRow extends Formula {
+  components: { id: string; name: string } | null;
+  formula_versions: {
+    id: string;
+    version_number: number;
+    status: FormulaVersion["status"];
+  }[];
+}
+
+export const formulasQuery = () =>
+  queryOptions({
+    queryKey: ["formulas"],
+    queryFn: async (): Promise<FormulaListRow[]> =>
+      unwrap(
+        await supabase
+          .from("formulas")
+          .select(
+            "*, components(id, name), formula_versions(id, version_number, status)"
+          )
+          .order("updated_at", { ascending: false })
+      ) as unknown as FormulaListRow[],
+  });
+
+export const formulaQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["formulas", id],
+    queryFn: async (): Promise<Formula> =>
+      unwrap(await supabase.from("formulas").select("*").eq("id", id).single()),
+  });
+
+export const formulaVersionsQuery = (formulaId: string) =>
+  queryOptions({
+    queryKey: ["formula_versions", formulaId],
+    queryFn: async (): Promise<FormulaVersion[]> =>
+      unwrap(
+        await supabase
+          .from("formula_versions")
+          .select("*")
+          .eq("formula_id", formulaId)
+          .order("version_number", { ascending: true })
+      ),
+  });
+
+export interface VersionIngredientRow {
+  id: string;
+  amount: number;
+  unit: string;
+  sort_order: number;
+  note: string | null;
+  ingredient_id: string;
+  ingredients: IngredientRow;
+}
+
+export const versionIngredientsQuery = (versionId: string | null) =>
+  queryOptions({
+    queryKey: ["formula_version_ingredients", versionId],
+    enabled: Boolean(versionId),
+    queryFn: async (): Promise<VersionIngredientRow[]> => {
+      if (!versionId) return [];
+      return unwrap(
+        await supabase
+          .from("formula_version_ingredients")
+          .select(
+            "id, amount, unit, sort_order, note, ingredient_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))"
+          )
+          .eq("formula_version_id", versionId)
+          .order("sort_order")
+      ) as unknown as VersionIngredientRow[];
+    },
+  });
+
+/** 특정 component들에 연결된 formula + 그 CURRENT 버전 요약 */
+export const formulasByComponentQuery = (componentId: string) =>
+  queryOptions({
+    queryKey: ["formulas_by_component", componentId],
+    queryFn: async (): Promise<FormulaListRow[]> =>
+      unwrap(
+        await supabase
+          .from("formulas")
+          .select(
+            "*, components(id, name), formula_versions(id, version_number, status)"
+          )
+          .eq("component_id", componentId)
+          .order("updated_at", { ascending: false })
+      ) as unknown as FormulaListRow[],
+  });

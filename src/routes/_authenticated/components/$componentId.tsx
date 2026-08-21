@@ -12,6 +12,7 @@ import {
 import { categoryPath } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
+import { ComponentFormulasSection } from "@/components/pilot/FormulaSummary";
 import {
   NextPhaseSection,
   SectionCard,
@@ -154,7 +155,7 @@ function ComponentDetailPage() {
       </SectionCard>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <NextPhaseSection title="FORMULAS" />
+        <ComponentFormulasSection componentId={componentId} />
         <NextPhaseSection title="EXPERIMENTS" />
       </div>
 
