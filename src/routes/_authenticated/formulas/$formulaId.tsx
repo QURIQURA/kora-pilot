@@ -608,6 +608,26 @@ function FormulaDetailPage() {
           }
         />
       )}
+
+      {creatingExperiment && versionId && (
+        <ExperimentCreateModal
+          preset={{
+            formulaId,
+            formulaVersionId: versionId,
+            componentId: formula.data.component_id,
+            mouldId: version?.default_mould_id ?? null,
+            batch: batchValue,
+          }}
+          onCancel={() => setCreatingExperiment(false)}
+          onCreated={(id) => {
+            setCreatingExperiment(false);
+            void navigate({
+              to: "/experiments/$experimentId",
+              params: { experimentId: id },
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

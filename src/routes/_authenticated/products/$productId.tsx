@@ -7,6 +7,7 @@ import {
   categoriesQuery,
   componentsQuery,
   currentUserId,
+  experimentsByProductQuery,
   productComponentsQuery,
   productQuery,
   productTagsQuery,
@@ -24,6 +25,7 @@ import type { TablesUpdate } from "@/integrations/supabase/types";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
+import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   Field,
   NextPhaseSection,
@@ -60,6 +62,7 @@ function ProductDetailPage() {
   const links = useQuery(productComponentsQuery(productId));
   const tags = useQuery(tagsQuery());
   const productTags = useQuery(productTagsQuery(productId));
+  const experiments = useQuery(experimentsByProductQuery(productId));
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, product.data?.category_id ?? null);
@@ -244,7 +247,19 @@ function ProductDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ProductFormulasSection productId={productId} />
-        <NextPhaseSection title="EXPERIMENTS" />
+        <SectionCard
+          title="EXPERIMENTS"
+          action={
+            <Link
+              to="/experiments"
+              className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+            >
+              VIEW ALL
+            </Link>
+          }
+        >
+          <ExperimentListItems items={experiments.data ?? []} />
+        </SectionCard>
         <NextPhaseSection title="OBSERVATIONS" />
         <NextPhaseSection title="KNOWLEDGE" />
       </div>
