@@ -96,6 +96,104 @@ export type Database = {
           },
         ]
       }
+      experiments: {
+        Row: {
+          ai_interpretation: string | null
+          batch_multiplier: number
+          component_id: string | null
+          conclusion: string | null
+          control_variables: string | null
+          created_at: string
+          date: string
+          experiment_number: number | null
+          formula_version_id: string | null
+          hypothesis: string | null
+          id: string
+          mould_id: string | null
+          next_experiment: string | null
+          notes: string | null
+          product_id: string | null
+          result: string | null
+          status: Database["public"]["Enums"]["experiment_status"]
+          updated_at: string
+          user_id: string
+          variables: string | null
+        }
+        Insert: {
+          ai_interpretation?: string | null
+          batch_multiplier?: number
+          component_id?: string | null
+          conclusion?: string | null
+          control_variables?: string | null
+          created_at?: string
+          date?: string
+          experiment_number?: number | null
+          formula_version_id?: string | null
+          hypothesis?: string | null
+          id?: string
+          mould_id?: string | null
+          next_experiment?: string | null
+          notes?: string | null
+          product_id?: string | null
+          result?: string | null
+          status?: Database["public"]["Enums"]["experiment_status"]
+          updated_at?: string
+          user_id: string
+          variables?: string | null
+        }
+        Update: {
+          ai_interpretation?: string | null
+          batch_multiplier?: number
+          component_id?: string | null
+          conclusion?: string | null
+          control_variables?: string | null
+          created_at?: string
+          date?: string
+          experiment_number?: number | null
+          formula_version_id?: string | null
+          hypothesis?: string | null
+          id?: string
+          mould_id?: string | null
+          next_experiment?: string | null
+          notes?: string | null
+          product_id?: string | null
+          result?: string | null
+          status?: Database["public"]["Enums"]["experiment_status"]
+          updated_at?: string
+          user_id?: string
+          variables?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "experiments_component_id_fkey"
+            columns: ["component_id"]
+            isOneToOne: false
+            referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experiments_formula_version_id_fkey"
+            columns: ["formula_version_id"]
+            isOneToOne: false
+            referencedRelation: "formula_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experiments_mould_id_fkey"
+            columns: ["mould_id"]
+            isOneToOne: false
+            referencedRelation: "moulds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experiments_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       formula_version_ingredients: {
         Row: {
           amount: number
@@ -391,6 +489,44 @@ export type Database = {
         }
         Relationships: []
       }
+      observations: {
+        Row: {
+          created_at: string
+          experiment_id: string
+          id: string
+          label: string
+          note: string | null
+          user_id: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          experiment_id: string
+          id?: string
+          label?: string
+          note?: string | null
+          user_id: string
+          value?: string
+        }
+        Update: {
+          created_at?: string
+          experiment_id?: string
+          id?: string
+          label?: string
+          note?: string | null
+          user_id?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "observations_experiment_id_fkey"
+            columns: ["experiment_id"]
+            isOneToOne: false
+            referencedRelation: "experiments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_components: {
         Row: {
           component_id: string
@@ -554,6 +690,12 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      experiment_status:
+        | "PLANNED"
+        | "RUNNING"
+        | "COMPLETE"
+        | "FAILED"
+        | "CANCELLED"
       formula_status:
         | "DRAFT"
         | "TESTING"
@@ -688,6 +830,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      experiment_status: [
+        "PLANNED",
+        "RUNNING",
+        "COMPLETE",
+        "FAILED",
+        "CANCELLED",
+      ],
       formula_status: ["DRAFT", "TESTING", "CURRENT", "SUPERSEDED", "ARCHIVED"],
       product_status: ["IDEA", "ACTIVE", "TESTING", "STABLE", "ARCHIVED"],
     },
