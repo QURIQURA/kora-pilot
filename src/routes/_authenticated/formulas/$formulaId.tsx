@@ -358,7 +358,9 @@ function FormulaDetailPage() {
                 return;
               }
               const ok = confirm(
-                "이 버전은 확정 상태입니다.\n이 버전을 참조하는 실험이 있을 수 있습니다 — 배합 변경은 새 버전 생성을 권장합니다.\n오타 수정 등을 위해 잠금을 해제할까요?"
+                experimentCount > 0
+                  ? `실험 ${experimentCount}개가 이 버전을 참조 중 — 배합 변경은 새 버전 생성을 권장합니다.\n오타 수정 등을 위해 잠금을 해제할까요?`
+                  : "이 버전은 확정 상태입니다.\n배합 변경은 새 버전 생성을 권장합니다. 오타 수정 등을 위해 잠금을 해제할까요?"
               );
               if (ok) setUnlocked(true);
             }}
@@ -529,6 +531,23 @@ function FormulaDetailPage() {
           defaultValue={version?.notes ?? ""}
           onBlur={(e) => updateVersion.mutate({ notes: e.target.value })}
         />
+      </SectionCard>
+
+      {/* RELATED EXPERIMENTS */}
+      <SectionCard
+        title="RELATED EXPERIMENTS"
+        action={
+          <button
+            type="button"
+            className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+            onClick={() => setCreatingExperiment(true)}
+            disabled={!versionId}
+          >
+            + NEW EXPERIMENT
+          </button>
+        }
+      >
+        <ExperimentListItems items={versionExperiments.data ?? []} />
       </SectionCard>
 
       {/* HISTORY */}
