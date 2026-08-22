@@ -62,9 +62,9 @@ export function ExperimentCreateModal({
   const usage = useQuery(componentUsageQuery(componentId));
   const allProducts = useQuery(productsQuery());
   const productOptions = useMemo(() => {
-    const linked = (usage.data ?? [])
-      .map((row) => row.products)
-      .filter((p): p is { id: string; name: string } => Boolean(p));
+    const linked = (usage.data ?? []).flatMap((row) =>
+      row.products ? [{ id: row.products.id, name: row.products.name }] : []
+    );
     if (linked.length > 0) return linked;
     return (allProducts.data ?? []).map((p) => ({ id: p.id, name: p.name }));
   }, [usage.data, allProducts.data]);
@@ -72,7 +72,8 @@ export function ExperimentCreateModal({
   const [productId, setProductId] = useState(preset?.productId ?? "");
   useEffect(() => {
     if (productId) return;
-    if (productOptions.length > 0) setProductId(productOptions[0].id);
+    const first = productOptions[0];
+    if (first) setProductId(first.id);
   }, [productOptions, productId]);
 
   const [mouldId, setMouldId] = useState(preset?.mouldId ?? "");
@@ -91,7 +92,7 @@ export function ExperimentCreateModal({
     const current =
       versionList.find((v) => v.status === "CURRENT") ??
       versionList[versionList.length - 1];
-    setVersionId(current.id);
+    if (current) setVersionId(current.id);
   }, [versionList, versionId]);
 
   const [batch, setBatch] = useState(String(preset?.batch ?? 1));
