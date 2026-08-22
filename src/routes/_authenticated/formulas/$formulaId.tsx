@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
+  experimentsByVersionQuery,
   formulaQuery,
   formulaVersionsQuery,
   mouldsQuery,
@@ -27,6 +28,9 @@ import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
+import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
+import { ExperimentListItems } from "@/components/pilot/ExperimentList";
+import { experimentLabel } from "@/lib/experiment";
 import {
   Field,
   SectionCard,

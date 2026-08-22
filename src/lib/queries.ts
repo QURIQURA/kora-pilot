@@ -116,16 +116,19 @@ export interface ComponentUsageRow {
   products: Product;
 }
 
-export const componentUsageQuery = (componentId: string) =>
+export const componentUsageQuery = (componentId: string | null) =>
   queryOptions({
     queryKey: ["component_usage", componentId],
-    queryFn: async (): Promise<ComponentUsageRow[]> =>
-      unwrap(
+    enabled: Boolean(componentId),
+    queryFn: async (): Promise<ComponentUsageRow[]> => {
+      if (!componentId) return [];
+      return unwrap(
         await supabase
           .from("product_components")
           .select("id, products(*)")
           .eq("component_id", componentId)
-      ) as unknown as ComponentUsageRow[],
+      ) as unknown as ComponentUsageRow[];
+    },
   });
 
 export interface IngredientRow extends Ingredient {
@@ -293,17 +296,20 @@ export const formulaQuery = (id: string) =>
       unwrap(await supabase.from("formulas").select("*").eq("id", id).single()),
   });
 
-export const formulaVersionsQuery = (formulaId: string) =>
+export const formulaVersionsQuery = (formulaId: string | null) =>
   queryOptions({
     queryKey: ["formula_versions", formulaId],
-    queryFn: async (): Promise<FormulaVersion[]> =>
-      unwrap(
+    enabled: Boolean(formulaId),
+    queryFn: async (): Promise<FormulaVersion[]> => {
+      if (!formulaId) return [];
+      return unwrap(
         await supabase
           .from("formula_versions")
           .select("*")
           .eq("formula_id", formulaId)
           .order("version_number", { ascending: true })
-      ),
+      );
+    },
   });
 
 export interface VersionIngredientRow {
@@ -348,4 +354,125 @@ export const formulasByComponentQuery = (componentId: string) =>
           .eq("component_id", componentId)
           .order("updated_at", { ascending: false })
       ) as unknown as FormulaListRow[],
+  });
+
+/* ── PHASE 4A — EXPERIMENTS / OBSERVATIONS ───────────────────── */
+
+import type { Experiment, Observation } from "@/lib/experiment";
+
+export interface ExperimentRow extends Experiment {
+  products: { id: string; name: string } | null;
+  components: { id: string; name: string } | null;
+  formula_versions: {
+    id: string;
+    version_number: number;
+    formula_id: string;
+    default_mould_id: string | null;
+    formulas: { id: string; name: string } | null;
+  } | null;
+}
+
+const EXPERIMENT_SELECT =
+  "*, products(id, name), components(id, name), formula_versions(id, version_number, formula_id, default_mould_id, formulas(id, name))";
+
+export const experimentsQuery = () =>
+  queryOptions({
+    queryKey: ["experiments"],
+    queryFn: async (): Promise<ExperimentRow[]> =>
+      unwrap(
+        await supabase
+          .from("experiments")
+          .select(EXPERIMENT_SELECT)
+          .order("date", { ascending: false })
+          .order("experiment_number", { ascending: false })
+      ) as unknown as ExperimentRow[],
+  });
+
+export const experimentQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["experiments", id],
+    queryFn: async (): Promise<ExperimentRow> =>
+      unwrap(
+        await supabase
+          .from("experiments")
+          .select(EXPERIMENT_SELECT)
+          .eq("id", id)
+          .single()
+      ) as unknown as ExperimentRow,
+  });
+
+/** 특정 formula version을 참조하는 실험 (EDIT 잠금 해제 경고/RELATED EXPERIMENTS) */
+export const experimentsByVersionQuery = (formulaVersionId: string | null) =>
+  queryOptions({
+    queryKey: ["experiments_by_version", formulaVersionId],
+    enabled: Boolean(formulaVersionId),
+    queryFn: async (): Promise<Experiment[]> => {
+      if (!formulaVersionId) return [];
+      return unwrap(
+        await supabase
+          .from("experiments")
+          .select("*")
+          .eq("formula_version_id", formulaVersionId)
+          .order("experiment_number", { ascending: false })
+      );
+    },
+  });
+
+export const experimentsByProductQuery = (productId: string) =>
+  queryOptions({
+    queryKey: ["experiments_by_product", productId],
+    queryFn: async (): Promise<Experiment[]> =>
+      unwrap(
+        await supabase
+          .from("experiments")
+          .select("*")
+          .eq("product_id", productId)
+          .order("experiment_number", { ascending: false })
+      ),
+  });
+
+/** DASHBOARD 위젯 — PLANNED/RUNNING 실험 */
+export const activeExperimentsQuery = () =>
+  queryOptions({
+    queryKey: ["active_experiments"],
+    queryFn: async (): Promise<ExperimentRow[]> =>
+      unwrap(
+        await supabase
+          .from("experiments")
+          .select(EXPERIMENT_SELECT)
+          .in("status", ["PLANNED", "RUNNING"])
+          .order("updated_at", { ascending: false })
+          .limit(6)
+      ) as unknown as ExperimentRow[],
+  });
+
+export const experimentObservationsQuery = (experimentId: string) =>
+  queryOptions({
+    queryKey: ["observations", experimentId],
+    queryFn: async (): Promise<Observation[]> =>
+      unwrap(
+        await supabase
+          .from("observations")
+          .select("*")
+          .eq("experiment_id", experimentId)
+          .order("created_at", { ascending: true })
+      ),
+  });
+
+export interface RecentObservationRow extends Observation {
+  experiments: { id: string; experiment_number: number | null } | null;
+}
+
+/** DASHBOARD 위젯 — 최근 관찰 */
+export const recentObservationsQuery = () =>
+  queryOptions({
+    queryKey: ["recent_observations"],
+    queryFn: async (): Promise<RecentObservationRow[]> =>
+      unwrap(
+        await supabase
+          .from("observations")
+          .select("*, experiments(id, experiment_number)")
+          .order("created_at", { ascending: false })
+          .limit(8)
+      ) as unknown as RecentObservationRow[],
   });

@@ -12,12 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedExperimentsRouteImport } from './routes/_authenticated/experiments'
 import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
 import { Route as AuthenticatedReferencesRouteImport } from './routes/_authenticated/references'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedComponentsIndexRouteImport } from './routes/_authenticated/components/index'
 import { Route as AuthenticatedComponentsComponentIdRouteImport } from './routes/_authenticated/components/$componentId'
+import { Route as AuthenticatedExperimentsIndexRouteImport } from './routes/_authenticated/experiments/index'
+import { Route as AuthenticatedExperimentsExperimentIdRouteImport } from './routes/_authenticated/experiments/$experimentId'
 import { Route as AuthenticatedFormulasIndexRouteImport } from './routes/_authenticated/formulas/index'
 import { Route as AuthenticatedFormulasFormulaIdRouteImport } from './routes/_authenticated/formulas/$formulaId'
 import { Route as AuthenticatedIngredientsIndexRouteImport } from './routes/_authenticated/ingredients/index'
@@ -39,12 +40,6 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedExperimentsRoute =
-  AuthenticatedExperimentsRouteImport.update({
-    id: '/experiments',
-    path: '/experiments',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
   id: '/knowledge',
   path: '/knowledge',
@@ -70,6 +65,18 @@ const AuthenticatedComponentsComponentIdRoute =
   AuthenticatedComponentsComponentIdRouteImport.update({
     id: '/components/$componentId',
     path: '/components/$componentId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedExperimentsIndexRoute =
+  AuthenticatedExperimentsIndexRouteImport.update({
+    id: '/experiments/',
+    path: '/experiments/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedExperimentsExperimentIdRoute =
+  AuthenticatedExperimentsExperimentIdRouteImport.update({
+    id: '/experiments/$experimentId',
+    path: '/experiments/$experimentId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedFormulasIndexRoute =
@@ -112,31 +119,33 @@ const AuthenticatedProductsProductIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
-  '/experiments': typeof AuthenticatedExperimentsRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
+  '/experiments/$experimentId': typeof AuthenticatedExperimentsExperimentIdRoute
   '/formulas/$formulaId': typeof AuthenticatedFormulasFormulaIdRoute
   '/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components/': typeof AuthenticatedComponentsIndexRoute
+  '/experiments/': typeof AuthenticatedExperimentsIndexRoute
   '/formulas/': typeof AuthenticatedFormulasIndexRoute
   '/ingredients/': typeof AuthenticatedIngredientsIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
-  '/experiments': typeof AuthenticatedExperimentsRoute
   '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
   '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
+  '/experiments/$experimentId': typeof AuthenticatedExperimentsExperimentIdRoute
   '/formulas/$formulaId': typeof AuthenticatedFormulasFormulaIdRoute
   '/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components': typeof AuthenticatedComponentsIndexRoute
+  '/experiments': typeof AuthenticatedExperimentsIndexRoute
   '/formulas': typeof AuthenticatedFormulasIndexRoute
   '/ingredients': typeof AuthenticatedIngredientsIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
@@ -145,16 +154,17 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
-  '/_authenticated/experiments': typeof AuthenticatedExperimentsRoute
   '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
   '/_authenticated/references': typeof AuthenticatedReferencesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
+  '/_authenticated/experiments/$experimentId': typeof AuthenticatedExperimentsExperimentIdRoute
   '/_authenticated/formulas/$formulaId': typeof AuthenticatedFormulasFormulaIdRoute
   '/_authenticated/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
   '/_authenticated/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/_authenticated/components/': typeof AuthenticatedComponentsIndexRoute
+  '/_authenticated/experiments/': typeof AuthenticatedExperimentsIndexRoute
   '/_authenticated/formulas/': typeof AuthenticatedFormulasIndexRoute
   '/_authenticated/ingredients/': typeof AuthenticatedIngredientsIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
@@ -164,31 +174,33 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
-    | '/experiments'
     | '/knowledge'
     | '/references'
     | '/settings'
     | '/components/$componentId'
+    | '/experiments/$experimentId'
     | '/formulas/$formulaId'
     | '/ingredients/$ingredientId'
     | '/products/$productId'
     | '/components/'
+    | '/experiments/'
     | '/formulas/'
     | '/ingredients/'
     | '/products/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
-    | '/experiments'
     | '/knowledge'
     | '/references'
     | '/settings'
     | '/'
     | '/components/$componentId'
+    | '/experiments/$experimentId'
     | '/formulas/$formulaId'
     | '/ingredients/$ingredientId'
     | '/products/$productId'
     | '/components'
+    | '/experiments'
     | '/formulas'
     | '/ingredients'
     | '/products'
@@ -196,16 +208,17 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authenticated'
     | '/auth'
-    | '/_authenticated/experiments'
     | '/_authenticated/knowledge'
     | '/_authenticated/references'
     | '/_authenticated/settings'
     | '/_authenticated/'
     | '/_authenticated/components/$componentId'
+    | '/_authenticated/experiments/$experimentId'
     | '/_authenticated/formulas/$formulaId'
     | '/_authenticated/ingredients/$ingredientId'
     | '/_authenticated/products/$productId'
     | '/_authenticated/components/'
+    | '/_authenticated/experiments/'
     | '/_authenticated/formulas/'
     | '/_authenticated/ingredients/'
     | '/_authenticated/products/'
@@ -237,13 +250,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/experiments': {
-      id: '/_authenticated/experiments'
-      path: '/experiments'
-      fullPath: '/experiments'
-      preLoaderRoute: typeof AuthenticatedExperimentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/knowledge': {
@@ -279,6 +285,20 @@ declare module '@tanstack/react-router' {
       path: '/components/$componentId'
       fullPath: '/components/$componentId'
       preLoaderRoute: typeof AuthenticatedComponentsComponentIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/experiments/': {
+      id: '/_authenticated/experiments/'
+      path: '/experiments'
+      fullPath: '/experiments/'
+      preLoaderRoute: typeof AuthenticatedExperimentsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/experiments/$experimentId': {
+      id: '/_authenticated/experiments/$experimentId'
+      path: '/experiments/$experimentId'
+      fullPath: '/experiments/$experimentId'
+      preLoaderRoute: typeof AuthenticatedExperimentsExperimentIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/formulas/': {
@@ -327,34 +347,37 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedExperimentsRoute: typeof AuthenticatedExperimentsRoute
   AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
   AuthenticatedReferencesRoute: typeof AuthenticatedReferencesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedComponentsComponentIdRoute: typeof AuthenticatedComponentsComponentIdRoute
+  AuthenticatedExperimentsExperimentIdRoute: typeof AuthenticatedExperimentsExperimentIdRoute
   AuthenticatedFormulasFormulaIdRoute: typeof AuthenticatedFormulasFormulaIdRoute
   AuthenticatedIngredientsIngredientIdRoute: typeof AuthenticatedIngredientsIngredientIdRoute
   AuthenticatedProductsProductIdRoute: typeof AuthenticatedProductsProductIdRoute
   AuthenticatedComponentsIndexRoute: typeof AuthenticatedComponentsIndexRoute
+  AuthenticatedExperimentsIndexRoute: typeof AuthenticatedExperimentsIndexRoute
   AuthenticatedFormulasIndexRoute: typeof AuthenticatedFormulasIndexRoute
   AuthenticatedIngredientsIndexRoute: typeof AuthenticatedIngredientsIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedExperimentsRoute: AuthenticatedExperimentsRoute,
   AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
   AuthenticatedReferencesRoute: AuthenticatedReferencesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedComponentsComponentIdRoute:
     AuthenticatedComponentsComponentIdRoute,
+  AuthenticatedExperimentsExperimentIdRoute:
+    AuthenticatedExperimentsExperimentIdRoute,
   AuthenticatedFormulasFormulaIdRoute: AuthenticatedFormulasFormulaIdRoute,
   AuthenticatedIngredientsIngredientIdRoute:
     AuthenticatedIngredientsIngredientIdRoute,
   AuthenticatedProductsProductIdRoute: AuthenticatedProductsProductIdRoute,
   AuthenticatedComponentsIndexRoute: AuthenticatedComponentsIndexRoute,
+  AuthenticatedExperimentsIndexRoute: AuthenticatedExperimentsIndexRoute,
   AuthenticatedFormulasIndexRoute: AuthenticatedFormulasIndexRoute,
   AuthenticatedIngredientsIndexRoute: AuthenticatedIngredientsIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
