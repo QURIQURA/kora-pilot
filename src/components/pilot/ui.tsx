@@ -57,10 +57,14 @@ export function Field({
   );
 }
 
+const SOLID_STATUSES = ["ACTIVE", "TESTING", "RUNNING", "COMPLETE", "CURRENT"];
+const DASHED_STATUSES = ["IDEA", "PLANNED", "DRAFT"];
+const FADED_STATUSES = ["ARCHIVED", "CANCELLED", "FAILED", "SUPERSEDED"];
+
 export function StatusBadge({ status }: { status: ProductStatus | string }) {
-  const solid = status === "ACTIVE" || status === "TESTING";
-  const dashed = status === "IDEA";
-  const faded = status === "ARCHIVED";
+  const solid = SOLID_STATUSES.includes(status);
+  const dashed = DASHED_STATUSES.includes(status);
+  const faded = FADED_STATUSES.includes(status);
   return (
     <span
       className={cn(

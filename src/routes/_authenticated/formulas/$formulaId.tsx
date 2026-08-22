@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
+  experimentsByVersionQuery,
   formulaQuery,
   formulaVersionsQuery,
   mouldsQuery,
@@ -27,6 +28,9 @@ import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
+import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
+import { ExperimentListItems } from "@/components/pilot/ExperimentList";
+import { experimentLabel } from "@/lib/experiment";
 import {
   Field,
   SectionCard,
@@ -69,6 +73,7 @@ function FormulaDetailPage() {
   const [basisId, setBasisId] = useState(""); // baker's % 기준 재료
   const [adding, setAdding] = useState(false);
   const [creatingVersion, setCreatingVersion] = useState(false);
+  const [creatingExperiment, setCreatingExperiment] = useState(false);
 
   useEffect(() => {
     if (versionList.length === 0) return;
@@ -82,6 +87,8 @@ function FormulaDetailPage() {
   const version = versionList.find((v) => v.id === versionId) ?? null;
   const ingredients = useQuery(versionIngredientsQuery(versionId));
   const rows = ingredients.data ?? [];
+  const versionExperiments = useQuery(experimentsByVersionQuery(versionId));
+  const experimentCount = versionExperiments.data?.length ?? 0;
 
   useEffect(() => setUnlocked(false), [versionId]);
 
@@ -351,7 +358,9 @@ function FormulaDetailPage() {
                 return;
               }
               const ok = confirm(
-                "이 버전은 확정 상태입니다.\n이 버전을 참조하는 실험이 있을 수 있습니다 — 배합 변경은 새 버전 생성을 권장합니다.\n오타 수정 등을 위해 잠금을 해제할까요?"
+                experimentCount > 0
+                  ? `실험 ${experimentCount}개가 이 버전을 참조 중 — 배합 변경은 새 버전 생성을 권장합니다.\n오타 수정 등을 위해 잠금을 해제할까요?`
+                  : "이 버전은 확정 상태입니다.\n배합 변경은 새 버전 생성을 권장합니다. 오타 수정 등을 위해 잠금을 해제할까요?"
               );
               if (ok) setUnlocked(true);
             }}
@@ -524,6 +533,23 @@ function FormulaDetailPage() {
         />
       </SectionCard>
 
+      {/* RELATED EXPERIMENTS */}
+      <SectionCard
+        title="RELATED EXPERIMENTS"
+        action={
+          <button
+            type="button"
+            className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+            onClick={() => setCreatingExperiment(true)}
+            disabled={!versionId}
+          >
+            + NEW EXPERIMENT
+          </button>
+        }
+      >
+        <ExperimentListItems items={versionExperiments.data ?? []} />
+      </SectionCard>
+
       {/* HISTORY */}
       <VersionHistory
         formulaId={formulaId}
@@ -580,6 +606,26 @@ function FormulaDetailPage() {
           onCreate={(summary, reason) =>
             createVersion.mutate({ summary, reason })
           }
+        />
+      )}
+
+      {creatingExperiment && versionId && (
+        <ExperimentCreateModal
+          preset={{
+            formulaId,
+            formulaVersionId: versionId,
+            componentId: formula.data.component_id,
+            mouldId: version?.default_mould_id ?? null,
+            batch: batchValue,
+          }}
+          onCancel={() => setCreatingExperiment(false)}
+          onCreated={(id) => {
+            setCreatingExperiment(false);
+            void navigate({
+              to: "/experiments/$experimentId",
+              params: { experimentId: id },
+            });
+          }}
         />
       )}
     </div>

@@ -1,0 +1,1 @@
+revoke execute on function public.assign_experiment_number() from public, anon, authenticated;
