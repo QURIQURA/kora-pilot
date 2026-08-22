@@ -73,6 +73,7 @@ function FormulaDetailPage() {
   const [basisId, setBasisId] = useState(""); // baker's % 기준 재료
   const [adding, setAdding] = useState(false);
   const [creatingVersion, setCreatingVersion] = useState(false);
+  const [creatingExperiment, setCreatingExperiment] = useState(false);
 
   useEffect(() => {
     if (versionList.length === 0) return;
@@ -86,6 +87,8 @@ function FormulaDetailPage() {
   const version = versionList.find((v) => v.id === versionId) ?? null;
   const ingredients = useQuery(versionIngredientsQuery(versionId));
   const rows = ingredients.data ?? [];
+  const versionExperiments = useQuery(experimentsByVersionQuery(versionId));
+  const experimentCount = versionExperiments.data?.length ?? 0;
 
   useEffect(() => setUnlocked(false), [versionId]);
 
