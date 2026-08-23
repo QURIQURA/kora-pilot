@@ -476,3 +476,75 @@ export const recentObservationsQuery = () =>
           .limit(8)
       ) as unknown as RecentObservationRow[],
   });
+
+/* ── PHASE 4B — PROCESS TIMELINE ─────────────────────────────── */
+
+import type { ProcessCategory, ProcessEvent } from "@/lib/process";
+
+export const processCategoriesQuery = () =>
+  queryOptions({
+    queryKey: ["process_categories"],
+    queryFn: async (): Promise<ProcessCategory[]> =>
+      unwrap(
+        await supabase
+          .from("process_categories")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true })
+      ),
+  });
+
+/** 프로세스 카테고리별 사용 횟수 (process_events.category_id) */
+export const processCategoryUsageQuery = () =>
+  queryOptions({
+    queryKey: ["process_category_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(
+        await supabase.from("process_events").select("category_id")
+      );
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.category_id)
+          map[row.category_id] = (map[row.category_id] ?? 0) + 1;
+      }
+      return map;
+    },
+  });
+
+export interface ProcessEventRow extends ProcessEvent {
+  process_categories: ProcessCategory | null;
+}
+
+export const processEventsQuery = (experimentId: string) =>
+  queryOptions({
+    queryKey: ["process_events", experimentId],
+    queryFn: async (): Promise<ProcessEventRow[]> =>
+      unwrap(
+        await supabase
+          .from("process_events")
+          .select("*, process_categories(*)")
+          .eq("experiment_id", experimentId)
+          .order("started_at", { ascending: true })
+      ) as unknown as ProcessEventRow[],
+  });
+
+export interface RecentProcessEventRow extends ProcessEvent {
+  process_categories: Pick<ProcessCategory, "id" | "name" | "color"> | null;
+  experiments: { id: string; experiment_number: number | null } | null;
+}
+
+/** DASHBOARD 위젯 — 최근 공정 이벤트 */
+export const recentProcessEventsQuery = () =>
+  queryOptions({
+    queryKey: ["recent_process_events"],
+    queryFn: async (): Promise<RecentProcessEventRow[]> =>
+      unwrap(
+        await supabase
+          .from("process_events")
+          .select(
+            "*, process_categories(id, name, color), experiments(id, experiment_number)"
+          )
+          .order("created_at", { ascending: false })
+          .limit(8)
+      ) as unknown as RecentProcessEventRow[],
+  });
