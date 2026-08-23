@@ -527,6 +527,96 @@ export type Database = {
           },
         ]
       }
+      process_categories: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          is_default: boolean
+          name: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name: string
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      process_events: {
+        Row: {
+          action: string
+          category_id: string | null
+          created_at: string
+          ended_at: string | null
+          event_type: Database["public"]["Enums"]["process_event_type"]
+          experiment_id: string
+          id: string
+          note: string | null
+          started_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          category_id?: string | null
+          created_at?: string
+          ended_at?: string | null
+          event_type?: Database["public"]["Enums"]["process_event_type"]
+          experiment_id: string
+          id?: string
+          note?: string | null
+          started_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          category_id?: string | null
+          created_at?: string
+          ended_at?: string | null
+          event_type?: Database["public"]["Enums"]["process_event_type"]
+          experiment_id?: string
+          id?: string
+          note?: string | null
+          started_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_events_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "process_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "process_events_experiment_id_fkey"
+            columns: ["experiment_id"]
+            isOneToOne: false
+            referencedRelation: "experiments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_components: {
         Row: {
           component_id: string
@@ -702,6 +792,7 @@ export type Database = {
         | "CURRENT"
         | "SUPERSEDED"
         | "ARCHIVED"
+      process_event_type: "point" | "span"
       product_status: "IDEA" | "ACTIVE" | "TESTING" | "STABLE" | "ARCHIVED"
     }
     CompositeTypes: {
@@ -838,6 +929,7 @@ export const Constants = {
         "CANCELLED",
       ],
       formula_status: ["DRAFT", "TESTING", "CURRENT", "SUPERSEDED", "ARCHIVED"],
+      process_event_type: ["point", "span"],
       product_status: ["IDEA", "ACTIVE", "TESTING", "STABLE", "ARCHIVED"],
     },
   },
