@@ -213,7 +213,7 @@ export function ProcessTimelineSection({
   );
 }
 
-/** RUNNING 실험용 빠른 기록 바 — 모바일에서는 화면 하단 고정 */
+/** RUNNING 실험용 빠른 기록 바 — 모바일에서는 화면 하단 고정 + 2줄 배치 */
 function QuickLogBar({
   pending,
   onStart,
@@ -225,23 +225,35 @@ function QuickLogBar({
 }) {
   const [action, setAction] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [showEmptyHint, setShowEmptyHint] = useState(false);
+  const actionRef = useRef<HTMLInputElement>(null);
 
   const submit = (kind: ProcessEventType) => {
     const value = action.trim();
-    if (!value) return;
+    if (!value) {
+      // 침묵하지 않고 이유를 알린다
+      setShowEmptyHint(true);
+      actionRef.current?.focus();
+      return;
+    }
     if (kind === "span") onStart(value, categoryId);
     else onLog(value, categoryId);
     setAction("");
+    setShowEmptyHint(false);
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background p-2 sm:static sm:border-0 sm:p-0">
-      <div className="flex items-stretch gap-2">
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:static sm:border-0 sm:p-0">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
         <input
-          className={`${inputClass} min-h-[48px] min-w-0 flex-1`}
+          ref={actionRef}
+          className={`${inputClass} min-h-[48px] w-full min-w-0 text-base sm:flex-1`}
           placeholder="ACTION (MERINGUE…)"
           value={action}
-          onChange={(e) => setAction(e.target.value)}
+          onChange={(e) => {
+            setAction(e.target.value);
+            if (e.target.value.trim()) setShowEmptyHint(false);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -249,29 +261,36 @@ function QuickLogBar({
             }
           }}
         />
-        <ProcessCategorySelect
-          value={categoryId}
-          onChange={setCategoryId}
-          emptyLabel="—"
-          className={`${selectClass} min-h-[48px] w-24 sm:w-36`}
-        />
-        <button
-          type="button"
-          className={`${primaryButtonClass} min-h-[48px] px-3 sm:px-4`}
-          disabled={pending}
-          onClick={() => submit("span")}
-        >
-          START
-        </button>
-        <button
-          type="button"
-          className={`${buttonClass} min-h-[48px] px-3 sm:px-4`}
-          disabled={pending}
-          onClick={() => submit("point")}
-        >
-          LOG
-        </button>
+        <div className="flex items-stretch gap-2">
+          <ProcessCategorySelect
+            value={categoryId}
+            onChange={setCategoryId}
+            emptyLabel="—"
+            className={`${selectClass} min-h-[48px] min-w-0 flex-1 sm:w-36 sm:flex-none`}
+          />
+          <button
+            type="button"
+            className={`${primaryButtonClass} min-h-[48px] shrink-0 px-3 sm:px-4`}
+            disabled={pending}
+            onClick={() => submit("span")}
+          >
+            START
+          </button>
+          <button
+            type="button"
+            className={`${buttonClass} min-h-[48px] shrink-0 px-3 sm:px-4`}
+            disabled={pending}
+            onClick={() => submit("point")}
+          >
+            LOG
+          </button>
+        </div>
       </div>
+      {showEmptyHint && (
+        <p className="label-caps mt-1 text-[11px] text-foreground">
+          ACTION을 입력하세요
+        </p>
+      )}
     </div>
   );
 }
