@@ -28,9 +28,16 @@ export function IngredientPicker({
 
   const term = search.trim().toLowerCase();
   const rows = (ingredients.data ?? []).filter((row) =>
-    term ? row.name.toLowerCase().includes(term) : true
+    term
+      ? row.name.toLowerCase().includes(term) ||
+        (row.name_en ?? "").toLowerCase().includes(term)
+      : true
   );
-  const exact = rows.some((row) => row.name.toLowerCase() === term);
+  const exact = rows.some(
+    (row) =>
+      row.name.toLowerCase() === term ||
+      (row.name_en ?? "").toLowerCase() === term
+  );
 
   const create = useMutation({
     mutationFn: async () => {
@@ -74,7 +81,14 @@ export function IngredientPicker({
               className="flex min-h-[48px] w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-secondary"
               onClick={() => onPick(row.id, row.default_unit)}
             >
-              <span className="text-sm">{row.name}</span>
+              <span className="text-sm">
+                {row.name}
+                {row.name_en && (
+                  <span className="ml-1 font-mono text-xs text-muted-foreground">
+                    ({row.name_en})
+                  </span>
+                )}
+              </span>
               <span className="label-caps text-xs text-muted-foreground">
                 {row.default_unit}
               </span>
