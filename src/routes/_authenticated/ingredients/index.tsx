@@ -9,13 +9,9 @@ import {
   flavourFamiliesQuery,
   ingredientFunctionsQuery,
   ingredientsQuery,
-} from "@/lib/queries";
-import {
-  categoryPathLabel,
-  hasComposition,
   type IngredientRow,
-} from "@/lib/pilot";
-import { formatDateTime } from "@/lib/datetime";
+} from "@/lib/queries";
+import { categoryPathLabel, hasComposition } from "@/lib/pilot";
 import { EmptyState } from "@/components/EmptyState";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";
 import { cn } from "@/lib/utils";
