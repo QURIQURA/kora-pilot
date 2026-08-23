@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { ProductStatus } from "@/lib/pilot";
 
@@ -87,6 +87,42 @@ export function NextPhaseSection({ title }: { title: string }) {
         NEXT PHASE
       </p>
     </SectionCard>
+  );
+}
+
+/** 접이식 섹션 — 부담스러운 긴 폼을 접어둘 때 사용 */
+export function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  badge,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  badge?: ReactNode;
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="border border-border bg-card">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex min-h-[48px] w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-secondary",
+          open && "border-b border-border"
+        )}
+      >
+        <span className="label-caps text-muted-foreground">{title}</span>
+        <span className="flex items-center gap-2">
+          {badge}
+          <span className="label-caps text-xs text-muted-foreground">
+            {open ? "− CLOSE" : "+ OPEN"}
+          </span>
+        </span>
+      </button>
+      {open && <div className="p-4">{children}</div>}
+    </section>
   );
 }
 
