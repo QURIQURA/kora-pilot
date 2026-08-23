@@ -5,7 +5,13 @@ import { categoriesQuery, componentsQuery } from "@/lib/queries";
 import { categoryPathLabel } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
-import { Field, PageHeader, inputClass } from "@/components/pilot/ui";
+import { ComponentCreateModal } from "@/components/pilot/ComponentCreateModal";
+import {
+  Field,
+  PageHeader,
+  inputClass,
+  primaryButtonClass,
+} from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/components/")({
   head: () => ({
@@ -23,6 +29,7 @@ function ComponentsPage() {
   const components = useQuery(componentsQuery());
   const categories = useQuery(categoriesQuery());
   const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const rows = (components.data ?? []).filter((c) =>
     c.name.toLowerCase().includes(search.trim().toLowerCase())
@@ -30,7 +37,18 @@ function ComponentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="COMPONENTS" />
+      <PageHeader
+        title="COMPONENTS"
+        action={
+          <button
+            type="button"
+            className={primaryButtonClass}
+            onClick={() => setCreating(true)}
+          >
+            + CREATE COMPONENT
+          </button>
+        }
+      />
       <div className="border border-border bg-card p-4">
         <Field label="SEARCH">
           <input
@@ -42,7 +60,15 @@ function ComponentsPage() {
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState message="NO COMPONENTS YET" />
+        <EmptyState
+          message={
+            (components.data ?? []).length === 0
+              ? "NO COMPONENTS YET"
+              : "NO COMPONENTS MATCH THIS SEARCH"
+          }
+          actionLabel="+ CREATE COMPONENT"
+          onAction={() => setCreating(true)}
+        />
       ) : (
         <ul className="divide-y divide-border border border-border bg-card">
           {rows.map((component) => (
@@ -62,6 +88,8 @@ function ComponentsPage() {
           ))}
         </ul>
       )}
+
+      {creating && <ComponentCreateModal onClose={() => setCreating(false)} />}
     </div>
   );
 }
