@@ -937,6 +937,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      seed_default_ingredients: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       seed_flavour_families: { Args: { p_user_id: string }; Returns: undefined }
     }
     Enums: {
