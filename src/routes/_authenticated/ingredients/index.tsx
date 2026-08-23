@@ -6,13 +6,15 @@ import { CategorySelect } from "@/components/pilot/CategorySelect";
 import {
   categoriesQuery,
   currentUserId,
+  flavourFamiliesQuery,
   ingredientFunctionsQuery,
   ingredientsQuery,
+  type IngredientRow,
 } from "@/lib/queries";
-import { categoryPathLabel } from "@/lib/pilot";
-import { formatDateTime } from "@/lib/datetime";
+import { categoryPathLabel, hasComposition } from "@/lib/pilot";
 import { EmptyState } from "@/components/EmptyState";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";
+import { cn } from "@/lib/utils";
 import {
   Field,
   PageHeader,
@@ -34,23 +36,84 @@ export const Route = createFileRoute("/_authenticated/ingredients/")({
   component: IngredientsPage,
 });
 
+function rateLabel(row: IngredientRow): string {
+  const min = row.typical_rate_min;
+  const max = row.typical_rate_max;
+  if (min != null && max != null) return `${min}–${max}%`;
+  if (min != null) return `≥${min}%`;
+  if (max != null) return `≤${max}%`;
+  return "—";
+}
+
 function IngredientsPage() {
   const ingredients = useQuery(ingredientsQuery());
   const categories = useQuery(categoriesQuery());
+  const families = useQuery(flavourFamiliesQuery());
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
 
+  const [familyFilter, setFamilyFilter] = useState("");
+  const [onlyFunctional, setOnlyFunctional] = useState(false);
+  const [onlyNoComposition, setOnlyNoComposition] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<"" | "standard" | "verified">(
+    ""
+  );
+  const [onlyNoEnglish, setOnlyNoEnglish] = useState(false);
+
   const term = search.trim().toLowerCase();
   const rows = (ingredients.data ?? []).filter((ingredient) => {
+    if (onlyFunctional && !ingredient.is_functional) return false;
+    if (onlyNoComposition && hasComposition(ingredient)) return false;
+    if (sourceFilter && ingredient.composition_source !== sourceFilter)
+      return false;
+    if (onlyNoEnglish && ingredient.name_en?.trim()) return false;
+    if (familyFilter && ingredient.flavour_family_id !== familyFilter)
+      return false;
     if (!term) return true;
     const functions = ingredient.ingredient_function_links
       .map((l) => l.ingredient_functions?.name ?? "")
       .join(" ")
       .toLowerCase();
     return (
-      ingredient.name.toLowerCase().includes(term) || functions.includes(term)
+      ingredient.name.toLowerCase().includes(term) ||
+      (ingredient.name_en ?? "").toLowerCase().includes(term) ||
+      functions.includes(term)
     );
   });
+
+  const toggleFilters: {
+    label: string;
+    active: boolean;
+    onToggle: () => void;
+  }[] = [
+    {
+      label: "기능성 재료만",
+      active: onlyFunctional,
+      onToggle: () => setOnlyFunctional((v) => !v),
+    },
+    {
+      label: "조성 미입력만",
+      active: onlyNoComposition,
+      onToggle: () => setOnlyNoComposition((v) => !v),
+    },
+    {
+      label: "표준값만",
+      active: sourceFilter === "standard",
+      onToggle: () =>
+        setSourceFilter((v) => (v === "standard" ? "" : "standard")),
+    },
+    {
+      label: "확인됨만",
+      active: sourceFilter === "verified",
+      onToggle: () =>
+        setSourceFilter((v) => (v === "verified" ? "" : "verified")),
+    },
+    {
+      label: "영문명 미입력만",
+      active: onlyNoEnglish,
+      onToggle: () => setOnlyNoEnglish((v) => !v),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -67,14 +130,46 @@ function IngredientsPage() {
         }
       />
 
-      <div className="border border-border bg-card p-4">
-        <Field label="SEARCH (NAME OR FUNCTION)">
+      <div className="space-y-3 border border-border bg-card p-4">
+        <Field label="SEARCH (한글 · ENGLISH · FUNCTION)">
           <input
             className={inputClass}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </Field>
+        <div className="flex flex-wrap items-center gap-2">
+          {toggleFilters.map((filter) => (
+            <button
+              key={filter.label}
+              type="button"
+              onClick={filter.onToggle}
+              className={cn(
+                "label-caps min-h-[44px] border px-3 py-2 text-[11px]",
+                filter.active
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+          <select
+            className={`${selectClass} w-auto min-w-[10rem]`}
+            value={familyFilter}
+            onChange={(e) => setFamilyFilter(e.target.value)}
+            aria-label="계열 필터"
+          >
+            <option value="">모든 계열</option>
+            {(families.data ?? []).map((family) => (
+              <option key={family.id} value={family.id}>
+                {family.name_en
+                  ? `${family.name} (${family.name_en})`
+                  : family.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {rows.length === 0 ? (
@@ -96,17 +191,23 @@ function IngredientsPage() {
             <span className="label-caps col-span-2 text-xs text-muted-foreground">
               CATEGORY
             </span>
-            <span className="label-caps col-span-3 text-xs text-muted-foreground">
+            <span className="label-caps col-span-2 text-xs text-muted-foreground">
               FUNCTIONS
             </span>
-            <span className="label-caps col-span-2 text-xs text-muted-foreground">
-              SUPPLIER / BRAND
+            <span className="label-caps col-span-1 text-xs text-muted-foreground">
+              기능성
             </span>
             <span className="label-caps col-span-1 text-xs text-muted-foreground">
-              UNIT
+              BASIS
             </span>
             <span className="label-caps col-span-1 text-xs text-muted-foreground">
-              UPDATED
+              사용률
+            </span>
+            <span className="label-caps col-span-1 text-xs text-muted-foreground">
+              조성
+            </span>
+            <span className="label-caps col-span-1 text-xs text-muted-foreground">
+              계열
             </span>
           </div>
           <ul>
@@ -120,14 +221,25 @@ function IngredientsPage() {
                   params={{ ingredientId: ingredient.id }}
                   className="grid grid-cols-1 gap-1 px-4 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
                 >
-                  <span className="col-span-3 text-sm">{ingredient.name}</span>
+                  <span className="col-span-3 text-sm">
+                    <span className="block md:inline">{ingredient.name}</span>{" "}
+                    {ingredient.name_en ? (
+                      <span className="block font-mono text-xs text-muted-foreground md:inline md:text-sm">
+                        ({ingredient.name_en})
+                      </span>
+                    ) : (
+                      <span className="block font-mono text-[10px] uppercase text-muted-foreground md:inline">
+                        영문명 없음
+                      </span>
+                    )}
+                  </span>
                   <span className="col-span-2 font-mono text-xs uppercase text-muted-foreground">
                     {categoryPathLabel(
                       categories.data ?? [],
                       ingredient.category_id
                     )}
                   </span>
-                  <span className="col-span-3 flex flex-wrap gap-1">
+                  <span className="col-span-2 flex flex-wrap gap-1">
                     {ingredient.ingredient_function_links.map((link) => (
                       <span
                         key={link.function_id}
@@ -137,16 +249,44 @@ function IngredientsPage() {
                       </span>
                     ))}
                   </span>
-                  <span className="col-span-2 font-mono text-xs uppercase text-muted-foreground">
-                    {[ingredient.supplier, ingredient.brand]
-                      .filter(Boolean)
-                      .join(" / ") || "—"}
+                  <span className="col-span-1">
+                    {ingredient.is_functional ? (
+                      <span className="label-caps border border-foreground bg-foreground px-1.5 py-0.5 text-[10px] text-background">
+                        기능성
+                      </span>
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground">
+                        —
+                      </span>
+                    )}
+                  </span>
+                  <span className="col-span-1 font-mono text-xs uppercase text-muted-foreground">
+                    {ingredient.reference_basis ?? "—"}
+                  </span>
+                  <span className="col-span-1 font-mono text-xs tabular-nums text-muted-foreground">
+                    {rateLabel(ingredient)}
                   </span>
                   <span className="col-span-1 font-mono text-xs text-muted-foreground">
-                    {ingredient.default_unit}
+                    {hasComposition(ingredient)
+                      ? ingredient.composition_source === "verified"
+                        ? "확인됨"
+                        : "표준값"
+                      : "미입력"}
                   </span>
                   <span className="col-span-1 font-mono text-xs text-muted-foreground">
-                    {formatDateTime(ingredient.updated_at)}
+                    {ingredient.flavour_families ? (
+                      <span className="flex items-center gap-1">
+                        <span
+                          className="inline-block h-3 w-3 shrink-0 border border-border"
+                          style={{
+                            backgroundColor: ingredient.flavour_families.color,
+                          }}
+                        />
+                        {ingredient.flavour_families.name}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </span>
                 </Link>
               </li>
@@ -167,6 +307,7 @@ function CreateIngredientDialog({ onClose }: { onClose: () => void }) {
   const functions = useQuery(ingredientFunctionsQuery());
 
   const [name, setName] = useState("");
+  const [nameEn, setNameEn] = useState("");
   const [unit, setUnit] = useState("g");
   const [categoryId, setCategoryId] = useState("");
   const [functionNames, setFunctionNames] = useState<string[]>([]);
@@ -179,6 +320,7 @@ function CreateIngredientDialog({ onClose }: { onClose: () => void }) {
         .insert({
           user_id: userId,
           name: name.trim(),
+          name_en: nameEn.trim() || null,
           default_unit: unit.trim() || "g",
           category_id: categoryId || null,
         })
@@ -236,13 +378,20 @@ function CreateIngredientDialog({ onClose }: { onClose: () => void }) {
             if (name.trim()) create.mutate();
           }}
         >
-          <Field label="NAME">
+          <Field label="NAME (한글)">
             <input
               className={inputClass}
               autoFocus
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field label="NAME (ENGLISH)">
+            <input
+              className={inputClass}
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
             />
           </Field>
           <Field label="DEFAULT UNIT">

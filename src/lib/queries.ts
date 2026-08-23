@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   Category,
   Component,
+  FlavourFamily,
   Ingredient,
   IngredientFunction,
   Product,
@@ -136,19 +137,21 @@ export interface IngredientRow extends Ingredient {
     function_id: string;
     ingredient_functions: IngredientFunction;
   }[];
+  flavour_families: Pick<
+    FlavourFamily,
+    "id" | "name" | "name_en" | "color"
+  > | null;
 }
+
+const INGREDIENT_SELECT =
+  "*, flavour_families(id, name, name_en, color), ingredient_function_links(function_id, ingredient_functions(*))";
 
 export const ingredientsQuery = () =>
   queryOptions({
     queryKey: ["ingredients"],
     queryFn: async (): Promise<IngredientRow[]> =>
       unwrap(
-        await supabase
-          .from("ingredients")
-          .select(
-            "*, ingredient_function_links(function_id, ingredient_functions(*))"
-          )
-          .order("name")
+        await supabase.from("ingredients").select(INGREDIENT_SELECT).order("name")
       ) as unknown as IngredientRow[],
   });
 
@@ -159,9 +162,7 @@ export const ingredientQuery = (id: string) =>
       unwrap(
         await supabase
           .from("ingredients")
-          .select(
-            "*, ingredient_function_links(function_id, ingredient_functions(*))"
-          )
+          .select(INGREDIENT_SELECT)
           .eq("id", id)
           .single()
       ) as unknown as IngredientRow,
@@ -172,8 +173,57 @@ export const ingredientFunctionsQuery = () =>
     queryKey: ["ingredient_functions"],
     queryFn: async (): Promise<IngredientFunction[]> =>
       unwrap(
-        await supabase.from("ingredient_functions").select("*").order("name")
+        await supabase
+          .from("ingredient_functions")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true })
       ),
+  });
+
+/** 기능(INGREDIENT FUNCTION)별 사용 재료 수 */
+export const ingredientFunctionUsageQuery = () =>
+  queryOptions({
+    queryKey: ["ingredient_function_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(
+        await supabase.from("ingredient_function_links").select("function_id")
+      );
+      const map: Record<string, number> = {};
+      for (const row of rows)
+        map[row.function_id] = (map[row.function_id] ?? 0) + 1;
+      return map;
+    },
+  });
+
+export const flavourFamiliesQuery = () =>
+  queryOptions({
+    queryKey: ["flavour_families"],
+    queryFn: async (): Promise<FlavourFamily[]> =>
+      unwrap(
+        await supabase
+          .from("flavour_families")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true })
+      ),
+  });
+
+/** 향미 계열별 사용 재료 수 */
+export const flavourFamilyUsageQuery = () =>
+  queryOptions({
+    queryKey: ["flavour_family_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(
+        await supabase.from("ingredients").select("flavour_family_id")
+      );
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.flavour_family_id)
+          map[row.flavour_family_id] = (map[row.flavour_family_id] ?? 0) + 1;
+      }
+      return map;
+    },
   });
 
 export async function currentUserId(): Promise<string> {
