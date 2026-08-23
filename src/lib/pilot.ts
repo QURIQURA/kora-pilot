@@ -129,3 +129,119 @@ export function categoryWithDescendants(
   }
   return ids;
 }
+
+/* ── 재료 원장 확장 (기능성/조성/균형/향미) ─────────────────── */
+
+export type FlavourFamily = Tables<"flavour_families">;
+
+/** 재료 표시명 — 이름이 나오는 모든 곳에서 "한글명 (English)" 병기 */
+export function ingredientDisplayName(
+  ingredient: Pick<Ingredient, "name" | "name_en">
+): string {
+  const en = ingredient.name_en?.trim();
+  return en ? `${ingredient.name} (${en})` : ingredient.name;
+}
+
+/** 기능성 재료 사용률 기준 */
+export const REFERENCE_BASIS_OPTIONS = [
+  { value: "flour", label: "FLOUR" },
+  { value: "liquid", label: "LIQUID" },
+  { value: "total", label: "TOTAL" },
+  { value: "puree_sugar", label: "PUREE SUGAR" },
+  { value: "fat", label: "FAT" },
+  { value: "sugar", label: "SUGAR" },
+  { value: "egg_white", label: "EGG WHITE" },
+  { value: "bath", label: "BATH" },
+] as const;
+
+export const SCALING_MODE_OPTIONS = [
+  { value: "linear", label: "LINEAR (×N)" },
+  { value: "sub_linear", label: "SUB-LINEAR (N^K)" },
+  { value: "fixed", label: "FIXED" },
+] as const;
+
+export const FAT_TYPE_OPTIONS = [
+  { value: "dairy", label: "DAIRY" },
+  { value: "cocoa_butter", label: "COCOA BUTTER" },
+  { value: "vegetable", label: "VEGETABLE" },
+  { value: "other", label: "OTHER" },
+] as const;
+
+export const SUGAR_TYPE_OPTIONS = [
+  { value: "sucrose", label: "SUCROSE" },
+  { value: "dextrose", label: "DEXTROSE" },
+  { value: "fructose", label: "FRUCTOSE" },
+  { value: "invert", label: "INVERT" },
+  { value: "glucose_syrup", label: "GLUCOSE SYRUP" },
+  { value: "lactose", label: "LACTOSE" },
+  { value: "sorbitol", label: "SORBITOL" },
+  { value: "trehalose", label: "TREHALOSE" },
+  { value: "maltodextrin", label: "MALTODEXTRIN" },
+  { value: "other", label: "OTHER" },
+] as const;
+
+/** 조성 필드 (모두 numeric %) */
+export const COMPOSITION_FIELDS = [
+  { key: "comp_water", label: "수분 WATER" },
+  { key: "comp_fat", label: "지방 FAT" },
+  { key: "comp_protein", label: "단백질 PROTEIN" },
+  { key: "comp_sugar", label: "당 SUGAR" },
+  { key: "comp_other_solids", label: "기타 고형분 OTHER SOLIDS" },
+  { key: "comp_alcohol", label: "알코올 ALCOHOL" },
+] as const;
+
+export type CompositionKey = (typeof COMPOSITION_FIELDS)[number]["key"];
+
+/** 조성 합계 — 전부 비어 있으면 null */
+export function compositionSum(
+  ingredient: Pick<Ingredient, CompositionKey>
+): number | null {
+  let sum = 0;
+  let any = false;
+  for (const { key } of COMPOSITION_FIELDS) {
+    const value = ingredient[key];
+    if (value != null) {
+      sum += value;
+      any = true;
+    }
+  }
+  return any ? sum : null;
+}
+
+/** 조성이 하나라도 입력됐는지 */
+export function hasComposition(
+  ingredient: Pick<Ingredient, CompositionKey>
+): boolean {
+  return compositionSum(ingredient) !== null;
+}
+
+/** 맛 축 (0~5) */
+export const TASTE_AXES = [
+  { key: "taste_sweet", label: "단맛 SWEET" },
+  { key: "taste_sour", label: "신맛 SOUR" },
+  { key: "taste_bitter", label: "쓴맛 BITTER" },
+  { key: "taste_salty", label: "짠맛 SALTY" },
+  { key: "taste_umami", label: "감칠맛 UMAMI" },
+  { key: "taste_astringent", label: "떫은맛 ASTRINGENT" },
+  { key: "taste_fat", label: "지방맛 FAT" },
+] as const;
+
+/** 배합 균형 역할 */
+export const BALANCE_ROLES = [
+  { key: "role_toughener", label: "강화 TOUGHENER" },
+  { key: "role_tenderizer", label: "연화 TENDERIZER" },
+  { key: "role_moistener", label: "습윤 MOISTENER" },
+  { key: "role_drier", label: "건조 DRIER" },
+] as const;
+
+/**
+ * 시스템이 기준량 자동 집계에 쓰는 기능의 내부 키.
+ * 표시 이름은 바뀔 수 있지만 이 키는 유지된다.
+ */
+export const SYSTEM_FUNCTION_KEYS = [
+  "structure",
+  "starch",
+  "water",
+  "fat",
+  "sweetener",
+] as const;
