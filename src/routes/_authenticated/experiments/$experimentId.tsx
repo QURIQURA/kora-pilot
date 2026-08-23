@@ -17,9 +17,9 @@ import { parseNumber, versionLabel } from "@/lib/formula";
 import { formatDateLabel, formatDateTime, formatTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
+import { ProcessTimelineSection } from "@/components/pilot/ProcessTimelineSection";
 import {
   Field,
-  NextPhaseSection,
   SectionCard,
   StatusBadge,
   inputClass,
@@ -440,7 +440,11 @@ function ExperimentDetailPage() {
       </SectionCard>
 
       {/* PROCESS TIMELINE — Phase 4B */}
-      <NextPhaseSection title="PROCESS TIMELINE" />
+      <ProcessTimelineSection
+        experimentId={exp.id}
+        experimentDate={exp.date}
+        status={exp.status}
+      />
 
       {/* NOTES */}
       <SectionCard title="NOTES">
