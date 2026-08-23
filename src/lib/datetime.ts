@@ -117,3 +117,90 @@ export function diffDays(a: string, b: string): number {
 export function isToday(dateStr: string): boolean {
   return dateStr === toLocalDateString();
 }
+
+/* ── Phase 4B — PROCESS TIMELINE용 시각/duration 유틸 ─────────────── */
+
+const TIME_WITH_SECONDS: Intl.DateTimeFormatOptions = {
+  timeZone: LOCAL_TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+};
+
+/**
+ * Date 또는 ISO 문자열을 "HH:MM:SS"로 포맷 (수동 편집 입력 표시용)
+ */
+export function formatTimeWithSeconds(input: Date | string): string {
+  const date = typeof input === "string" ? new Date(input) : input;
+  return new Intl.DateTimeFormat("en-AU", TIME_WITH_SECONDS).format(date);
+}
+
+/**
+ * 초 단위 duration을 "45 SEC" / "12 MIN" / "1H 24M" 형태로 포맷
+ */
+export function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  if (s < 60) return `${s} SEC`;
+  const minutes = Math.floor(s / 60);
+  if (s < 3600) return `${minutes} MIN`;
+  return `${Math.floor(minutes / 60)}H ${minutes % 60}M`;
+}
+
+const OFFSET_PARTS: Intl.DateTimeFormatOptions = {
+  timeZone: LOCAL_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+};
+
+/**
+ * 주어진 시점에서 로컬 타임존(Australia/Sydney)의 UTC 오프셋(ms)을 반환.
+ * Intl formatToParts 기반이라 DST 전환에도 안전하다.
+ */
+function localOffsetMs(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", OFFSET_PARTS).formatToParts(
+    date
+  );
+  const get = (type: string) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const asUTC = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second")
+  );
+  return asUTC - Math.floor(date.getTime() / 1000) * 1000;
+}
+
+/**
+ * 로컬 날짜/시각("YYYY-MM-DD" + "HH:MM" 또는 "HH:MM:SS")을 ISO(UTC) 문자열로 변환.
+ * new Date("YYYY-MM-DDTHH:mm") 같은 직접 파싱은 사용하지 않는다.
+ */
+export function localDateTimeToISO(dateStr: string, timeStr: string): string {
+  const date = parseLocalDate(dateStr);
+  const tm = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(timeStr);
+  if (!tm) {
+    throw new Error(`Invalid time string: ${timeStr}. Expected HH:MM[:SS].`);
+  }
+  const guess = Date.UTC(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    Number(tm[1]),
+    Number(tm[2]),
+    Number(tm[3] ?? "0")
+  );
+  // 로컬 시각을 UTC로 가정한 뒤 오프셋을 빼고, DST 경계를 위해 한 번 더 보정한다.
+  const first = localOffsetMs(new Date(guess));
+  let utc = guess - first;
+  const second = localOffsetMs(new Date(utc));
+  if (second !== first) utc = guess - second;
+  return new Date(utc).toISOString();
+}
