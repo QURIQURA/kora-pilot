@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
@@ -208,7 +208,7 @@ export function ProcessTimelineSection({
       </div>
 
       {/* 모바일 하단 고정 QUICK LOG 바에 가려지는 영역 확보 */}
-      {isExperimentRunning && <div className="h-16 sm:hidden" />}
+      {isExperimentRunning && <div className="h-32 sm:hidden" />}
     </SectionCard>
   );
 }
@@ -398,7 +398,7 @@ function EventRow({
           if (action && action !== event.action) onUpdate({ action });
         }}
       />
-      <span className="w-20 font-mono text-xs tabular-nums text-muted-foreground">
+      <span className="w-24 font-mono text-xs tabular-nums text-muted-foreground">
         {duration === null
           ? "—"
           : running
