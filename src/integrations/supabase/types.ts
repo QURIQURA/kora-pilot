@@ -194,6 +194,42 @@ export type Database = {
           },
         ]
       }
+      flavour_families: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          name_en: string | null
+          notes: string | null
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          name_en?: string | null
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          name_en?: string | null
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       formula_version_ingredients: {
         Row: {
           amount: number
@@ -387,26 +423,38 @@ export type Database = {
       }
       ingredient_functions: {
         Row: {
+          color: string
           created_at: string
           id: string
           is_default: boolean
+          key: string | null
           name: string
+          name_en: string | null
+          sort_order: number
           updated_at: string
           user_id: string
         }
         Insert: {
+          color?: string
           created_at?: string
           id?: string
           is_default?: boolean
+          key?: string | null
           name: string
+          name_en?: string | null
+          sort_order?: number
           updated_at?: string
           user_id: string
         }
         Update: {
+          color?: string
           created_at?: string
           id?: string
           is_default?: boolean
+          key?: string | null
           name?: string
+          name_en?: string | null
+          sort_order?: number
           updated_at?: string
           user_id?: string
         }
@@ -414,38 +462,143 @@ export type Database = {
       }
       ingredients: {
         Row: {
+          aroma_notes: string[] | null
+          bloom: number | null
           brand: string | null
           category_id: string | null
+          comp_alcohol: number | null
+          comp_fat: number | null
+          comp_other_solids: number | null
+          comp_protein: number | null
+          comp_sugar: number | null
+          comp_water: number | null
+          composition_source: string | null
           created_at: string
           default_unit: string
+          fat_type: string | null
+          flavour_family_id: string | null
+          flavour_intensity: number | null
+          flavour_note: string | null
           id: string
+          is_functional: boolean
           name: string
+          name_en: string | null
           notes: string | null
+          pac_value: number | null
+          pod_value: number | null
+          process_note: string | null
+          reference_basis: string | null
+          role_drier: boolean
+          role_moistener: boolean
+          role_tenderizer: boolean
+          role_toughener: boolean
+          scaling_exponent: number
+          scaling_mode: string
+          sugar_type: string | null
           supplier: string | null
+          taste_astringent: number | null
+          taste_bitter: number | null
+          taste_fat: number | null
+          taste_salty: number | null
+          taste_sour: number | null
+          taste_sweet: number | null
+          taste_umami: number | null
+          typical_rate_max: number | null
+          typical_rate_min: number | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          aroma_notes?: string[] | null
+          bloom?: number | null
           brand?: string | null
           category_id?: string | null
+          comp_alcohol?: number | null
+          comp_fat?: number | null
+          comp_other_solids?: number | null
+          comp_protein?: number | null
+          comp_sugar?: number | null
+          comp_water?: number | null
+          composition_source?: string | null
           created_at?: string
           default_unit?: string
+          fat_type?: string | null
+          flavour_family_id?: string | null
+          flavour_intensity?: number | null
+          flavour_note?: string | null
           id?: string
+          is_functional?: boolean
           name: string
+          name_en?: string | null
           notes?: string | null
+          pac_value?: number | null
+          pod_value?: number | null
+          process_note?: string | null
+          reference_basis?: string | null
+          role_drier?: boolean
+          role_moistener?: boolean
+          role_tenderizer?: boolean
+          role_toughener?: boolean
+          scaling_exponent?: number
+          scaling_mode?: string
+          sugar_type?: string | null
           supplier?: string | null
+          taste_astringent?: number | null
+          taste_bitter?: number | null
+          taste_fat?: number | null
+          taste_salty?: number | null
+          taste_sour?: number | null
+          taste_sweet?: number | null
+          taste_umami?: number | null
+          typical_rate_max?: number | null
+          typical_rate_min?: number | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          aroma_notes?: string[] | null
+          bloom?: number | null
           brand?: string | null
           category_id?: string | null
+          comp_alcohol?: number | null
+          comp_fat?: number | null
+          comp_other_solids?: number | null
+          comp_protein?: number | null
+          comp_sugar?: number | null
+          comp_water?: number | null
+          composition_source?: string | null
           created_at?: string
           default_unit?: string
+          fat_type?: string | null
+          flavour_family_id?: string | null
+          flavour_intensity?: number | null
+          flavour_note?: string | null
           id?: string
+          is_functional?: boolean
           name?: string
+          name_en?: string | null
           notes?: string | null
+          pac_value?: number | null
+          pod_value?: number | null
+          process_note?: string | null
+          reference_basis?: string | null
+          role_drier?: boolean
+          role_moistener?: boolean
+          role_tenderizer?: boolean
+          role_toughener?: boolean
+          scaling_exponent?: number
+          scaling_mode?: string
+          sugar_type?: string | null
           supplier?: string | null
+          taste_astringent?: number | null
+          taste_bitter?: number | null
+          taste_fat?: number | null
+          taste_salty?: number | null
+          taste_sour?: number | null
+          taste_sweet?: number | null
+          taste_umami?: number | null
+          typical_rate_max?: number | null
+          typical_rate_min?: number | null
           updated_at?: string
           user_id?: string
         }
@@ -455,6 +608,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredients_flavour_family_id_fkey"
+            columns: ["flavour_family_id"]
+            isOneToOne: false
+            referencedRelation: "flavour_families"
             referencedColumns: ["id"]
           },
         ]
@@ -777,7 +937,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      seed_flavour_families: { Args: { p_user_id: string }; Returns: undefined }
     }
     Enums: {
       experiment_status:
