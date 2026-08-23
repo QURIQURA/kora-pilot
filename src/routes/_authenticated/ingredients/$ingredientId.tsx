@@ -16,7 +16,8 @@ import {
   FAT_TYPE_OPTIONS,
   REFERENCE_BASIS_OPTIONS,
   SCALING_MODE_OPTIONS,
-  SUGAR_TYPES_OPTIONS_FALLBACK as _unused,
+  SUGAR_TYPE_OPTIONS,
+  TASTE_AXES,
   categoryPath,
   compositionSum,
 } from "@/lib/pilot";
