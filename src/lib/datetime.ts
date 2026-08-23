@@ -137,14 +137,21 @@ export function formatTimeWithSeconds(input: Date | string): string {
 }
 
 /**
- * 초 단위 duration을 "45 SEC" / "12 MIN" / "1H 24M" 형태로 포맷
+ * 초 단위 duration을 "M:SS" / "H:MM:SS" 형태로 포맷 (항상 초 포함)
+ * - 1시간 미만: "12:34" (분:초)
+ * - 1시간 이상: "1:24:05" (시:분:초)
+ * tabular-nums와 함께 사용해 숫자가 흔들리지 않게 한다.
  */
 export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
-  if (s < 60) return `${s} SEC`;
-  const minutes = Math.floor(s / 60);
-  if (s < 3600) return `${minutes} MIN`;
-  return `${Math.floor(minutes / 60)}H ${minutes % 60}M`;
+  const seconds = s % 60;
+  const minutes = Math.floor(s / 60) % 60;
+  const hours = Math.floor(s / 3600);
+  const ss = String(seconds).padStart(2, "0");
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${ss}`;
+  }
+  return `${Math.floor(s / 60)}:${ss}`;
 }
 
 const OFFSET_PARTS: Intl.DateTimeFormatOptions = {
