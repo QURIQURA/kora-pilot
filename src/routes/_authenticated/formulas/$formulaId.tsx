@@ -43,7 +43,7 @@ import {
   type FunctionalRowPatch,
 } from "@/components/pilot/formula/FunctionalIngredientTable";
 import { CompositionPanel } from "@/components/pilot/formula/CompositionPanel";
-import { BalancePanel } from "@/components/pilot/formula/BalancePanel";
+import { BalancePanel, balanceSummaryLine } from "@/components/pilot/formula/BalancePanel";
 import {
   Field,
   SectionCard,
@@ -507,7 +507,9 @@ function FormulaDetailPage() {
           bathWaterG={bathWaterG}
           locked={locked}
           onOverridesChange={(next) =>
-            updateVersion.mutate({ basis_overrides: next })
+            updateVersion.mutate({
+              basis_overrides: next as unknown as FormulaVersion["basis_overrides"],
+            })
           }
           onBathChange={(grams) => updateVersion.mutate({ bath_water_g: grams })}
         />
