@@ -233,6 +233,7 @@ export type Database = {
       formula_version_ingredients: {
         Row: {
           amount: number
+          amount_source: string
           created_at: string
           formula_version_id: string
           id: string
@@ -245,6 +246,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          amount_source?: string
           created_at?: string
           formula_version_id: string
           id?: string
@@ -257,6 +259,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          amount_source?: string
           created_at?: string
           formula_version_id?: string
           id?: string
@@ -286,6 +289,8 @@ export type Database = {
       }
       formula_versions: {
         Row: {
+          basis_overrides: Json
+          bath_water_g: number | null
           change_reason: string | null
           change_summary: string | null
           created_at: string
@@ -300,6 +305,8 @@ export type Database = {
           yield_quantity: number | null
         }
         Insert: {
+          basis_overrides?: Json
+          bath_water_g?: number | null
           change_reason?: string | null
           change_summary?: string | null
           created_at?: string
@@ -314,6 +321,8 @@ export type Database = {
           yield_quantity?: number | null
         }
         Update: {
+          basis_overrides?: Json
+          bath_water_g?: number | null
           change_reason?: string | null
           change_summary?: string | null
           created_at?: string
