@@ -168,6 +168,37 @@ export const ingredientQuery = (id: string) =>
       ) as unknown as IngredientRow,
   });
 
+export interface AromaTagUsage {
+  tag: string;
+  count: number;
+}
+
+/**
+ * 현재 유저의 재료들에서 실제 쓰인 aroma_notes 태그와 사용 재료 수.
+ * 별도 마스터 테이블 없이 ingredients.aroma_notes에서 집계한다.
+ */
+export const aromaTagUsageQuery = () =>
+  queryOptions({
+    queryKey: ["aroma_tag_usage"],
+    queryFn: async (): Promise<AromaTagUsage[]> => {
+      const rows = unwrap(
+        await supabase
+          .from("ingredients")
+          .select("aroma_notes")
+          .not("aroma_notes", "is", null)
+      );
+      const counts = new Map<string, number>();
+      for (const row of rows) {
+        for (const tag of row.aroma_notes ?? []) {
+          counts.set(tag, (counts.get(tag) ?? 0) + 1);
+        }
+      }
+      return [...counts.entries()]
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+    },
+  });
+
 export const ingredientFunctionsQuery = () =>
   queryOptions({
     queryKey: ["ingredient_functions"],

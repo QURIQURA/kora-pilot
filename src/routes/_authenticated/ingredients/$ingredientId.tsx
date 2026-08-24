@@ -25,6 +25,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";
 import { FlavourFamilySelect } from "@/components/pilot/FlavourFamilySelect";
+import { AromaTagsInput } from "@/components/pilot/AromaTagsInput";
 import { cn } from "@/lib/utils";
 import {
   CollapsibleSection,
@@ -77,6 +78,7 @@ function IngredientDetailPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["ingredients"] });
+      await queryClient.invalidateQueries({ queryKey: ["aroma_tag_usage"] });
     },
   });
 
@@ -130,6 +132,7 @@ function IngredientDetailPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["ingredients"] });
+      await queryClient.invalidateQueries({ queryKey: ["aroma_tag_usage"] });
       void navigate({ to: "/ingredients" });
     },
   });
@@ -509,7 +512,7 @@ function IngredientDetailPage() {
             <span className="label-caps block text-xs text-muted-foreground">
               아로마 태그 AROMA NOTES
             </span>
-            <AromaTagInput
+            <AromaTagsInput
               value={data.aroma_notes ?? []}
               onSave={(aroma_notes) => update.mutate({ aroma_notes })}
             />
@@ -679,58 +682,6 @@ function CheckRow({
       />
       <span className="label-caps text-xs">{label}</span>
     </button>
-  );
-}
-
-function AromaTagInput({
-  value,
-  onSave,
-}: {
-  value: string[];
-  onSave: (next: string[]) => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const add = () => {
-    const tag = draft.trim();
-    if (tag && !value.includes(tag)) onSave([...value, tag]);
-    setDraft("");
-  };
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-1">
-        {value.length === 0 && (
-          <span className="font-mono text-xs uppercase text-muted-foreground">
-            NO AROMA NOTES
-          </span>
-        )}
-        {value.map((tag) => (
-          <button
-            key={tag}
-            type="button"
-            title="REMOVE"
-            onClick={() => onSave(value.filter((t) => t !== tag))}
-            className="label-caps border border-foreground bg-foreground px-2 py-1 text-[11px] text-background"
-          >
-            {tag} ×
-          </button>
-        ))}
-      </div>
-      <input
-        className={inputClass}
-        placeholder="ADD AROMA + ENTER"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            add();
-          }
-        }}
-        onBlur={() => {
-          if (draft.trim()) add();
-        }}
-      />
-    </div>
   );
 }
 

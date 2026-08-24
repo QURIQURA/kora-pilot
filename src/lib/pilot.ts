@@ -245,3 +245,50 @@ export const SYSTEM_FUNCTION_KEYS = [
   "fat",
   "sweetener",
 ] as const;
+
+/* ── 아로마 태그 ─────────────────────────────────────────── */
+
+/**
+ * 아로마 태그 기본 어휘 24종 — 코드에 하드코딩된 최초 자동완성 후보.
+ * DB 시드가 아니며, 사용자가 실제 쓴 태그가 여기에 더해져 후보가 늘어난다.
+ */
+export const DEFAULT_AROMA_TAGS = [
+  { value: "우디", en: "Woody" },
+  { value: "스모키", en: "Smoky" },
+  { value: "레지너스", en: "Resinous" },
+  { value: "그린", en: "Green" },
+  { value: "민티", en: "Minty" },
+  { value: "페퍼리", en: "Peppery" },
+  { value: "플로럴", en: "Floral" },
+  { value: "프루티", en: "Fruity" },
+  { value: "시트러시", en: "Citrusy" },
+  { value: "넛티", en: "Nutty" },
+  { value: "로스티", en: "Roasty" },
+  { value: "캐러멜릭", en: "Caramelic" },
+  { value: "버터리", en: "Buttery" },
+  { value: "크리미", en: "Creamy" },
+  { value: "바닐릭", en: "Vanillic" },
+  { value: "어시", en: "Earthy" },
+  { value: "스파이시", en: "Spicy" },
+  { value: "허바시어스", en: "Herbaceous" },
+  { value: "잼미", en: "Jammy" },
+  { value: "발사믹", en: "Balsamic" },
+  { value: "알코홀릭", en: "Alcoholic" },
+  { value: "이스티", en: "Yeasty" },
+  { value: "토스티", en: "Toasty" },
+  { value: "애니멀릭", en: "Animalic" },
+] as const;
+
+export interface AromaTagCandidate {
+  value: string;
+  en?: string;
+}
+
+/** 기본 어휘 + 사용자가 실제 쓴 태그를 합친 자동완성 후보 */
+export function aromaTagCandidates(used: string[]): AromaTagCandidate[] {
+  const list: AromaTagCandidate[] = [...DEFAULT_AROMA_TAGS];
+  for (const tag of used) {
+    if (!list.some((c) => c.value === tag)) list.push({ value: tag });
+  }
+  return list;
+}

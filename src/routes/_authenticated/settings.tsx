@@ -6,6 +6,7 @@ import { MouldManager } from "@/components/pilot/MouldManager";
 import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
 import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
+import { AromaTagManager } from "@/components/pilot/AromaTagManager";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -76,6 +77,9 @@ function SettingsPage() {
       </SettingsSection>
       <SettingsSection title="FLAVOUR FAMILIES">
         <FlavourFamilyManager />
+      </SettingsSection>
+      <SettingsSection title="AROMA TAGS">
+        <AromaTagManager />
       </SettingsSection>
     </div>
   );

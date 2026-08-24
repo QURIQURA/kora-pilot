@@ -232,6 +232,18 @@ function IngredientsPage() {
                         영문명 없음
                       </span>
                     )}
+                    {(ingredient.aroma_notes ?? []).length > 0 && (
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {(ingredient.aroma_notes ?? []).map((tag) => (
+                          <span
+                            key={tag}
+                            className="label-caps border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </span>
                   <span className="col-span-2 font-mono text-xs uppercase text-muted-foreground">
                     {categoryPathLabel(
