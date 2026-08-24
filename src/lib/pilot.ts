@@ -142,6 +142,39 @@ export function ingredientDisplayName(
   return en ? `${ingredient.name} (${en})` : ingredient.name;
 }
 
+/**
+ * 기능(FUNCTION) 표시 — 영문 우선, 한글 보조.
+ * name_en이 없는 기능은 한글명만 표시한다 (빈 칸 방지).
+ */
+export interface FunctionDisplayParts {
+  primary: string;
+  secondary: string | null;
+}
+
+export function functionDisplayParts(
+  fn: Pick<IngredientFunction, "name" | "name_en">
+): FunctionDisplayParts {
+  const en = fn.name_en?.trim();
+  return en
+    ? { primary: en, secondary: fn.name }
+    : { primary: fn.name, secondary: null };
+}
+
+/** 한 줄 표시용 — "STARCH (전분)" */
+export function functionDisplayName(
+  fn: Pick<IngredientFunction, "name" | "name_en">
+): string {
+  const { primary, secondary } = functionDisplayParts(fn);
+  return secondary ? `${primary} (${secondary})` : primary;
+}
+
+/** 여러 기능을 짧게 나열할 때 — 영문만, 없으면 한글. "STARCH / STRUCTURE" */
+export function functionShortName(
+  fn: Pick<IngredientFunction, "name" | "name_en">
+): string {
+  return fn.name_en?.trim() || fn.name;
+}
+
 /** 기능성 재료 사용률 기준 */
 export const REFERENCE_BASIS_OPTIONS = [
   { value: "flour", label: "FLOUR" },
