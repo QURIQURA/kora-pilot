@@ -130,23 +130,26 @@ export function IngredientFunctionManager() {
                 />
                 <input
                   className={`${inputClass} min-w-[8rem] flex-1 border-transparent hover:border-input`}
-                  defaultValue={fn.name}
-                  key={`name-${fn.id}-${fn.name}`}
-                  onBlur={(e) => {
-                    const name = e.target.value.trim();
-                    if (name && name !== fn.name)
-                      update.mutate({ id: fn.id, patch: { name } });
-                  }}
-                />
-                <input
-                  className={`${inputClass} min-w-[8rem] flex-1 border-transparent hover:border-input`}
-                  placeholder="ENGLISH NAME"
+                  placeholder="ENGLISH — PRIMARY"
+                  aria-label={`ENGLISH NAME ${fn.name}`}
                   defaultValue={fn.name_en ?? ""}
                   key={`en-${fn.id}-${fn.name_en ?? ""}`}
                   onBlur={(e) => {
                     const name_en = e.target.value.trim() || null;
                     if (name_en !== (fn.name_en ?? null))
                       update.mutate({ id: fn.id, patch: { name_en } });
+                  }}
+                />
+                <input
+                  className={`${inputClass} min-w-[8rem] flex-1 border-transparent text-muted-foreground hover:border-input`}
+                  placeholder="한글 — FALLBACK"
+                  aria-label={`한글명 ${fn.name_en ?? fn.name}`}
+                  defaultValue={fn.name}
+                  key={`name-${fn.id}-${fn.name}`}
+                  onBlur={(e) => {
+                    const name = e.target.value.trim();
+                    if (name && name !== fn.name)
+                      update.mutate({ id: fn.id, patch: { name } });
                   }}
                 />
                 <input
@@ -251,20 +254,20 @@ function FunctionCreateForm({
         if (name.trim()) create.mutate();
       }}
     >
-      <Field label="NAME (한글)">
+      <Field label="NAME (ENGLISH) — PRIMARY DISPLAY">
         <input
           className={inputClass}
           autoFocus
+          value={nameEn}
+          onChange={(e) => setNameEn(e.target.value)}
+        />
+      </Field>
+      <Field label="NAME (한글) — FALLBACK · REQUIRED">
+        <input
+          className={inputClass}
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-        />
-      </Field>
-      <Field label="NAME (ENGLISH)">
-        <input
-          className={inputClass}
-          value={nameEn}
-          onChange={(e) => setNameEn(e.target.value)}
         />
       </Field>
       <Field label="COLOR">

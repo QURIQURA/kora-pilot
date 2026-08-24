@@ -43,7 +43,18 @@ export function FunctionPicker({
                   : "border-border text-muted-foreground hover:text-foreground")
               }
             >
-              {name}
+              {labels?.[name] ? (
+                <>
+                  <span>{labels[name].primary}</span>
+                  {labels[name].secondary && (
+                    <span className="ml-1 text-[9px] opacity-70">
+                      ({labels[name].secondary})
+                    </span>
+                  )}
+                </>
+              ) : (
+                name
+              )}
             </button>
           );
         })}

@@ -11,7 +11,12 @@ import {
   ingredientsQuery,
   type IngredientRow,
 } from "@/lib/queries";
-import { categoryPathLabel, hasComposition } from "@/lib/pilot";
+import {
+  categoryPathLabel,
+  functionDisplayName,
+  functionDisplayParts,
+  hasComposition,
+} from "@/lib/pilot";
 import { EmptyState } from "@/components/EmptyState";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";
 import { cn } from "@/lib/utils";
@@ -49,10 +54,12 @@ function IngredientsPage() {
   const ingredients = useQuery(ingredientsQuery());
   const categories = useQuery(categoriesQuery());
   const families = useQuery(flavourFamiliesQuery());
+  const functions = useQuery(ingredientFunctionsQuery());
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
 
   const [familyFilter, setFamilyFilter] = useState("");
+  const [functionFilter, setFunctionFilter] = useState("");
   const [onlyFunctional, setOnlyFunctional] = useState(false);
   const [onlyNoComposition, setOnlyNoComposition] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<"" | "standard" | "verified">(
@@ -69,9 +76,19 @@ function IngredientsPage() {
     if (onlyNoEnglish && ingredient.name_en?.trim()) return false;
     if (familyFilter && ingredient.flavour_family_id !== familyFilter)
       return false;
+    if (
+      functionFilter &&
+      !ingredient.ingredient_function_links.some(
+        (l) => l.function_id === functionFilter
+      )
+    )
+      return false;
     if (!term) return true;
     const functions = ingredient.ingredient_function_links
-      .map((l) => l.ingredient_functions?.name ?? "")
+      .map(
+        (l) =>
+          `${l.ingredient_functions?.name ?? ""} ${l.ingredient_functions?.name_en ?? ""}`
+      )
       .join(" ")
       .toLowerCase();
     return (
@@ -169,6 +186,19 @@ function IngredientsPage() {
               </option>
             ))}
           </select>
+          <select
+            className={`${selectClass} w-auto min-w-[10rem]`}
+            value={functionFilter}
+            onChange={(e) => setFunctionFilter(e.target.value)}
+            aria-label="기능 필터"
+          >
+            <option value="">모든 기능 ALL FUNCTIONS</option>
+            {(functions.data ?? []).map((fn) => (
+              <option key={fn.id} value={fn.id}>
+                {functionDisplayName(fn)}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -252,14 +282,29 @@ function IngredientsPage() {
                     )}
                   </span>
                   <span className="col-span-2 flex flex-wrap gap-1">
-                    {ingredient.ingredient_function_links.map((link) => (
-                      <span
-                        key={link.function_id}
-                        className="label-caps border border-foreground bg-foreground px-1.5 py-0.5 text-[10px] text-background"
-                      >
-                        {link.ingredient_functions?.name}
-                      </span>
-                    ))}
+                    {ingredient.ingredient_function_links.map((link) => {
+                      const fn = link.ingredient_functions;
+                      const label = fn ? functionDisplayParts(fn) : null;
+                      return (
+                        <span
+                          key={link.function_id}
+                          className="label-caps border border-foreground bg-foreground px-1.5 py-0.5 text-[10px] text-background"
+                        >
+                          {label ? (
+                            <>
+                              {label.primary}
+                              {label.secondary && (
+                                <span className="ml-1 opacity-70">
+                                  ({label.secondary})
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </span>
+                      );
+                    })}
                   </span>
                   <span className="col-span-1">
                     {ingredient.is_functional ? (
@@ -427,6 +472,12 @@ function CreateIngredientDialog({ onClose }: { onClose: () => void }) {
             </span>
             <FunctionPicker
               options={(functions.data ?? []).map((f) => f.name)}
+              labels={Object.fromEntries(
+                (functions.data ?? []).map((f) => [
+                  f.name,
+                  functionDisplayParts(f),
+                ])
+              )}
               selected={functionNames}
               onChange={setFunctionNames}
             />
