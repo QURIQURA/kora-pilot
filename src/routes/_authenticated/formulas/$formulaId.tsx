@@ -31,6 +31,7 @@ import {
   rowScaledGrams,
   type BasisOverrides,
 } from "@/lib/formula-calc";
+import { functionShortName } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
@@ -750,8 +751,9 @@ function IngredientTableRow({
   const percent =
     denominator > 0 && grams !== null ? (grams / denominator) * 100 : null;
   const functions = (row.ingredients?.ingredient_function_links ?? [])
-    .map((link) => link.ingredient_functions?.name)
-    .filter(Boolean)
+    .map((link) => link.ingredient_functions)
+    .filter((fn) => Boolean(fn))
+    .map((fn) => functionShortName(fn!))
     .join(" / ");
   const scaled = rowScaledGrams(row, batch);
 
