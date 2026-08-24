@@ -20,6 +20,7 @@ import {
   TASTE_AXES,
   categoryPath,
   compositionSum,
+  functionDisplayParts,
 } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
@@ -249,6 +250,12 @@ function IngredientDetailPage() {
         <div className="space-y-4">
           <FunctionPicker
             options={(functions.data ?? []).map((f) => f.name)}
+            labels={Object.fromEntries(
+              (functions.data ?? []).map((f) => [
+                f.name,
+                functionDisplayParts(f),
+              ])
+            )}
             selected={selected}
             onChange={(next) => setFunctions.mutate(next)}
           />
