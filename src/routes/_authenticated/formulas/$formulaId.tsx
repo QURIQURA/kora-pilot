@@ -25,7 +25,6 @@ import {
   type FormulaVersion,
 } from "@/lib/formula";
 import {
-  balanceSummaryLine,
   balanceTotals,
   computeBases,
   parseBasisOverrides,

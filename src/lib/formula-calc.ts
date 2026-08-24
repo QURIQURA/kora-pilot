@@ -56,12 +56,14 @@ export function parseBasisOverrides(raw: unknown): BasisOverrides {
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!value || typeof value !== "object") continue;
     const rec = value as Record<string, unknown>;
+    const include = rec["include"];
+    const exclude = rec["exclude"];
     out[key] = {
-      include: Array.isArray(rec.include)
-        ? rec.include.filter((v): v is string => typeof v === "string")
+      include: Array.isArray(include)
+        ? include.filter((v): v is string => typeof v === "string")
         : [],
-      exclude: Array.isArray(rec.exclude)
-        ? rec.exclude.filter((v): v is string => typeof v === "string")
+      exclude: Array.isArray(exclude)
+        ? exclude.filter((v): v is string => typeof v === "string")
         : [],
     };
   }
