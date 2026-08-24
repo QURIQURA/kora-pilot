@@ -1,14 +1,18 @@
 import { useState } from "react";
+import type { FunctionDisplayParts } from "@/lib/pilot";
 import { buttonClass, inputClass } from "./ui";
 
 export function FunctionPicker({
   options,
   selected,
   onChange,
+  labels,
 }: {
   options: string[];
   selected: string[];
   onChange: (next: string[]) => void;
+  /** 옵션 name → 영문 우선 표시 라벨. 없으면 name 그대로 표시 */
+  labels?: Record<string, FunctionDisplayParts>;
 }) {
   const [custom, setCustom] = useState("");
 
