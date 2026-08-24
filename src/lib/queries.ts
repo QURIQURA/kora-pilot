@@ -399,6 +399,8 @@ export interface VersionIngredientRow {
   unit: string;
   sort_order: number;
   note: string | null;
+  /** 'manual' | 'suggested' | 'copied' — 양의 출처 */
+  amount_source: string;
   ingredient_id: string;
   ingredients: IngredientRow;
 }
@@ -413,7 +415,7 @@ export const versionIngredientsQuery = (versionId: string | null) =>
         await supabase
           .from("formula_version_ingredients")
           .select(
-            "id, amount, unit, sort_order, note, ingredient_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))"
+            "id, amount, unit, sort_order, note, amount_source, ingredient_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))"
           )
           .eq("formula_version_id", versionId)
           .order("sort_order")

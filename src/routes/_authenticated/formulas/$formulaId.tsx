@@ -24,13 +24,26 @@ import {
   type FormulaStatus,
   type FormulaVersion,
 } from "@/lib/formula";
+import {
+  balanceTotals,
+  computeBases,
+  parseBasisOverrides,
+  rowScaledGrams,
+  type BasisOverrides,
+} from "@/lib/formula-calc";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
-import { experimentLabel } from "@/lib/experiment";
+import { BasisPanel } from "@/components/pilot/formula/BasisPanel";
+import {
+  FunctionalIngredientTable,
+  type FunctionalRowPatch,
+} from "@/components/pilot/formula/FunctionalIngredientTable";
+import { CompositionPanel } from "@/components/pilot/formula/CompositionPanel";
+import { BalancePanel, balanceSummaryLine } from "@/components/pilot/formula/BalancePanel";
 import {
   Field,
   SectionCard,
@@ -154,6 +167,7 @@ function FormulaDetailPage() {
           amount: 0,
           unit,
           sort_order: rows.length,
+          amount_source: "manual",
         });
       if (error) throw error;
     },
@@ -166,7 +180,7 @@ function FormulaDetailPage() {
       patch,
     }: {
       id: string;
-      patch: { amount?: number; unit?: string; note?: string | null };
+      patch: FunctionalRowPatch;
     }) => {
       const { error } = await supabase
         .from("formula_version_ingredients")
@@ -210,6 +224,8 @@ function FormulaDetailPage() {
           yield_quantity: version?.yield_quantity ?? null,
           change_summary: summary || null,
           change_reason: reason || null,
+          bath_water_g: version?.bath_water_g ?? null,
+          basis_overrides: version?.basis_overrides ?? {},
         })
         .select("id")
         .single();
@@ -226,6 +242,8 @@ function FormulaDetailPage() {
               unit: row.unit,
               sort_order: row.sort_order,
               note: row.note,
+              // 새 버전으로 복사된 값은 'copied'로 시작, 수정 시 'manual'이 된다
+              amount_source: "copied",
             }))
           );
         if (copyError) throw copyError;
@@ -261,10 +279,32 @@ function FormulaDetailPage() {
     );
   }
 
+  /* ── 계산 (전부 표시용 — 저장되는 것은 amount와 amount_source뿐) ── */
+  const overrides: BasisOverrides = parseBasisOverrides(version?.basis_overrides);
+  const bathWaterG =
+    version?.bath_water_g != null ? Number(version.bath_water_g) : null;
+  const bases = computeBases(rows, overrides, bathWaterG);
+
+  const bulkRows = rows.filter((r) => !r.ingredients?.is_functional);
+  const functionalRows = rows.filter((r) => r.ingredients?.is_functional);
+
+  // 총 중량 — N^k 스케일링 반영
   const totalGrams = rows.reduce((sum, row) => {
     const grams = toGrams(Number(row.amount), row.unit);
     return sum + (grams ?? 0);
   }, 0);
+  const totalScaled = rows.reduce(
+    (sum, row) => sum + rowScaledGrams(row, batchValue).scaled,
+    0
+  );
+
+  // 배수 ≥ 2 + process_note 보유 재료 → 공정 주의
+  const processCautions =
+    batchValue >= 2
+      ? rows.filter((r) => r.ingredients?.process_note)
+      : [];
+
+  // baker's % 기준 (벌크 테이블 수동 선택)
   const basisRow = rows.find((r) => r.ingredient_id === basisId) ?? null;
   const basisGrams = basisRow
     ? toGrams(Number(basisRow.amount), basisRow.unit) ?? 0
@@ -383,6 +423,20 @@ function FormulaDetailPage() {
         </p>
       )}
 
+      {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
+      {processCautions.length > 0 && (
+        <div className="border border-dashed border-foreground px-4 py-3">
+          <p className="label-caps text-xs">PROCESS CAUTION — 배수 ×{fmtNumber(batchValue, 2)}</p>
+          <ul className="mt-1 space-y-1">
+            {processCautions.map((row) => (
+              <li key={row.id} className="font-mono text-xs">
+                {row.ingredients?.name}: {row.ingredients?.process_note}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* YIELD & BATCH */}
       <SectionCard title="YIELD & BATCH">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -428,27 +482,42 @@ function FormulaDetailPage() {
             <span className="label-caps block text-xs text-muted-foreground">
               TOTAL WEIGHT
             </span>
-            <p className="font-mono text-base">
+            <p className="font-mono text-base tabular-nums">
               {fmtNumber(totalGrams)}g
               <span className="ml-2 bg-secondary px-2 py-0.5 text-sm">
-                ×{fmtNumber(batchValue, 2)} = {fmtNumber(totalGrams * batchValue)}g
+                ×{fmtNumber(batchValue, 2)} = {fmtNumber(totalScaled)}g
               </span>
             </p>
             <p className="font-mono text-xs uppercase text-muted-foreground">
               {mould ? mould.name : "NO MOULD"}
               {yieldQty
-                ? ` ${fmtNumber(yieldQty * batchValue, 2)}개 · ${fmtNumber(
-                    totalGrams * batchValue
-                  )}g`
+                ? ` ${fmtNumber(yieldQty * batchValue, 2)}개 · ${fmtNumber(totalScaled)}g`
                 : ""}
             </p>
           </div>
         </div>
       </SectionCard>
 
-      {/* INGREDIENT TABLE */}
+      {/* BASIS — 기준량 자동 집계 */}
+      {version && (
+        <BasisPanel
+          bases={bases}
+          rows={rows}
+          overrides={overrides}
+          bathWaterG={bathWaterG}
+          locked={locked}
+          onOverridesChange={(next) =>
+            updateVersion.mutate({
+              basis_overrides: next as unknown as FormulaVersion["basis_overrides"],
+            })
+          }
+          onBathChange={(grams) => updateVersion.mutate({ bath_water_g: grams })}
+        />
+      )}
+
+      {/* BULK INGREDIENTS */}
       <SectionCard
-        title="INGREDIENT TABLE"
+        title="BULK INGREDIENTS"
         action={
           <div className="flex items-center gap-2">
             <select
@@ -475,9 +544,9 @@ function FormulaDetailPage() {
           </div>
         }
       >
-        {rows.length === 0 ? (
+        {bulkRows.length === 0 ? (
           <p className="font-mono text-xs uppercase text-muted-foreground">
-            NO INGREDIENTS IN THIS VERSION
+            NO BULK INGREDIENTS IN THIS VERSION
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -504,7 +573,7 @@ function FormulaDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {bulkRows.map((row) => (
                   <IngredientTableRow
                     key={row.id}
                     row={row}
@@ -520,6 +589,35 @@ function FormulaDetailPage() {
           </div>
         )}
       </SectionCard>
+
+      {/* FUNCTIONAL INGREDIENTS */}
+      <SectionCard
+        title="FUNCTIONAL INGREDIENTS"
+        action={
+          !locked ? (
+            <button
+              type="button"
+              className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+              onClick={() => setAdding(true)}
+            >
+              + ADD INGREDIENT
+            </button>
+          ) : undefined
+        }
+      >
+        <FunctionalIngredientTable
+          rows={functionalRows}
+          bases={bases}
+          locked={locked}
+          batch={batchValue}
+          onPatch={(id, patch) => updateRow.mutate({ id, patch })}
+          onRemove={(id) => removeRow.mutate(id)}
+        />
+      </SectionCard>
+
+      {/* COMPOSITION / BALANCE */}
+      <CompositionPanel rows={rows} batch={batchValue} />
+      <BalancePanel rows={rows} batch={batchValue} />
 
       {/* NOTES */}
       <SectionCard title="VERSION NOTES">
@@ -644,7 +742,7 @@ function IngredientTableRow({
   locked: boolean;
   batch: number;
   denominator: number;
-  onPatch: (patch: { amount?: number; unit?: string; note?: string | null }) => void;
+  onPatch: (patch: FunctionalRowPatch) => void;
   onRemove: () => void;
 }) {
   const amount = Number(row.amount);
@@ -655,6 +753,7 @@ function IngredientTableRow({
     .map((link) => link.ingredient_functions?.name)
     .filter(Boolean)
     .join(" / ");
+  const scaled = rowScaledGrams(row, batch);
 
   return (
     <tr className="border-b border-border align-middle">
@@ -672,18 +771,24 @@ function IngredientTableRow({
           type="number"
           inputMode="decimal"
           step="0.1"
-          className="min-h-[48px] w-24 border border-input bg-background px-2 py-2 font-mono text-sm outline-none focus:border-foreground disabled:opacity-60"
+          className="min-h-[48px] w-24 border border-input bg-background px-2 py-2 font-mono text-base tabular-nums outline-none focus:border-foreground disabled:opacity-60"
           disabled={locked}
           defaultValue={amount}
           key={`amt-${row.id}-${amount}`}
           onBlur={(e) => {
             const next = parseNumber(e.target.value);
-            if (next !== amount) onPatch({ amount: next });
+            // 직접 수정하면 manual이 된다 (copied → manual 전환)
+            if (next !== amount) onPatch({ amount: next, amount_source: "manual" });
           }}
         />
       </td>
-      <td className="bg-secondary px-2 py-2 font-mono text-sm">
-        {fmtNumber(amount * batch, 2)}
+      <td className="bg-secondary px-2 py-2 font-mono text-sm tabular-nums">
+        {fmtNumber(scaled.scaled, 2)}
+        {scaled.nonLinear && (
+          <span className="block text-[10px] text-muted-foreground">
+            비례 시 {fmtNumber(scaled.linear, 2)}
+          </span>
+        )}
       </td>
       <td className="px-2 py-2">
         <select
@@ -699,7 +804,7 @@ function IngredientTableRow({
           ))}
         </select>
       </td>
-      <td className="px-2 py-2 font-mono text-sm">
+      <td className="px-2 py-2 font-mono text-sm tabular-nums">
         {percent === null ? "—" : `${fmtNumber(percent, 1)}%`}
       </td>
       <td className="px-2 py-2 font-mono text-xs uppercase text-muted-foreground">
@@ -707,7 +812,7 @@ function IngredientTableRow({
       </td>
       <td className="px-2 py-2">
         <input
-          className="min-h-[48px] w-40 border border-input bg-background px-2 py-2 text-sm outline-none focus:border-foreground disabled:opacity-60"
+          className="min-h-[48px] w-40 border border-input bg-background px-2 py-2 text-base outline-none focus:border-foreground disabled:opacity-60"
           disabled={locked}
           defaultValue={row.note ?? ""}
           key={`note-${row.id}`}
@@ -756,6 +861,28 @@ function VersionHistory({
 
   const diff =
     left && right ? diffIngredients(simplify(leftRows.data), simplify(rightRows.data)) : [];
+
+  // 버전 간 균형 이동
+  const leftBalance = left ? balanceTotals(leftRows.data ?? [], 1) : null;
+  const rightBalance = right ? balanceTotals(rightRows.data ?? [], 1) : null;
+  const balanceDelta =
+    leftBalance && rightBalance
+      ? [
+          leftBalance.toughenTender && rightBalance.toughenTender
+            ? {
+                label: "연화",
+                delta:
+                  rightBalance.toughenTender.right - leftBalance.toughenTender.right,
+              }
+            : null,
+          leftBalance.moistenDry && rightBalance.moistenDry
+            ? {
+                label: "습윤",
+                delta: rightBalance.moistenDry.left - leftBalance.moistenDry.left,
+              }
+            : null,
+        ].filter((d): d is { label: string; delta: number } => Boolean(d))
+      : [];
 
   return (
     <SectionCard title="VERSION HISTORY">
@@ -836,6 +963,24 @@ function VersionHistory({
                 </li>
               ))}
             </ul>
+          )}
+          {leftBalance && rightBalance && (
+            <div className="border-t border-border px-3 py-3">
+              <p className="label-caps text-[11px] text-muted-foreground">BALANCE SHIFT</p>
+              <p className="mt-1 font-mono text-xs tabular-nums">
+                {balanceSummaryLine(leftBalance)} → {balanceSummaryLine(rightBalance)}
+              </p>
+              {balanceDelta.length > 0 && (
+                <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
+                  {balanceDelta
+                    .map(
+                      (d) =>
+                        `${d.label} ${d.delta >= 0 ? "+" : ""}${fmtNumber(d.delta, 1)}%`
+                    )
+                    .join(" · ")}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
