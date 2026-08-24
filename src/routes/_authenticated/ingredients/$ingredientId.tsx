@@ -122,18 +122,44 @@ function IngredientDetailPage() {
     },
   });
 
+  const [usageBlocked, setUsageBlocked] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const remove = useMutation({
     mutationFn: async () => {
+      setUsageBlocked(null);
+      setDeleteError(null);
+      // 배합에서 사용 중인지 먼저 확인 — 사용 중이면 삭제하지 않는다
+      const { count, error: countError } = await supabase
+        .from("formula_version_ingredients")
+        .select("id", { count: "exact", head: true })
+        .eq("ingredient_id", ingredientId);
+      if (countError) throw countError;
+      if ((count ?? 0) > 0) {
+        setUsageBlocked(count ?? 0);
+        return false;
+      }
+      // 기능 링크가 FK로 참조하므로 먼저 제거
+      const { error: linkError } = await supabase
+        .from("ingredient_function_links")
+        .delete()
+        .eq("ingredient_id", ingredientId);
+      if (linkError) throw linkError;
       const { error } = await supabase
         .from("ingredients")
         .delete()
         .eq("id", ingredientId);
       if (error) throw error;
+      return true;
     },
-    onSuccess: async () => {
+    onSuccess: async (deleted) => {
+      if (!deleted) return;
       await queryClient.invalidateQueries({ queryKey: ["ingredients"] });
       await queryClient.invalidateQueries({ queryKey: ["aroma_tag_usage"] });
       void navigate({ to: "/ingredients" });
+    },
+    onError: (e) => {
+      setDeleteError(e instanceof Error ? e.message : String(e));
     },
   });
 
