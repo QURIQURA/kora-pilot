@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.seed_technique_categories(uuid) FROM anon, authenticated, public;
+REVOKE EXECUTE ON FUNCTION public.enforce_leaf_technique_category() FROM anon, authenticated, public;
