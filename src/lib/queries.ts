@@ -631,3 +631,66 @@ export const recentProcessEventsQuery = () =>
           .limit(8)
       ) as unknown as RecentProcessEventRow[],
   });
+
+/* ── PHASE 9 — TECHNIQUE CATEGORIES / CALIBRATION ─────────────── */
+
+import type { TechniqueCategory } from "@/lib/technique";
+
+export const techniqueCategoriesQuery = () =>
+  queryOptions({
+    queryKey: ["technique_categories"],
+    queryFn: async (): Promise<TechniqueCategory[]> =>
+      unwrap(
+        await supabase
+          .from("technique_categories")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true })
+      ),
+  });
+
+/** 특정 기법군에 연결된 배합 — 기준 배합 먼저 */
+export const formulasByTechniqueQuery = (techniqueId: string | null) =>
+  queryOptions({
+    queryKey: ["formulas_by_technique", techniqueId],
+    enabled: Boolean(techniqueId),
+    queryFn: async (): Promise<FormulaListRow[]> => {
+      if (!techniqueId) return [];
+      return unwrap(
+        await supabase
+          .from("formulas")
+          .select(
+            "*, components(id, name), formula_versions(id, version_number, status)"
+          )
+          .eq("technique_category_id", techniqueId)
+          .order("is_base_formula", { ascending: false })
+          .order("updated_at", { ascending: false })
+      ) as unknown as FormulaListRow[];
+    },
+  });
+
+/** 여러 버전의 재료를 한 번에 — CALIBRATION 비교표용 */
+export const versionIngredientsBulkQuery = (versionIds: string[]) =>
+  queryOptions({
+    queryKey: ["formula_version_ingredients_bulk", [...versionIds].sort()],
+    enabled: versionIds.length > 0,
+    queryFn: async (): Promise<Record<string, VersionIngredientRow[]>> => {
+      if (versionIds.length === 0) return {};
+      const rows = unwrap(
+        await supabase
+          .from("formula_version_ingredients")
+          .select(
+            "id, amount, unit, sort_order, note, amount_source, ingredient_id, formula_version_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))"
+          )
+          .in("formula_version_id", versionIds)
+          .order("sort_order")
+      ) as unknown as (VersionIngredientRow & {
+        formula_version_id: string;
+      })[];
+      const map: Record<string, VersionIngredientRow[]> = {};
+      for (const row of rows) {
+        (map[row.formula_version_id] ??= []).push(row);
+      }
+      return map;
+    },
+  });
