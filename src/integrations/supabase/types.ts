@@ -358,8 +358,10 @@ export type Database = {
           component_id: string | null
           created_at: string
           id: string
+          is_base_formula: boolean
           name: string
           notes: string | null
+          technique_category_id: string | null
           updated_at: string
           user_id: string
         }
@@ -367,8 +369,10 @@ export type Database = {
           component_id?: string | null
           created_at?: string
           id?: string
+          is_base_formula?: boolean
           name: string
           notes?: string | null
+          technique_category_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -376,8 +380,10 @@ export type Database = {
           component_id?: string | null
           created_at?: string
           id?: string
+          is_base_formula?: boolean
           name?: string
           notes?: string | null
+          technique_category_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -387,6 +393,13 @@ export type Database = {
             columns: ["component_id"]
             isOneToOne: false
             referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulas_technique_category_id_fkey"
+            columns: ["technique_category_id"]
+            isOneToOne: false
+            referencedRelation: "technique_categories"
             referencedColumns: ["id"]
           },
         ]
@@ -941,6 +954,53 @@ export type Database = {
         }
         Relationships: []
       }
+      technique_categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          name_en: string | null
+          notes: string | null
+          parent_id: string | null
+          sort_order: number
+          suggested_base_formula: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          name_en?: string | null
+          notes?: string | null
+          parent_id?: string | null
+          sort_order?: number
+          suggested_base_formula?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          name_en?: string | null
+          notes?: string | null
+          parent_id?: string | null
+          sort_order?: number
+          suggested_base_formula?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technique_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "technique_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -951,6 +1011,10 @@ export type Database = {
         Returns: undefined
       }
       seed_flavour_families: { Args: { p_user_id: string }; Returns: undefined }
+      seed_technique_categories: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       experiment_status:
