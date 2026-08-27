@@ -9,8 +9,10 @@ import {
   type FormulaListRow,
 } from "@/lib/queries";
 import { FORMULA_STATUSES, versionLabel } from "@/lib/formula";
+import { confirmBaseFormula } from "@/lib/technique-actions";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
+import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import {
   Field,
   PageHeader,
