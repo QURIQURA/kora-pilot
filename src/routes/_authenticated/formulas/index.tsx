@@ -227,7 +227,9 @@ function FormulasPage() {
           }))}
           pending={create.isPending}
           onCancel={() => setCreating(false)}
-          onCreate={(name, componentId) => create.mutate({ name, componentId })}
+          onCreate={(name, componentId, techniqueId, isBase) =>
+            create.mutate({ name, componentId, techniqueId, isBase })
+          }
         />
       )}
     </div>

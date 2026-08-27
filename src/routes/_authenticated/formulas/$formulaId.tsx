@@ -10,6 +10,7 @@ import {
   mouldsQuery,
   versionIngredientsQuery,
   componentsQuery,
+  techniqueCategoriesQuery,
   type VersionIngredientRow,
 } from "@/lib/queries";
 import {
@@ -33,8 +34,11 @@ import {
 } from "@/lib/formula-calc";
 import { functionShortName } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
+import { techniquePath } from "@/lib/technique";
+import { confirmBaseFormula } from "@/lib/technique-actions";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
+import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
@@ -79,6 +83,7 @@ function FormulaDetailPage() {
   const versions = useQuery(formulaVersionsQuery(formulaId));
   const moulds = useQuery(mouldsQuery());
   const components = useQuery(componentsQuery());
+  const techniqueCategories = useQuery(techniqueCategoriesQuery());
 
   const versionList = useMemo(() => versions.data ?? [], [versions.data]);
   const [versionId, setVersionId] = useState<string | null>(null);
@@ -126,6 +131,7 @@ function FormulaDetailPage() {
       queryKey: ["formula_version_ingredients", versionId],
     });
     await queryClient.invalidateQueries({ queryKey: ["mould_usage"] });
+    await queryClient.invalidateQueries({ queryKey: ["formulas_by_technique"] });
   };
 
   const updateFormula = useMutation({
@@ -137,6 +143,25 @@ function FormulaDetailPage() {
       const { error } = await supabase
         .from("formulas")
         .update(patch)
+        .eq("id", formulaId);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  /** 기법 분류 변경 + 기준 배합 지정 — 중복 시 확인 후 교체 */
+  const updateTechnique = useMutation({
+    mutationFn: async ({
+      techniqueId,
+      isBase,
+    }: {
+      techniqueId: string | null;
+      isBase: boolean;
+    }) => {
+      const base = await confirmBaseFormula({ formulaId, techniqueId, isBase });
+      const { error } = await supabase
+        .from("formulas")
+        .update({ technique_category_id: techniqueId, is_base_formula: base })
         .eq("id", formulaId);
       if (error) throw error;
     },
@@ -317,6 +342,13 @@ function FormulaDetailPage() {
   );
   const yieldQty = version?.yield_quantity ? Number(version.yield_quantity) : 0;
 
+  const techniqueList = techniqueCategories.data ?? [];
+  const techniquePathList = techniquePath(
+    techniqueList,
+    formula.data.technique_category_id
+  );
+  const technique = techniquePathList[techniquePathList.length - 1] ?? null;
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -331,11 +363,52 @@ function FormulaDetailPage() {
                 updateFormula.mutate({ name });
             }}
           />
+          {technique && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to="/settings/calibration/$techniqueId"
+                params={{ techniqueId: technique.id }}
+                className="label-caps inline-block border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-secondary"
+              >
+                {technique.name}
+              </Link>
+              {formula.data.is_base_formula && (
+                <span className="label-caps inline-block border border-border bg-secondary px-2 py-1 text-xs">
+                  ⭐ 기준 배합
+                </span>
+              )}
+            </div>
+          )}
           <p className="font-mono text-xs uppercase text-muted-foreground">
             UPDATED {formatDateTime(formula.data.updated_at)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <TechniqueSelect
+            className={`${selectClass} w-auto`}
+            value={formula.data.technique_category_id ?? ""}
+            onChange={(id) =>
+              updateTechnique.mutate({
+                techniqueId: id || null,
+                isBase: id ? formula.data!.is_base_formula : false,
+              })
+            }
+          />
+          <label className="flex min-h-[44px] items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              className="h-5 w-5 border border-input"
+              checked={formula.data.is_base_formula}
+              disabled={!formula.data.technique_category_id}
+              onChange={(e) =>
+                updateTechnique.mutate({
+                  techniqueId: formula.data!.technique_category_id,
+                  isBase: e.target.checked,
+                })
+              }
+            />
+            <span className="label-caps">기준 배합</span>
+          </label>
           <select
             className={`${selectClass} w-auto`}
             value={formula.data.component_id ?? ""}
