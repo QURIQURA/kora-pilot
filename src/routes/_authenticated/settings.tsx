@@ -4,6 +4,7 @@ import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { TagManager } from "@/components/pilot/TagManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManager";
+import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
 import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
 import { AromaTagManager } from "@/components/pilot/AromaTagManager";
