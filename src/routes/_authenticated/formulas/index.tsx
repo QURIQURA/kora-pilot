@@ -9,8 +9,10 @@ import {
   type FormulaListRow,
 } from "@/lib/queries";
 import { FORMULA_STATUSES, versionLabel } from "@/lib/formula";
+import { confirmBaseFormula } from "@/lib/technique-actions";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
+import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import {
   Field,
   PageHeader,
@@ -67,14 +69,28 @@ function FormulasPage() {
     mutationFn: async ({
       name,
       componentId,
+      techniqueId,
+      isBase,
     }: {
       name: string;
       componentId: string;
+      techniqueId: string;
+      isBase: boolean;
     }) => {
       const user_id = await currentUserId();
+      const base = await confirmBaseFormula({
+        techniqueId: techniqueId || null,
+        isBase,
+      });
       const { data, error } = await supabase
         .from("formulas")
-        .insert({ user_id, name, component_id: componentId || null })
+        .insert({
+          user_id,
+          name,
+          component_id: componentId || null,
+          technique_category_id: techniqueId || null,
+          is_base_formula: base,
+        })
         .select("id")
         .single();
       if (error) throw error;
@@ -91,6 +107,7 @@ function FormulasPage() {
     },
     onSuccess: async (id) => {
       await queryClient.invalidateQueries({ queryKey: ["formulas"] });
+      await queryClient.invalidateQueries({ queryKey: ["formulas_by_technique"] });
       setCreating(false);
       void navigate({ to: "/formulas/$formulaId", params: { formulaId: id } });
     },
@@ -226,10 +243,17 @@ function NewFormulaModal({
   components: { id: string; name: string }[];
   pending: boolean;
   onCancel: () => void;
-  onCreate: (name: string, componentId: string) => void;
+  onCreate: (
+    name: string,
+    componentId: string,
+    techniqueId: string,
+    isBase: boolean
+  ) => void;
 }) {
   const [name, setName] = useState("");
   const [componentId, setComponentId] = useState("");
+  const [techniqueId, setTechniqueId] = useState("");
+  const [isBase, setIsBase] = useState(false);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
       <div className="w-full max-w-md border border-border bg-background">
@@ -243,7 +267,8 @@ function NewFormulaModal({
           className="space-y-4 p-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (name.trim()) onCreate(name.trim(), componentId);
+            if (name.trim())
+              onCreate(name.trim(), componentId, techniqueId, isBase);
           }}
         >
           <Field label="NAME">
@@ -269,6 +294,21 @@ function NewFormulaModal({
               ))}
             </select>
           </Field>
+          <Field label="기법 분류 TECHNIQUE (OPTIONAL)">
+            <TechniqueSelect value={techniqueId} onChange={setTechniqueId} />
+          </Field>
+          <label className="flex min-h-[44px] items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-5 w-5 border border-input"
+              checked={isBase}
+              disabled={!techniqueId}
+              onChange={(e) => setIsBase(e.target.checked)}
+            />
+            <span className="label-caps text-xs">
+              이 배합을 기준(Base Formula)으로 지정
+            </span>
+          </label>
           <p className="font-mono text-xs uppercase text-muted-foreground">
             V1 DRAFT WILL BE CREATED
           </p>
