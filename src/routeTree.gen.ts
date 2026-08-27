@@ -25,6 +25,7 @@ import { Route as AuthenticatedIngredientsIndexRouteImport } from './routes/_aut
 import { Route as AuthenticatedIngredientsIngredientIdRouteImport } from './routes/_authenticated/ingredients/$ingredientId'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedProductsProductIdRouteImport } from './routes/_authenticated/products/$productId'
+import { Route as AuthenticatedSettingsCalibrationTechniqueIdRouteImport } from './routes/_authenticated/settings_.calibration.$techniqueId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -115,6 +116,12 @@ const AuthenticatedProductsProductIdRoute =
     path: '/products/$productId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSettingsCalibrationTechniqueIdRoute =
+  AuthenticatedSettingsCalibrationTechniqueIdRouteImport.update({
+    id: '/settings_/calibration/$techniqueId',
+    path: '/settings/calibration/$techniqueId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/formulas/': typeof AuthenticatedFormulasIndexRoute
   '/ingredients/': typeof AuthenticatedIngredientsIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
+  '/settings/calibration/$techniqueId': typeof AuthenticatedSettingsCalibrationTechniqueIdRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -149,6 +157,7 @@ export interface FileRoutesByTo {
   '/formulas': typeof AuthenticatedFormulasIndexRoute
   '/ingredients': typeof AuthenticatedIngredientsIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
+  '/settings/calibration/$techniqueId': typeof AuthenticatedSettingsCalibrationTechniqueIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -168,6 +177,7 @@ export interface FileRoutesById {
   '/_authenticated/formulas/': typeof AuthenticatedFormulasIndexRoute
   '/_authenticated/ingredients/': typeof AuthenticatedIngredientsIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
+  '/_authenticated/settings_/calibration/$techniqueId': typeof AuthenticatedSettingsCalibrationTechniqueIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -187,6 +197,7 @@ export interface FileRouteTypes {
     | '/formulas/'
     | '/ingredients/'
     | '/products/'
+    | '/settings/calibration/$techniqueId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/formulas'
     | '/ingredients'
     | '/products'
+    | '/settings/calibration/$techniqueId'
   id:
     | '__root__'
     | '/_authenticated'
@@ -222,6 +234,7 @@ export interface FileRouteTypes {
     | '/_authenticated/formulas/'
     | '/_authenticated/ingredients/'
     | '/_authenticated/products/'
+    | '/_authenticated/settings_/calibration/$techniqueId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -343,6 +356,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProductsProductIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings_/calibration/$techniqueId': {
+      id: '/_authenticated/settings_/calibration/$techniqueId'
+      path: '/settings/calibration/$techniqueId'
+      fullPath: '/settings/calibration/$techniqueId'
+      preLoaderRoute: typeof AuthenticatedSettingsCalibrationTechniqueIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -361,6 +381,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedFormulasIndexRoute: typeof AuthenticatedFormulasIndexRoute
   AuthenticatedIngredientsIndexRoute: typeof AuthenticatedIngredientsIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
+  AuthenticatedSettingsCalibrationTechniqueIdRoute: typeof AuthenticatedSettingsCalibrationTechniqueIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -381,6 +402,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFormulasIndexRoute: AuthenticatedFormulasIndexRoute,
   AuthenticatedIngredientsIndexRoute: AuthenticatedIngredientsIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
+  AuthenticatedSettingsCalibrationTechniqueIdRoute:
+    AuthenticatedSettingsCalibrationTechniqueIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

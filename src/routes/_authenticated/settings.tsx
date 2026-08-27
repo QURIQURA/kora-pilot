@@ -72,6 +72,9 @@ function SettingsPage() {
       <SettingsSection title="PROCESS CATEGORIES">
         <ProcessCategoryManager />
       </SettingsSection>
+      <SettingsSection title="TECHNIQUE CATEGORIES">
+        <TechniqueCategoryManager />
+      </SettingsSection>
       <SettingsSection title="INGREDIENT FUNCTIONS">
         <IngredientFunctionManager />
       </SettingsSection>
