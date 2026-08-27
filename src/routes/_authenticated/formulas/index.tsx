@@ -67,14 +67,28 @@ function FormulasPage() {
     mutationFn: async ({
       name,
       componentId,
+      techniqueId,
+      isBase,
     }: {
       name: string;
       componentId: string;
+      techniqueId: string;
+      isBase: boolean;
     }) => {
       const user_id = await currentUserId();
+      const base = await confirmBaseFormula({
+        techniqueId: techniqueId || null,
+        isBase,
+      });
       const { data, error } = await supabase
         .from("formulas")
-        .insert({ user_id, name, component_id: componentId || null })
+        .insert({
+          user_id,
+          name,
+          component_id: componentId || null,
+          technique_category_id: techniqueId || null,
+          is_base_formula: base,
+        })
         .select("id")
         .single();
       if (error) throw error;
@@ -91,6 +105,7 @@ function FormulasPage() {
     },
     onSuccess: async (id) => {
       await queryClient.invalidateQueries({ queryKey: ["formulas"] });
+      await queryClient.invalidateQueries({ queryKey: ["formulas_by_technique"] });
       setCreating(false);
       void navigate({ to: "/formulas/$formulaId", params: { formulaId: id } });
     },
