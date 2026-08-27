@@ -243,10 +243,17 @@ function NewFormulaModal({
   components: { id: string; name: string }[];
   pending: boolean;
   onCancel: () => void;
-  onCreate: (name: string, componentId: string) => void;
+  onCreate: (
+    name: string,
+    componentId: string,
+    techniqueId: string,
+    isBase: boolean
+  ) => void;
 }) {
   const [name, setName] = useState("");
   const [componentId, setComponentId] = useState("");
+  const [techniqueId, setTechniqueId] = useState("");
+  const [isBase, setIsBase] = useState(false);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
       <div className="w-full max-w-md border border-border bg-background">
@@ -260,7 +267,8 @@ function NewFormulaModal({
           className="space-y-4 p-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (name.trim()) onCreate(name.trim(), componentId);
+            if (name.trim())
+              onCreate(name.trim(), componentId, techniqueId, isBase);
           }}
         >
           <Field label="NAME">
@@ -286,6 +294,21 @@ function NewFormulaModal({
               ))}
             </select>
           </Field>
+          <Field label="기법 분류 TECHNIQUE (OPTIONAL)">
+            <TechniqueSelect value={techniqueId} onChange={setTechniqueId} />
+          </Field>
+          <label className="flex min-h-[44px] items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-5 w-5 border border-input"
+              checked={isBase}
+              disabled={!techniqueId}
+              onChange={(e) => setIsBase(e.target.checked)}
+            />
+            <span className="label-caps text-xs">
+              이 배합을 기준(Base Formula)으로 지정
+            </span>
+          </label>
           <p className="font-mono text-xs uppercase text-muted-foreground">
             V1 DRAFT WILL BE CREATED
           </p>
