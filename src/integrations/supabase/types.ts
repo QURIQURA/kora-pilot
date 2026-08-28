@@ -746,39 +746,48 @@ export type Database = {
         Row: {
           action: string
           category_id: string | null
+          confidence: number | null
           created_at: string
           ended_at: string | null
           event_type: Database["public"]["Enums"]["process_event_type"]
           experiment_id: string
           id: string
           note: string | null
+          source: string
           started_at: string
+          transcript: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           action: string
           category_id?: string | null
+          confidence?: number | null
           created_at?: string
           ended_at?: string | null
           event_type?: Database["public"]["Enums"]["process_event_type"]
           experiment_id: string
           id?: string
           note?: string | null
+          source?: string
           started_at?: string
+          transcript?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           action?: string
           category_id?: string | null
+          confidence?: number | null
           created_at?: string
           ended_at?: string | null
           event_type?: Database["public"]["Enums"]["process_event_type"]
           experiment_id?: string
           id?: string
           note?: string | null
+          source?: string
           started_at?: string
+          transcript?: string | null
           updated_at?: string
           user_id?: string
         }
