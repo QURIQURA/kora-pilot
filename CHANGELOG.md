@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-08-29 — KNOWLEDGE 화면 완성 (목록·필터·CRUD·PRODUCT 연동)
+
+### 무엇이 달라졌나
+
+앞서 스키마만 준비됐던 KNOWLEDGE가 이제 실제로 쓸 수 있는 화면이 됐습니다.
+
+- **KNOWLEDGE 탭**: 지식 항목 목록이 뜨고, 전체 / 일반 원칙만 / PRODUCT·COMPONENT·INGREDIENT·TECHNIQUE 별로 필터할 수 있어요. "+ ADD KNOWLEDGE"로 제목/본문과 함께 원하는 연결 대상(제품/구성요소/재료/기법, 전부 선택 안 해도 됨)을 골라 새로 추가하고, 항목을 눌러 바로 수정하거나 삭제할 수 있습니다.
+- **PRODUCT DETAIL의 KNOWLEDGE 섹션**: 그 제품에 연결된 지식만 모아서 보여주고, "+ ADD KNOWLEDGE"를 누르면 이 제품에 자동으로 연결된 채로 새 지식을 바로 추가할 수 있어요.
+
+이번 작업은 화면(UI)만 새로 만든 것이라 DB 변경은 없었고, 별도로 진행 중이던 REFERENCES 스키마·PRODUCT DETAIL의 OBSERVATIONS 작업과 합쳐서 반영했습니다.
+
+### 테스트 방법
+
+1. **KNOWLEDGE 탭 진입** → 목록이 placeholder 대신 실제로 뜨는지 확인 (아직 아무것도 없으면 빈 상태 문구가 정상)
+2. **"+ ADD KNOWLEDGE"** → 제목/본문 입력, 연결 대상 선택 없이 저장 → 목록에 "일반 원칙"으로 뜨는지 확인
+3. 다시 하나 추가하면서 이번엔 PRODUCT 하나를 연결 → 필터에서 그 제품을 선택했을 때만 뜨는지 확인
+4. 항목 클릭 → 제목/본문/연결 대상 수정 → 저장 후 반영되는지 확인, DELETE도 확인
+5. **PRODUCTS → 아무 제품 클릭** → KNOWLEDGE 섹션에 이 제품과 연결된 항목만 뜨는지 확인, "+ ADD KNOWLEDGE"로 추가하면 자동으로 이 제품에 연결되는지 확인
+
+---
+
 ## 2026-08-29 — PRODUCT DETAIL에 OBSERVATIONS 목록 추가
 
 ### 무엇이 달라졌나
