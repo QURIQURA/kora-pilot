@@ -9,12 +9,14 @@ import {
   componentsQuery,
   currentUserId,
   experimentsByProductQuery,
+  knowledgeEntriesByProductQuery,
   observationsByProductQuery,
   productComponentsQuery,
   productQuery,
   productTagsQuery,
   tagsQuery,
 } from "@/lib/queries";
+import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
 import {
   categoryPath,
   DEFAULT_TARGET_KEYS,
@@ -31,7 +33,6 @@ import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   Field,
-  NextPhaseSection,
   SectionCard,
   StatusBadge,
   buttonClass,
@@ -253,7 +254,7 @@ function ProductDetailPage() {
             </ul>
           )}
         </SectionCard>
-        <NextPhaseSection title="KNOWLEDGE" />
+        <ProductKnowledgeSection productId={productId} />
       </div>
 
       <div className="pt-2">
@@ -598,5 +599,34 @@ function AddComponentPanel({
         </div>
       )}
     </div>
+  );
+}
+
+function ProductKnowledgeSection({ productId }: { productId: string }) {
+  const entries = useQuery(knowledgeEntriesByProductQuery(productId));
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <SectionCard
+      title="KNOWLEDGE"
+      action={
+        <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
+          {adding ? "CLOSE" : "+ ADD KNOWLEDGE"}
+        </button>
+      }
+    >
+      {adding && (
+        <KnowledgeCreateForm
+          initialLinks={{ product_id: productId }}
+          lockProductId={productId}
+          onDone={() => setAdding(false)}
+        />
+      )}
+      <KnowledgeList
+        entries={entries.data ?? []}
+        emptyMessage="NO KNOWLEDGE LINKED TO THIS PRODUCT"
+        lockProductId={productId}
+      />
+    </SectionCard>
   );
 }
