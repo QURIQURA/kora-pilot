@@ -2,17 +2,13 @@ import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  componentsQuery,
-  currentUserId,
-  formulasQuery,
-  type FormulaListRow,
-} from "@/lib/queries";
+import { componentsQuery, currentUserId, formulasQuery, type FormulaListRow } from "@/lib/queries";
 import { FORMULA_STATUSES, versionLabel } from "@/lib/formula";
 import { confirmBaseFormula } from "@/lib/technique-actions";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
+import { MethodSelect } from "@/components/pilot/MethodSelect";
 import {
   Field,
   PageHeader,
@@ -41,7 +37,7 @@ export const Route = createFileRoute("/_authenticated/formulas/")({
 /** 해당 formula에서 대표로 보여줄 버전 (CURRENT > 최신) */
 export function headlineVersion(row: FormulaListRow) {
   const versions = [...(row.formula_versions ?? [])].sort(
-    (a, b) => b.version_number - a.version_number
+    (a, b) => b.version_number - a.version_number,
   );
   return versions.find((v) => v.status === "CURRENT") ?? versions[0] ?? null;
 }
@@ -70,11 +66,13 @@ function FormulasPage() {
       name,
       componentId,
       techniqueId,
+      methodId,
       isBase,
     }: {
       name: string;
       componentId: string;
       techniqueId: string;
+      methodId: string;
       isBase: boolean;
     }) => {
       const user_id = await currentUserId();
@@ -89,19 +87,18 @@ function FormulasPage() {
           name,
           component_id: componentId || null,
           technique_category_id: techniqueId || null,
+          method_id: methodId || null,
           is_base_formula: base,
         })
         .select("id")
         .single();
       if (error) throw error;
-      const { error: versionError } = await supabase
-        .from("formula_versions")
-        .insert({
-          user_id,
-          formula_id: data.id,
-          version_number: 1,
-          status: "DRAFT",
-        });
+      const { error: versionError } = await supabase.from("formula_versions").insert({
+        user_id,
+        formula_id: data.id,
+        version_number: 1,
+        status: "DRAFT",
+      });
       if (versionError) throw versionError;
       return data.id;
     },
@@ -118,11 +115,7 @@ function FormulasPage() {
       <PageHeader
         title="FORMULAS"
         action={
-          <button
-            type="button"
-            className={primaryButtonClass}
-            onClick={() => setCreating(true)}
-          >
+          <button type="button" className={primaryButtonClass} onClick={() => setCreating(true)}>
             + NEW FORMULA
           </button>
         }
@@ -172,21 +165,11 @@ function FormulasPage() {
       ) : (
         <div className="border border-border bg-card">
           <div className="hidden grid-cols-12 gap-2 border-b border-border px-4 py-2 md:grid">
-            <span className="label-caps col-span-4 text-xs text-muted-foreground">
-              NAME
-            </span>
-            <span className="label-caps col-span-3 text-xs text-muted-foreground">
-              COMPONENT
-            </span>
-            <span className="label-caps col-span-1 text-xs text-muted-foreground">
-              VERSION
-            </span>
-            <span className="label-caps col-span-2 text-xs text-muted-foreground">
-              STATUS
-            </span>
-            <span className="label-caps col-span-2 text-xs text-muted-foreground">
-              UPDATED
-            </span>
+            <span className="label-caps col-span-4 text-xs text-muted-foreground">NAME</span>
+            <span className="label-caps col-span-3 text-xs text-muted-foreground">COMPONENT</span>
+            <span className="label-caps col-span-1 text-xs text-muted-foreground">VERSION</span>
+            <span className="label-caps col-span-2 text-xs text-muted-foreground">STATUS</span>
+            <span className="label-caps col-span-2 text-xs text-muted-foreground">UPDATED</span>
           </div>
           <ul className="divide-y divide-border">
             {rows.map((row) => {
@@ -227,8 +210,8 @@ function FormulasPage() {
           }))}
           pending={create.isPending}
           onCancel={() => setCreating(false)}
-          onCreate={(name, componentId, techniqueId, isBase) =>
-            create.mutate({ name, componentId, techniqueId, isBase })
+          onCreate={(name, componentId, techniqueId, methodId, isBase) =>
+            create.mutate({ name, componentId, techniqueId, methodId, isBase })
           }
         />
       )}
@@ -249,12 +232,14 @@ function NewFormulaModal({
     name: string,
     componentId: string,
     techniqueId: string,
-    isBase: boolean
+    methodId: string,
+    isBase: boolean,
   ) => void;
 }) {
   const [name, setName] = useState("");
   const [componentId, setComponentId] = useState("");
   const [techniqueId, setTechniqueId] = useState("");
+  const [methodId, setMethodId] = useState("");
   const [isBase, setIsBase] = useState(false);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
@@ -269,8 +254,7 @@ function NewFormulaModal({
           className="space-y-4 p-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (name.trim())
-              onCreate(name.trim(), componentId, techniqueId, isBase);
+            if (name.trim()) onCreate(name.trim(), componentId, techniqueId, methodId, isBase);
           }}
         >
           <Field label="NAME">
@@ -297,7 +281,20 @@ function NewFormulaModal({
             </select>
           </Field>
           <Field label="기법 분류 TECHNIQUE (OPTIONAL)">
-            <TechniqueSelect value={techniqueId} onChange={setTechniqueId} />
+            <TechniqueSelect
+              value={techniqueId}
+              onChange={(id) => {
+                setTechniqueId(id);
+                setMethodId(""); // 기법이 바뀌면 이전에 고른 METHOD는 더 이상 맞지 않을 수 있음 — 초기화
+              }}
+            />
+          </Field>
+          <Field label="METHOD (OPTIONAL)">
+            <MethodSelect
+              techniqueCategoryId={techniqueId}
+              value={methodId}
+              onChange={setMethodId}
+            />
           </Field>
           <label className="flex min-h-[44px] items-center gap-2">
             <input
@@ -307,9 +304,7 @@ function NewFormulaModal({
               disabled={!techniqueId}
               onChange={(e) => setIsBase(e.target.checked)}
             />
-            <span className="label-caps text-xs">
-              이 배합을 기준(Base Formula)으로 지정
-            </span>
+            <span className="label-caps text-xs">이 배합을 기준(Base Formula)으로 지정</span>
           </label>
           <p className="font-mono text-xs uppercase text-muted-foreground">
             V1 DRAFT WILL BE CREATED

@@ -11,8 +11,10 @@ import {
   versionIngredientsQuery,
   componentsQuery,
   techniqueCategoriesQuery,
+  methodsQuery,
   type VersionIngredientRow,
 } from "@/lib/queries";
+import { methodLabel } from "@/lib/method";
 import {
   FORMULA_STATUSES,
   UNITS,
@@ -39,6 +41,7 @@ import { confirmBaseFormula } from "@/lib/technique-actions";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
+import { MethodSelect } from "@/components/pilot/MethodSelect";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
@@ -84,6 +87,7 @@ function FormulaDetailPage() {
   const moulds = useQuery(mouldsQuery());
   const components = useQuery(componentsQuery());
   const techniqueCategories = useQuery(techniqueCategoriesQuery());
+  const methods = useQuery(methodsQuery());
 
   const versionList = useMemo(() => versions.data ?? [], [versions.data]);
   const [versionId, setVersionId] = useState<string | null>(null);
@@ -98,8 +102,7 @@ function FormulaDetailPage() {
     if (versionList.length === 0) return;
     if (versionId && versionList.some((v) => v.id === versionId)) return;
     const current =
-      versionList.find((v) => v.status === "CURRENT") ??
-      versionList[versionList.length - 1];
+      versionList.find((v) => v.status === "CURRENT") ?? versionList[versionList.length - 1];
     setVersionId(current?.id ?? null);
   }, [versionList, versionId]);
 
@@ -140,28 +143,44 @@ function FormulaDetailPage() {
       component_id?: string | null;
       notes?: string | null;
     }) => {
+      const { error } = await supabase.from("formulas").update(patch).eq("id", formulaId);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  /** 기법 분류 변경 + 기준 배합 지정 — 중복 시 확인 후 교체.
+   *  기법이 바뀌면 이전에 고른 METHOD는 새 기법에 안 맞을 수 있으므로 clearMethod로 함께 초기화한다. */
+  const updateTechnique = useMutation({
+    mutationFn: async ({
+      techniqueId,
+      isBase,
+      clearMethod = false,
+    }: {
+      techniqueId: string | null;
+      isBase: boolean;
+      clearMethod?: boolean;
+    }) => {
+      const base = await confirmBaseFormula({ formulaId, techniqueId, isBase });
       const { error } = await supabase
         .from("formulas")
-        .update(patch)
+        .update({
+          technique_category_id: techniqueId,
+          is_base_formula: base,
+          ...(clearMethod ? { method_id: null } : {}),
+        })
         .eq("id", formulaId);
       if (error) throw error;
     },
     onSuccess: invalidate,
   });
 
-  /** 기법 분류 변경 + 기준 배합 지정 — 중복 시 확인 후 교체 */
-  const updateTechnique = useMutation({
-    mutationFn: async ({
-      techniqueId,
-      isBase,
-    }: {
-      techniqueId: string | null;
-      isBase: boolean;
-    }) => {
-      const base = await confirmBaseFormula({ formulaId, techniqueId, isBase });
+  /** METHOD 변경 — 기법 분류는 그대로 두고 method_id만 바꾼다 */
+  const updateMethod = useMutation({
+    mutationFn: async (methodId: string | null) => {
       const { error } = await supabase
         .from("formulas")
-        .update({ technique_category_id: techniqueId, is_base_formula: base })
+        .update({ method_id: methodId })
         .eq("id", formulaId);
       if (error) throw error;
     },
@@ -171,10 +190,7 @@ function FormulaDetailPage() {
   const updateVersion = useMutation({
     mutationFn: async (patch: Partial<FormulaVersion>) => {
       if (!versionId) return;
-      const { error } = await supabase
-        .from("formula_versions")
-        .update(patch)
-        .eq("id", versionId);
+      const { error } = await supabase.from("formula_versions").update(patch).eq("id", versionId);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -184,30 +200,22 @@ function FormulaDetailPage() {
     mutationFn: async ({ id, unit }: { id: string; unit: string }) => {
       if (!versionId) return;
       const user_id = await currentUserId();
-      const { error } = await supabase
-        .from("formula_version_ingredients")
-        .insert({
-          user_id,
-          formula_version_id: versionId,
-          ingredient_id: id,
-          amount: 0,
-          unit,
-          sort_order: rows.length,
-          amount_source: "manual",
-        });
+      const { error } = await supabase.from("formula_version_ingredients").insert({
+        user_id,
+        formula_version_id: versionId,
+        ingredient_id: id,
+        amount: 0,
+        unit,
+        sort_order: rows.length,
+        amount_source: "manual",
+      });
       if (error) throw error;
     },
     onSuccess: invalidate,
   });
 
   const updateRow = useMutation({
-    mutationFn: async ({
-      id,
-      patch,
-    }: {
-      id: string;
-      patch: FunctionalRowPatch;
-    }) => {
+    mutationFn: async ({ id, patch }: { id: string; patch: FunctionalRowPatch }) => {
       const { error } = await supabase
         .from("formula_version_ingredients")
         .update(patch)
@@ -219,26 +227,16 @@ function FormulaDetailPage() {
 
   const removeRow = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("formula_version_ingredients")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.from("formula_version_ingredients").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: invalidate,
   });
 
   const createVersion = useMutation({
-    mutationFn: async ({
-      summary,
-      reason,
-    }: {
-      summary: string;
-      reason: string;
-    }) => {
+    mutationFn: async ({ summary, reason }: { summary: string; reason: string }) => {
       const user_id = await currentUserId();
-      const nextNumber =
-        versionList.reduce((max, v) => Math.max(max, v.version_number), 0) + 1;
+      const nextNumber = versionList.reduce((max, v) => Math.max(max, v.version_number), 0) + 1;
       const { data, error } = await supabase
         .from("formula_versions")
         .insert({
@@ -257,21 +255,19 @@ function FormulaDetailPage() {
         .single();
       if (error) throw error;
       if (rows.length > 0) {
-        const { error: copyError } = await supabase
-          .from("formula_version_ingredients")
-          .insert(
-            rows.map((row) => ({
-              user_id,
-              formula_version_id: data.id,
-              ingredient_id: row.ingredient_id,
-              amount: row.amount,
-              unit: row.unit,
-              sort_order: row.sort_order,
-              note: row.note,
-              // 새 버전으로 복사된 값은 'copied'로 시작, 수정 시 'manual'이 된다
-              amount_source: "copied",
-            }))
-          );
+        const { error: copyError } = await supabase.from("formula_version_ingredients").insert(
+          rows.map((row) => ({
+            user_id,
+            formula_version_id: data.id,
+            ingredient_id: row.ingredient_id,
+            amount: row.amount,
+            unit: row.unit,
+            sort_order: row.sort_order,
+            note: row.note,
+            // 새 버전으로 복사된 값은 'copied'로 시작, 수정 시 'manual'이 된다
+            amount_source: "copied",
+          })),
+        );
         if (copyError) throw copyError;
       }
       return data.id;
@@ -285,10 +281,7 @@ function FormulaDetailPage() {
 
   const removeFormula = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("formulas")
-        .delete()
-        .eq("id", formulaId);
+      const { error } = await supabase.from("formulas").delete().eq("id", formulaId);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -307,8 +300,7 @@ function FormulaDetailPage() {
 
   /* ── 계산 (전부 표시용 — 저장되는 것은 amount와 amount_source뿐) ── */
   const overrides: BasisOverrides = parseBasisOverrides(version?.basis_overrides);
-  const bathWaterG =
-    version?.bath_water_g != null ? Number(version.bath_water_g) : null;
+  const bathWaterG = version?.bath_water_g != null ? Number(version.bath_water_g) : null;
   const bases = computeBases(rows, overrides, bathWaterG);
 
   const bulkRows = rows.filter((r) => !r.ingredients?.is_functional);
@@ -319,35 +311,23 @@ function FormulaDetailPage() {
     const grams = toGrams(Number(row.amount), row.unit);
     return sum + (grams ?? 0);
   }, 0);
-  const totalScaled = rows.reduce(
-    (sum, row) => sum + rowScaledGrams(row, batchValue).scaled,
-    0
-  );
+  const totalScaled = rows.reduce((sum, row) => sum + rowScaledGrams(row, batchValue).scaled, 0);
 
   // 배수 ≥ 2 + process_note 보유 재료 → 공정 주의
-  const processCautions =
-    batchValue >= 2
-      ? rows.filter((r) => r.ingredients?.process_note)
-      : [];
+  const processCautions = batchValue >= 2 ? rows.filter((r) => r.ingredients?.process_note) : [];
 
   // baker's % 기준 (벌크 테이블 수동 선택)
   const basisRow = rows.find((r) => r.ingredient_id === basisId) ?? null;
-  const basisGrams = basisRow
-    ? toGrams(Number(basisRow.amount), basisRow.unit) ?? 0
-    : 0;
+  const basisGrams = basisRow ? (toGrams(Number(basisRow.amount), basisRow.unit) ?? 0) : 0;
   const denominator = basisRow ? basisGrams : totalGrams;
 
-  const mould = (moulds.data ?? []).find(
-    (m) => m.id === version?.default_mould_id
-  );
+  const mould = (moulds.data ?? []).find((m) => m.id === version?.default_mould_id);
   const yieldQty = version?.yield_quantity ? Number(version.yield_quantity) : 0;
 
   const techniqueList = techniqueCategories.data ?? [];
-  const techniquePathList = techniquePath(
-    techniqueList,
-    formula.data.technique_category_id
-  );
+  const techniquePathList = techniquePath(techniqueList, formula.data.technique_category_id);
   const technique = techniquePathList[techniquePathList.length - 1] ?? null;
+  const method = (methods.data ?? []).find((m) => m.id === formula.data.method_id) ?? null;
 
   return (
     <div className="space-y-6">
@@ -359,8 +339,7 @@ function FormulaDetailPage() {
             defaultValue={formula.data.name}
             onBlur={(e) => {
               const name = e.target.value.trim();
-              if (name && name !== formula.data?.name)
-                updateFormula.mutate({ name });
+              if (name && name !== formula.data?.name) updateFormula.mutate({ name });
             }}
           />
           {technique && (
@@ -372,6 +351,11 @@ function FormulaDetailPage() {
               >
                 {technique.name}
               </Link>
+              {method && (
+                <span className="label-caps inline-block border border-border px-2 py-1 text-xs text-muted-foreground">
+                  {methodLabel(method)}
+                </span>
+              )}
               {formula.data.is_base_formula && (
                 <span className="label-caps inline-block border border-border bg-secondary px-2 py-1 text-xs">
                   ⭐ 기준 배합
@@ -391,8 +375,15 @@ function FormulaDetailPage() {
               updateTechnique.mutate({
                 techniqueId: id || null,
                 isBase: id ? formula.data!.is_base_formula : false,
+                clearMethod: true,
               })
             }
+          />
+          <MethodSelect
+            className={`${selectClass} w-auto`}
+            techniqueCategoryId={formula.data.technique_category_id ?? ""}
+            value={formula.data.method_id ?? ""}
+            onChange={(id) => updateMethod.mutate(id || null)}
           />
           <label className="flex min-h-[44px] items-center gap-2 text-xs">
             <input
@@ -412,9 +403,7 @@ function FormulaDetailPage() {
           <select
             className={`${selectClass} w-auto`}
             value={formula.data.component_id ?? ""}
-            onChange={(e) =>
-              updateFormula.mutate({ component_id: e.target.value || null })
-            }
+            onChange={(e) => updateFormula.mutate({ component_id: e.target.value || null })}
           >
             <option value="">NO COMPONENT</option>
             {(components.data ?? []).map((component) => (
@@ -452,9 +441,7 @@ function FormulaDetailPage() {
         <select
           className={`${selectClass} w-auto`}
           value={version?.status ?? "DRAFT"}
-          onChange={(e) =>
-            updateVersion.mutate({ status: e.target.value as FormulaStatus })
-          }
+          onChange={(e) => updateVersion.mutate({ status: e.target.value as FormulaStatus })}
         >
           {FORMULA_STATUSES.map((status) => (
             <option key={status} value={status}>
@@ -474,7 +461,7 @@ function FormulaDetailPage() {
               const ok = confirm(
                 experimentCount > 0
                   ? `실험 ${experimentCount}개가 이 버전을 참조 중 — 배합 변경은 새 버전 생성을 권장합니다.\n오타 수정 등을 위해 잠금을 해제할까요?`
-                  : "이 버전은 확정 상태입니다.\n배합 변경은 새 버전 생성을 권장합니다. 오타 수정 등을 위해 잠금을 해제할까요?"
+                  : "이 버전은 확정 상태입니다.\n배합 변경은 새 버전 생성을 권장합니다. 오타 수정 등을 위해 잠금을 해제할까요?",
               );
               if (ok) setUnlocked(true);
             }}
@@ -518,9 +505,7 @@ function FormulaDetailPage() {
             <MouldSelect
               value={version?.default_mould_id ?? ""}
               disabled={locked}
-              onChange={(id) =>
-                updateVersion.mutate({ default_mould_id: id || null })
-              }
+              onChange={(id) => updateVersion.mutate({ default_mould_id: id || null })}
             />
           </Field>
           <Field label="YIELD (QTY)">
@@ -534,9 +519,7 @@ function FormulaDetailPage() {
               key={`yield-${versionId}`}
               onBlur={(e) =>
                 updateVersion.mutate({
-                  yield_quantity: e.target.value
-                    ? parseNumber(e.target.value)
-                    : null,
+                  yield_quantity: e.target.value ? parseNumber(e.target.value) : null,
                 })
               }
             />
@@ -553,9 +536,7 @@ function FormulaDetailPage() {
             />
           </Field>
           <div className="space-y-1">
-            <span className="label-caps block text-xs text-muted-foreground">
-              TOTAL WEIGHT
-            </span>
+            <span className="label-caps block text-xs text-muted-foreground">TOTAL WEIGHT</span>
             <p className="font-mono text-base tabular-nums">
               {fmtNumber(totalGrams)}g
               <span className="ml-2 bg-secondary px-2 py-0.5 text-sm">
@@ -637,10 +618,7 @@ function FormulaDetailPage() {
                     "NOTE",
                     "",
                   ].map((header) => (
-                    <th
-                      key={header}
-                      className="label-caps px-2 py-2 text-xs text-muted-foreground"
-                    >
+                    <th key={header} className="label-caps px-2 py-2 text-xs text-muted-foreground">
                       {header}
                     </th>
                   ))}
@@ -735,7 +713,7 @@ function FormulaDetailPage() {
         onClick={() => {
           if (
             confirm(
-              "DELETE THIS FORMULA AND ALL ITS VERSIONS? (버전 단위 삭제는 지원하지 않습니다 — ARCHIVED로 변경하세요)"
+              "DELETE THIS FORMULA AND ALL ITS VERSIONS? (버전 단위 삭제는 지원하지 않습니다 — ARCHIVED로 변경하세요)",
             )
           )
             removeFormula.mutate();
@@ -775,9 +753,7 @@ function FormulaDetailPage() {
           fromLabel={version ? versionLabel(version.version_number) : "—"}
           pending={createVersion.isPending}
           onCancel={() => setCreatingVersion(false)}
-          onCreate={(summary, reason) =>
-            createVersion.mutate({ summary, reason })
-          }
+          onCreate={(summary, reason) => createVersion.mutate({ summary, reason })}
         />
       )}
 
@@ -821,8 +797,7 @@ function IngredientTableRow({
 }) {
   const amount = Number(row.amount);
   const grams = toGrams(amount, row.unit);
-  const percent =
-    denominator > 0 && grams !== null ? (grams / denominator) * 100 : null;
+  const percent = denominator > 0 && grams !== null ? (grams / denominator) * 100 : null;
   const functions = (row.ingredients?.ingredient_function_links ?? [])
     .map((link) => link.ingredient_functions)
     .filter((fn) => Boolean(fn))
@@ -946,8 +921,7 @@ function VersionHistory({
           leftBalance.toughenTender && rightBalance.toughenTender
             ? {
                 label: "연화",
-                delta:
-                  rightBalance.toughenTender.right - leftBalance.toughenTender.right,
+                delta: rightBalance.toughenTender.right - leftBalance.toughenTender.right,
               }
             : null,
           leftBalance.moistenDry && rightBalance.moistenDry
@@ -963,10 +937,7 @@ function VersionHistory({
     <SectionCard title="VERSION HISTORY">
       <ul className="divide-y divide-border border border-border">
         {versions.map((version) => (
-          <li
-            key={version.id}
-            className="flex flex-wrap items-center gap-2 px-3 py-3"
-          >
+          <li key={version.id} className="flex flex-wrap items-center gap-2 px-3 py-3">
             <button
               type="button"
               className="label-caps min-w-[3rem] text-left hover:underline"
@@ -975,9 +946,7 @@ function VersionHistory({
               {versionLabel(version.version_number)}
             </button>
             <StatusBadge status={version.status} />
-            <span className="flex-1 text-sm">
-              {version.change_summary || "—"}
-            </span>
+            <span className="flex-1 text-sm">{version.change_summary || "—"}</span>
             <span className="font-mono text-xs text-muted-foreground">
               {formatDateTime(version.created_at)}
             </span>
@@ -987,11 +956,7 @@ function VersionHistory({
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="COMPARE FROM">
-          <select
-            className={selectClass}
-            value={left}
-            onChange={(e) => setLeft(e.target.value)}
-          >
+          <select className={selectClass} value={left} onChange={(e) => setLeft(e.target.value)}>
             <option value="">—</option>
             {versions.map((version) => (
               <option key={version.id} value={version.id}>
@@ -1001,11 +966,7 @@ function VersionHistory({
           </select>
         </Field>
         <Field label="COMPARE TO">
-          <select
-            className={selectClass}
-            value={right}
-            onChange={(e) => setRight(e.target.value)}
-          >
+          <select className={selectClass} value={right} onChange={(e) => setRight(e.target.value)}>
             <option value="">—</option>
             {versions.map((version) => (
               <option key={version.id} value={version.id}>
@@ -1030,9 +991,7 @@ function VersionHistory({
                   className="flex flex-wrap items-center gap-2 px-3 py-2 font-mono text-sm"
                 >
                   <span className="label-caps min-w-[8rem]">{row.name}</span>
-                  <span className="text-muted-foreground">
-                    {row.from ?? "NONE"}
-                  </span>
+                  <span className="text-muted-foreground">{row.from ?? "NONE"}</span>
                   <span>→</span>
                   <span>{row.to ?? "REMOVED"}</span>
                 </li>
@@ -1048,10 +1007,7 @@ function VersionHistory({
               {balanceDelta.length > 0 && (
                 <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
                   {balanceDelta
-                    .map(
-                      (d) =>
-                        `${d.label} ${d.delta >= 0 ? "+" : ""}${fmtNumber(d.delta, 1)}%`
-                    )
+                    .map((d) => `${d.label} ${d.delta >= 0 ? "+" : ""}${fmtNumber(d.delta, 1)}%`)
                     .join(" · ")}
                 </p>
               )}

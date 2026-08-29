@@ -5,6 +5,7 @@ import { TagManager } from "@/components/pilot/TagManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
+import { MethodManager } from "@/components/pilot/MethodManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
 import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
 import { AromaTagManager } from "@/components/pilot/AromaTagManager";
@@ -42,7 +43,7 @@ function SettingsSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex min-h-[48px] w-full items-center justify-between gap-2 border border-border bg-card px-4 py-3 text-left hover:bg-secondary"
+          "flex min-h-[48px] w-full items-center justify-between gap-2 border border-border bg-card px-4 py-3 text-left hover:bg-secondary",
         )}
       >
         <span className="label-caps text-muted-foreground">{title}</span>
@@ -75,6 +76,9 @@ function SettingsPage() {
       </SettingsSection>
       <SettingsSection title="TECHNIQUE CATEGORIES">
         <TechniqueCategoryManager />
+      </SettingsSection>
+      <SettingsSection title="METHODS">
+        <MethodManager />
       </SettingsSection>
       <SettingsSection title="INGREDIENT FUNCTIONS">
         <IngredientFunctionManager />

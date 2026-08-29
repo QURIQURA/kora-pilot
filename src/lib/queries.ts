@@ -707,6 +707,20 @@ export const methodsByTechniqueCategoryQuery = (techniqueCategoryId: string | nu
     },
   });
 
+/** METHOD별 사용 중인 FORMULA 개수 — 삭제 보호용 (FlavourFamilyManager와 동일 패턴) */
+export const methodUsageQuery = () =>
+  queryOptions({
+    queryKey: ["method_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(await supabase.from("formulas").select("method_id"));
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.method_id) map[row.method_id] = (map[row.method_id] ?? 0) + 1;
+      }
+      return map;
+    },
+  });
+
 /** 특정 기법군에 연결된 배합 — 기준 배합 먼저 */
 export const formulasByTechniqueQuery = (techniqueId: string | null) =>
   queryOptions({

@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-08-29 — METHOD 관리 화면 + FORMULA에 METHOD 연결 (PHASE 2)
+
+### 무엇이 달라졌나
+
+- **SETTINGS → METHODS**: TECHNIQUE CATEGORY별로 METHOD(제조 방식/원리, 예: "오일 유화법")를 만들고 이름/영문명/정렬을 수정하거나 삭제할 수 있습니다. 이미 FORMULA에서 쓰이고 있는 METHOD는 삭제 버튼을 누르면 "이 METHOD는 현재 N개의 FORMULA에서 사용 중이라 삭제할 수 없습니다" 안내가 뜨고 삭제되지 않습니다 (FLAVOUR FAMILIES와 동일한 보호 방식).
+- **FORMULAS → + NEW FORMULA**: TECHNIQUE 선택 아래에 METHOD 선택이 추가됐습니다. TECHNIQUE을 먼저 골라야 그 TECHNIQUE에 등록된 METHOD만 목록에 뜨고, TECHNIQUE을 바꾸면 이미 골랐던 METHOD는 자동으로 초기화됩니다(잘못된 조합 방지).
+- **FORMULA 상세 화면**: 상단에 METHOD 선택창이 추가돼서 바로 바꿀 수 있고, TECHNIQUE 옆에 현재 METHOD 이름이 뱃지로 표시됩니다.
+
+### 테스트 방법
+
+1. **SETTINGS → METHODS** 펼치기 → "오일 유화법 (Oil Emulsion)" 항목이 "폼 케이크" 그룹 밑에 보이는지 확인
+2. **+ ADD METHOD**로 아무 TECHNIQUE CATEGORY 밑에 테스트용 METHOD 하나 추가 → 목록에 바로 뜨는지, 이름/영문명/정렬 수정이 되는지 확인
+3. **FORMULAS → + NEW FORMULA** → TECHNIQUE을 "폼 케이크"로 선택 → METHOD 선택창에 "오일 유화법"이 뜨는지 확인
+4. TECHNIQUE을 다른 걸로 바꿔보고 METHOD 선택이 자동으로 비워지는지 확인
+5. FORMULA 하나를 만든 뒤 상세 화면에서 METHOD를 바꿔보고, 헤더의 TECHNIQUE 옆에 METHOD 이름이 뱃지로 뜨는지 확인
+6. 방금 만든 FORMULA가 사용 중인 METHOD를 SETTINGS → METHODS에서 삭제 시도 → "1개의 FORMULA에서 사용 중" 안내가 뜨고 삭제가 막히는지 확인
+
+---
+
 ## 2026-08-29 — TECHNIQUE CATEGORY 구조 재정비 (taxonomy v1)
 
 ### 무엇이 달라졌나
