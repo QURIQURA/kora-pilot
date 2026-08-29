@@ -572,6 +572,24 @@ export const recentObservationsQuery = () =>
       ) as unknown as RecentObservationRow[],
   });
 
+export interface ProductObservationRow extends Observation {
+  experiments: { id: string; experiment_number: number | null } | null;
+}
+
+/** PRODUCT DETAIL — 이 제품에 속한 모든 실험의 관찰 기록 (읽기 전용, 최신순) */
+export const observationsByProductQuery = (productId: string) =>
+  queryOptions({
+    queryKey: ["observations_by_product", productId],
+    queryFn: async (): Promise<ProductObservationRow[]> =>
+      unwrap(
+        await supabase
+          .from("observations")
+          .select("*, experiments!inner(id, experiment_number, product_id)")
+          .eq("experiments.product_id", productId)
+          .order("created_at", { ascending: false }),
+      ) as unknown as ProductObservationRow[],
+  });
+
 /* ── PHASE 4B — PROCESS TIMELINE ─────────────────────────────── */
 
 import type { ProcessCategory, ProcessEvent } from "@/lib/process";

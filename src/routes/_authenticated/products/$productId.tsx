@@ -9,6 +9,7 @@ import {
   componentsQuery,
   currentUserId,
   experimentsByProductQuery,
+  observationsByProductQuery,
   productComponentsQuery,
   productQuery,
   productTagsQuery,
@@ -23,7 +24,8 @@ import {
   type TargetAttribute,
 } from "@/lib/pilot";
 import type { TablesUpdate } from "@/integrations/supabase/types";
-import { formatDateTime } from "@/lib/datetime";
+import { experimentLabel } from "@/lib/experiment";
+import { formatDateTime, formatTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
@@ -64,6 +66,7 @@ function ProductDetailPage() {
   const tags = useQuery(tagsQuery());
   const productTags = useQuery(productTagsQuery(productId));
   const experiments = useQuery(experimentsByProductQuery(productId));
+  const observations = useQuery(observationsByProductQuery(productId));
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, product.data?.category_id ?? null);
@@ -222,7 +225,34 @@ function ProductDetailPage() {
         >
           <ExperimentListItems items={experiments.data ?? []} />
         </SectionCard>
-        <NextPhaseSection title="OBSERVATIONS" />
+        <SectionCard title="OBSERVATIONS">
+          {(observations.data ?? []).length === 0 ? (
+            <p className="font-mono text-xs uppercase text-muted-foreground">NO OBSERVATIONS YET</p>
+          ) : (
+            <ul className="divide-y divide-border border border-border">
+              {(observations.data ?? []).map((obs) => (
+                <li key={obs.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                  <span className="w-14 font-mono text-xs text-muted-foreground">
+                    {formatTime(obs.created_at)}
+                  </span>
+                  <span className="label-caps bg-foreground px-2 py-0.5 text-[11px] text-background">
+                    {(obs.label || "NOTE").toUpperCase()}
+                  </span>
+                  <span className="min-w-[8rem] flex-1 text-sm">{obs.value}</span>
+                  {obs.experiments && (
+                    <Link
+                      to="/experiments/$experimentId"
+                      params={{ experimentId: obs.experiments.id }}
+                      className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      {experimentLabel(obs.experiments.experiment_number)}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
         <NextPhaseSection title="KNOWLEDGE" />
       </div>
 
