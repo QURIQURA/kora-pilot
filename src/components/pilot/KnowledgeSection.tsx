@@ -41,7 +41,7 @@ export function KnowledgeLinkSelects({
 }: {
   value: KnowledgeLinks;
   onChange: (next: KnowledgeLinks) => void;
-  lockProductId?: string;
+  lockProductId?: string | undefined;
 }) {
   const products = useQuery(productsQuery());
   const components = useQuery(componentsQuery());
@@ -128,7 +128,7 @@ export function KnowledgeCreateForm({
   onDone,
 }: {
   initialLinks?: Partial<KnowledgeLinks>;
-  lockProductId?: string;
+  lockProductId?: string | undefined;
   onDone: () => void;
 }) {
   const invalidate = useKnowledgeInvalidate();
@@ -257,7 +257,7 @@ export function KnowledgeItem({
   lockProductId,
 }: {
   entry: KnowledgeEntry;
-  lockProductId?: string;
+  lockProductId?: string | undefined;
 }) {
   const invalidate = useKnowledgeInvalidate();
   const [editing, setEditing] = useState(false);
@@ -398,7 +398,7 @@ export function KnowledgeList({
 }: {
   entries: KnowledgeEntry[];
   emptyMessage?: string;
-  lockProductId?: string;
+  lockProductId?: string | undefined;
 }) {
   if (entries.length === 0) {
     return <p className="font-mono text-xs uppercase text-muted-foreground">{emptyMessage}</p>;
