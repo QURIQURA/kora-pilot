@@ -9,11 +9,16 @@ import {
   componentsQuery,
   currentUserId,
   experimentsByProductQuery,
+  knowledgeEntriesByProductQuery,
   productComponentsQuery,
   productQuery,
   productTagsQuery,
   tagsQuery,
 } from "@/lib/queries";
+import {
+  KnowledgeCreateForm,
+  KnowledgeList,
+} from "@/components/pilot/KnowledgeSection";
 import {
   categoryPath,
   DEFAULT_TARGET_KEYS,
