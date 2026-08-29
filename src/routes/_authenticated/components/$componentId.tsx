@@ -8,13 +8,14 @@ import {
   categoriesQuery,
   componentQuery,
   componentUsageQuery,
+  experimentsByComponentQuery,
 } from "@/lib/queries";
 import { categoryPath } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ComponentFormulasSection } from "@/components/pilot/FormulaSummary";
+import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
-  NextPhaseSection,
   SectionCard,
   StatusBadge,
   buttonClass,
@@ -45,6 +46,7 @@ function ComponentDetailPage() {
   const component = useQuery(componentQuery(componentId));
   const categories = useQuery(categoriesQuery());
   const usage = useQuery(componentUsageQuery(componentId));
+  const experiments = useQuery(experimentsByComponentQuery(componentId));
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, component.data?.category_id ?? null);
@@ -58,10 +60,7 @@ function ComponentDetailPage() {
 
   const update = useMutation({
     mutationFn: async (patch: TablesUpdate<"components">) => {
-      const { error } = await supabase
-        .from("components")
-        .update(patch)
-        .eq("id", componentId);
+      const { error } = await supabase.from("components").update(patch).eq("id", componentId);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -74,10 +73,7 @@ function ComponentDetailPage() {
 
   const remove = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("components")
-        .delete()
-        .eq("id", componentId);
+      const { error } = await supabase.from("components").delete().eq("id", componentId);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -148,15 +144,14 @@ function ComponentDetailPage() {
       </SectionCard>
 
       <SectionCard title="NOTES">
-        <TextArea
-          value={data.notes ?? ""}
-          onSave={(notes) => update.mutate({ notes })}
-        />
+        <TextArea value={data.notes ?? ""} onSave={(notes) => update.mutate({ notes })} />
       </SectionCard>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ComponentFormulasSection componentId={componentId} />
-        <NextPhaseSection title="EXPERIMENTS" />
+        <SectionCard title="EXPERIMENTS">
+          <ExperimentListItems items={experiments.data ?? []} />
+        </SectionCard>
       </div>
 
       <button
@@ -197,13 +192,7 @@ function InlineText({
   );
 }
 
-function TextArea({
-  value,
-  onSave,
-}: {
-  value: string;
-  onSave: (value: string) => void;
-}) {
+function TextArea({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return (

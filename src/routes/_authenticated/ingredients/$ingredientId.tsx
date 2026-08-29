@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CategorySelect } from "@/components/pilot/CategorySelect";
@@ -7,6 +7,7 @@ import type { TablesUpdate } from "@/integrations/supabase/types";
 import {
   categoriesQuery,
   currentUserId,
+  formulasByIngredientQuery,
   ingredientFunctionsQuery,
   ingredientQuery,
 } from "@/lib/queries";
@@ -31,8 +32,8 @@ import { cn } from "@/lib/utils";
 import {
   CollapsibleSection,
   Field,
-  NextPhaseSection,
   SectionCard,
+  StatusBadge,
   buttonClass,
   inputClass,
   selectClass,
@@ -56,6 +57,7 @@ function IngredientDetailPage() {
   const queryClient = useQueryClient();
 
   const ingredient = useQuery(ingredientQuery(ingredientId));
+  const usedInFormulas = useQuery(formulasByIngredientQuery(ingredientId));
   const categories = useQuery(categoriesQuery());
   const functions = useQuery(ingredientFunctionsQuery());
 
@@ -71,10 +73,7 @@ function IngredientDetailPage() {
 
   const update = useMutation({
     mutationFn: async (patch: TablesUpdate<"ingredients">) => {
-      const { error } = await supabase
-        .from("ingredients")
-        .update(patch)
-        .eq("id", ingredientId);
+      const { error } = await supabase.from("ingredients").update(patch).eq("id", ingredientId);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -112,7 +111,7 @@ function IngredientDetailPage() {
             user_id: userId,
             ingredient_id: ingredientId,
             function_id: functionId,
-          }))
+          })),
         );
         if (error) throw error;
       }
@@ -146,10 +145,7 @@ function IngredientDetailPage() {
         .delete()
         .eq("ingredient_id", ingredientId);
       if (linkError) throw linkError;
-      const { error } = await supabase
-        .from("ingredients")
-        .delete()
-        .eq("id", ingredientId);
+      const { error } = await supabase.from("ingredients").delete().eq("id", ingredientId);
       if (error) throw error;
       return true;
     },
@@ -196,9 +192,7 @@ function IngredientDetailPage() {
             onSave={(name) => update.mutate({ name })}
           />
           {data.name_en && (
-            <p className="font-mono text-sm text-muted-foreground">
-              {data.name_en}
-            </p>
+            <p className="font-mono text-sm text-muted-foreground">{data.name_en}</p>
           )}
           <p className="font-mono text-xs uppercase text-muted-foreground">
             UPDATED {formatDateTime(data.updated_at)}
@@ -225,9 +219,7 @@ function IngredientDetailPage() {
           <Field label="기본 단위 DEFAULT UNIT">
             <InlineInput
               value={data.default_unit}
-              onSave={(unit) =>
-                update.mutate({ default_unit: unit.trim() || "g" })
-              }
+              onSave={(unit) => update.mutate({ default_unit: unit.trim() || "g" })}
             />
           </Field>
           <Field label="공급처 SUPPLIER">
@@ -251,10 +243,7 @@ function IngredientDetailPage() {
           <FunctionPicker
             options={(functions.data ?? []).map((f) => f.name)}
             labels={Object.fromEntries(
-              (functions.data ?? []).map((f) => [
-                f.name,
-                functionDisplayParts(f),
-              ])
+              (functions.data ?? []).map((f) => [f.name, functionDisplayParts(f)]),
             )}
             selected={selected}
             onChange={(next) => setFunctions.mutate(next)}
@@ -327,18 +316,14 @@ function IngredientDetailPage() {
                 <EnumSelect
                   value={data.scaling_mode}
                   options={SCALING_MODE_OPTIONS}
-                  onChange={(v) =>
-                    update.mutate({ scaling_mode: v ?? "linear" })
-                  }
+                  onChange={(v) => update.mutate({ scaling_mode: v ?? "linear" })}
                 />
               </Field>
               {data.scaling_mode === "sub_linear" && (
                 <Field label="스케일링 지수 K (N^K)">
                   <NullableNumberInput
                     value={data.scaling_exponent}
-                    onSave={(v) =>
-                      update.mutate({ scaling_exponent: v ?? 1.0 })
-                    }
+                    onSave={(v) => update.mutate({ scaling_exponent: v ?? 1.0 })}
                   />
                 </Field>
               )}
@@ -389,8 +374,7 @@ function IngredientDetailPage() {
               </p>
               {Math.abs(sum - 100) > 1 && (
                 <p className="font-mono text-xs uppercase text-destructive">
-                  합계가 100%에서 벗어났습니다 — 입력값을 확인하세요 (저장은
-                  유지됩니다)
+                  합계가 100%에서 벗어났습니다 — 입력값을 확인하세요 (저장은 유지됩니다)
                 </p>
               )}
             </div>
@@ -480,9 +464,7 @@ function IngredientDetailPage() {
             <Field label="향미 계열 FAMILY">
               <FlavourFamilySelect
                 value={data.flavour_family_id ?? ""}
-                onChange={(id) =>
-                  update.mutate({ flavour_family_id: id || null })
-                }
+                onChange={(id) => update.mutate({ flavour_family_id: id || null })}
               />
             </Field>
             <Field label="향 강도 INTENSITY (1~5)">
@@ -491,9 +473,7 @@ function IngredientDetailPage() {
                 value={data.flavour_intensity?.toString() ?? ""}
                 onChange={(e) =>
                   update.mutate({
-                    flavour_intensity: e.target.value
-                      ? Number(e.target.value)
-                      : null,
+                    flavour_intensity: e.target.value ? Number(e.target.value) : null,
                   })
                 }
               >
@@ -523,9 +503,7 @@ function IngredientDetailPage() {
                     value={data[axis.key]?.toString() ?? ""}
                     onChange={(e) =>
                       update.mutate({
-                        [axis.key]: e.target.value
-                          ? Number(e.target.value)
-                          : null,
+                        [axis.key]: e.target.value ? Number(e.target.value) : null,
                       })
                     }
                   >
@@ -561,13 +539,47 @@ function IngredientDetailPage() {
       </CollapsibleSection>
 
       <SectionCard title="NOTES">
-        <TextArea
-          value={data.notes ?? ""}
-          onSave={(notes) => update.mutate({ notes })}
-        />
+        <TextArea value={data.notes ?? ""} onSave={(notes) => update.mutate({ notes })} />
       </SectionCard>
 
-      <NextPhaseSection title="USED IN FORMULAS" />
+      <SectionCard title="USED IN FORMULAS">
+        {(usedInFormulas.data ?? []).length === 0 ? (
+          <p className="font-mono text-xs uppercase text-muted-foreground">
+            NOT USED IN ANY FORMULA
+          </p>
+        ) : (
+          <ul className="divide-y divide-border border border-border">
+            {(usedInFormulas.data ?? []).map((row) => {
+              const fv = row.formula_versions;
+              const formula = fv?.formulas;
+              if (!fv || !formula) return null;
+              return (
+                <li key={row.id}>
+                  <Link
+                    to="/formulas/$formulaId"
+                    params={{ formulaId: formula.id }}
+                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-3 hover:bg-secondary"
+                  >
+                    <span className="text-sm">
+                      {formula.name}
+                      <span className="ml-2 font-mono text-xs text-muted-foreground">
+                        v{fv.version_number}
+                      </span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                        {row.amount}
+                        {row.unit}
+                      </span>
+                      <StatusBadge status={fv.status} />
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </SectionCard>
 
       <div className="space-y-2">
         {usageBlocked !== null && (
@@ -582,12 +594,8 @@ function IngredientDetailPage() {
         )}
         {deleteError && (
           <div className="border border-destructive px-3 py-2">
-            <p className="label-caps text-xs text-destructive">
-              삭제 실패 DELETE FAILED
-            </p>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">
-              {deleteError}
-            </p>
+            <p className="label-caps text-xs text-destructive">삭제 실패 DELETE FAILED</p>
+            <p className="mt-1 font-mono text-xs text-muted-foreground">{deleteError}</p>
           </div>
         )}
         <button
@@ -733,7 +741,7 @@ function CheckRow({
       <span
         className={cn(
           "h-4 w-4 shrink-0 border",
-          checked ? "border-foreground bg-foreground" : "border-input"
+          checked ? "border-foreground bg-foreground" : "border-input",
         )}
       />
       <span className="label-caps text-xs">{label}</span>
@@ -741,13 +749,7 @@ function CheckRow({
   );
 }
 
-function TextArea({
-  value,
-  onSave,
-}: {
-  value: string;
-  onSave: (value: string) => void;
-}) {
+function TextArea({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return (

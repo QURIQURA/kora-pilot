@@ -24,7 +24,7 @@ export const categoriesQuery = () =>
           .from("categories")
           .select("*")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
+          .order("name", { ascending: true }),
       ),
   });
 
@@ -48,7 +48,7 @@ export const productsQuery = () =>
         await supabase
           .from("products")
           .select("*, product_components(count), product_tags(tag_id)")
-          .order("updated_at", { ascending: false })
+          .order("updated_at", { ascending: false }),
       ) as unknown as ProductListRow[],
   });
 
@@ -63,12 +63,7 @@ export const productTagsQuery = (productId: string) =>
   queryOptions({
     queryKey: ["product_tags", productId],
     queryFn: async (): Promise<{ tag_id: string }[]> =>
-      unwrap(
-        await supabase
-          .from("product_tags")
-          .select("tag_id")
-          .eq("product_id", productId)
-      ),
+      unwrap(await supabase.from("product_tags").select("tag_id").eq("product_id", productId)),
   });
 
 export interface ProductComponentRow {
@@ -87,7 +82,7 @@ export const productComponentsQuery = (productId: string) =>
           .from("product_components")
           .select("id, sort_order, component_id, components(*)")
           .eq("product_id", productId)
-          .order("sort_order")
+          .order("sort_order"),
       ) as unknown as ProductComponentRow[],
   });
 
@@ -96,10 +91,7 @@ export const componentsQuery = () =>
     queryKey: ["components"],
     queryFn: async (): Promise<Component[]> =>
       unwrap(
-        await supabase
-          .from("components")
-          .select("*")
-          .order("updated_at", { ascending: false })
+        await supabase.from("components").select("*").order("updated_at", { ascending: false }),
       ),
   });
 
@@ -107,9 +99,7 @@ export const componentQuery = (id: string) =>
   queryOptions({
     queryKey: ["components", id],
     queryFn: async (): Promise<Component> =>
-      unwrap(
-        await supabase.from("components").select("*").eq("id", id).single()
-      ),
+      unwrap(await supabase.from("components").select("*").eq("id", id).single()),
   });
 
 export interface ComponentUsageRow {
@@ -127,7 +117,7 @@ export const componentUsageQuery = (componentId: string | null) =>
         await supabase
           .from("product_components")
           .select("id, products(*)")
-          .eq("component_id", componentId)
+          .eq("component_id", componentId),
       ) as unknown as ComponentUsageRow[];
     },
   });
@@ -137,10 +127,7 @@ export interface IngredientRow extends Ingredient {
     function_id: string;
     ingredient_functions: IngredientFunction;
   }[];
-  flavour_families: Pick<
-    FlavourFamily,
-    "id" | "name" | "name_en" | "color"
-  > | null;
+  flavour_families: Pick<FlavourFamily, "id" | "name" | "name_en" | "color"> | null;
 }
 
 const INGREDIENT_SELECT =
@@ -151,7 +138,7 @@ export const ingredientsQuery = () =>
     queryKey: ["ingredients"],
     queryFn: async (): Promise<IngredientRow[]> =>
       unwrap(
-        await supabase.from("ingredients").select(INGREDIENT_SELECT).order("name")
+        await supabase.from("ingredients").select(INGREDIENT_SELECT).order("name"),
       ) as unknown as IngredientRow[],
   });
 
@@ -160,11 +147,7 @@ export const ingredientQuery = (id: string) =>
     queryKey: ["ingredients", id],
     queryFn: async (): Promise<IngredientRow> =>
       unwrap(
-        await supabase
-          .from("ingredients")
-          .select(INGREDIENT_SELECT)
-          .eq("id", id)
-          .single()
+        await supabase.from("ingredients").select(INGREDIENT_SELECT).eq("id", id).single(),
       ) as unknown as IngredientRow,
   });
 
@@ -182,10 +165,7 @@ export const aromaTagUsageQuery = () =>
     queryKey: ["aroma_tag_usage"],
     queryFn: async (): Promise<AromaTagUsage[]> => {
       const rows = unwrap(
-        await supabase
-          .from("ingredients")
-          .select("aroma_notes")
-          .not("aroma_notes", "is", null)
+        await supabase.from("ingredients").select("aroma_notes").not("aroma_notes", "is", null),
       );
       const counts = new Map<string, number>();
       for (const row of rows) {
@@ -208,7 +188,7 @@ export const ingredientFunctionsQuery = () =>
           .from("ingredient_functions")
           .select("*")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
+          .order("name", { ascending: true }),
       ),
   });
 
@@ -217,12 +197,9 @@ export const ingredientFunctionUsageQuery = () =>
   queryOptions({
     queryKey: ["ingredient_function_usage"],
     queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(
-        await supabase.from("ingredient_function_links").select("function_id")
-      );
+      const rows = unwrap(await supabase.from("ingredient_function_links").select("function_id"));
       const map: Record<string, number> = {};
-      for (const row of rows)
-        map[row.function_id] = (map[row.function_id] ?? 0) + 1;
+      for (const row of rows) map[row.function_id] = (map[row.function_id] ?? 0) + 1;
       return map;
     },
   });
@@ -236,7 +213,7 @@ export const flavourFamiliesQuery = () =>
           .from("flavour_families")
           .select("*")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
+          .order("name", { ascending: true }),
       ),
   });
 
@@ -245,9 +222,7 @@ export const flavourFamilyUsageQuery = () =>
   queryOptions({
     queryKey: ["flavour_family_usage"],
     queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(
-        await supabase.from("ingredients").select("flavour_family_id")
-      );
+      const rows = unwrap(await supabase.from("ingredients").select("flavour_family_id"));
       const map: Record<string, number> = {};
       for (const row of rows) {
         if (row.flavour_family_id)
@@ -317,11 +292,7 @@ export const tagUsageQuery = () =>
 
 /* ── PHASE 3 — MOULDS / FORMULAS ─────────────────────────────── */
 
-import type {
-  Formula,
-  FormulaVersion,
-  Mould,
-} from "@/lib/formula";
+import type { Formula, FormulaVersion, Mould } from "@/lib/formula";
 
 export const mouldsQuery = () =>
   queryOptions({
@@ -335,13 +306,10 @@ export const mouldUsageQuery = () =>
   queryOptions({
     queryKey: ["mould_usage"],
     queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(
-        await supabase.from("formula_versions").select("default_mould_id")
-      );
+      const rows = unwrap(await supabase.from("formula_versions").select("default_mould_id"));
       const map: Record<string, number> = {};
       for (const row of rows) {
-        if (row.default_mould_id)
-          map[row.default_mould_id] = (map[row.default_mould_id] ?? 0) + 1;
+        if (row.default_mould_id) map[row.default_mould_id] = (map[row.default_mould_id] ?? 0) + 1;
       }
       return map;
     },
@@ -363,10 +331,8 @@ export const formulasQuery = () =>
       unwrap(
         await supabase
           .from("formulas")
-          .select(
-            "*, components(id, name), formula_versions(id, version_number, status)"
-          )
-          .order("updated_at", { ascending: false })
+          .select("*, components(id, name), formula_versions(id, version_number, status)")
+          .order("updated_at", { ascending: false }),
       ) as unknown as FormulaListRow[],
   });
 
@@ -388,7 +354,7 @@ export const formulaVersionsQuery = (formulaId: string | null) =>
           .from("formula_versions")
           .select("*")
           .eq("formula_id", formulaId)
-          .order("version_number", { ascending: true })
+          .order("version_number", { ascending: true }),
       );
     },
   });
@@ -415,10 +381,10 @@ export const versionIngredientsQuery = (versionId: string | null) =>
         await supabase
           .from("formula_version_ingredients")
           .select(
-            "id, amount, unit, sort_order, note, amount_source, ingredient_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))"
+            "id, amount, unit, sort_order, note, amount_source, ingredient_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))",
           )
           .eq("formula_version_id", versionId)
-          .order("sort_order")
+          .order("sort_order"),
       ) as unknown as VersionIngredientRow[];
     },
   });
@@ -431,12 +397,37 @@ export const formulasByComponentQuery = (componentId: string) =>
       unwrap(
         await supabase
           .from("formulas")
-          .select(
-            "*, components(id, name), formula_versions(id, version_number, status)"
-          )
+          .select("*, components(id, name), formula_versions(id, version_number, status)")
           .eq("component_id", componentId)
-          .order("updated_at", { ascending: false })
+          .order("updated_at", { ascending: false }),
       ) as unknown as FormulaListRow[],
+  });
+
+export interface FormulaUsageRow {
+  id: string;
+  amount: number;
+  unit: string;
+  formula_versions: {
+    id: string;
+    version_number: number;
+    status: string;
+    formulas: { id: string; name: string } | null;
+  } | null;
+}
+
+/** INGREDIENT DETAIL — 이 재료가 사용된 배합(버전별) 목록 */
+export const formulasByIngredientQuery = (ingredientId: string) =>
+  queryOptions({
+    queryKey: ["formulas_by_ingredient", ingredientId],
+    queryFn: async (): Promise<FormulaUsageRow[]> =>
+      unwrap(
+        await supabase
+          .from("formula_version_ingredients")
+          .select(
+            "id, amount, unit, formula_versions(id, version_number, status, formulas(id, name))",
+          )
+          .eq("ingredient_id", ingredientId),
+      ) as unknown as FormulaUsageRow[],
   });
 
 /* ── PHASE 4A — EXPERIMENTS / OBSERVATIONS ───────────────────── */
@@ -458,6 +449,21 @@ export interface ExperimentRow extends Experiment {
 const EXPERIMENT_SELECT =
   "*, products(id, name), components(id, name), formula_versions(id, version_number, formula_id, default_mould_id, formulas(id, name))";
 
+/** COMPONENT DETAIL — 이 구성요소로 진행된 실험 목록 */
+export const experimentsByComponentQuery = (componentId: string) =>
+  queryOptions({
+    queryKey: ["experiments_by_component", componentId],
+    queryFn: async (): Promise<ExperimentRow[]> =>
+      unwrap(
+        await supabase
+          .from("experiments")
+          .select(EXPERIMENT_SELECT)
+          .eq("component_id", componentId)
+          .order("date", { ascending: false })
+          .order("experiment_number", { ascending: false }),
+      ) as unknown as ExperimentRow[],
+  });
+
 export const experimentsQuery = () =>
   queryOptions({
     queryKey: ["experiments"],
@@ -467,7 +473,7 @@ export const experimentsQuery = () =>
           .from("experiments")
           .select(EXPERIMENT_SELECT)
           .order("date", { ascending: false })
-          .order("experiment_number", { ascending: false })
+          .order("experiment_number", { ascending: false }),
       ) as unknown as ExperimentRow[],
   });
 
@@ -476,11 +482,7 @@ export const experimentQuery = (id: string) =>
     queryKey: ["experiments", id],
     queryFn: async (): Promise<ExperimentRow> =>
       unwrap(
-        await supabase
-          .from("experiments")
-          .select(EXPERIMENT_SELECT)
-          .eq("id", id)
-          .single()
+        await supabase.from("experiments").select(EXPERIMENT_SELECT).eq("id", id).single(),
       ) as unknown as ExperimentRow,
   });
 
@@ -496,7 +498,7 @@ export const experimentsByVersionQuery = (formulaVersionId: string | null) =>
           .from("experiments")
           .select("*")
           .eq("formula_version_id", formulaVersionId)
-          .order("experiment_number", { ascending: false })
+          .order("experiment_number", { ascending: false }),
       );
     },
   });
@@ -510,7 +512,7 @@ export const experimentsByProductQuery = (productId: string) =>
           .from("experiments")
           .select("*")
           .eq("product_id", productId)
-          .order("experiment_number", { ascending: false })
+          .order("experiment_number", { ascending: false }),
       ),
   });
 
@@ -525,7 +527,7 @@ export const activeExperimentsQuery = () =>
           .select(EXPERIMENT_SELECT)
           .in("status", ["PLANNED", "RUNNING"])
           .order("updated_at", { ascending: false })
-          .limit(6)
+          .limit(6),
       ) as unknown as ExperimentRow[],
   });
 
@@ -538,7 +540,7 @@ export const experimentObservationsQuery = (experimentId: string) =>
           .from("observations")
           .select("*")
           .eq("experiment_id", experimentId)
-          .order("created_at", { ascending: true })
+          .order("created_at", { ascending: true }),
       ),
   });
 
@@ -556,7 +558,7 @@ export const recentObservationsQuery = () =>
           .from("observations")
           .select("*, experiments(id, experiment_number)")
           .order("created_at", { ascending: false })
-          .limit(8)
+          .limit(8),
       ) as unknown as RecentObservationRow[],
   });
 
@@ -573,7 +575,7 @@ export const processCategoriesQuery = () =>
           .from("process_categories")
           .select("*")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
+          .order("name", { ascending: true }),
       ),
   });
 
@@ -582,13 +584,10 @@ export const processCategoryUsageQuery = () =>
   queryOptions({
     queryKey: ["process_category_usage"],
     queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(
-        await supabase.from("process_events").select("category_id")
-      );
+      const rows = unwrap(await supabase.from("process_events").select("category_id"));
       const map: Record<string, number> = {};
       for (const row of rows) {
-        if (row.category_id)
-          map[row.category_id] = (map[row.category_id] ?? 0) + 1;
+        if (row.category_id) map[row.category_id] = (map[row.category_id] ?? 0) + 1;
       }
       return map;
     },
@@ -607,7 +606,7 @@ export const processEventsQuery = (experimentId: string) =>
           .from("process_events")
           .select("*, process_categories(*)")
           .eq("experiment_id", experimentId)
-          .order("started_at", { ascending: true })
+          .order("started_at", { ascending: true }),
       ) as unknown as ProcessEventRow[],
   });
 
@@ -624,11 +623,9 @@ export const recentProcessEventsQuery = () =>
       unwrap(
         await supabase
           .from("process_events")
-          .select(
-            "*, process_categories(id, name, color), experiments(id, experiment_number)"
-          )
+          .select("*, process_categories(id, name, color), experiments(id, experiment_number)")
           .order("created_at", { ascending: false })
-          .limit(8)
+          .limit(8),
       ) as unknown as RecentProcessEventRow[],
   });
 
@@ -645,7 +642,7 @@ export const techniqueCategoriesQuery = () =>
           .from("technique_categories")
           .select("*")
           .order("sort_order", { ascending: true })
-          .order("name", { ascending: true })
+          .order("name", { ascending: true }),
       ),
   });
 
@@ -659,12 +656,10 @@ export const formulasByTechniqueQuery = (techniqueId: string | null) =>
       return unwrap(
         await supabase
           .from("formulas")
-          .select(
-            "*, components(id, name), formula_versions(id, version_number, status)"
-          )
+          .select("*, components(id, name), formula_versions(id, version_number, status)")
           .eq("technique_category_id", techniqueId)
           .order("is_base_formula", { ascending: false })
-          .order("updated_at", { ascending: false })
+          .order("updated_at", { ascending: false }),
       ) as unknown as FormulaListRow[];
     },
   });
@@ -680,10 +675,10 @@ export const versionIngredientsBulkQuery = (versionIds: string[]) =>
         await supabase
           .from("formula_version_ingredients")
           .select(
-            "id, amount, unit, sort_order, note, amount_source, ingredient_id, formula_version_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))"
+            "id, amount, unit, sort_order, note, amount_source, ingredient_id, formula_version_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))",
           )
           .in("formula_version_id", versionIds)
-          .order("sort_order")
+          .order("sort_order"),
       ) as unknown as (VersionIngredientRow & {
         formula_version_id: string;
       })[];
