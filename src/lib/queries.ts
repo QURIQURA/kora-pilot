@@ -699,3 +699,88 @@ export const versionIngredientsBulkQuery = (versionIds: string[]) =>
       return map;
     },
   });
+
+/* ── PHASE 10 — KNOWLEDGE ─────────────────────────────────────── */
+
+import type { KnowledgeEntry } from "@/lib/knowledge";
+
+/** KNOWLEDGE 탭 전체 목록 — 최신순 */
+export const knowledgeEntriesQuery = () =>
+  queryOptions({
+    queryKey: ["knowledge_entries"],
+    queryFn: async (): Promise<KnowledgeEntry[]> =>
+      unwrap(
+        await supabase
+          .from("knowledge_entries")
+          .select("*")
+          .order("updated_at", { ascending: false }),
+      ),
+  });
+
+/** 특정 PRODUCT에 연결된 지식만 — PRODUCT DETAIL의 KNOWLEDGE 섹션용 */
+export const knowledgeEntriesByProductQuery = (productId: string | null) =>
+  queryOptions({
+    queryKey: ["knowledge_entries", "by_product", productId],
+    enabled: Boolean(productId),
+    queryFn: async (): Promise<KnowledgeEntry[]> => {
+      if (!productId) return [];
+      return unwrap(
+        await supabase
+          .from("knowledge_entries")
+          .select("*")
+          .eq("product_id", productId)
+          .order("updated_at", { ascending: false }),
+      );
+    },
+  });
+
+/** 특정 COMPONENT에 연결된 지식만 */
+export const knowledgeEntriesByComponentQuery = (componentId: string | null) =>
+  queryOptions({
+    queryKey: ["knowledge_entries", "by_component", componentId],
+    enabled: Boolean(componentId),
+    queryFn: async (): Promise<KnowledgeEntry[]> => {
+      if (!componentId) return [];
+      return unwrap(
+        await supabase
+          .from("knowledge_entries")
+          .select("*")
+          .eq("component_id", componentId)
+          .order("updated_at", { ascending: false }),
+      );
+    },
+  });
+
+/** 특정 INGREDIENT에 연결된 지식만 */
+export const knowledgeEntriesByIngredientQuery = (ingredientId: string | null) =>
+  queryOptions({
+    queryKey: ["knowledge_entries", "by_ingredient", ingredientId],
+    enabled: Boolean(ingredientId),
+    queryFn: async (): Promise<KnowledgeEntry[]> => {
+      if (!ingredientId) return [];
+      return unwrap(
+        await supabase
+          .from("knowledge_entries")
+          .select("*")
+          .eq("ingredient_id", ingredientId)
+          .order("updated_at", { ascending: false }),
+      );
+    },
+  });
+
+/** 특정 TECHNIQUE CATEGORY에 연결된 지식만 */
+export const knowledgeEntriesByTechniqueQuery = (techniqueId: string | null) =>
+  queryOptions({
+    queryKey: ["knowledge_entries", "by_technique", techniqueId],
+    enabled: Boolean(techniqueId),
+    queryFn: async (): Promise<KnowledgeEntry[]> => {
+      if (!techniqueId) return [];
+      return unwrap(
+        await supabase
+          .from("knowledge_entries")
+          .select("*")
+          .eq("technique_category_id", techniqueId)
+          .order("updated_at", { ascending: false }),
+      );
+    },
+  });

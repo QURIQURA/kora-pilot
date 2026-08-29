@@ -635,6 +635,74 @@ export type Database = {
           },
         ];
       };
+      knowledge_entries: {
+        Row: {
+          body: string;
+          component_id: string | null;
+          created_at: string;
+          id: string;
+          ingredient_id: string | null;
+          product_id: string | null;
+          technique_category_id: string | null;
+          title: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          body?: string;
+          component_id?: string | null;
+          created_at?: string;
+          id?: string;
+          ingredient_id?: string | null;
+          product_id?: string | null;
+          technique_category_id?: string | null;
+          title: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          body?: string;
+          component_id?: string | null;
+          created_at?: string;
+          id?: string;
+          ingredient_id?: string | null;
+          product_id?: string | null;
+          technique_category_id?: string | null;
+          title?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_entries_component_id_fkey";
+            columns: ["component_id"];
+            isOneToOne: false;
+            referencedRelation: "components";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "knowledge_entries_ingredient_id_fkey";
+            columns: ["ingredient_id"];
+            isOneToOne: false;
+            referencedRelation: "ingredients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "knowledge_entries_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "knowledge_entries_technique_category_id_fkey";
+            columns: ["technique_category_id"];
+            isOneToOne: false;
+            referencedRelation: "technique_categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       moulds: {
         Row: {
           created_at: string;
