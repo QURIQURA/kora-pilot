@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-08-29 — METHOD 데이터 모델 준비 (스키마만, taxonomy 재정비는 다음 단계)
+
+### 무엇이 달라졌나
+
+TECHNIQUE CATEGORY("무슨 기법군인가", 예: Foam Cake)와 METHOD("그 기법을 어떤 방식으로 만들었는가", 예: 공립법/오일 유화법)를 분리해서 관리하기로 확정했습니다. 이번 작업에서는 METHOD를 저장할 DB 구조만 먼저 만들었어요 — 화면은 아직 없습니다.
+
+- METHOD는 특정 TECHNIQUE CATEGORY에 종속됩니다(공립법은 Foam Cake 전용).
+- METHOD의 실제 값은 FORMULA(배합) 레벨에서만 저장됩니다 — TECHNIQUE CATEGORY + METHOD 둘 다 FORMULA가 갖고, COMPONENT에는 중복 저장하지 않습니다. (COMPONENT의 기존 `technique_category_id`는 아직 FORMULA 데이터/화면이 없어서 당분간 그대로 유지합니다.)
+- 아직 기존 26개 TECHNIQUE CATEGORY 데이터는 손대지 않았습니다 — 예: 현재 "오일폼 케이크"가 별도 카테고리로 있는데, 이걸 "폼 케이크" + METHOD "오일 유화법"으로 재정비하는 작업은 매핑안을 먼저 확인받은 뒤 별도로 진행합니다.
+
+### 지금 확인할 수 있는 것
+
+화면이 아직 없어서 눈으로 테스트할 건 없어요. DB에 `methods` 테이블과 `formulas.method_id` 컬럼이 생성됐다는 것만 참고해주세요.
+
+---
+
 ## 2026-08-29 — KNOWLEDGE 화면 완성 (목록·필터·CRUD·PRODUCT 연동)
 
 ### 무엇이 달라졌나

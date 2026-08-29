@@ -359,6 +359,7 @@ export type Database = {
           created_at: string
           id: string
           is_base_formula: boolean
+          method_id: string | null
           name: string
           notes: string | null
           technique_category_id: string | null
@@ -370,6 +371,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_base_formula?: boolean
+          method_id?: string | null
           name: string
           notes?: string | null
           technique_category_id?: string | null
@@ -381,6 +383,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_base_formula?: boolean
+          method_id?: string | null
           name?: string
           notes?: string | null
           technique_category_id?: string | null
@@ -393,6 +396,13 @@ export type Database = {
             columns: ["component_id"]
             isOneToOne: false
             referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulas_method_id_fkey"
+            columns: ["method_id"]
+            isOneToOne: false
+            referencedRelation: "methods"
             referencedColumns: ["id"]
           },
           {
@@ -702,6 +712,50 @@ export type Database = {
           },
           {
             foreignKeyName: "knowledge_entries_technique_category_id_fkey"
+            columns: ["technique_category_id"]
+            isOneToOne: false
+            referencedRelation: "technique_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      methods: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          name_en: string | null
+          notes: string | null
+          sort_order: number
+          technique_category_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          name_en?: string | null
+          notes?: string | null
+          sort_order?: number
+          technique_category_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          name_en?: string | null
+          notes?: string | null
+          sort_order?: number
+          technique_category_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "methods_technique_category_id_fkey"
             columns: ["technique_category_id"]
             isOneToOne: false
             referencedRelation: "technique_categories"

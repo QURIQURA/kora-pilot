@@ -660,6 +660,7 @@ export const recentProcessEventsQuery = () =>
 /* ── PHASE 9 — TECHNIQUE CATEGORIES / CALIBRATION ─────────────── */
 
 import type { TechniqueCategory } from "@/lib/technique";
+import type { Method } from "@/lib/method";
 
 export const techniqueCategoriesQuery = () =>
   queryOptions({
@@ -672,6 +673,38 @@ export const techniqueCategoriesQuery = () =>
           .order("sort_order", { ascending: true })
           .order("name", { ascending: true }),
       ),
+  });
+
+/** 전체 METHOD 목록 (technique_category_id로 클라이언트에서 필터링해서 씀 — @/lib/method의 methodsForTechnique 참고) */
+export const methodsQuery = () =>
+  queryOptions({
+    queryKey: ["methods"],
+    queryFn: async (): Promise<Method[]> =>
+      unwrap(
+        await supabase
+          .from("methods")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true }),
+      ),
+  });
+
+/** 특정 TECHNIQUE CATEGORY에 속한 METHOD만 (서버 필터) */
+export const methodsByTechniqueCategoryQuery = (techniqueCategoryId: string | null) =>
+  queryOptions({
+    queryKey: ["methods_by_technique_category", techniqueCategoryId],
+    enabled: Boolean(techniqueCategoryId),
+    queryFn: async (): Promise<Method[]> => {
+      if (!techniqueCategoryId) return [];
+      return unwrap(
+        await supabase
+          .from("methods")
+          .select("*")
+          .eq("technique_category_id", techniqueCategoryId)
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true }),
+      );
+    },
   });
 
 /** 특정 기법군에 연결된 배합 — 기준 배합 먼저 */
