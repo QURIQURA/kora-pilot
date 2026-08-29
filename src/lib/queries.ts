@@ -784,3 +784,88 @@ export const knowledgeEntriesByTechniqueQuery = (techniqueId: string | null) =>
       );
     },
   });
+
+/* ── PHASE 11 — REFERENCES ────────────────────────────────────── */
+
+import type { ReferenceEntry } from "@/lib/reference";
+
+/** REFERENCES 탭 전체 목록 — 최신순 */
+export const referenceEntriesQuery = () =>
+  queryOptions({
+    queryKey: ["reference_entries"],
+    queryFn: async (): Promise<ReferenceEntry[]> =>
+      unwrap(
+        await supabase
+          .from("reference_entries")
+          .select("*")
+          .order("updated_at", { ascending: false }),
+      ),
+  });
+
+/** 특정 PRODUCT에 연결된 참고자료만 */
+export const referenceEntriesByProductQuery = (productId: string | null) =>
+  queryOptions({
+    queryKey: ["reference_entries", "by_product", productId],
+    enabled: Boolean(productId),
+    queryFn: async (): Promise<ReferenceEntry[]> => {
+      if (!productId) return [];
+      return unwrap(
+        await supabase
+          .from("reference_entries")
+          .select("*")
+          .eq("product_id", productId)
+          .order("updated_at", { ascending: false }),
+      );
+    },
+  });
+
+/** 특정 COMPONENT에 연결된 참고자료만 */
+export const referenceEntriesByComponentQuery = (componentId: string | null) =>
+  queryOptions({
+    queryKey: ["reference_entries", "by_component", componentId],
+    enabled: Boolean(componentId),
+    queryFn: async (): Promise<ReferenceEntry[]> => {
+      if (!componentId) return [];
+      return unwrap(
+        await supabase
+          .from("reference_entries")
+          .select("*")
+          .eq("component_id", componentId)
+          .order("updated_at", { ascending: false }),
+      );
+    },
+  });
+
+/** 특정 INGREDIENT에 연결된 참고자료만 */
+export const referenceEntriesByIngredientQuery = (ingredientId: string | null) =>
+  queryOptions({
+    queryKey: ["reference_entries", "by_ingredient", ingredientId],
+    enabled: Boolean(ingredientId),
+    queryFn: async (): Promise<ReferenceEntry[]> => {
+      if (!ingredientId) return [];
+      return unwrap(
+        await supabase
+          .from("reference_entries")
+          .select("*")
+          .eq("ingredient_id", ingredientId)
+          .order("updated_at", { ascending: false }),
+      );
+    },
+  });
+
+/** 특정 TECHNIQUE CATEGORY에 연결된 참고자료만 */
+export const referenceEntriesByTechniqueQuery = (techniqueId: string | null) =>
+  queryOptions({
+    queryKey: ["reference_entries", "by_technique", techniqueId],
+    enabled: Boolean(techniqueId),
+    queryFn: async (): Promise<ReferenceEntry[]> => {
+      if (!techniqueId) return [];
+      return unwrap(
+        await supabase
+          .from("reference_entries")
+          .select("*")
+          .eq("technique_category_id", techniqueId)
+          .order("updated_at", { ascending: false }),
+      );
+    },
+  });

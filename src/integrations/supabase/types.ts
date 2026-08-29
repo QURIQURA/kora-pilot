@@ -998,6 +998,83 @@ export type Database = {
           },
         ];
       };
+      reference_entries: {
+        Row: {
+          author: string | null;
+          component_id: string | null;
+          created_at: string;
+          id: string;
+          ingredient_id: string | null;
+          note: string;
+          product_id: string | null;
+          source_type: string;
+          technique_category_id: string | null;
+          title: string;
+          updated_at: string;
+          url: string | null;
+          user_id: string;
+        };
+        Insert: {
+          author?: string | null;
+          component_id?: string | null;
+          created_at?: string;
+          id?: string;
+          ingredient_id?: string | null;
+          note?: string;
+          product_id?: string | null;
+          source_type?: string;
+          technique_category_id?: string | null;
+          title: string;
+          updated_at?: string;
+          url?: string | null;
+          user_id: string;
+        };
+        Update: {
+          author?: string | null;
+          component_id?: string | null;
+          created_at?: string;
+          id?: string;
+          ingredient_id?: string | null;
+          note?: string;
+          product_id?: string | null;
+          source_type?: string;
+          technique_category_id?: string | null;
+          title?: string;
+          updated_at?: string;
+          url?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reference_entries_component_id_fkey";
+            columns: ["component_id"];
+            isOneToOne: false;
+            referencedRelation: "components";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reference_entries_ingredient_id_fkey";
+            columns: ["ingredient_id"];
+            isOneToOne: false;
+            referencedRelation: "ingredients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reference_entries_product_id_fkey";
+            columns: ["product_id"];
+            isOneToOne: false;
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reference_entries_technique_category_id_fkey";
+            columns: ["technique_category_id"];
+            isOneToOne: false;
+            referencedRelation: "technique_categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       tags: {
         Row: {
           color: string;
