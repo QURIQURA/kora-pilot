@@ -223,7 +223,7 @@ function ProductDetailPage() {
           <ExperimentListItems items={experiments.data ?? []} />
         </SectionCard>
         <NextPhaseSection title="OBSERVATIONS" />
-        <NextPhaseSection title="KNOWLEDGE" />
+        <ProductKnowledgeSection productId={productId} />
       </div>
 
       <div className="pt-2">
