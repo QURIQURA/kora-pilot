@@ -1,19 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  categoriesQuery,
-  categoryUsageQuery,
-  type CategoryUsage,
-} from "@/lib/queries";
+import { categoriesQuery, categoryUsageQuery, type CategoryUsage } from "@/lib/queries";
 import { flattenCategories, type Category } from "@/lib/pilot";
-import {
-  SectionCard,
-  buttonClass,
-  inputClass,
-  primaryButtonClass,
-  selectClass,
-} from "./ui";
+import { SectionCard, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 import { CategoryCreateForm } from "./CategoryCreateForm";
 
 export function CategoryManager() {
@@ -31,36 +21,23 @@ export function CategoryManager() {
       queryClient.invalidateQueries({ queryKey: ["categories"] }),
       queryClient.invalidateQueries({ queryKey: ["category_usage"] }),
       queryClient.invalidateQueries({ queryKey: ["products"] }),
-      queryClient.invalidateQueries({ queryKey: ["components"] }),
-      queryClient.invalidateQueries({ queryKey: ["ingredients"] }),
     ]);
   };
 
   const update = useMutation({
-    mutationFn: async (input: {
-      id: string;
-      name?: string;
-      color?: string;
-    }) => {
+    mutationFn: async (input: { id: string; name?: string; color?: string }) => {
       const { id, ...patch } = input;
-      const { error } = await supabase
-        .from("categories")
-        .update(patch)
-        .eq("id", id);
+      const { error } = await supabase.from("categories").update(patch).eq("id", id);
       if (error) throw error;
     },
     onSuccess: refresh,
   });
 
   const remove = useMutation({
-    mutationFn: async ({
-      id,
-      moveTo,
-    }: {
-      id: string;
-      moveTo: string | null;
-    }) => {
-      for (const table of ["products", "components", "ingredients"] as const) {
+    mutationFn: async ({ id, moveTo }: { id: string; moveTo: string | null }) => {
+      // categories는 PRODUCT 전용 taxonomy (2026-08-29 확정) — COMPONENT는 technique_categories를 쓰므로 제외.
+      // INGREDIENT는 category_id FK가 남아있지만 아직 UI 미구현이라 여기서 함께 정리한다.
+      for (const table of ["products", "ingredients"] as const) {
         const { error } = await supabase
           .from(table)
           .update({ category_id: moveTo })
@@ -105,9 +82,7 @@ export function CategoryManager() {
         )}
 
         {list.length === 0 ? (
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            NO CATEGORIES YET
-          </p>
+          <p className="font-mono text-xs uppercase text-muted-foreground">NO CATEGORIES YET</p>
         ) : (
           <ul className="divide-y divide-border border border-border">
             {flattenCategories(list).map(({ category, depth }) => (
@@ -146,9 +121,7 @@ export function CategoryManager() {
           categories={list}
           pending={remove.isPending}
           onCancel={() => setPendingDelete(null)}
-          onConfirm={(moveTo) =>
-            remove.mutate({ id: pendingDelete.id, moveTo })
-          }
+          onConfirm={(moveTo) => remove.mutate({ id: pendingDelete.id, moveTo })}
         />
       )}
     </SectionCard>
@@ -202,9 +175,7 @@ function CategoryRow({
         value={category.color}
         onChange={(e) => onColor(e.target.value.toUpperCase())}
       />
-      <span className="label-caps text-[11px] text-muted-foreground">
-        {usage?.total ?? 0} USED
-      </span>
+      <span className="label-caps text-[11px] text-muted-foreground">{usage?.total ?? 0} USED</span>
       <button type="button" className={buttonClass} onClick={onDelete}>
         DELETE
       </button>
@@ -228,9 +199,7 @@ function DeleteCategoryDialog({
   onConfirm: (moveTo: string | null) => void;
 }) {
   const [moveTo, setMoveTo] = useState("");
-  const options = flattenCategories(categories).filter(
-    ({ category: c }) => c.id !== category.id
-  );
+  const options = flattenCategories(categories).filter(({ category: c }) => c.id !== category.id);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
@@ -247,14 +216,10 @@ function DeleteCategoryDialog({
           </p>
           <ul className="font-mono text-xs uppercase text-muted-foreground">
             <li>PRODUCTS {usage?.products ?? 0}</li>
-            <li>COMPONENTS {usage?.components ?? 0}</li>
-            <li>INGREDIENTS {usage?.ingredients ?? 0}</li>
             <li>SUB CATEGORIES {usage?.children ?? 0}</li>
           </ul>
           <label className="block space-y-1">
-            <span className="label-caps block text-xs text-muted-foreground">
-              MOVE TO
-            </span>
+            <span className="label-caps block text-xs text-muted-foreground">MOVE TO</span>
             <select
               className={selectClass}
               value={moveTo}

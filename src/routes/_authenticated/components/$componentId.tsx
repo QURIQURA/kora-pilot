@@ -2,15 +2,15 @@ import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { CategorySelect } from "@/components/pilot/CategorySelect";
+import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import {
-  categoriesQuery,
   componentQuery,
   componentUsageQuery,
   experimentsByComponentQuery,
+  techniqueCategoriesQuery,
 } from "@/lib/queries";
-import { categoryPath } from "@/lib/pilot";
+import { techniquePath } from "@/lib/technique";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ComponentFormulasSection } from "@/components/pilot/FormulaSummary";
@@ -44,12 +44,12 @@ function ComponentDetailPage() {
   const queryClient = useQueryClient();
 
   const component = useQuery(componentQuery(componentId));
-  const categories = useQuery(categoriesQuery());
+  const techniqueCategories = useQuery(techniqueCategoriesQuery());
   const usage = useQuery(componentUsageQuery(componentId));
   const experiments = useQuery(experimentsByComponentQuery(componentId));
 
-  const categoryList = categories.data ?? [];
-  const path = categoryPath(categoryList, component.data?.category_id ?? null);
+  const techniqueCategoryList = techniqueCategories.data ?? [];
+  const path = techniquePath(techniqueCategoryList, component.data?.technique_category_id ?? null);
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -105,11 +105,11 @@ function ComponentDetailPage() {
             UPDATED {formatDateTime(data.updated_at)}
           </p>
         </div>
-        <CategorySelect
+        <TechniqueSelect
           className={selectClass + " w-auto"}
-          value={data.category_id ?? ""}
-          onChange={(id) => update.mutate({ category_id: id || null })}
-          emptyLabel="NO CATEGORY"
+          value={data.technique_category_id ?? ""}
+          onChange={(id) => update.mutate({ technique_category_id: id || null })}
+          emptyLabel="NO TECHNIQUE CATEGORY"
         />
       </div>
 

@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CategorySelect } from "@/components/pilot/CategorySelect";
+import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import {
   categoriesQuery,
   componentsQuery,
@@ -81,10 +82,7 @@ function ProductDetailPage() {
 
   const updateProduct = useMutation({
     mutationFn: async (patch: TablesUpdate<"products">) => {
-      const { error } = await supabase
-        .from("products")
-        .update(patch)
-        .eq("id", productId);
+      const { error } = await supabase.from("products").update(patch).eq("id", productId);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -92,10 +90,7 @@ function ProductDetailPage() {
 
   const unlink = useMutation({
     mutationFn: async (linkId: string) => {
-      const { error } = await supabase
-        .from("product_components")
-        .delete()
-        .eq("id", linkId);
+      const { error } = await supabase.from("product_components").delete().eq("id", linkId);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -108,10 +103,7 @@ function ProductDetailPage() {
 
   const remove = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("products")
-        .delete()
-        .eq("id", productId);
+      const { error } = await supabase.from("products").delete().eq("id", productId);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -123,18 +115,10 @@ function ProductDetailPage() {
   const [adding, setAdding] = useState(false);
 
   if (product.isLoading) {
-    return (
-      <p className="font-mono text-xs uppercase text-muted-foreground">
-        LOADING…
-      </p>
-    );
+    return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
   }
   if (!product.data) {
-    return (
-      <p className="font-mono text-xs uppercase text-muted-foreground">
-        PRODUCT NOT FOUND
-      </p>
-    );
+    return <p className="font-mono text-xs uppercase text-muted-foreground">PRODUCT NOT FOUND</p>;
   }
 
   const data = product.data;
@@ -144,13 +128,9 @@ function ProductDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
-          <InlineName
-            value={data.name}
-            onSave={(name) => updateProduct.mutate({ name })}
-          />
+          <InlineName value={data.name} onSave={(name) => updateProduct.mutate({ name })} />
           <p className="font-mono text-xs uppercase text-muted-foreground">
-            CREATED {formatDateTime(data.created_at)} · UPDATED{" "}
-            {formatDateTime(data.updated_at)}
+            CREATED {formatDateTime(data.created_at)} · UPDATED {formatDateTime(data.updated_at)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -158,9 +138,7 @@ function ProductDetailPage() {
           <select
             className={selectClass + " w-auto"}
             value={data.status}
-            onChange={(e) =>
-              updateProduct.mutate({ status: e.target.value as ProductStatus })
-            }
+            onChange={(e) => updateProduct.mutate({ status: e.target.value as ProductStatus })}
           >
             {PRODUCT_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -177,11 +155,7 @@ function ProductDetailPage() {
         </div>
       </div>
 
-      <TagEditor
-        productId={productId}
-        allTags={tags.data ?? []}
-        linkedTagIds={linkedTagIds}
-      />
+      <TagEditor productId={productId} allTags={tags.data ?? []} linkedTagIds={linkedTagIds} />
 
       <TargetSection
         target={parseTarget(data.product_target)}
@@ -191,11 +165,7 @@ function ProductDetailPage() {
       <SectionCard
         title="COMPONENTS"
         action={
-          <button
-            type="button"
-            className={buttonClass}
-            onClick={() => setAdding((v) => !v)}
-          >
+          <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
             {adding ? "CLOSE" : "+ ADD COMPONENT"}
           </button>
         }
@@ -208,9 +178,7 @@ function ProductDetailPage() {
           />
         )}
         {(links.data ?? []).length === 0 ? (
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            NO COMPONENTS LINKED
-          </p>
+          <p className="font-mono text-xs uppercase text-muted-foreground">NO COMPONENTS LINKED</p>
         ) : (
           <ul className="divide-y divide-border border border-border">
             {(links.data ?? []).map((link) => (
@@ -239,10 +207,7 @@ function ProductDetailPage() {
       </SectionCard>
 
       <SectionCard title="NOTES">
-        <NotesEditor
-          value={data.notes ?? ""}
-          onSave={(notes) => updateProduct.mutate({ notes })}
-        />
+        <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateProduct.mutate({ notes })} />
       </SectionCard>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -250,10 +215,7 @@ function ProductDetailPage() {
         <SectionCard
           title="EXPERIMENTS"
           action={
-            <Link
-              to="/experiments"
-              className="label-caps px-2 py-2 text-xs hover:bg-secondary"
-            >
+            <Link to="/experiments" className="label-caps px-2 py-2 text-xs hover:bg-secondary">
               VIEW ALL
             </Link>
           }
@@ -279,13 +241,7 @@ function ProductDetailPage() {
   );
 }
 
-function InlineName({
-  value,
-  onSave,
-}: {
-  value: string;
-  onSave: (value: string) => void;
-}) {
+function InlineName({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return (
@@ -302,13 +258,7 @@ function InlineName({
   );
 }
 
-function NotesEditor({
-  value,
-  onSave,
-}: {
-  value: string;
-  onSave: (value: string) => void;
-}) {
+function NotesEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return (
@@ -335,20 +285,16 @@ function TargetSection({
   const rows = useMemo(() => {
     const existing = new Map(target.map((t) => [t.key, t]));
     const base = DEFAULT_TARGET_KEYS.map(
-      (key) => existing.get(key) ?? { key, value: "", note: "" }
+      (key) => existing.get(key) ?? { key, value: "", note: "" },
     );
-    const custom = target.filter(
-      (t) => !DEFAULT_TARGET_KEYS.includes(t.key as never)
-    );
+    const custom = target.filter((t) => !DEFAULT_TARGET_KEYS.includes(t.key as never));
     return [...base, ...custom];
   }, [target]);
 
   const [newKey, setNewKey] = useState("");
 
   const commit = (key: string, patch: Partial<TargetAttribute>) => {
-    const next = rows.map((row) =>
-      row.key === key ? { ...row, ...patch } : row
-    );
+    const next = rows.map((row) => (row.key === key ? { ...row, ...patch } : row));
     onSave(next.filter((row) => row.value || row.note));
   };
 
@@ -384,16 +330,13 @@ function TargetSection({
             key={row.key}
             className="grid grid-cols-1 gap-2 px-3 py-2 md:grid-cols-12 md:items-center"
           >
-            <span className="label-caps col-span-3 text-xs text-muted-foreground">
-              {row.key}
-            </span>
+            <span className="label-caps col-span-3 text-xs text-muted-foreground">{row.key}</span>
             <input
               className="col-span-4 min-h-[40px] border border-input bg-background px-2 text-sm outline-none focus:border-foreground"
               defaultValue={row.value}
               placeholder="VALUE"
               onBlur={(e) => {
-                if (e.target.value !== row.value)
-                  commit(row.key, { value: e.target.value });
+                if (e.target.value !== row.value) commit(row.key, { value: e.target.value });
               }}
             />
             <input
@@ -401,8 +344,7 @@ function TargetSection({
               defaultValue={row.note ?? ""}
               placeholder="NOTE"
               onBlur={(e) => {
-                if (e.target.value !== (row.note ?? ""))
-                  commit(row.key, { note: e.target.value });
+                if (e.target.value !== (row.note ?? "")) commit(row.key, { note: e.target.value });
               }}
             />
           </li>
@@ -519,14 +461,11 @@ function AddComponentPanel({
 }) {
   const queryClient = useQueryClient();
   const components = useQuery(componentsQuery());
-  const categories = useQuery(categoriesQuery());
   const [search, setSearch] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [techniqueCategoryId, setTechniqueCategoryId] = useState("");
 
   const results = (components.data ?? []).filter(
-    (c) =>
-      !linkedIds.includes(c.id) &&
-      c.name.toLowerCase().includes(search.trim().toLowerCase())
+    (c) => !linkedIds.includes(c.id) && c.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
 
   const link = useMutation({
@@ -557,19 +496,17 @@ function AddComponentPanel({
         .insert({
           user_id: userId,
           name: search.trim(),
-          category_id: categoryId || null,
+          technique_category_id: techniqueCategoryId || null,
         })
         .select("id")
         .single();
       if (error) throw error;
-      const { error: linkError } = await supabase
-        .from("product_components")
-        .insert({
-          user_id: userId,
-          product_id: productId,
-          component_id: data.id,
-          sort_order: linkedIds.length,
-        });
+      const { error: linkError } = await supabase.from("product_components").insert({
+        user_id: userId,
+        product_id: productId,
+        component_id: data.id,
+        sort_order: linkedIds.length,
+      });
       if (linkError) throw linkError;
     },
     onSuccess: async () => {
@@ -596,10 +533,7 @@ function AddComponentPanel({
       {results.length > 0 && (
         <ul className="divide-y divide-border border border-border">
           {results.slice(0, 8).map((component) => (
-            <li
-              key={component.id}
-              className="flex items-center justify-between gap-2 px-3 py-2"
-            >
+            <li key={component.id} className="flex items-center justify-between gap-2 px-3 py-2">
               <span className="text-sm">{component.name}</span>
               <button
                 type="button"
@@ -614,14 +548,12 @@ function AddComponentPanel({
       )}
       {search.trim() && results.length === 0 && (
         <div className="space-y-3">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            NO MATCH
-          </p>
-          <Field label="CATEGORY (OPTIONAL)">
-            <CategorySelect
+          <p className="font-mono text-xs uppercase text-muted-foreground">NO MATCH</p>
+          <Field label="TECHNIQUE CATEGORY (OPTIONAL)">
+            <TechniqueSelect
               className={selectClass}
-              value={categoryId}
-              onChange={setCategoryId}
+              value={techniqueCategoryId}
+              onChange={setTechniqueCategoryId}
               emptyLabel="—"
             />
           </Field>

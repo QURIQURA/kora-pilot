@@ -1,17 +1,12 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { categoriesQuery, componentsQuery } from "@/lib/queries";
-import { categoryPathLabel } from "@/lib/pilot";
+import { componentsQuery, techniqueCategoriesQuery } from "@/lib/queries";
+import { techniquePathLabel } from "@/lib/technique";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import { ComponentCreateModal } from "@/components/pilot/ComponentCreateModal";
-import {
-  Field,
-  PageHeader,
-  inputClass,
-  primaryButtonClass,
-} from "@/components/pilot/ui";
+import { Field, PageHeader, inputClass, primaryButtonClass } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/components/")({
   head: () => ({
@@ -27,12 +22,12 @@ export const Route = createFileRoute("/_authenticated/components/")({
 
 function ComponentsPage() {
   const components = useQuery(componentsQuery());
-  const categories = useQuery(categoriesQuery());
+  const techniqueCategories = useQuery(techniqueCategoriesQuery());
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
 
   const rows = (components.data ?? []).filter((c) =>
-    c.name.toLowerCase().includes(search.trim().toLowerCase())
+    c.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
 
   return (
@@ -40,11 +35,7 @@ function ComponentsPage() {
       <PageHeader
         title="COMPONENTS"
         action={
-          <button
-            type="button"
-            className={primaryButtonClass}
-            onClick={() => setCreating(true)}
-          >
+          <button type="button" className={primaryButtonClass} onClick={() => setCreating(true)}>
             + CREATE COMPONENT
           </button>
         }
@@ -80,7 +71,10 @@ function ComponentsPage() {
               >
                 <span className="text-sm">{component.name}</span>
                 <span className="font-mono text-xs uppercase text-muted-foreground">
-                  {categoryPathLabel(categories.data ?? [], component.category_id)}{" "}
+                  {techniquePathLabel(
+                    techniqueCategories.data ?? [],
+                    component.technique_category_id,
+                  )}{" "}
                   · {formatDateTime(component.updated_at)}
                 </span>
               </Link>

@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08-29 — COMPONENT 카테고리를 TECHNIQUE CATEGORY로 전환
+
+### 무엇이 달라졌나
+
+지금까지 COMPONENT(구성요소)를 만들거나 볼 때 뜨던 "CATEGORY" 선택창이, PRODUCT가 쓰는 것과 같은 자리를 빌려 쓰고 있었는데 실제로는 내용이 거의 비어있는(값 2개뿐인) 목록이었어요. 반면 FORMULA(배합) 화면에는 이미 "케이크 / 크리밍 케이크"처럼 잘 정리된 기법 분류 목록(TECHNIQUE CATEGORY)이 있었죠.
+
+이제 이 둘을 다음과 같이 정리했습니다.
+
+- **PRODUCT**: 계속 기존 CATEGORY(예: Cake, Tart, Bread)를 씁니다. 변경 없음.
+- **COMPONENT**: 이제 FORMULA와 똑같은 TECHNIQUE CATEGORY 목록(예: 버터크림, 머랭, 폼 케이크)을 씁니다. COMPONENT 생성/상세 화면, PRODUCT 상세에서 컴포넌트를 새로 만들 때 모두 동일하게 적용됩니다.
+- **FORMULA**: 원래도 TECHNIQUE CATEGORY를 썼고 그대로입니다. 즉 이제 COMPONENT와 FORMULA는 같은 기법 분류 체계를 공유해요.
+- **INGREDIENT**: 카테고리 기능은 아직 이 작업 범위가 아니에요 (유제품/신선제품/초콜릿/가루류/넛트류 같은 재료 전용 분류는 별도로 준비 중).
+
+기존에 COMPONENT 2건 중 "LEMON CURD"에 붙어있던 카테고리 값("FILLING")은 애초에 PRODUCT용 목록에 있던 값이라 기법 분류로 자동 변환할 수 없어서 초기화됐습니다 — 상세 화면에서 알맞은 기법 카테고리(예: 크림·필링 계열)로 다시 선택해주시면 됩니다.
+
+### 테스트 방법
+
+1. **COMPONENTS → 아무 컴포넌트 클릭** (또는 새로 CREATE COMPONENT)
+   - 상단 우측 선택창이 "NO TECHNIQUE CATEGORY"이고, 눌러보면 FORMULA에서 보던 것과 같은 목록(케이크/페이스트리/머랭/크림·필링 등)이 뜨는지 확인
+2. **PRODUCTS → 아무 제품 → + ADD COMPONENT → 검색해도 없는 이름 입력**
+   - "TECHNIQUE CATEGORY (OPTIONAL)" 선택창이 뜨는지, 선택 후 CREATE 하면 정상 생성되는지 확인
+3. **LEMON CURD 컴포넌트가 있다면** 상세 화면에서 카테고리가 비어있는 게 정상 — 원하는 기법 카테고리로 재선택
+4. **SETTINGS → CATEGORIES**(PRODUCT용) 화면은 그대로 PRODUCT 카테고리만 관리하고, 카테고리 삭제 시 "몇 개 항목이 사용 중"이라는 안내도 이제 PRODUCTS/SUB CATEGORIES만 보여주는지 확인 (COMPONENTS/INGREDIENTS 줄은 더 이상 안 뜸 — 정상)
+
+---
+
 ## 2026-08-28 — COMPONENT/INGREDIENT 상세 화면에 연결 목록 추가
 
 ### 무엇이 달라졌나

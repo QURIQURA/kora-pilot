@@ -2,15 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { CategorySelect } from "@/components/pilot/CategorySelect";
+import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import { currentUserId } from "@/lib/queries";
-import {
-  Field,
-  buttonClass,
-  inputClass,
-  primaryButtonClass,
-  selectClass,
-} from "./ui";
+import { Field, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 /**
  * + CREATE COMPONENT 공용 모달.
@@ -21,7 +15,7 @@ export function ComponentCreateModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [techniqueCategoryId, setTechniqueCategoryId] = useState("");
 
   const create = useMutation({
     mutationFn: async () => {
@@ -31,7 +25,7 @@ export function ComponentCreateModal({ onClose }: { onClose: () => void }) {
         .insert({
           user_id: userId,
           name: name.trim(),
-          category_id: categoryId || null,
+          technique_category_id: techniqueCategoryId || null,
         })
         .select("id")
         .single();
@@ -73,11 +67,11 @@ export function ComponentCreateModal({ onClose }: { onClose: () => void }) {
               required
             />
           </Field>
-          <Field label="CATEGORY">
-            <CategorySelect
+          <Field label="TECHNIQUE CATEGORY">
+            <TechniqueSelect
               className={selectClass}
-              value={categoryId}
-              onChange={setCategoryId}
+              value={techniqueCategoryId}
+              onChange={setTechniqueCategoryId}
               emptyLabel="—"
             />
           </Field>
@@ -87,11 +81,7 @@ export function ComponentCreateModal({ onClose }: { onClose: () => void }) {
             </p>
           )}
           <div className="flex gap-2">
-            <button
-              type="submit"
-              className={primaryButtonClass}
-              disabled={create.isPending}
-            >
+            <button type="submit" className={primaryButtonClass} disabled={create.isPending}>
               CREATE
             </button>
             <button type="button" className={buttonClass} onClick={onClose}>

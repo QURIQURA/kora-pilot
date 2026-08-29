@@ -13,9 +13,7 @@ export interface TechniqueNode {
 }
 
 function sortCats(list: TechniqueCategory[]): TechniqueCategory[] {
-  return [...list].sort(
-    (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)
-  );
+  return [...list].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
 }
 
 /** 부모-자식 트리로 변환 */
@@ -65,7 +63,7 @@ export function leafTechniques(list: TechniqueCategory[]): FlatTechnique[] {
 /** 루트부터 해당 항목까지의 경로 */
 export function techniquePath(
   list: TechniqueCategory[],
-  id: string | null | undefined
+  id: string | null | undefined,
 ): TechniqueCategory[] {
   if (!id) return [];
   const byId = new Map(list.map((c) => [c.id, c]));
@@ -75,7 +73,7 @@ export function techniquePath(
   while (cursor && !guard.has(cursor.id)) {
     guard.add(cursor.id);
     path.unshift(cursor);
-    cursor = cursor.parent_id ? byId.get(cursor.parent_id) ?? null : null;
+    cursor = cursor.parent_id ? (byId.get(cursor.parent_id) ?? null) : null;
   }
   return path;
 }
@@ -83,4 +81,13 @@ export function techniquePath(
 /** 표시 라벨 — 한글 우선, 영문은 보조 */
 export function techniqueLabel(c: TechniqueCategory): string {
   return c.name_en ? `${c.name} (${c.name_en})` : c.name;
+}
+
+/** 루트부터의 경로를 " / "로 이어붙인 라벨. 없으면 "—" */
+export function techniquePathLabel(
+  list: TechniqueCategory[],
+  id: string | null | undefined,
+): string {
+  const path = techniquePath(list, id);
+  return path.length ? path.map((c) => c.name).join(" / ") : "—";
 }

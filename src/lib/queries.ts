@@ -238,10 +238,11 @@ export async function currentUserId(): Promise<string> {
   return data.user.id;
 }
 
+// NOTE: `categories`는 PRODUCT 전용 taxonomy (2026-08-29 확정).
+// COMPONENT는 더 이상 categories를 쓰지 않음 (technique_categories로 전환, componentUsageQuery는 아래 별도 쿼리 참고).
+// INGREDIENT의 category_id는 categories FK가 남아있지만 UI 미구현 상태라 여기 usage 집계에서는 제외한다.
 export interface CategoryUsage {
   products: number;
-  components: number;
-  ingredients: number;
   children: number;
   total: number;
 }
@@ -250,10 +251,8 @@ export const categoryUsageQuery = () =>
   queryOptions({
     queryKey: ["category_usage"],
     queryFn: async (): Promise<Record<string, CategoryUsage>> => {
-      const [products, components, ingredients, categories] = await Promise.all([
+      const [products, categories] = await Promise.all([
         supabase.from("products").select("category_id"),
-        supabase.from("components").select("category_id"),
-        supabase.from("ingredients").select("category_id"),
         supabase.from("categories").select("parent_id"),
       ]);
       const map: Record<string, CategoryUsage> = {};
@@ -263,8 +262,6 @@ export const categoryUsageQuery = () =>
           map[id] ??
           (map[id] = {
             products: 0,
-            components: 0,
-            ingredients: 0,
             children: 0,
             total: 0,
           });
@@ -272,9 +269,22 @@ export const categoryUsageQuery = () =>
         entry.total += 1;
       };
       for (const row of unwrap(products)) bump(row.category_id, "products");
-      for (const row of unwrap(components)) bump(row.category_id, "components");
-      for (const row of unwrap(ingredients)) bump(row.category_id, "ingredients");
       for (const row of unwrap(categories)) bump(row.parent_id, "children");
+      return map;
+    },
+  });
+
+/** COMPONENT의 technique_category 별 사용 횟수 (technique_categories 설정 화면용) */
+export const componentTechniqueCategoryUsageQuery = () =>
+  queryOptions({
+    queryKey: ["component_technique_category_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(await supabase.from("components").select("technique_category_id"));
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.technique_category_id)
+          map[row.technique_category_id] = (map[row.technique_category_id] ?? 0) + 1;
+      }
       return map;
     },
   });
