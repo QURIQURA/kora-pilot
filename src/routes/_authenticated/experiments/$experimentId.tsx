@@ -3,21 +3,16 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
-import {
-  currentUserId,
-  experimentObservationsQuery,
-  experimentQuery,
-} from "@/lib/queries";
-import {
-  EXPERIMENT_STATUSES,
-  experimentLabel,
-  type ExperimentStatus,
-} from "@/lib/experiment";
+import { currentUserId, experimentObservationsQuery, experimentQuery } from "@/lib/queries";
+import { EXPERIMENT_STATUSES, experimentLabel, type ExperimentStatus } from "@/lib/experiment";
 import { parseNumber, versionLabel } from "@/lib/formula";
 import { formatDateLabel, formatDateTime, formatTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { ProcessTimelineSection } from "@/components/pilot/ProcessTimelineSection";
+import { SensoryEvaluationSection } from "@/components/pilot/SensoryEvaluationSection";
+import { experimentsForBaselineQuery } from "@/lib/queries";
+import { lossPct } from "@/lib/experiment";
 import {
   Field,
   SectionCard,
@@ -27,9 +22,7 @@ import {
   selectClass,
 } from "@/components/pilot/ui";
 
-export const Route = createFileRoute(
-  "/_authenticated/experiments/$experimentId"
-)({
+export const Route = createFileRoute("/_authenticated/experiments/$experimentId")({
   head: () => ({
     meta: [
       { title: "PILOT — Experiment Detail" },
@@ -53,6 +46,7 @@ function ExperimentDetailPage() {
 
   const experiment = useQuery(experimentQuery(experimentId));
   const observations = useQuery(experimentObservationsQuery(experimentId));
+  const baselineOptions = useQuery(experimentsForBaselineQuery(experimentId));
   const exp = experiment.data;
 
   const [obsLabel, setObsLabel] = useState("");
@@ -81,10 +75,7 @@ function ExperimentDetailPage() {
 
   const update = useMutation({
     mutationFn: async (patch: TablesUpdate<"experiments">) => {
-      const { error } = await supabase
-        .from("experiments")
-        .update(patch)
-        .eq("id", experimentId);
+      const { error } = await supabase.from("experiments").update(patch).eq("id", experimentId);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -103,10 +94,7 @@ function ExperimentDetailPage() {
 
   const updateObservation = useMutation({
     mutationFn: async ({ id, note }: { id: string; note: string | null }) => {
-      const { error } = await supabase
-        .from("observations")
-        .update({ note })
-        .eq("id", id);
+      const { error } = await supabase.from("observations").update({ note }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -114,10 +102,7 @@ function ExperimentDetailPage() {
 
   const removeObservation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("observations")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.from("observations").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -153,8 +138,7 @@ function ExperimentDetailPage() {
             {experimentLabel(exp.experiment_number)}
           </h1>
           <p className="font-mono text-xs uppercase text-muted-foreground">
-            {formatDateLabel(exp.date)} · CREATED{" "}
-            {formatDateTime(exp.created_at)}
+            {formatDateLabel(exp.date)} · CREATED {formatDateTime(exp.created_at)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -162,9 +146,7 @@ function ExperimentDetailPage() {
           <select
             className={`${selectClass} w-auto`}
             value={exp.status}
-            onChange={(e) =>
-              update.mutate({ status: e.target.value as ExperimentStatus })
-            }
+            onChange={(e) => update.mutate({ status: e.target.value as ExperimentStatus })}
           >
             {EXPERIMENT_STATUSES.map((status) => (
               <option key={status} value={status}>
@@ -257,7 +239,79 @@ function ExperimentDetailPage() {
               }}
             />
           </Field>
+          <Field label="BASELINE EXPERIMENT (OPTIONAL)">
+            <select
+              className={selectClass}
+              value={exp.baseline_experiment_id ?? ""}
+              onChange={(e) => update.mutate({ baseline_experiment_id: e.target.value || null })}
+            >
+              <option value="">— NONE —</option>
+              {(baselineOptions.data ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {experimentLabel(b.experiment_number)} · {formatDateLabel(b.date)}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
+      </SectionCard>
+
+      {/* YIELD / LOSS — 실측값. Formula Version의 yield_quantity(이론값)와는 별개 */}
+      <SectionCard title="YIELD / LOSS">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="RAW WEIGHT (g)">
+            <input
+              type="number"
+              inputMode="decimal"
+              className={inputClass}
+              defaultValue={exp.raw_weight_g ?? ""}
+              key={`raw-${exp.id}-${exp.raw_weight_g ?? ""}`}
+              onBlur={(e) => {
+                const raw = e.target.value.trim();
+                const raw_weight_g = raw === "" ? null : parseNumber(raw);
+                if (raw_weight_g !== (exp.raw_weight_g ?? null)) update.mutate({ raw_weight_g });
+              }}
+            />
+          </Field>
+          <Field label="PROCESSED WEIGHT (g)">
+            <input
+              type="number"
+              inputMode="decimal"
+              className={inputClass}
+              defaultValue={exp.processed_weight_g ?? ""}
+              key={`processed-${exp.id}-${exp.processed_weight_g ?? ""}`}
+              onBlur={(e) => {
+                const raw = e.target.value.trim();
+                const processed_weight_g = raw === "" ? null : parseNumber(raw);
+                if (processed_weight_g !== (exp.processed_weight_g ?? null))
+                  update.mutate({ processed_weight_g });
+              }}
+            />
+          </Field>
+          <Field label="FINISHED WEIGHT (g)">
+            <input
+              type="number"
+              inputMode="decimal"
+              className={inputClass}
+              defaultValue={exp.finished_weight_g ?? ""}
+              key={`finished-${exp.id}-${exp.finished_weight_g ?? ""}`}
+              onBlur={(e) => {
+                const raw = e.target.value.trim();
+                const finished_weight_g = raw === "" ? null : parseNumber(raw);
+                if (finished_weight_g !== (exp.finished_weight_g ?? null))
+                  update.mutate({ finished_weight_g });
+              }}
+            />
+          </Field>
+        </div>
+        <p className="mt-3 font-mono text-xs uppercase text-muted-foreground">
+          LOSS %{" "}
+          {(() => {
+            const pct = lossPct(exp.raw_weight_g, exp.finished_weight_g);
+            return pct == null ? "— (RAW/FINISHED 입력 시 계산)" : `${pct.toFixed(1)}%`;
+          })()}
+          {" — 저장되지 않고 화면에서만 계산됩니다"}
+        </p>
       </SectionCard>
 
       {/* HYPOTHESIS / VARIABLES / CONTROL */}
@@ -345,19 +399,14 @@ function ExperimentDetailPage() {
         ) : (
           <ul className="mt-4 divide-y divide-border border border-border">
             {rows.map((obs) => (
-              <li
-                key={obs.id}
-                className="flex flex-wrap items-center gap-2 px-3 py-2"
-              >
+              <li key={obs.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                 <span className="w-14 font-mono text-xs text-muted-foreground">
                   {formatTime(obs.created_at)}
                 </span>
                 <span className="label-caps bg-foreground px-2 py-0.5 text-[11px] text-background">
                   {(obs.label || "NOTE").toUpperCase()}
                 </span>
-                <span className="min-w-[10rem] flex-1 text-sm">
-                  {obs.value}
-                </span>
+                <span className="min-w-[10rem] flex-1 text-sm">{obs.value}</span>
                 <input
                   className="min-h-[44px] w-44 border border-transparent bg-transparent px-2 text-xs text-muted-foreground outline-none hover:border-border focus:border-foreground"
                   defaultValue={obs.note ?? ""}
@@ -365,8 +414,7 @@ function ExperimentDetailPage() {
                   key={`onote-${obs.id}`}
                   onBlur={(e) => {
                     const note = e.target.value.trim() || null;
-                    if (note !== (obs.note ?? null))
-                      updateObservation.mutate({ id: obs.id, note });
+                    if (note !== (obs.note ?? null)) updateObservation.mutate({ id: obs.id, note });
                   }}
                 />
                 <button
@@ -381,6 +429,9 @@ function ExperimentDetailPage() {
           </ul>
         )}
       </SectionCard>
+
+      {/* SENSORY EVALUATION — Observation(자유 기록)과 별개, structured measurement */}
+      <SensoryEvaluationSection experimentId={exp.id} />
 
       {/* RESULT / CONCLUSION / NEXT */}
       <SectionCard title="RESULT & CONCLUSION">
@@ -440,11 +491,7 @@ function ExperimentDetailPage() {
       </SectionCard>
 
       {/* PROCESS TIMELINE — Phase 4B */}
-      <ProcessTimelineSection
-        experimentId={exp.id}
-        experimentDate={exp.date}
-        status={exp.status}
-      />
+      <ProcessTimelineSection experimentId={exp.id} experimentDate={exp.date} status={exp.status} />
 
       {/* NOTES */}
       <SectionCard title="NOTES">
@@ -461,8 +508,7 @@ function ExperimentDetailPage() {
       </SectionCard>
 
       <p className="font-mono text-[11px] uppercase text-muted-foreground">
-        실험은 삭제하지 않습니다 — 상태를 CANCELLED로 변경하세요. 실험 번호는
-        재사용되지 않습니다.
+        실험은 삭제하지 않습니다 — 상태를 CANCELLED로 변경하세요. 실험 번호는 재사용되지 않습니다.
       </p>
     </div>
   );

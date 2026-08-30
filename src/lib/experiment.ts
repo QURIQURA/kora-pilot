@@ -23,3 +23,17 @@ export function experimentLabel(n: number | null | undefined): string {
   if (n == null) return "#---";
   return `#${String(n).padStart(3, "0")}`;
 }
+
+/**
+ * Loss % = (raw - finished) / raw × 100 — 저장하지 않고 표시 시점에 계산한다
+ * (formula-calc.ts의 "저장은 확정된 값만, 나머지는 계산" 원칙과 동일, 2026-08-30 P0 확정).
+ * raw/finished 중 하나라도 없거나 raw가 0 이하이면 계산 불가(null).
+ */
+export function lossPct(
+  rawWeightG: number | null | undefined,
+  finishedWeightG: number | null | undefined,
+): number | null {
+  if (rawWeightG == null || finishedWeightG == null) return null;
+  if (rawWeightG <= 0) return null;
+  return ((rawWeightG - finishedWeightG) / rawWeightG) * 100;
+}

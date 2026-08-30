@@ -934,3 +934,66 @@ export const referenceEntriesByTechniqueQuery = (techniqueId: string | null) =>
       );
     },
   });
+
+/* ── P0 — SENSORY / YIELD / EXPERIMENT BASELINE (사용자 확정, 2026-08-30) ── */
+
+import type { SensoryAttribute, SensoryScore } from "@/lib/sensory";
+
+export const sensoryAttributesQuery = () =>
+  queryOptions({
+    queryKey: ["sensory_attributes"],
+    queryFn: async (): Promise<SensoryAttribute[]> =>
+      unwrap(
+        await supabase
+          .from("sensory_attributes")
+          .select("*")
+          .order("category", { ascending: true })
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true }),
+      ),
+  });
+
+/** attribute별 사용 횟수 (experiment_sensory_scores.attribute_id) — usage-protected delete용 */
+export const sensoryAttributeUsageQuery = () =>
+  queryOptions({
+    queryKey: ["sensory_attribute_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(await supabase.from("experiment_sensory_scores").select("attribute_id"));
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.attribute_id) map[row.attribute_id] = (map[row.attribute_id] ?? 0) + 1;
+      }
+      return map;
+    },
+  });
+
+/** EXPERIMENT DETAIL — 이 실험의 sensory 점수 (attribute 정보 포함) */
+export interface ExperimentSensoryScoreRow extends SensoryScore {
+  sensory_attributes: SensoryAttribute | null;
+}
+
+export const experimentSensoryScoresQuery = (experimentId: string) =>
+  queryOptions({
+    queryKey: ["experiment_sensory_scores", experimentId],
+    queryFn: async (): Promise<ExperimentSensoryScoreRow[]> =>
+      unwrap(
+        await supabase
+          .from("experiment_sensory_scores")
+          .select("*, sensory_attributes(*)")
+          .eq("experiment_id", experimentId),
+      ) as unknown as ExperimentSensoryScoreRow[],
+  });
+
+/** EXPERIMENT DETAIL — BASELINE EXPERIMENT 선택지 (자기 자신 제외) */
+export const experimentsForBaselineQuery = (excludeId: string) =>
+  queryOptions({
+    queryKey: ["experiments_for_baseline", excludeId],
+    queryFn: async (): Promise<Pick<Experiment, "id" | "experiment_number" | "date">[]> =>
+      unwrap(
+        await supabase
+          .from("experiments")
+          .select("id, experiment_number, date")
+          .neq("id", excludeId)
+          .order("experiment_number", { ascending: false }),
+      ),
+  });

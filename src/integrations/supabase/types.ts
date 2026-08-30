@@ -96,9 +96,55 @@ export type Database = {
           },
         ]
       }
+      experiment_sensory_scores: {
+        Row: {
+          attribute_id: string
+          created_at: string
+          experiment_id: string
+          id: string
+          note: string | null
+          score: number
+          user_id: string
+        }
+        Insert: {
+          attribute_id: string
+          created_at?: string
+          experiment_id: string
+          id?: string
+          note?: string | null
+          score: number
+          user_id: string
+        }
+        Update: {
+          attribute_id?: string
+          created_at?: string
+          experiment_id?: string
+          id?: string
+          note?: string | null
+          score?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "experiment_sensory_scores_attribute_id_fkey"
+            columns: ["attribute_id"]
+            isOneToOne: false
+            referencedRelation: "sensory_attributes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experiment_sensory_scores_experiment_id_fkey"
+            columns: ["experiment_id"]
+            isOneToOne: false
+            referencedRelation: "experiments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       experiments: {
         Row: {
           ai_interpretation: string | null
+          baseline_experiment_id: string | null
           batch_multiplier: number
           component_id: string | null
           conclusion: string | null
@@ -106,13 +152,16 @@ export type Database = {
           created_at: string
           date: string
           experiment_number: number | null
+          finished_weight_g: number | null
           formula_version_id: string | null
           hypothesis: string | null
           id: string
           mould_id: string | null
           next_experiment: string | null
           notes: string | null
+          processed_weight_g: number | null
           product_id: string | null
+          raw_weight_g: number | null
           result: string | null
           status: Database["public"]["Enums"]["experiment_status"]
           updated_at: string
@@ -121,6 +170,7 @@ export type Database = {
         }
         Insert: {
           ai_interpretation?: string | null
+          baseline_experiment_id?: string | null
           batch_multiplier?: number
           component_id?: string | null
           conclusion?: string | null
@@ -128,13 +178,16 @@ export type Database = {
           created_at?: string
           date?: string
           experiment_number?: number | null
+          finished_weight_g?: number | null
           formula_version_id?: string | null
           hypothesis?: string | null
           id?: string
           mould_id?: string | null
           next_experiment?: string | null
           notes?: string | null
+          processed_weight_g?: number | null
           product_id?: string | null
+          raw_weight_g?: number | null
           result?: string | null
           status?: Database["public"]["Enums"]["experiment_status"]
           updated_at?: string
@@ -143,6 +196,7 @@ export type Database = {
         }
         Update: {
           ai_interpretation?: string | null
+          baseline_experiment_id?: string | null
           batch_multiplier?: number
           component_id?: string | null
           conclusion?: string | null
@@ -150,13 +204,16 @@ export type Database = {
           created_at?: string
           date?: string
           experiment_number?: number | null
+          finished_weight_g?: number | null
           formula_version_id?: string | null
           hypothesis?: string | null
           id?: string
           mould_id?: string | null
           next_experiment?: string | null
           notes?: string | null
+          processed_weight_g?: number | null
           product_id?: string | null
+          raw_weight_g?: number | null
           result?: string | null
           status?: Database["public"]["Enums"]["experiment_status"]
           updated_at?: string
@@ -164,6 +221,13 @@ export type Database = {
           variables?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "experiments_baseline_experiment_id_fkey"
+            columns: ["baseline_experiment_id"]
+            isOneToOne: false
+            referencedRelation: "experiments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "experiments_component_id_fkey"
             columns: ["component_id"]
@@ -1134,6 +1198,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sensory_attributes: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          name: string
+          name_en: string | null
+          scale_max: number
+          scale_min: number
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          name: string
+          name_en?: string | null
+          scale_max?: number
+          scale_min?: number
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          name_en?: string | null
+          scale_max?: number
+          scale_min?: number
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       tags: {
         Row: {

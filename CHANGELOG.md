@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08-30 — SENSORY EVALUATION / YIELD·LOSS / EXPERIMENT BASELINE (P0)
+
+### 무엇이 달라졌나
+
+- **SETTINGS → SENSORY ATTRIBUTES**: TEXTURE / FLAVOUR / APPEARANCE 3개 카테고리로 평가 속성(예: Softness, Sweetness, Colour)을 직접 만들고, 속성마다 점수 범위(SCALE MIN~MAX, 기본 1~5)를 다르게 설정할 수 있습니다. 이미 EXPERIMENT에서 점수가 기록된 속성은 삭제 버튼을 누르면 "이 속성은 현재 N개의 실험에서 사용 중이라 삭제할 수 없습니다" 안내가 뜨고 삭제되지 않습니다(METHOD/FLAVOUR FAMILY와 동일한 보호 방식).
+- **EXPERIMENT 상세 → SENSORY EVALUATION**: OBSERVATION(자유 기록)과는 별도로, SETTINGS에 등록된 속성별로 점수+메모를 입력하는 구조화된 평가 섹션이 추가됐습니다. 범위를 벗어난 점수는 저장 시 막힙니다(DB 레벨 검증 포함).
+- **EXPERIMENT 상세 → YIELD/LOSS**: RAW WEIGHT / PROCESSED WEIGHT / FINISHED WEIGHT(g) 실측값을 입력할 수 있고, LOSS %는 저장하지 않고 화면에서 자동 계산됩니다. FORMULA VERSION의 YIELD(이론값)와는 별개입니다.
+- **EXPERIMENT 상세 → BASELINE EXPERIMENT**: 이 실험이 어떤 이전 실험을 기준(baseline)으로 한 변형인지 선택할 수 있습니다. FORMULA의 "⭐ 기준 배합(is_base_formula)"과는 완전히 다른 개념입니다 — 자기 자신을 baseline으로 지정하는 것은 DB에서 막혀 있습니다.
+
+### 테스트 방법
+
+1. **SETTINGS → SENSORY ATTRIBUTES** 펼치기 → "+ ADD ATTRIBUTE"로 TEXTURE 카테고리에 속성 하나(예: 촉촉함/Moistness, 1~5) 추가
+2. **EXPERIMENTS → 아무 실험 열기 → SENSORY EVALUATION** 섹션에서 방금 만든 속성에 점수(예: 4)와 메모 입력 → 저장되는지 확인
+3. 같은 칸에 범위 밖 점수(예: 10)를 입력해보고 경고와 함께 저장이 막히는지 확인
+4. **YIELD/LOSS** 섹션에서 RAW WEIGHT/FINISHED WEIGHT를 입력하고 LOSS %가 자동으로 계산되어 표시되는지 확인
+5. **BASELINE EXPERIMENT** 선택창에서 다른 실험을 골라 연결되는지 확인
+6. **SETTINGS → SENSORY ATTRIBUTES**로 돌아가 방금 점수를 기록한 속성을 삭제해보고 "N개의 실험에서 사용 중" 경고가 뜨는지 확인
+
+---
+
 ## 2026-08-29 — METHOD 관리 화면 + FORMULA에 METHOD 연결 (PHASE 2)
 
 ### 무엇이 달라졌나

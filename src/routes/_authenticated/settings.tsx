@@ -7,6 +7,7 @@ import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManage
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
+import { SensoryAttributeManager } from "@/components/pilot/SensoryAttributeManager";
 import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
 import { AromaTagManager } from "@/components/pilot/AromaTagManager";
 import { cn } from "@/lib/utils";
@@ -82,6 +83,9 @@ function SettingsPage() {
       </SettingsSection>
       <SettingsSection title="INGREDIENT FUNCTIONS">
         <IngredientFunctionManager />
+      </SettingsSection>
+      <SettingsSection title="SENSORY ATTRIBUTES">
+        <SensoryAttributeManager />
       </SettingsSection>
       <SettingsSection title="FLAVOUR FAMILIES">
         <FlavourFamilyManager />
