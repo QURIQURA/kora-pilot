@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-08-30 — EXPERIMENT BASELINE / VARIANT UI 완성
+
+### 무엇이 달라졌나
+
+- **EXPERIMENTS → + NEW EXPERIMENT**: 실험 생성 화면에 BASELINE EXPERIMENT(선택) 필드가 추가됐습니다. 아직 만들어지지 않은 실험이라 자기 자신은 목록에 나타나지 않고, 비워둔 채로 생성해도 됩니다.
+- **EXPERIMENT 상세**: BASELINE EXPERIMENT를 LINKED CONTEXT 칸에서 분리해 별도 섹션(EXPERIMENT BASELINE / VARIANT)으로 옮기고, "BASE FORMULA와는 다른 개념"이라는 설명을 항상 보이게 했습니다. Baseline을 선택하면 바로 그 실험으로 이동하는 링크가 뜹니다.
+- **EXPERIMENT 상세 → USED AS BASELINE BY (VARIANTS)**: 반대 방향 조회 — 지금 보고 있는 실험을 다른 어떤 실험들이 baseline으로 쓰고 있는지 목록으로 보여주고, 각 항목을 눌러 바로 이동할 수 있습니다.
+- HYPOTHESIS / VARIABLES 자유 텍스트 필드, Sensory/Yield-Loss 구조, Balance Role, Context Weight는 이번 작업에서 전혀 손대지 않았습니다. DB 마이그레이션도 추가하지 않았습니다(기존 `baseline_experiment_id` 컬럼만 사용).
+
+### 테스트 방법
+
+1. **EXPERIMENTS → + NEW EXPERIMENT** → BASELINE EXPERIMENT 선택창에서 기존 실험 하나를 골라 생성 → 생성된 실험 상세에서 baseline이 연결되어 있는지 확인
+2. 실험 상세의 **EXPERIMENT BASELINE / VARIANT** 섹션에서 "→ #N · 날짜" 링크를 눌러 baseline 실험으로 이동되는지 확인
+3. 방금 baseline으로 지정한 실험을 열어 **USED AS BASELINE BY (VARIANTS)** 목록에 방금 만든 실험이 나타나는지, 눌러서 이동되는지 확인
+4. BASELINE EXPERIMENT 선택창에서 자기 자신은 목록에 없는지 확인
+5. HYPOTHESIS/VARIABLES 입력이 기존처럼 정상 동작하는지 확인
+
+---
+
 ## 2026-08-30 — SENSORY EVALUATION / YIELD·LOSS / EXPERIMENT BASELINE (P0)
 
 ### 무엇이 달라졌나

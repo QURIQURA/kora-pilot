@@ -984,16 +984,35 @@ export const experimentSensoryScoresQuery = (experimentId: string) =>
       ) as unknown as ExperimentSensoryScoreRow[],
   });
 
-/** EXPERIMENT DETAIL — BASELINE EXPERIMENT 선택지 (자기 자신 제외) */
-export const experimentsForBaselineQuery = (excludeId: string) =>
+/**
+ * BASELINE EXPERIMENT 선택지. excludeId가 있으면 자기 자신은 목록에서 뺀다
+ * (EXPERIMENT DETAIL에서 사용). 신규 생성 화면에서는 excludeId=null로 호출한다 — 아직 자기 id가 없음.
+ */
+export const experimentsForBaselineQuery = (excludeId: string | null) =>
   queryOptions({
     queryKey: ["experiments_for_baseline", excludeId],
-    queryFn: async (): Promise<Pick<Experiment, "id" | "experiment_number" | "date">[]> =>
+    queryFn: async (): Promise<Pick<Experiment, "id" | "experiment_number" | "date">[]> => {
+      let query = supabase
+        .from("experiments")
+        .select("id, experiment_number, date")
+        .order("experiment_number", { ascending: false });
+      if (excludeId) query = query.neq("id", excludeId);
+      return unwrap(await query);
+    },
+  });
+
+/** 이 EXPERIMENT를 baseline으로 참조하는 다른 EXPERIMENT들 (VARIANT) — 반대 방향 조회 */
+export const experimentVariantsQuery = (experimentId: string) =>
+  queryOptions({
+    queryKey: ["experiment_variants", experimentId],
+    queryFn: async (): Promise<
+      Pick<Experiment, "id" | "experiment_number" | "date" | "status">[]
+    > =>
       unwrap(
         await supabase
           .from("experiments")
-          .select("id, experiment_number, date")
-          .neq("id", excludeId)
+          .select("id, experiment_number, date, status")
+          .eq("baseline_experiment_id", experimentId)
           .order("experiment_number", { ascending: false }),
       ),
   });

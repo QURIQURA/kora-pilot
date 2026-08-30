@@ -11,7 +11,7 @@ import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { ProcessTimelineSection } from "@/components/pilot/ProcessTimelineSection";
 import { SensoryEvaluationSection } from "@/components/pilot/SensoryEvaluationSection";
-import { experimentsForBaselineQuery } from "@/lib/queries";
+import { experimentsForBaselineQuery, experimentVariantsQuery } from "@/lib/queries";
 import { lossPct } from "@/lib/experiment";
 import {
   Field,
@@ -47,6 +47,7 @@ function ExperimentDetailPage() {
   const experiment = useQuery(experimentQuery(experimentId));
   const observations = useQuery(experimentObservationsQuery(experimentId));
   const baselineOptions = useQuery(experimentsForBaselineQuery(experimentId));
+  const variants = useQuery(experimentVariantsQuery(experimentId));
   const exp = experiment.data;
 
   const [obsLabel, setObsLabel] = useState("");
@@ -239,7 +240,17 @@ function ExperimentDetailPage() {
               }}
             />
           </Field>
-          <Field label="BASELINE EXPERIMENT (OPTIONAL)">
+        </div>
+      </SectionCard>
+
+      {/* BASELINE / VARIANT — 이번 실험의 비교 기준 (Formula의 is_base_formula와는 별개 개념) */}
+      <SectionCard title="EXPERIMENT BASELINE / VARIANT">
+        <p className="mb-3 font-mono text-[11px] text-muted-foreground">
+          BASE FORMULA(기법의 기준 배합)와는 다른 개념입니다 — 여기서는 이번 실험이 어떤{" "}
+          <span className="font-semibold">실험</span>과 비교되는지를 관리합니다.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="BASELINE EXPERIMENT (OPTIONAL) — 이번 실험의 비교 기준">
             <select
               className={selectClass}
               value={exp.baseline_experiment_id ?? ""}
@@ -252,6 +263,45 @@ function ExperimentDetailPage() {
                 </option>
               ))}
             </select>
+            {exp.baseline_experiment_id &&
+              (() => {
+                const baseline = (baselineOptions.data ?? []).find(
+                  (b) => b.id === exp.baseline_experiment_id,
+                );
+                return (
+                  <p className="mt-1">
+                    <Link
+                      to="/experiments/$experimentId"
+                      params={{ experimentId: exp.baseline_experiment_id! }}
+                      className={linkClass}
+                    >
+                      → {baseline ? `${experimentLabel(baseline.experiment_number)} · ${formatDateLabel(baseline.date)}` : "VIEW BASELINE EXPERIMENT"}
+                    </Link>
+                  </p>
+                );
+              })()}
+          </Field>
+          <Field label="USED AS BASELINE BY (VARIANTS)">
+            {(variants.data ?? []).length === 0 ? (
+              <p className="flex min-h-[44px] items-center border border-dashed border-border px-3 font-mono text-sm text-muted-foreground">
+                이 실험을 baseline으로 사용하는 실험 없음
+              </p>
+            ) : (
+              <ul className="divide-y divide-border border border-border">
+                {(variants.data ?? []).map((v) => (
+                  <li key={v.id} className="flex items-center justify-between px-3 py-2">
+                    <Link
+                      to="/experiments/$experimentId"
+                      params={{ experimentId: v.id }}
+                      className={linkClass}
+                    >
+                      {experimentLabel(v.experiment_number)} · {formatDateLabel(v.date)}
+                    </Link>
+                    <span className="label-caps text-xs text-muted-foreground">{v.status}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Field>
         </div>
       </SectionCard>

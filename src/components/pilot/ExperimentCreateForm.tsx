@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   componentUsageQuery,
   currentUserId,
+  experimentsForBaselineQuery,
   formulaVersionsQuery,
   formulasQuery,
   productsQuery,
@@ -99,6 +100,8 @@ export function ExperimentCreateModal({
   const [date, setDate] = useState(toLocalDateString());
   const [hypothesis, setHypothesis] = useState("");
   const [variables, setVariables] = useState("");
+  const [baselineId, setBaselineId] = useState("");
+  const baselineOptions = useQuery(experimentsForBaselineQuery(null));
 
   const create = useMutation({
     mutationFn: async () => {
@@ -117,6 +120,7 @@ export function ExperimentCreateModal({
           status: "PLANNED",
           hypothesis: hypothesis.trim() || null,
           variables: variables.trim() || null,
+          baseline_experiment_id: baselineId || null,
         })
         .select("id")
         .single();
@@ -271,6 +275,23 @@ export function ExperimentCreateModal({
                 onChange={(e) => setVariables(e.target.value)}
                 placeholder="SUGAR 120g → 110g"
               />
+            </Field>
+            <Field label="BASELINE EXPERIMENT (OPTIONAL)">
+              <select
+                className={selectClass}
+                value={baselineId}
+                onChange={(e) => setBaselineId(e.target.value)}
+              >
+                <option value="">NO BASELINE</option>
+                {(baselineOptions.data ?? []).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    #{b.experiment_number} · {b.date}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                이번 실험이 비교하는 기준 실험 (Base Formula와 다름)
+              </p>
             </Field>
             {create.isError && (
               <p className="font-mono text-xs uppercase text-destructive">
