@@ -657,6 +657,49 @@ export const recentProcessEventsQuery = () =>
       ) as unknown as RecentProcessEventRow[],
   });
 
+/* ── PROCESS PARAMETERS — 마스터 데이터 + 링크 테이블 (사용자 확정, 2026-08-31) ── */
+
+import type { ProcessEventParameter, ProcessParameterDefinition } from "@/lib/process-parameters";
+
+export const processParameterDefinitionsQuery = () =>
+  queryOptions({
+    queryKey: ["process_parameter_definitions"],
+    queryFn: async (): Promise<ProcessParameterDefinition[]> =>
+      unwrap(
+        await supabase
+          .from("process_parameter_definitions")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("label", { ascending: true }),
+      ),
+  });
+
+/** definition별 사용 횟수 (process_event_parameters.definition_id) — usage-protected delete용 */
+export const processParameterDefinitionUsageQuery = () =>
+  queryOptions({
+    queryKey: ["process_parameter_definition_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(await supabase.from("process_event_parameters").select("definition_id"));
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        map[row.definition_id] = (map[row.definition_id] ?? 0) + 1;
+      }
+      return map;
+    },
+  });
+
+export const processEventParametersQuery = (processEventId: string) =>
+  queryOptions({
+    queryKey: ["process_event_parameters", processEventId],
+    queryFn: async (): Promise<ProcessEventParameter[]> =>
+      unwrap(
+        await supabase
+          .from("process_event_parameters")
+          .select("*")
+          .eq("process_event_id", processEventId),
+      ),
+  });
+
 /* ── PHASE 9 — TECHNIQUE CATEGORIES / CALIBRATION ─────────────── */
 
 import type { TechniqueCategory } from "@/lib/technique";

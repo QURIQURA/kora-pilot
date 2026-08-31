@@ -928,6 +928,54 @@ export type Database = {
         }
         Relationships: []
       }
+      process_event_parameters: {
+        Row: {
+          created_at: string
+          definition_id: string
+          id: string
+          process_event_id: string
+          user_id: string
+          value_boolean: boolean | null
+          value_numeric: number | null
+          value_text: string | null
+        }
+        Insert: {
+          created_at?: string
+          definition_id: string
+          id?: string
+          process_event_id: string
+          user_id: string
+          value_boolean?: boolean | null
+          value_numeric?: number | null
+          value_text?: string | null
+        }
+        Update: {
+          created_at?: string
+          definition_id?: string
+          id?: string
+          process_event_id?: string
+          user_id?: string
+          value_boolean?: boolean | null
+          value_numeric?: number | null
+          value_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_event_parameters_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "process_parameter_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "process_event_parameters_process_event_id_fkey"
+            columns: ["process_event_id"]
+            isOneToOne: false
+            referencedRelation: "process_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       process_events: {
         Row: {
           action: string
@@ -990,6 +1038,56 @@ export type Database = {
             columns: ["experiment_id"]
             isOneToOne: false
             referencedRelation: "experiments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      process_parameter_definitions: {
+        Row: {
+          created_at: string
+          id: string
+          key: string
+          label: string
+          label_en: string | null
+          process_category_id: string | null
+          sort_order: number
+          unit: string | null
+          updated_at: string
+          user_id: string
+          value_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key: string
+          label: string
+          label_en?: string | null
+          process_category_id?: string | null
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+          value_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key?: string
+          label?: string
+          label_en?: string | null
+          process_category_id?: string | null
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+          value_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_parameter_definitions_process_category_id_fkey"
+            columns: ["process_category_id"]
+            isOneToOne: false
+            referencedRelation: "process_categories"
             referencedColumns: ["id"]
           },
         ]
@@ -1322,6 +1420,10 @@ export type Database = {
         Returns: undefined
       }
       seed_flavour_families: { Args: { p_user_id: string }; Returns: undefined }
+      seed_process_parameter_definitions: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       seed_technique_categories: {
         Args: { p_user_id: string }
         Returns: undefined

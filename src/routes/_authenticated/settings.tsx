@@ -4,6 +4,7 @@ import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { TagManager } from "@/components/pilot/TagManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManager";
+import { ProcessParameterManager } from "@/components/pilot/ProcessParameterManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
@@ -74,6 +75,9 @@ function SettingsPage() {
       </SettingsSection>
       <SettingsSection title="PROCESS CATEGORIES">
         <ProcessCategoryManager />
+      </SettingsSection>
+      <SettingsSection title="PROCESS PARAMETERS">
+        <ProcessParameterManager />
       </SettingsSection>
       <SettingsSection title="TECHNIQUE CATEGORIES">
         <TechniqueCategoryManager />

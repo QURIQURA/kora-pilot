@@ -18,6 +18,7 @@ import {
   toLocalDateString,
 } from "@/lib/datetime";
 import { ProcessCategorySelect } from "./ProcessCategorySelect";
+import { ProcessEventParametersEditor } from "./ProcessEventParametersEditor";
 import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 /**
@@ -623,10 +624,11 @@ function EventRow({
   // 시각 편집 시 이벤트 자체의 로컬 날짜를 유지한다 (실험 날짜와 다를 수 있음)
   const eventDate = toLocalDateString(new Date(event.started_at));
   const endDate = event.ended_at ? toLocalDateString(new Date(event.ended_at)) : eventDate;
+  const [showParams, setShowParams] = useState(false);
 
   return (
     <li
-      className={`flex flex-wrap items-center gap-2 px-3 py-2 ${
+      className={`flex flex-col gap-2 px-3 py-2 ${
         running ? "border-l-2 border-dashed border-foreground" : ""
       }`}
       style={
@@ -635,81 +637,95 @@ function EventRow({
           : undefined
       }
     >
-      <input
-        type="time"
-        step={1}
-        aria-label="START TIME"
-        className="min-h-[44px] w-[7.5rem] border border-transparent bg-transparent px-1 font-mono text-xs outline-none hover:border-border focus:border-foreground"
-        defaultValue={formatTimeWithSeconds(event.started_at)}
-        key={`start-${event.id}-${event.started_at}`}
-        onBlur={(e) => {
-          const value = e.target.value;
-          if (!value) return;
-          const iso = localDateTimeToISO(eventDate, value);
-          if (iso !== event.started_at) onUpdate({ started_at: iso });
-        }}
-      />
-      <span className="font-mono text-[11px] text-muted-foreground">
-        {event.event_type === "span" ? "SPAN" : "LOG"}
-      </span>
-      <input
-        className="min-h-[44px] min-w-[8rem] flex-1 border border-transparent bg-transparent px-2 text-sm uppercase outline-none hover:border-border focus:border-foreground"
-        defaultValue={event.action}
-        key={`action-${event.id}-${event.action}`}
-        onBlur={(e) => {
-          const action = e.target.value.trim();
-          if (action && action !== event.action) onUpdate({ action });
-        }}
-      />
-      <span className="w-24 font-mono text-xs tabular-nums text-muted-foreground">
-        {duration === null
-          ? "—"
-          : running
-            ? `${formatDuration(duration)}…`
-            : formatDuration(duration)}
-      </span>
-      {event.event_type === "span" &&
-        (running ? (
-          <span className="label-caps px-1 text-[11px] text-muted-foreground">IN PROGRESS</span>
-        ) : (
-          <input
-            type="time"
-            step={1}
-            aria-label="END TIME"
-            className="min-h-[44px] w-[7.5rem] border border-transparent bg-transparent px-1 font-mono text-xs outline-none hover:border-border focus:border-foreground"
-            defaultValue={event.ended_at ? formatTimeWithSeconds(event.ended_at) : ""}
-            key={`end-${event.id}-${event.ended_at}`}
-            onBlur={(e) => {
-              const value = e.target.value;
-              if (!value) return;
-              const iso = localDateTimeToISO(endDate, value);
-              if (iso !== event.ended_at) onUpdate({ ended_at: iso });
-            }}
-          />
-        ))}
-      <ProcessCategorySelect
-        value={event.category_id ?? ""}
-        onChange={(id) => onUpdate({ category_id: id || null })}
-        emptyLabel="—"
-        className="min-h-[44px] w-28 border border-transparent bg-transparent px-1 font-mono text-xs uppercase outline-none hover:border-border focus:border-foreground"
-      />
-      <input
-        className="min-h-[44px] w-36 border border-transparent bg-transparent px-2 text-xs text-muted-foreground outline-none hover:border-border focus:border-foreground"
-        defaultValue={event.note ?? ""}
-        placeholder="NOTE…"
-        key={`note-${event.id}-${event.note}`}
-        onBlur={(e) => {
-          const note = e.target.value.trim() || null;
-          if (note !== (event.note ?? null)) onUpdate({ note });
-        }}
-      />
-      <button
-        type="button"
-        className="label-caps min-h-[44px] px-2 text-xs text-muted-foreground hover:text-foreground"
-        onClick={onRemove}
-      >
-        REMOVE
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="time"
+          step={1}
+          aria-label="START TIME"
+          className="min-h-[44px] w-[7.5rem] border border-transparent bg-transparent px-1 font-mono text-xs outline-none hover:border-border focus:border-foreground"
+          defaultValue={formatTimeWithSeconds(event.started_at)}
+          key={`start-${event.id}-${event.started_at}`}
+          onBlur={(e) => {
+            const value = e.target.value;
+            if (!value) return;
+            const iso = localDateTimeToISO(eventDate, value);
+            if (iso !== event.started_at) onUpdate({ started_at: iso });
+          }}
+        />
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {event.event_type === "span" ? "SPAN" : "LOG"}
+        </span>
+        <input
+          className="min-h-[44px] min-w-[8rem] flex-1 border border-transparent bg-transparent px-2 text-sm uppercase outline-none hover:border-border focus:border-foreground"
+          defaultValue={event.action}
+          key={`action-${event.id}-${event.action}`}
+          onBlur={(e) => {
+            const action = e.target.value.trim();
+            if (action && action !== event.action) onUpdate({ action });
+          }}
+        />
+        <span className="w-24 font-mono text-xs tabular-nums text-muted-foreground">
+          {duration === null
+            ? "—"
+            : running
+              ? `${formatDuration(duration)}…`
+              : formatDuration(duration)}
+        </span>
+        {event.event_type === "span" &&
+          (running ? (
+            <span className="label-caps px-1 text-[11px] text-muted-foreground">IN PROGRESS</span>
+          ) : (
+            <input
+              type="time"
+              step={1}
+              aria-label="END TIME"
+              className="min-h-[44px] w-[7.5rem] border border-transparent bg-transparent px-1 font-mono text-xs outline-none hover:border-border focus:border-foreground"
+              defaultValue={event.ended_at ? formatTimeWithSeconds(event.ended_at) : ""}
+              key={`end-${event.id}-${event.ended_at}`}
+              onBlur={(e) => {
+                const value = e.target.value;
+                if (!value) return;
+                const iso = localDateTimeToISO(endDate, value);
+                if (iso !== event.ended_at) onUpdate({ ended_at: iso });
+              }}
+            />
+          ))}
+        <ProcessCategorySelect
+          value={event.category_id ?? ""}
+          onChange={(id) => onUpdate({ category_id: id || null })}
+          emptyLabel="—"
+          className="min-h-[44px] w-28 border border-transparent bg-transparent px-1 font-mono text-xs uppercase outline-none hover:border-border focus:border-foreground"
+        />
+        <input
+          className="min-h-[44px] w-36 border border-transparent bg-transparent px-2 text-xs text-muted-foreground outline-none hover:border-border focus:border-foreground"
+          defaultValue={event.note ?? ""}
+          placeholder="NOTE…"
+          key={`note-${event.id}-${event.note}`}
+          onBlur={(e) => {
+            const note = e.target.value.trim() || null;
+            if (note !== (event.note ?? null)) onUpdate({ note });
+          }}
+        />
+        <button
+          type="button"
+          className="label-caps min-h-[44px] px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setShowParams((v) => !v)}
+        >
+          {showParams ? "PARAMS ▲" : "PARAMS ▼"}
+        </button>
+        <button
+          type="button"
+          className="label-caps min-h-[44px] px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={onRemove}
+        >
+          REMOVE
+        </button>
+      </div>
+      {showParams && (
+        <div className="border-t border-dashed border-border pt-2">
+          <ProcessEventParametersEditor processEventId={event.id} categoryId={event.category_id} />
+        </div>
+      )}
     </li>
   );
 }

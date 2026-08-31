@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08-31 — PROCESS PARAMETERS (구조화된 공정 파라미터)
+
+### 무엇이 달라졌나
+
+- **SETTINGS → PROCESS PARAMETERS**: MIXING/BAKING/COOLING 같은 공정 카테고리별로 구조화된 파라미터(속도, 시간, 온도, 팬, 습도, 선반 위치 등)를 정의할 수 있습니다. 여러 카테고리에서 공통으로 쓰이는 항목(온도, 시간)은 "COMMON"으로 묶여 모든 카테고리에서 선택됩니다. 이미 값이 기록된 파라미터는 삭제 버튼을 누르면 "N개의 공정 이벤트에서 사용 중" 안내가 뜨고 삭제되지 않습니다(SENSORY ATTRIBUTES와 동일한 보호 방식).
+- **EXPERIMENT 상세 → PROCESS TIMELINE**: 각 이벤트 행에 "PARAMS ▼" 버튼이 추가됐습니다. 펼치면 그 이벤트의 카테고리에 맞는 파라미터 입력칸이 나타나고(예: BAKING 이벤트라면 온도/시간/팬/습도/선반 위치), 값을 입력하면 저장됩니다. 값을 비우면 저장되지 않거나 삭제됩니다. 기존 ACTION/NOTE/시간/카테고리 편집, QUICK LOG, 음성 로그는 전혀 바뀌지 않았습니다.
+- 기본 계정에는 MIXING(속도/시간/온도/투입순서), BAKING(온도/시간/팬/습도/선반위치), COOLING(온도/시간, COMMON 항목 재사용)에 맞는 파라미터가 미리 등록되어 있습니다.
+- DB에는 `process_parameter_definitions`(마스터 데이터)와 `process_event_parameters`(실제 기록값) 테이블이 새로 추가됐고, 값의 타입(숫자/텍스트/불리언)이 정의와 다르면 저장 시 막힙니다. 기존 `process_events`(action/note/timeline) 구조는 컬럼 하나도 바뀌지 않았습니다.
+
+### 테스트 방법
+
+1. **SETTINGS → PROCESS PARAMETERS** 펼치기 → MIXING/BAKING/COOLING/COMMON 그룹 아래 기본 파라미터(속도, 온도, 시간 등)가 보이는지 확인
+2. **EXPERIMENTS → 아무 실험 열기 → PROCESS TIMELINE**에서 BAKING 카테고리로 지정된 이벤트의 "PARAMS ▼"를 눌러 펼치기 → 온도(예: 170), 시간, 팬, 습도, 선반 위치 입력 후 저장되는지 확인(포커스 아웃 시 저장)
+3. 같은 값을 다시 열어서 입력했던 값이 그대로 보이는지 확인
+4. 값 입력칸을 비워서 저장 시 값이 삭제되는지 확인
+5. **SETTINGS → PROCESS PARAMETERS**로 돌아가 방금 값을 기록한 파라미터를 삭제해보고 "N개의 공정 이벤트에서 사용 중" 경고가 뜨는지 확인
+6. 기존 ACTION 텍스트, NOTE, QUICK LOG(START/STOP/LOG), 과거 이벤트 추가가 예전처럼 동작하는지 확인
+
+---
+
 ## 2026-08-30 — EXPERIMENT BASELINE / VARIANT UI 완성
 
 ### 무엇이 달라졌나
