@@ -30,6 +30,7 @@ import { experimentLabel } from "@/lib/experiment";
 import { formatDateTime, formatTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
+import { ProductSizesSection } from "@/components/pilot/ProductSizesSection";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   Field,
@@ -213,6 +214,8 @@ function ProductDetailPage() {
       <SectionCard title="NOTES">
         <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateProduct.mutate({ notes })} />
       </SectionCard>
+
+      <ProductSizesSection productId={productId} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ProductFormulasSection productId={productId} />

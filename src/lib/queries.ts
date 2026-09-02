@@ -9,6 +9,7 @@ import type {
   Product,
   Tag,
 } from "@/lib/pilot";
+import type { ProductSize } from "@/lib/product-size";
 
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
   if (error) throw error;
@@ -64,6 +65,20 @@ export const productTagsQuery = (productId: string) =>
     queryKey: ["product_tags", productId],
     queryFn: async (): Promise<{ tag_id: string }[]> =>
       unwrap(await supabase.from("product_tags").select("tag_id").eq("product_id", productId)),
+  });
+
+export const productSizesQuery = (productId: string) =>
+  queryOptions({
+    queryKey: ["product_sizes", productId],
+    queryFn: async (): Promise<ProductSize[]> =>
+      unwrap(
+        await supabase
+          .from("product_sizes")
+          .select("*")
+          .eq("product_id", productId)
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: true }),
+      ),
   });
 
 export interface ProductComponentRow {

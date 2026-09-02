@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-09-02 — PRODUCT SIZE / DIMENSION SYSTEM (제품 실측 사이즈)
+
+### 무엇이 달라졌나
+
+- **PRODUCT 상세 → SIZES**: 제품마다 실제 완성 사이즈를 여러 개 등록할 수 있는 섹션이 추가됐습니다. Shape(ROUND/RECTANGLE)을 고르면 그에 맞는 입력칸만 나타납니다 — ROUND는 지름(DIAMETER)/높이(HEIGHT), RECTANGLE은 가로(LENGTH)/세로(WIDTH)/높이(HEIGHT).
+- 입력은 cm 단위로 하지만 DB에는 mm로 저장됩니다(변환은 자동). 화면에는 다시 cm로 표시됩니다 — 예: "Ø15 × H3 cm", "32 × 24 × H3 cm".
+- 각 사이즈 아래에 단면적(AREA, cm²)과 부피(VOLUME, cm³)가 자동으로 계산되어 표시됩니다. 이 값들은 DB에 저장되지 않고 지름/가로세로/높이로부터 매번 계산됩니다.
+- 사이즈 하나를 "SET DEFAULT"로 지정할 수 있고, 한 제품에는 기본 사이즈가 최대 1개만 허용됩니다(두 번째를 기본으로 지정하면 이전 기본이 자동으로 해제됩니다).
+- `product_sizes`는 `products`의 하위 테이블로 새로 추가됐습니다. 기존 `moulds`(생산 도구), `formula_versions`, `experiments`, Formula 계산 로직(Balance Role/Context Weight/Sensory/Yield-Loss/Process Parameters 포함)은 전혀 건드리지 않았습니다. Formula 배치 스케일링/몰드 환산 계산도 이번 단계에서는 구현하지 않았습니다(향후 확장을 위한 구조만 마련).
+
+### 테스트 방법
+
+1. **PRODUCTS → 아무 제품 열기 → SIZES → + ADD SIZE**
+2. SHAPE을 ROUND로 두고 지름 15, 높이 3을 입력 후 CREATE → "Ø15 × H3 cm"와 AREA ≈176.7cm², VOLUME ≈530.1cm³가 표시되는지 확인
+3. 같은 제품에 SHAPE RECTANGLE로 가로 32, 세로 24, 높이 3을 추가 → "32 × 24 × H3 cm"와 AREA 768cm², VOLUME 2,304cm³가 표시되는지 확인
+4. 두 사이즈 중 하나를 SET DEFAULT → DEFAULT 배지가 옮겨가고 이전 것에는 더 이상 배지가 없는지 확인
+5. EDIT으로 값을 수정하고 저장 후 표시/계산 값이 갱신되는지 확인, DELETE로 삭제되는지 확인
+6. 같은 제품의 COMPONENTS/NOTES/PRODUCT TARGET/EXPERIMENTS/OBSERVATIONS/KNOWLEDGE 섹션과 다른 제품/Formula/Mould/Experiment 화면이 예전과 동일하게 동작하는지 확인
+
+---
+
 ## 2026-08-31 — PROCESS PARAMETERS (구조화된 공정 파라미터)
 
 ### 무엇이 달라졌나

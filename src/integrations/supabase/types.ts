@@ -1134,6 +1134,59 @@ export type Database = {
           },
         ]
       }
+      product_sizes: {
+        Row: {
+          created_at: string
+          diameter_mm: number | null
+          height_mm: number | null
+          id: string
+          is_default: boolean
+          length_mm: number | null
+          notes: string | null
+          product_id: string
+          shape: string
+          updated_at: string
+          user_id: string
+          width_mm: number | null
+        }
+        Insert: {
+          created_at?: string
+          diameter_mm?: number | null
+          height_mm?: number | null
+          id?: string
+          is_default?: boolean
+          length_mm?: number | null
+          notes?: string | null
+          product_id: string
+          shape: string
+          updated_at?: string
+          user_id: string
+          width_mm?: number | null
+        }
+        Update: {
+          created_at?: string
+          diameter_mm?: number | null
+          height_mm?: number | null
+          id?: string
+          is_default?: boolean
+          length_mm?: number | null
+          notes?: string | null
+          product_id?: string
+          shape?: string
+          updated_at?: string
+          user_id?: string
+          width_mm?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_sizes_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_tags: {
         Row: {
           created_at: string
