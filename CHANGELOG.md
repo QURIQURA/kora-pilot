@@ -4,9 +4,31 @@
 
 ---
 
-## 2026-09-02 — PRODUCTION / WEIGHING DASHBOARD (여러 Formula 동시 계량)
+## 2026-09-02 — FORMULA 이름 표기 규칙 통일 + 약어표 위젯
 
 ### 무엇이 달라졌나
+
+- 기존 Formula 8개 이름을 하나의 규칙으로 통일했습니다: **[기법/컴포넌트] [재료·풍미] V[버전] [제품명]** 순서, 같은 단어 중복 멘션 금지, 제품명은 대괄호로 맨 뒤(제품이 늘고 표준화되면 나중에 뗄 예정이라 지금은 유지).
+  - `CHIFFON — Standard Oil Emulsion V1` → `Chiffon V1` (특정 flavor 없는 공용 베이스, 2개 Product에서 공유 중이라 제품 태그 생략)
+  - `STRENGTH — Vanilla Chiffon V1` → `Chiffon Vanilla V1 [Strength]`
+  - `TANGERINE MARMALADE SMB — V1` → `SMB Tangerine Marmalade V1`
+  - `LEMON CURD — Whole Egg + Gelatin V1` → `Curd LM V1`
+  - `LEMON CREAM CHEESE YOGURT MOUSSE — V1` → `Mousse LM C.C Yogurt V1`
+  - `Vanilla White Chocolate Whipped Ganache V1` → `Ganache Vanilla W.C V1 [Strength]`
+  - `Dark & Milk Chocolate Whipped Ganache V2` → `Ganache D.C & M.C V2 [60th]`
+  - `Chocolate Mud Cake Sheet V1` → `Mud D.C V1 [60th]`
+- 재료 약어는 자주 쓰는 일부만 적용합니다: W.C(White Chocolate)/D.C(Dark Chocolate)/M.C(Milk Chocolate)/LM(Lemon)/C.C(Cream Cheese)/W.E(Whole Egg)/E.Y(Egg Yolk)/E.W(Egg White). 두 단어 이니셜 조합은 점(.)으로 연결(W.C, D.C…), 한 단어 축약은 점 없음(LM). Chiffon/Mousse/Curd/Ganache/Mud 같은 케익·제과 이름과 SMB는 약어화하지 않고 그대로 씁니다.
+- **DASHBOARD**에 새 위젯 **NAMING ABBREVIATIONS**가 추가돼서, 위 약어 규칙표를 항상 화면에서 바로 참고할 수 있습니다.
+- Formula의 실제 데이터(재료/양/버전/Component·Product 연결)는 전혀 바뀌지 않았습니다 — `formulas.name` 컬럼 값만 바뀌었습니다.
+
+### 테스트 방법
+
+1. **FORMULAS** 목록과 Work Session의 **+ ADD FORMULA VERSION** 드롭다운에서 8개 Formula 이름이 위 표대로 바뀌었는지 확인
+2. **DASHBOARD**에서 NAMING ABBREVIATIONS 박스가 보이는지, 약어/전체 이름이 맞게 나오는지 확인
+3. 이름이 바뀐 Formula를 열어 재료/양/버전/Experiment 연결 등 실제 데이터는 그대로인지 확인
+
+---
+
 ## 2026-09-02 — WEIGHING MATRIX (스프레드시트형 동시 계량 화면으로 전면 개편)
 
 ### 무엇이 달라졌나
@@ -18,6 +40,8 @@
 - 체크 상태(NOT STARTED/DONE/SHORTAGE/SKIPPED)는 각 칸 안의 작은 아이콘 버튼으로 옮겨져 시각적으로 보조 역할만 하고, 수량 숫자가 항상 가장 크고 먼저 보이도록 했습니다. SHORTAGE 상태일 때만 칸을 눌러 메모를 입력할 수 있습니다(기존과 동일하게 서버에 저장/유지).
 - **FORMULA VIEW**(원래 레시피 구조 그대로, Formula 하나씩 세로로 읽는 화면)는 그대로 유지됩니다 — 매트릭스는 "여러 레시피 동시 비교/계량"용, Formula View는 "레시피 하나 자세히 읽기"용으로 역할이 나뉩니다.
 - 데이터/저장 구조는 전혀 바뀌지 않았습니다 — `work_sessions`/`work_session_formula_versions`/`work_session_progress`/`formula_versions`/`formula_version_ingredients`/`ingredients` 위에 표시 방식만 바뀐 것이고, 새 테이블이나 "재료 통합" 개념은 추가되지 않았습니다. 그룹핑은 기존과 동일하게 `ingredient_id` 기준입니다.
+- **행 정렬 방식**: 재료 행이 단순 이름순이 아니라, "어느 Formula 열에 걸쳐 있는지"를 기준으로 정렬됩니다. 한 Formula에만 쓰이는 재료는 그 Formula 열 쪽으로 몰리고, 여러 Formula에 공통으로 쓰이는 재료는 자연스럽게 그 Formula들 사이(중간)에 위치합니다 — 겹치는 재료를 한눈에 찾기 위함입니다.
+- **버그 수정**: ADD FORMULA VERSION / Formula Version별 MULTIPLIER ×N 입력칸에서 브라우저가 기본값 "1"을 무효한 값으로 처리해 "0.6과 1.1 중에 골라라" 같은 경고를 띄우던 문제를 고쳤습니다(입력 단위를 0.1로 조정). ×1, ×1.5, ×2 등 흔히 쓰는 값이 모두 정상적으로 입력됩니다.
 
 ### 테스트 방법
 
@@ -26,8 +50,15 @@
 3. Formula 열이 많을 때 가로로 스크롤해도 재료(첫 번째) 열이 화면에 고정되어 있는지 확인
 4. 칸의 작은 상태 버튼을 눌러 NOT STARTED → DONE → SHORTAGE → SKIPPED 순으로 바뀌는지, SHORTAGE일 때 메모 입력이 뜨는지, 새로고침 후에도 상태/메모가 유지되는지 확인
 5. **FORMULA VIEW**로 전환해 기존과 동일하게 Formula별 세로 리스트로 보이는지 확인
+6. 공통 재료가 있는 2개 이상의 Formula를 추가했을 때, 그 공통 재료 행이 각 Formula 전용 재료 행들 사이(중간)에 위치하는지 확인
+7. **+ ADD FORMULA VERSION**에서 MULTIPLIER ×N을 기본값 1로 그대로 ADD 눌렀을 때 경고 없이 추가되는지 확인
 
 ---
+
+## 2026-09-02 — PRODUCTION / WEIGHING DASHBOARD (여러 Formula 동시 계량)
+
+### 무엇이 달라졌나
+
 - 새 메뉴 **PRODUCTION**이 추가됐습니다. 여러 Formula Version을 하나의 **Work Session**으로 묶어서 한 화면에서 계량 작업을 진행할 수 있습니다.
 - **Work Session 생성 → Formula Version 선택 → Multiplier(배수) 설정 → START WORK → 계량 → PAUSE/RESUME → COMPLETE** 흐름으로 동작하고, 브라우저를 닫았다 다시 열어도 선택한 Formula, multiplier, 체크 상태가 그대로 남아 있습니다.
 - **WEIGHING VIEW**: 선택된 모든 Formula Version의 재료를 **Ingredient Master 기준으로 묶어서** 보여줍니다(이름이 아니라 실제 재료 ID 기준 — Caster Sugar와 Icing Sugar는 절대 같이 묶이지 않습니다). Butter가 여러 Formula에 등장해도 수량을 합치지 않고 Formula별 줄을 나란히 독립적으로 보여줍니다. 각 줄을 눌러 NOT STARTED → DONE → SHORTAGE → SKIPPED 순으로 체크 상태를 바꿀 수 있고, SHORTAGE일 때는 메모를 남길 수 있습니다. 이 체크 상태는 서버에 저장되어 나중에 다시 열어도 유지됩니다.
