@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-09-02 — PRODUCTION / WEIGHING DASHBOARD (여러 Formula 동시 계량)
+
+### 무엇이 달라졌나
+
+- 새 메뉴 **PRODUCTION**이 추가됐습니다. 여러 Formula Version을 하나의 **Work Session**으로 묶어서 한 화면에서 계량 작업을 진행할 수 있습니다.
+- **Work Session 생성 → Formula Version 선택 → Multiplier(배수) 설정 → START WORK → 계량 → PAUSE/RESUME → COMPLETE** 흐름으로 동작하고, 브라우저를 닫았다 다시 열어도 선택한 Formula, multiplier, 체크 상태가 그대로 남아 있습니다.
+- **WEIGHING VIEW**: 선택된 모든 Formula Version의 재료를 **Ingredient Master 기준으로 묶어서** 보여줍니다(이름이 아니라 실제 재료 ID 기준 — Caster Sugar와 Icing Sugar는 절대 같이 묶이지 않습니다). Butter가 여러 Formula에 등장해도 수량을 합치지 않고 Formula별 줄을 나란히 독립적으로 보여줍니다. 각 줄을 눌러 NOT STARTED → DONE → SHORTAGE → SKIPPED 순으로 체크 상태를 바꿀 수 있고, SHORTAGE일 때는 메모를 남길 수 있습니다. 이 체크 상태는 서버에 저장되어 나중에 다시 열어도 유지됩니다.
+- **FORMULA VIEW**: 같은 데이터를 Formula 원래 구조 그대로(재료 목록 순서대로) 보여주는 화면입니다. Weighing View와 같은 원본 데이터를 다른 방식으로 보여줄 뿐, 새로운 레시피 데이터 구조는 아닙니다.
+- **Multiplier**: 각 Formula Version마다 개별적으로 ×1.5, ×2 같은 배수를 설정할 수 있고, 실제 계량에 쓰이는 수량(working quantity)에만 반영됩니다. **원본 Formula Version의 레시피 양은 전혀 바뀌지 않습니다.**
+- Multiplier를 바꿀 때마다 이전 값 → 새 값, 그리고 그 순간 계산된 실제 작업 수량이 이력으로 남습니다(HISTORY 버튼으로 확인). 이 이력은 나중에 원본 레시피가 바뀌어도 "그때 실제로 몇 g을 썼는지"를 그대로 보존합니다.
+- **PROMOTE TO EXPERIMENT**: Work Session에서 특정 Formula Version을 골라 바로 Experiment로 승급할 수 있습니다. 그 시점의 multiplier가 Experiment의 BATCH ×N 값으로 복사되고(실시간 연동 아님, 스냅샷), 어느 Work Session에서 만들어진 Experiment인지 참조가 남습니다. 기존 Experiment의 baseline/변수/Sensory/Yield-Loss/Process Timeline 구조는 전혀 바뀌지 않았습니다.
+- DB에는 `work_sessions`, `work_session_formula_versions`, `work_session_multiplier_history`, `work_session_progress` 4개 테이블이 새로 추가됐고, `experiments`에는 추적용 `work_session_id`(nullable) 컬럼만 추가됐습니다. 기존 `formulas`/`formula_versions`/`formula_version_ingredients`/`ingredients`/`experiments`의 기존 컬럼과 계산 로직(Balance Role/Context Weight/Sensory/Yield-Loss/Process Parameters 포함)은 전혀 손대지 않았습니다.
+
+### 테스트 방법
+
+1. **PRODUCTION → + CREATE WORK SESSION** → 이름 입력 후 생성
+2. Work Session 상세에서 **+ ADD FORMULA VERSION**으로 서로 다른 Formula를 2개 이상 추가, 각각 multiplier(예: ×1.5, ×2) 지정
+3. 같은 Formula Version을 다시 추가하면 거부되는지 확인(중복 방지)
+4. **WEIGHING VIEW**에서 동일 재료가 여러 Formula 줄로 나란히 보이는지, 수량이 각자 독립적으로(합쳐지지 않고) 표시되는지 확인
+5. 재료 줄을 눌러 체크 상태를 DONE → SHORTAGE로 바꾸고 메모 입력 → 페이지를 새로고침해도 상태/메모가 유지되는지 확인
+6. **FORMULA VIEW**로 전환해 각 Formula가 원래 레시피 순서대로 나오는지 확인
+7. Formula Version의 multiplier 값을 바꾸고 **HISTORY**를 열어 이전 값 → 새 값 기록이 남는지 확인
+8. **START WORK → PAUSE → RESUME → COMPLETE** 상태 전환이 저장되는지 확인
+9. 한 Formula Version에서 **PROMOTE TO EXPERIMENT**를 눌러 Experiment가 생성되고 BATCH ×N에 그 시점 multiplier가 들어가는지 확인
+10. 기존 EXPERIMENTS, FORMULAS, PRODUCTS 화면과 그 안의 Sensory/Yield-Loss/Process Timeline/Baseline-Variant 기능이 예전과 동일하게 동작하는지 확인
+
+---
+
 ## 2026-09-02 — PRODUCT SIZE / DIMENSION SYSTEM (제품 실측 사이즈)
 
 ### 무엇이 달라졌나

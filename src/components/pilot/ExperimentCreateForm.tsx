@@ -13,13 +13,7 @@ import {
 import { toLocalDateString } from "@/lib/datetime";
 import { parseNumber, versionLabel } from "@/lib/formula";
 import { MouldSelect } from "./MouldSelect";
-import {
-  Field,
-  buttonClass,
-  inputClass,
-  primaryButtonClass,
-  selectClass,
-} from "./ui";
+import { Field, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 export interface ExperimentPreset {
   formulaId?: string;
@@ -28,6 +22,9 @@ export interface ExperimentPreset {
   productId?: string | null;
   mouldId?: string | null;
   batch?: number;
+  /** PRODUCTION / WEIGHING DASHBOARD → Promote to Experiment 시, 어느 Work Session에서 생성됐는지 기록한다.
+   *  live-linked multiplier 관계는 아니며 experiments.work_session_id는 추적용 참조일 뿐이다. */
+  workSessionId?: string;
 }
 
 /**
@@ -56,15 +53,13 @@ export function ExperimentCreateModal({
 
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
   const componentId =
-    preset?.componentId !== undefined
-      ? preset.componentId
-      : (formula?.component_id ?? null);
+    preset?.componentId !== undefined ? preset.componentId : (formula?.component_id ?? null);
 
   const usage = useQuery(componentUsageQuery(componentId));
   const allProducts = useQuery(productsQuery());
   const productOptions = useMemo(() => {
     const linked = (usage.data ?? []).flatMap((row) =>
-      row.products ? [{ id: row.products.id, name: row.products.name }] : []
+      row.products ? [{ id: row.products.id, name: row.products.name }] : [],
     );
     if (linked.length > 0) return linked;
     return (allProducts.data ?? []).map((p) => ({ id: p.id, name: p.name }));
@@ -91,8 +86,7 @@ export function ExperimentCreateModal({
     }
     if (versionId && versionList.some((v) => v.id === versionId)) return;
     const current =
-      versionList.find((v) => v.status === "CURRENT") ??
-      versionList[versionList.length - 1];
+      versionList.find((v) => v.status === "CURRENT") ?? versionList[versionList.length - 1];
     if (current) setVersionId(current.id);
   }, [versionList, versionId]);
 
@@ -121,6 +115,7 @@ export function ExperimentCreateModal({
           hypothesis: hypothesis.trim() || null,
           variables: variables.trim() || null,
           baseline_experiment_id: baselineId || null,
+          work_session_id: preset?.workSessionId || null,
         })
         .select("id")
         .single();
@@ -145,11 +140,7 @@ export function ExperimentCreateModal({
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto border border-border bg-background">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <span className="label-caps">NEW EXPERIMENT</span>
-          <button
-            type="button"
-            className="label-caps px-2 py-2"
-            onClick={onCancel}
-          >
+          <button type="button" className="label-caps px-2 py-2" onClick={onCancel}>
             CLOSE
           </button>
         </div>

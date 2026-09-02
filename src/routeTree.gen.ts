@@ -23,6 +23,8 @@ import { Route as AuthenticatedFormulasIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedFormulasFormulaIdRouteImport } from './routes/_authenticated/formulas/$formulaId'
 import { Route as AuthenticatedIngredientsIndexRouteImport } from './routes/_authenticated/ingredients/index'
 import { Route as AuthenticatedIngredientsIngredientIdRouteImport } from './routes/_authenticated/ingredients/$ingredientId'
+import { Route as AuthenticatedProductionIndexRouteImport } from './routes/_authenticated/production/index'
+import { Route as AuthenticatedProductionSessionIdRouteImport } from './routes/_authenticated/production/$sessionId'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products/index'
 import { Route as AuthenticatedProductsProductIdRouteImport } from './routes/_authenticated/products/$productId'
 import { Route as AuthenticatedSettingsCalibrationTechniqueIdRouteImport } from './routes/_authenticated/settings_.calibration.$techniqueId'
@@ -104,6 +106,18 @@ const AuthenticatedIngredientsIngredientIdRoute =
     path: '/ingredients/$ingredientId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedProductionIndexRoute =
+  AuthenticatedProductionIndexRouteImport.update({
+    id: '/production/',
+    path: '/production/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedProductionSessionIdRoute =
+  AuthenticatedProductionSessionIdRouteImport.update({
+    id: '/production/$sessionId',
+    path: '/production/$sessionId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProductsIndexRoute =
   AuthenticatedProductsIndexRouteImport.update({
     id: '/products/',
@@ -133,11 +147,13 @@ export interface FileRoutesByFullPath {
   '/experiments/$experimentId': typeof AuthenticatedExperimentsExperimentIdRoute
   '/formulas/$formulaId': typeof AuthenticatedFormulasFormulaIdRoute
   '/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
+  '/production/$sessionId': typeof AuthenticatedProductionSessionIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components/': typeof AuthenticatedComponentsIndexRoute
   '/experiments/': typeof AuthenticatedExperimentsIndexRoute
   '/formulas/': typeof AuthenticatedFormulasIndexRoute
   '/ingredients/': typeof AuthenticatedIngredientsIndexRoute
+  '/production/': typeof AuthenticatedProductionIndexRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
   '/settings/calibration/$techniqueId': typeof AuthenticatedSettingsCalibrationTechniqueIdRoute
 }
@@ -151,11 +167,13 @@ export interface FileRoutesByTo {
   '/experiments/$experimentId': typeof AuthenticatedExperimentsExperimentIdRoute
   '/formulas/$formulaId': typeof AuthenticatedFormulasFormulaIdRoute
   '/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
+  '/production/$sessionId': typeof AuthenticatedProductionSessionIdRoute
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components': typeof AuthenticatedComponentsIndexRoute
   '/experiments': typeof AuthenticatedExperimentsIndexRoute
   '/formulas': typeof AuthenticatedFormulasIndexRoute
   '/ingredients': typeof AuthenticatedIngredientsIndexRoute
+  '/production': typeof AuthenticatedProductionIndexRoute
   '/products': typeof AuthenticatedProductsIndexRoute
   '/settings/calibration/$techniqueId': typeof AuthenticatedSettingsCalibrationTechniqueIdRoute
 }
@@ -171,11 +189,13 @@ export interface FileRoutesById {
   '/_authenticated/experiments/$experimentId': typeof AuthenticatedExperimentsExperimentIdRoute
   '/_authenticated/formulas/$formulaId': typeof AuthenticatedFormulasFormulaIdRoute
   '/_authenticated/ingredients/$ingredientId': typeof AuthenticatedIngredientsIngredientIdRoute
+  '/_authenticated/production/$sessionId': typeof AuthenticatedProductionSessionIdRoute
   '/_authenticated/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/_authenticated/components/': typeof AuthenticatedComponentsIndexRoute
   '/_authenticated/experiments/': typeof AuthenticatedExperimentsIndexRoute
   '/_authenticated/formulas/': typeof AuthenticatedFormulasIndexRoute
   '/_authenticated/ingredients/': typeof AuthenticatedIngredientsIndexRoute
+  '/_authenticated/production/': typeof AuthenticatedProductionIndexRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
   '/_authenticated/settings_/calibration/$techniqueId': typeof AuthenticatedSettingsCalibrationTechniqueIdRoute
 }
@@ -191,11 +211,13 @@ export interface FileRouteTypes {
     | '/experiments/$experimentId'
     | '/formulas/$formulaId'
     | '/ingredients/$ingredientId'
+    | '/production/$sessionId'
     | '/products/$productId'
     | '/components/'
     | '/experiments/'
     | '/formulas/'
     | '/ingredients/'
+    | '/production/'
     | '/products/'
     | '/settings/calibration/$techniqueId'
   fileRoutesByTo: FileRoutesByTo
@@ -209,11 +231,13 @@ export interface FileRouteTypes {
     | '/experiments/$experimentId'
     | '/formulas/$formulaId'
     | '/ingredients/$ingredientId'
+    | '/production/$sessionId'
     | '/products/$productId'
     | '/components'
     | '/experiments'
     | '/formulas'
     | '/ingredients'
+    | '/production'
     | '/products'
     | '/settings/calibration/$techniqueId'
   id:
@@ -228,11 +252,13 @@ export interface FileRouteTypes {
     | '/_authenticated/experiments/$experimentId'
     | '/_authenticated/formulas/$formulaId'
     | '/_authenticated/ingredients/$ingredientId'
+    | '/_authenticated/production/$sessionId'
     | '/_authenticated/products/$productId'
     | '/_authenticated/components/'
     | '/_authenticated/experiments/'
     | '/_authenticated/formulas/'
     | '/_authenticated/ingredients/'
+    | '/_authenticated/production/'
     | '/_authenticated/products/'
     | '/_authenticated/settings_/calibration/$techniqueId'
   fileRoutesById: FileRoutesById
@@ -342,6 +368,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIngredientsIngredientIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/production/': {
+      id: '/_authenticated/production/'
+      path: '/production'
+      fullPath: '/production/'
+      preLoaderRoute: typeof AuthenticatedProductionIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/production/$sessionId': {
+      id: '/_authenticated/production/$sessionId'
+      path: '/production/$sessionId'
+      fullPath: '/production/$sessionId'
+      preLoaderRoute: typeof AuthenticatedProductionSessionIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/products/': {
       id: '/_authenticated/products/'
       path: '/products'
@@ -375,11 +415,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedExperimentsExperimentIdRoute: typeof AuthenticatedExperimentsExperimentIdRoute
   AuthenticatedFormulasFormulaIdRoute: typeof AuthenticatedFormulasFormulaIdRoute
   AuthenticatedIngredientsIngredientIdRoute: typeof AuthenticatedIngredientsIngredientIdRoute
+  AuthenticatedProductionSessionIdRoute: typeof AuthenticatedProductionSessionIdRoute
   AuthenticatedProductsProductIdRoute: typeof AuthenticatedProductsProductIdRoute
   AuthenticatedComponentsIndexRoute: typeof AuthenticatedComponentsIndexRoute
   AuthenticatedExperimentsIndexRoute: typeof AuthenticatedExperimentsIndexRoute
   AuthenticatedFormulasIndexRoute: typeof AuthenticatedFormulasIndexRoute
   AuthenticatedIngredientsIndexRoute: typeof AuthenticatedIngredientsIndexRoute
+  AuthenticatedProductionIndexRoute: typeof AuthenticatedProductionIndexRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
   AuthenticatedSettingsCalibrationTechniqueIdRoute: typeof AuthenticatedSettingsCalibrationTechniqueIdRoute
 }
@@ -396,11 +438,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFormulasFormulaIdRoute: AuthenticatedFormulasFormulaIdRoute,
   AuthenticatedIngredientsIngredientIdRoute:
     AuthenticatedIngredientsIngredientIdRoute,
+  AuthenticatedProductionSessionIdRoute: AuthenticatedProductionSessionIdRoute,
   AuthenticatedProductsProductIdRoute: AuthenticatedProductsProductIdRoute,
   AuthenticatedComponentsIndexRoute: AuthenticatedComponentsIndexRoute,
   AuthenticatedExperimentsIndexRoute: AuthenticatedExperimentsIndexRoute,
   AuthenticatedFormulasIndexRoute: AuthenticatedFormulasIndexRoute,
   AuthenticatedIngredientsIndexRoute: AuthenticatedIngredientsIndexRoute,
+  AuthenticatedProductionIndexRoute: AuthenticatedProductionIndexRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
   AuthenticatedSettingsCalibrationTechniqueIdRoute:
     AuthenticatedSettingsCalibrationTechniqueIdRoute,

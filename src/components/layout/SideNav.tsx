@@ -7,6 +7,7 @@ const TOP_ITEMS = [
   { label: "COMPONENTS", to: "/components" },
   { label: "FORMULAS", to: "/formulas" },
   { label: "EXPERIMENTS", to: "/experiments" },
+  { label: "PRODUCTION", to: "/production" },
   { label: "KNOWLEDGE", to: "/knowledge" },
   { label: "INGREDIENTS", to: "/ingredients" },
   { label: "REFERENCES", to: "/references" },
@@ -54,10 +55,7 @@ function NavItem({
       activeOptions={{ exact: item.to === "/" }}
       activeProps={{ className: "bg-foreground text-background" }}
       inactiveProps={{ className: "text-foreground hover:bg-secondary" }}
-      className={cn(
-        "label-caps block px-3 py-3 transition-colors",
-        "min-h-[48px] content-center"
-      )}
+      className={cn("label-caps block px-3 py-3 transition-colors", "min-h-[48px] content-center")}
     >
       {item.label}
     </Link>

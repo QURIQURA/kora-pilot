@@ -167,6 +167,7 @@ export type Database = {
           updated_at: string
           user_id: string
           variables: string | null
+          work_session_id: string | null
         }
         Insert: {
           ai_interpretation?: string | null
@@ -193,6 +194,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           variables?: string | null
+          work_session_id?: string | null
         }
         Update: {
           ai_interpretation?: string | null
@@ -219,6 +221,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           variables?: string | null
+          work_session_id?: string | null
         }
         Relationships: [
           {
@@ -254,6 +257,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "experiments_work_session_id_fkey"
+            columns: ["work_session_id"]
+            isOneToOne: false
+            referencedRelation: "work_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -1462,6 +1472,183 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      work_session_formula_versions: {
+        Row: {
+          added_at: string
+          formula_version_id: string
+          id: string
+          multiplier: number
+          sort_order: number
+          updated_at: string
+          user_id: string
+          work_session_id: string
+        }
+        Insert: {
+          added_at?: string
+          formula_version_id: string
+          id?: string
+          multiplier?: number
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+          work_session_id: string
+        }
+        Update: {
+          added_at?: string
+          formula_version_id?: string
+          id?: string
+          multiplier?: number
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+          work_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_session_formula_versions_formula_version_id_fkey"
+            columns: ["formula_version_id"]
+            isOneToOne: false
+            referencedRelation: "formula_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_formula_versions_work_session_id_fkey"
+            columns: ["work_session_id"]
+            isOneToOne: false
+            referencedRelation: "work_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_session_multiplier_history: {
+        Row: {
+          applied_at: string
+          applied_multiplier: number
+          formula_version_id: string
+          id: string
+          previous_multiplier: number
+          resulting_working_quantity_snapshot: Json | null
+          user_id: string
+          work_session_id: string
+        }
+        Insert: {
+          applied_at?: string
+          applied_multiplier: number
+          formula_version_id: string
+          id?: string
+          previous_multiplier: number
+          resulting_working_quantity_snapshot?: Json | null
+          user_id: string
+          work_session_id: string
+        }
+        Update: {
+          applied_at?: string
+          applied_multiplier?: number
+          formula_version_id?: string
+          id?: string
+          previous_multiplier?: number
+          resulting_working_quantity_snapshot?: Json | null
+          user_id?: string
+          work_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_session_multiplier_history_formula_version_id_fkey"
+            columns: ["formula_version_id"]
+            isOneToOne: false
+            referencedRelation: "formula_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_multiplier_history_work_session_id_fkey"
+            columns: ["work_session_id"]
+            isOneToOne: false
+            referencedRelation: "work_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_session_progress: {
+        Row: {
+          formula_version_ingredient_id: string
+          id: string
+          note: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          work_session_id: string
+        }
+        Insert: {
+          formula_version_ingredient_id: string
+          id?: string
+          note?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+          work_session_id: string
+        }
+        Update: {
+          formula_version_ingredient_id?: string
+          id?: string
+          note?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          work_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_session_progress_formula_version_ingredient_id_fkey"
+            columns: ["formula_version_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "formula_version_ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_progress_work_session_id_fkey"
+            columns: ["work_session_id"]
+            isOneToOne: false
+            referencedRelation: "work_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_sessions: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

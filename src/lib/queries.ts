@@ -10,6 +10,12 @@ import type {
   Tag,
 } from "@/lib/pilot";
 import type { ProductSize } from "@/lib/product-size";
+import type {
+  WorkSession,
+  WorkSessionFormulaVersion,
+  WorkSessionMultiplierHistory,
+  WorkSessionProgress,
+} from "@/lib/work-session";
 
 function unwrap<T>({ data, error }: { data: T | null; error: unknown }): T {
   if (error) throw error;
@@ -1073,4 +1079,84 @@ export const experimentVariantsQuery = (experimentId: string) =>
           .eq("baseline_experiment_id", experimentId)
           .order("experiment_number", { ascending: false }),
       ),
+  });
+
+/* ── PRODUCTION / WEIGHING DASHBOARD — WORK SESSION ──────────────── */
+
+export const workSessionsQuery = () =>
+  queryOptions({
+    queryKey: ["work_sessions"],
+    queryFn: async (): Promise<WorkSession[]> =>
+      unwrap(
+        await supabase.from("work_sessions").select("*").order("created_at", { ascending: false }),
+      ),
+  });
+
+export const workSessionQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["work_sessions", id],
+    queryFn: async (): Promise<WorkSession> =>
+      unwrap(await supabase.from("work_sessions").select("*").eq("id", id).single()),
+  });
+
+export interface WorkSessionFormulaVersionRow extends WorkSessionFormulaVersion {
+  formula_versions: {
+    id: string;
+    version_number: number;
+    status: string;
+    default_mould_id: string | null;
+    formulas: {
+      id: string;
+      name: string;
+      component_id: string | null;
+      components: { id: string; name: string } | null;
+    };
+  };
+}
+
+/** Work Session에 선택된 Formula Version 목록 — Formula/Component 이름까지 join해서 표시용으로 가져온다 */
+export const workSessionFormulaVersionsQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ["work_session_formula_versions", sessionId],
+    queryFn: async (): Promise<WorkSessionFormulaVersionRow[]> =>
+      unwrap(
+        await supabase
+          .from("work_session_formula_versions")
+          .select(
+            "*, formula_versions(id, version_number, status, default_mould_id, formulas(id, name, component_id, components(id, name)))",
+          )
+          .eq("work_session_id", sessionId)
+          .order("sort_order"),
+      ) as unknown as WorkSessionFormulaVersionRow[],
+  });
+
+/** Work Session의 checklist 상태 전체 (formula_version_ingredient_id 기준) */
+export const workSessionProgressQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ["work_session_progress", sessionId],
+    queryFn: async (): Promise<WorkSessionProgress[]> =>
+      unwrap(
+        await supabase.from("work_session_progress").select("*").eq("work_session_id", sessionId),
+      ),
+  });
+
+/** Multiplier 변경 이력 — append-only, 최신순 */
+export const workSessionMultiplierHistoryQuery = (
+  sessionId: string,
+  formulaVersionId: string | null,
+) =>
+  queryOptions({
+    queryKey: ["work_session_multiplier_history", sessionId, formulaVersionId],
+    enabled: Boolean(formulaVersionId),
+    queryFn: async (): Promise<WorkSessionMultiplierHistory[]> => {
+      if (!formulaVersionId) return [];
+      return unwrap(
+        await supabase
+          .from("work_session_multiplier_history")
+          .select("*")
+          .eq("work_session_id", sessionId)
+          .eq("formula_version_id", formulaVersionId)
+          .order("applied_at", { ascending: false }),
+      );
+    },
   });
