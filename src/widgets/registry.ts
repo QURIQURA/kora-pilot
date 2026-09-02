@@ -1,5 +1,3 @@
-
-Registry.ts · TXT
 import type { WidgetDef } from "./types";
 import { todayWidget } from "./today.widget";
 import { quickCreateWidget } from "./quick-create.widget";

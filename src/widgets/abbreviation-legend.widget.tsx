@@ -1,5 +1,3 @@
-
-Abbreviation legend.widget.tsx · TXT
 import type { WidgetDef } from "./types";
  
 /**
