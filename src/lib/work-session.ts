@@ -1,5 +1,3 @@
-
-Work session.ts · TXT
 /**
  * PRODUCTION / WEIGHING DASHBOARD — Work Session 도메인 헬퍼
  *
