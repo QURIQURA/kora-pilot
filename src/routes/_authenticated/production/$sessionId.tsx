@@ -35,7 +35,7 @@ import {
   primaryButtonClass,
   selectClass,
 } from "@/components/pilot/ui";
- 
+
 export const Route = createFileRoute("/_authenticated/production/$sessionId")({
   head: () => ({
     meta: [
@@ -45,7 +45,7 @@ export const Route = createFileRoute("/_authenticated/production/$sessionId")({
   }),
   component: WorkSessionPage,
 });
- 
+
 const NEXT_ACTIONS: Record<string, { label: string; nextStatus: string }[]> = {
   PLANNED: [{ label: "START WORK", nextStatus: "IN_PROGRESS" }],
   IN_PROGRESS: [
@@ -59,11 +59,11 @@ const NEXT_ACTIONS: Record<string, { label: string; nextStatus: string }[]> = {
   COMPLETED: [],
   CANCELLED: [],
 };
- 
+
 function WorkSessionPage() {
   const { sessionId } = Route.useParams();
   const queryClient = useQueryClient();
- 
+
   const session = useQuery(workSessionQuery(sessionId));
   const selections = useQuery(workSessionFormulaVersionsQuery(sessionId));
   const versionIds = useMemo(
@@ -72,17 +72,17 @@ function WorkSessionPage() {
   );
   const ingredients = useQuery(versionIngredientsBulkQuery(versionIds));
   const progress = useQuery(workSessionProgressQuery(sessionId));
- 
+
   const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA">("WEIGHING");
   const [adding, setAdding] = useState(false);
   const [promotingVersionId, setPromotingVersionId] = useState<string | null>(null);
- 
+
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
     { label: "PRODUCTION", path: "/production" },
     { label: (session.data?.name ?? "…").toUpperCase() },
   ]);
- 
+
   const invalidateSession = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
     await queryClient.invalidateQueries({ queryKey: ["work_sessions", sessionId] });
@@ -95,7 +95,7 @@ function WorkSessionPage() {
   const invalidateProgress = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_session_progress", sessionId] });
   };
- 
+
   const updateSession = useMutation({
     mutationFn: async (patch: TablesUpdate<"work_sessions">) => {
       const { error } = await supabase.from("work_sessions").update(patch).eq("id", sessionId);
@@ -103,7 +103,7 @@ function WorkSessionPage() {
     },
     onSuccess: invalidateSession,
   });
- 
+
   const setStatus = (nextStatus: string) => {
     const patch: TablesUpdate<"work_sessions"> = { status: nextStatus };
     if (nextStatus === "IN_PROGRESS" && !session.data?.started_at) {
@@ -114,7 +114,7 @@ function WorkSessionPage() {
     }
     updateSession.mutate(patch);
   };
- 
+
   const removeFormulaVersion = useMutation({
     mutationFn: async (row: WorkSessionFormulaVersionRow) => {
       // 이 formula version에 속한 ingredient line들의 checklist 기록도 함께 정리한다
@@ -145,7 +145,7 @@ function WorkSessionPage() {
       await invalidateProgress();
     },
   });
- 
+
   const rows = useMemo(() => selections.data ?? [], [selections.data]);
   const ingredientsByVersion = useMemo(() => ingredients.data ?? {}, [ingredients.data]);
   const progressByLineId = useMemo(() => {
@@ -155,7 +155,7 @@ function WorkSessionPage() {
     }
     return map;
   }, [progress.data]);
- 
+
   const orderedSelections = useMemo(
     () =>
       [...rows]
@@ -168,7 +168,7 @@ function WorkSessionPage() {
         })),
     [rows],
   );
- 
+
   const weighingGroups = useMemo(
     () =>
       buildWeighingGroups({
@@ -178,7 +178,7 @@ function WorkSessionPage() {
       }),
     [orderedSelections, ingredientsByVersion, progressByLineId],
   );
- 
+
   if (session.isLoading) {
     return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
   }
@@ -187,10 +187,10 @@ function WorkSessionPage() {
       <p className="font-mono text-xs uppercase text-muted-foreground">WORK SESSION NOT FOUND</p>
     );
   }
- 
+
   const data = session.data;
   const promotingRow = rows.find((r) => r.formula_version_id === promotingVersionId) ?? null;
- 
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
@@ -218,11 +218,11 @@ function WorkSessionPage() {
           ))}
         </div>
       </div>
- 
+
       <SectionCard title="NOTES">
         <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateSession.mutate({ notes })} />
       </SectionCard>
- 
+
       <SectionCard
         title="SELECTED FORMULA VERSIONS"
         action={
@@ -263,7 +263,7 @@ function WorkSessionPage() {
           )}
         </div>
       </SectionCard>
- 
+
       {rows.length > 0 && (
         <SectionCard
           title="WORK VIEW"
@@ -298,7 +298,7 @@ function WorkSessionPage() {
           )}
         </SectionCard>
       )}
- 
+
       {promotingRow && (
         <ExperimentCreateModal
           preset={{
@@ -316,7 +316,7 @@ function WorkSessionPage() {
     </div>
   );
 }
- 
+
 function InlineName({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
   return (
@@ -332,7 +332,7 @@ function InlineName({ value, onSave }: { value: string; onSave: (value: string) 
     />
   );
 }
- 
+
 function NotesEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
   return (
@@ -348,7 +348,7 @@ function NotesEditor({ value, onSave }: { value: string; onSave: (value: string)
     />
   );
 }
- 
+
 function AddFormulaVersionForm({
   sessionId,
   existingIds,
@@ -365,12 +365,12 @@ function AddFormulaVersionForm({
   const [formulaId, setFormulaId] = useState("");
   const [versionId, setVersionId] = useState("");
   const [multiplier, setMultiplier] = useState("1");
- 
+
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
   const versionOptions = [...(formula?.formula_versions ?? [])].sort(
     (a, b) => b.version_number - a.version_number,
   );
- 
+
   const add = useMutation({
     mutationFn: async () => {
       if (!versionId) throw new Error("Select a formula version");
@@ -388,7 +388,7 @@ function AddFormulaVersionForm({
     },
     onSuccess: onDone,
   });
- 
+
   return (
     <form
       className="space-y-3 border border-dashed border-border p-3"
@@ -437,7 +437,7 @@ function AddFormulaVersionForm({
           <input
             type="number"
             inputMode="decimal"
-            step="0.5"
+            step="0.1"
             min="0.1"
             className={inputClass}
             value={multiplier}
@@ -461,7 +461,7 @@ function AddFormulaVersionForm({
     </form>
   );
 }
- 
+
 function FormulaVersionRow({
   row,
   sessionId,
@@ -481,7 +481,7 @@ function FormulaVersionRow({
     ...workSessionMultiplierHistoryQuery(sessionId, row.formula_version_id),
     enabled: showHistory,
   });
- 
+
   const setMultiplier = useMutation({
     mutationFn: async (nextMultiplier: number) => {
       const previous = Number(row.multiplier);
@@ -514,9 +514,9 @@ function FormulaVersionRow({
       });
     },
   });
- 
+
   const formula = row.formula_versions.formulas;
- 
+
   return (
     <li className="space-y-2 px-3 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -535,7 +535,7 @@ function FormulaVersionRow({
             <input
               type="number"
               inputMode="decimal"
-              step="0.5"
+              step="0.1"
               min="0.1"
               className={`${inputClass} w-24 text-center`}
               defaultValue={Number(row.multiplier)}
@@ -593,14 +593,14 @@ function FormulaVersionRow({
     </li>
   );
 }
- 
+
 type WeighingColumn = {
   formulaVersionId: string;
   formulaName: string;
   multiplier: number;
   sortOrder: number;
 };
- 
+
 function WeighingView({
   sessionId,
   groups,
@@ -619,7 +619,7 @@ function WeighingView({
       </p>
     );
   }
- 
+
   return (
     <div className="max-h-[70vh] overflow-auto border border-border">
       <table className="w-full border-collapse text-sm">
@@ -673,20 +673,20 @@ function WeighingView({
     </div>
   );
 }
- 
+
 function nextProgressStatus(current: WorkSessionProgressStatus): WorkSessionProgressStatus {
   const idx = WORK_SESSION_PROGRESS_STATUSES.indexOf(current);
   const next = WORK_SESSION_PROGRESS_STATUSES[(idx + 1) % WORK_SESSION_PROGRESS_STATUSES.length];
   return next ?? "NOT_STARTED";
 }
- 
+
 const STATUS_CELL_TONE: Record<WorkSessionProgressStatus, string> = {
   NOT_STARTED: "",
   DONE: "text-muted-foreground",
   SHORTAGE: "bg-destructive/10",
   SKIPPED: "text-muted-foreground line-through decoration-1",
 };
- 
+
 function WeighingMatrixCell({
   sessionId,
   cell,
@@ -698,7 +698,7 @@ function WeighingMatrixCell({
 }) {
   const [note, setNote] = useState(cell.note ?? "");
   const [editingNote, setEditingNote] = useState(false);
- 
+
   const setProgress = useMutation({
     mutationFn: async (patch: { status?: WorkSessionProgressStatus; note?: string | null }) => {
       const user_id = await currentUserId();
@@ -716,7 +716,7 @@ function WeighingMatrixCell({
     },
     onSuccess: onChanged,
   });
- 
+
   return (
     <div
       className={`relative flex min-w-[110px] items-center justify-between gap-2 rounded-sm px-1 py-1 ${STATUS_CELL_TONE[cell.progressStatus]}`}
@@ -760,7 +760,7 @@ function WeighingMatrixCell({
     </div>
   );
 }
- 
+
 function FormulaView({
   rows,
   ingredientsByVersion,
@@ -819,5 +819,3 @@ function FormulaView({
     </div>
   );
 }
- 
-
