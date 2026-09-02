@@ -1,14 +1,20 @@
+
+Registry.ts · TXT
 import type { WidgetDef } from "./types";
 import { todayWidget } from "./today.widget";
 import { quickCreateWidget } from "./quick-create.widget";
 import { activeExperimentsWidget } from "./active-experiments.widget";
 import { recentObservationsWidget } from "./recent-observations.widget";
 import { recentProcessLogsWidget } from "./recent-process-logs.widget";
-
+import { abbreviationLegendWidget } from "./abbreviation-legend.widget";
+ 
 export const widgets: WidgetDef[] = [
   todayWidget,
   quickCreateWidget,
   activeExperimentsWidget,
   recentObservationsWidget,
   recentProcessLogsWidget,
+  abbreviationLegendWidget,
 ];
+ 
+
