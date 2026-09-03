@@ -1144,7 +1144,7 @@ export const workSessionProgressQuery = (sessionId: string) =>
 export const workSessionTasksQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ["work_session_tasks", sessionId],
-    queryFn: async (): Promise<Tables<"work_session_tasks">[]> =>
+    queryFn: async (): Promise<WorkSessionTask[]> =>
       unwrap(
         await supabase
           .from("work_session_tasks")
