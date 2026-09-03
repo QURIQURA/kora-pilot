@@ -48,10 +48,30 @@ export function nextTaskStatus(current: TaskStatus): TaskStatus {
   return TASK_STATUSES[(idx + 1) % TASK_STATUSES.length] ?? "NOT_STARTED";
 }
 
-/* ── Timeline 좌표 계산 (compute, don't store) ───────────────────── */
+/** TASK TYPE별 배지 색상 — task 이름과 구분되도록, 같은 type이면 항상 같은 색 */
+const TASK_TYPE_COLOR_CLASSES = [
+  "bg-amber-100 text-amber-900 border-amber-300",
+  "bg-blue-100 text-blue-900 border-blue-300",
+  "bg-emerald-100 text-emerald-900 border-emerald-300",
+  "bg-rose-100 text-rose-900 border-rose-300",
+  "bg-violet-100 text-violet-900 border-violet-300",
+  "bg-cyan-100 text-cyan-900 border-cyan-300",
+  "bg-orange-100 text-orange-900 border-orange-300",
+  "bg-lime-100 text-lime-900 border-lime-300",
+];
 
-export const DEFAULT_TIMELINE_START_HOUR = 6;
-export const DEFAULT_TIMELINE_END_HOUR = 18;
+export function taskTypeColorClass(taskType: string | null | undefined): string {
+  if (!taskType) return "bg-muted text-muted-foreground border-border";
+  let hash = 0;
+  for (let i = 0; i < taskType.length; i++) hash = (hash * 31 + taskType.charCodeAt(i)) >>> 0;
+  return TASK_TYPE_COLOR_CLASSES[hash % TASK_TYPE_COLOR_CLASSES.length]!;
+}
+
+/* ── Timeline 좌표 계산 (compute, don't store) ───────────────────── */
+/* 세로형 24시간 축: 행(row)=시간, 열(column)=품목(Formula/GENERAL) */
+
+export const DEFAULT_TIMELINE_START_HOUR = 0;
+export const DEFAULT_TIMELINE_END_HOUR = 24;
 
 /** 두 ISO 타임스탬프 사이의 분(minute) 차이 (end - start) */
 export function minutesBetween(startIso: string, endIso: string): number {
@@ -67,16 +87,13 @@ export function minutesFromDayStart(iso: string, dayStr: string): number {
 export interface TimelineRange {
   /** Timeline의 기준 날짜(로컬) — Task가 하나도 없으면 오늘 */
   dayStr: string;
-  /** 자정 기준 시작 분 (기본 06:00 = 360, Task가 더 이르면 30분 단위로 확장) */
+  /** 자정 기준 시작 분 — 항상 0(00:00), 24시간 전체를 보여준다 */
   startMinute: number;
-  /** 자정 기준 끝 분 (기본 18:00 = 1080, Task가 더 늦으면 30분 단위로 확장) */
+  /** 자정 기준 끝 분 — 항상 1440(24:00) */
   endMinute: number;
 }
 
-/**
- * 기본 06:00~18:00 범위를 쓰되, 계획된 Task가 그 범위를 벗어나면 30분 단위로 확장한다.
- * 자동으로 첫/마지막 Task에 맞춰 축소하지는 않는다(스펙 8번).
- */
+/** Timeline은 항상 00:00~24:00 하루 전체를 보여준다(스펙: "시간은 24시간"). */
 export function computeTimelineRange(tasks: WorkSessionTask[]): TimelineRange {
   const starts = tasks.map((t) => t.planned_start_at).filter((v): v is string => Boolean(v));
   const dayStr =
@@ -84,39 +101,29 @@ export function computeTimelineRange(tasks: WorkSessionTask[]): TimelineRange {
       ? toLocalDateString(new Date(starts.reduce((a, b) => (a < b ? a : b))))
       : toLocalDateString();
 
-  let startMinute = DEFAULT_TIMELINE_START_HOUR * 60;
-  let endMinute = DEFAULT_TIMELINE_END_HOUR * 60;
-
-  for (const t of tasks) {
-    if (t.planned_start_at) {
-      const m = minutesFromDayStart(t.planned_start_at, dayStr);
-      startMinute = Math.min(startMinute, Math.floor(m / 30) * 30);
-    }
-    if (t.planned_end_at) {
-      const m = minutesFromDayStart(t.planned_end_at, dayStr);
-      endMinute = Math.max(endMinute, Math.ceil(m / 30) * 30);
-    }
-  }
-
-  return { dayStr, startMinute, endMinute };
+  return {
+    dayStr,
+    startMinute: DEFAULT_TIMELINE_START_HOUR * 60,
+    endMinute: DEFAULT_TIMELINE_END_HOUR * 60,
+  };
 }
 
-/** Timeline 위 task bar의 left/width(px) — range와 px-per-minute만 있으면 항상 다시 계산 가능 */
-export function taskBarPosition(
+/** Timeline 위 task block의 top/height(px) — range와 px-per-minute만 있으면 항상 다시 계산 가능 */
+export function taskBlockPosition(
   task: Pick<WorkSessionTask, "planned_start_at" | "planned_end_at">,
   range: TimelineRange,
   pxPerMinute: number,
-): { left: number; width: number } | null {
+): { top: number; height: number } | null {
   if (!task.planned_start_at || !task.planned_end_at) return null;
   const startMin = minutesFromDayStart(task.planned_start_at, range.dayStr);
   const endMin = minutesFromDayStart(task.planned_end_at, range.dayStr);
-  const left = (startMin - range.startMinute) * pxPerMinute;
-  const width = Math.max((endMin - startMin) * pxPerMinute, 4);
-  return { left, width };
+  const top = (startMin - range.startMinute) * pxPerMinute;
+  const height = Math.max((endMin - startMin) * pxPerMinute, 4);
+  return { top, height };
 }
 
-/** "지금"의 timeline 위 px 위치 — 오늘 날짜(range.dayStr)일 때만 의미 있음 */
-export function nowLinePosition(range: TimelineRange, pxPerMinute: number): number | null {
+/** "지금"의 timeline 위 px 위치(세로축 top) — 오늘 날짜(range.dayStr)일 때만 의미 있음 */
+export function nowLineOffset(range: TimelineRange, pxPerMinute: number): number | null {
   const today = toLocalDateString();
   if (today !== range.dayStr) return null;
   const nowMin = minutesFromDayStart(new Date().toISOString(), range.dayStr);
