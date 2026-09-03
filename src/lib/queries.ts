@@ -1140,7 +1140,10 @@ export const workSessionProgressQuery = (sessionId: string) =>
       ),
   });
 
+import type { WorkSessionTask } from "@/lib/workflow";
+
 /** Work Session의 workflow task 목록 (sort_order 기준) */
+
 export const workSessionTasksQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ["work_session_tasks", sessionId],
