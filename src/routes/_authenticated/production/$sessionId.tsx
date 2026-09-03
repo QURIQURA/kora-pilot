@@ -10,6 +10,7 @@ import {
   workSessionMultiplierHistoryQuery,
   workSessionProgressQuery,
   workSessionQuery,
+  workSessionTasksQuery,
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
@@ -25,6 +26,7 @@ import {
   type WorkSessionProgressStatus,
 } from "@/lib/work-session";
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
+import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import {
@@ -72,8 +74,9 @@ function WorkSessionPage() {
   );
   const ingredients = useQuery(versionIngredientsBulkQuery(versionIds));
   const progress = useQuery(workSessionProgressQuery(sessionId));
+  const tasks = useQuery(workSessionTasksQuery(sessionId));
 
-  const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA">("WEIGHING");
+  const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA" | "WORKFLOW">("WEIGHING");
   const [adding, setAdding] = useState(false);
   const [promotingVersionId, setPromotingVersionId] = useState<string | null>(null);
 
@@ -94,6 +97,9 @@ function WorkSessionPage() {
   };
   const invalidateProgress = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_session_progress", sessionId] });
+  };
+  const invalidateTasks = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["work_session_tasks", sessionId] });
   };
 
   const updateSession = useMutation({
@@ -264,40 +270,55 @@ function WorkSessionPage() {
         </div>
       </SectionCard>
 
-      {rows.length > 0 && (
-        <SectionCard
-          title="WORK VIEW"
-          action={
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className={viewMode === "WEIGHING" ? primaryButtonClass : buttonClass}
-                onClick={() => setViewMode("WEIGHING")}
-              >
-                WEIGHING MATRIX
-              </button>
-              <button
-                type="button"
-                className={viewMode === "FORMULA" ? primaryButtonClass : buttonClass}
-                onClick={() => setViewMode("FORMULA")}
-              >
-                FORMULA VIEW
-              </button>
-            </div>
-          }
-        >
-          {viewMode === "WEIGHING" ? (
-            <WeighingView
-              sessionId={sessionId}
-              groups={weighingGroups}
-              columns={orderedSelections}
-              onProgressChanged={invalidateProgress}
-            />
-          ) : (
-            <FormulaView rows={rows} ingredientsByVersion={ingredientsByVersion} />
-          )}
-        </SectionCard>
-      )}
+      <SectionCard
+        title="WORK VIEW"
+        action={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={viewMode === "WEIGHING" ? primaryButtonClass : buttonClass}
+              onClick={() => setViewMode("WEIGHING")}
+            >
+              WEIGHING MATRIX
+            </button>
+            <button
+              type="button"
+              className={viewMode === "FORMULA" ? primaryButtonClass : buttonClass}
+              onClick={() => setViewMode("FORMULA")}
+            >
+              FORMULA VIEW
+            </button>
+            <button
+              type="button"
+              className={viewMode === "WORKFLOW" ? primaryButtonClass : buttonClass}
+              onClick={() => setViewMode("WORKFLOW")}
+            >
+              WORKFLOW
+            </button>
+          </div>
+        }
+      >
+        {viewMode === "WEIGHING" ? (
+          <WeighingView
+            sessionId={sessionId}
+            groups={weighingGroups}
+            columns={orderedSelections}
+            onProgressChanged={invalidateProgress}
+          />
+        ) : viewMode === "FORMULA" ? (
+          <FormulaView rows={rows} ingredientsByVersion={ingredientsByVersion} />
+        ) : (
+          <WorkflowView
+            sessionId={sessionId}
+            tasks={tasks.data ?? []}
+            formulaOptions={orderedSelections.map((s) => ({
+              formulaVersionId: s.formulaVersionId,
+              formulaName: s.formulaName,
+            }))}
+            onTasksChanged={invalidateTasks}
+          />
+        )}
+      </SectionCard>
 
       {promotingRow && (
         <ExperimentCreateModal
