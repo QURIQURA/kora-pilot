@@ -1140,6 +1140,22 @@ export const workSessionProgressQuery = (sessionId: string) =>
       ),
   });
 
+/** Work Session의 workflow task 목록 (sort_order 기준) */
+export const workSessionTasksQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ["work_session_tasks", sessionId],
+    queryFn: async (): Promise<Tables<"work_session_tasks">[]> =>
+      unwrap(
+        await supabase
+          .from("work_session_tasks")
+          .select("*")
+          .eq("work_session_id", sessionId)
+          .order("sort_order"),
+      ),
+  });
+
+
+
 /** Multiplier 변경 이력 — append-only, 최신순 */
 export const workSessionMultiplierHistoryQuery = (
   sessionId: string,
