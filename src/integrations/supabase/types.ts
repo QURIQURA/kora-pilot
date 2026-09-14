@@ -586,6 +586,8 @@ export type Database = {
           flavour_intensity: number | null
           flavour_note: string | null
           id: string
+          ingredient_declaration: string | null
+          ingredient_type: string
           is_functional: boolean
           name: string
           name_en: string | null
@@ -633,6 +635,8 @@ export type Database = {
           flavour_intensity?: number | null
           flavour_note?: string | null
           id?: string
+          ingredient_declaration?: string | null
+          ingredient_type?: string
           is_functional?: boolean
           name: string
           name_en?: string | null
@@ -680,6 +684,8 @@ export type Database = {
           flavour_intensity?: number | null
           flavour_note?: string | null
           id?: string
+          ingredient_declaration?: string | null
+          ingredient_type?: string
           is_functional?: boolean
           name?: string
           name_en?: string | null
@@ -1106,24 +1112,30 @@ export type Database = {
         Row: {
           component_id: string
           created_at: string
+          formula_version_id: string | null
           id: string
           product_id: string
+          quantity_g: number | null
           sort_order: number
           user_id: string
         }
         Insert: {
           component_id: string
           created_at?: string
+          formula_version_id?: string | null
           id?: string
           product_id: string
+          quantity_g?: number | null
           sort_order?: number
           user_id: string
         }
         Update: {
           component_id?: string
           created_at?: string
+          formula_version_id?: string | null
           id?: string
           product_id?: string
+          quantity_g?: number | null
           sort_order?: number
           user_id?: string
         }
@@ -1133,6 +1145,13 @@ export type Database = {
             columns: ["component_id"]
             isOneToOne: false
             referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_components_formula_version_id_fkey"
+            columns: ["formula_version_id"]
+            isOneToOne: false
+            referencedRelation: "formula_versions"
             referencedColumns: ["id"]
           },
           {
