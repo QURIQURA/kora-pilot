@@ -9,12 +9,14 @@ import {
   componentsQuery,
   currentUserId,
   experimentsByProductQuery,
+  formulasByComponentQuery,
   knowledgeEntriesByProductQuery,
   observationsByProductQuery,
   productComponentsQuery,
   productQuery,
   productTagsQuery,
   tagsQuery,
+  type ProductComponentRow,
 } from "@/lib/queries";
 import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
 import {
