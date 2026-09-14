@@ -628,6 +628,78 @@ function AddComponentPanel({
   );
 }
 
+/**
+ * Component 링크마다 "이 Product에서 실제로 어떤 Formula Version을, 몇 그램 쓰는지" 지정.
+ * Component는 Formula Version을 여러 개 가질 수 있으므로 버전까지 지정한다.
+ * Formula 자체의 기준 배합량과 이 Product에서의 실사용량은 다를 수 있다 (예: 배치 1kg 중 150g만 사용).
+ */
+function ComponentUsageEditor({
+  link,
+  onSave,
+}: {
+  link: ProductComponentRow;
+  onSave: (patch: { formula_version_id?: string | null; quantity_g?: number | null }) => void;
+}) {
+  const formulas = useQuery(formulasByComponentQuery(link.component_id));
+  const versionOptions = (formulas.data ?? []).flatMap((formula) =>
+    formula.formula_versions.map((version) => ({
+      id: version.id,
+      label: `${formula.name} · V${version.version_number}${version.status !== "DRAFT" ? ` (${version.status})` : ""}`,
+    })),
+  );
+
+  const [quantityDraft, setQuantityDraft] = useState(link.quantity_g?.toString() ?? "");
+  useEffect(() => {
+    setQuantityDraft(link.quantity_g?.toString() ?? "");
+  }, [link.quantity_g]);
+
+  if (versionOptions.length === 0) {
+    return (
+      <p className="font-mono text-xs uppercase text-muted-foreground">
+        이 COMPONENT에 연결된 FORMULA VERSION이 없음
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        className={selectClass + " w-auto min-w-[14rem]"}
+        value={link.formula_version_id ?? ""}
+        onChange={(e) => onSave({ formula_version_id: e.target.value || null })}
+      >
+        <option value="">FORMULA VERSION 미지정</option>
+        {versionOptions.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          inputMode="decimal"
+          step="any"
+          className={inputClass + " w-28"}
+          placeholder="0"
+          value={quantityDraft}
+          onChange={(e) => setQuantityDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = quantityDraft.trim();
+            const next = trimmed === "" ? null : Number(trimmed);
+            if (next !== null && Number.isNaN(next)) {
+              setQuantityDraft(link.quantity_g?.toString() ?? "");
+              return;
+            }
+            if (next !== (link.quantity_g ?? null)) onSave({ quantity_g: next });
+          }}
+        />
+        <span className="font-mono text-xs text-muted-foreground">G 실사용량</span>
+      </div>
+    </div>
+  );
+}
+
 function ProductKnowledgeSection({ productId }: { productId: string }) {
   const entries = useQuery(knowledgeEntriesByProductQuery(productId));
   const [adding, setAdding] = useState(false);
