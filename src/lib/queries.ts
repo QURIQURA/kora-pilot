@@ -92,6 +92,14 @@ export interface ProductComponentRow {
   sort_order: number;
   component_id: string;
   components: Component;
+  formula_version_id: string | null;
+  quantity_g: number | null;
+  formula_versions: {
+    id: string;
+    version_number: number;
+    status: FormulaVersion["status"];
+    formulas: { id: string; name: string } | null;
+  } | null;
 }
 
 export const productComponentsQuery = (productId: string) =>
@@ -101,7 +109,9 @@ export const productComponentsQuery = (productId: string) =>
       unwrap(
         await supabase
           .from("product_components")
-          .select("id, sort_order, component_id, components(*)")
+          .select(
+            "id, sort_order, component_id, components(*), formula_version_id, quantity_g, formula_versions(id, version_number, status, formulas(id, name))",
+          )
           .eq("product_id", productId)
           .order("sort_order"),
       ) as unknown as ProductComponentRow[],
