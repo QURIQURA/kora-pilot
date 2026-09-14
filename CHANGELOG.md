@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-09-12 — PRODUCT의 COMPONENT마다 실사용 FORMULA VERSION·수량(g) 기록
+
+### 무엇이 달라졌나
+
+- Product 상세 페이지의 **COMPONENTS** 섹션에서, 링크된 Component마다 **이 Product에서 실제로 사용하는 Formula Version**과 **실사용량(g)**을 지정할 수 있습니다. 하나의 Component가 여러 Formula Version을 가질 수 있으므로 Component 단위가 아니라 **Formula Version 단위**로 지정합니다.
+- Formula 자체의 기준 배합량(예: 1kg 배치)과 이 Product에서 실제로 쓰는 양(예: 그중 150g)이 다른 경우를 그대로 기록하기 위한 기능입니다 — Formula의 배합 자체는 전혀 바뀌지 않고, Product↔Component 연결에만 "이 조합에서는 몇 g 쓴다"는 정보가 별도로 붙습니다.
+- Formula Version을 지정하지 않으면 기존과 동일하게 동작합니다("FORMULA VERSION 미지정").
+- DB 변경은 `product_components` 테이블에 컬럼 2개(`formula_version_id`, `quantity_g`)를 추가한 것뿐이며 둘 다 nullable — 기존 링크는 값이 모두 비어 있는 상태로 그대로 유지되고, 다른 테이블/관계는 건드리지 않았습니다(순수 추가).
+
+### 테스트 방법
+
+1. Product 상세 페이지 → COMPONENTS 섹션에서 기존에 링크된 Component들이 그대로 보이는지 확인
+2. 각 Component 아래 새로 생긴 FORMULA VERSION 드롭다운에서 해당 Component에 연결된 Formula의 버전들이 나오는지 확인 → 하나 선택
+3. 옆의 그램(g) 입력란에 실사용량을 입력하고 다른 곳을 클릭 → 저장되는지, 새로고침 후에도 유지되는지 확인
+4. Formula Version이 없는 Component는 "이 COMPONENT에 연결된 FORMULA VERSION이 없음"으로 표시되는지 확인
+5. 다른 Product의 COMPONENTS 목록, Formula 자체의 배합 계산 결과가 전혀 바뀌지 않았는지 확인
+
+---
+
 ## 2026-09-03 — WORKFLOW TIMELINE: 세로형 24시간 그리드로 개편 (행=시간, 열=품목)
 
 ### 무엇이 달라졌나
