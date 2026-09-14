@@ -207,24 +207,27 @@ function ProductDetailPage() {
         ) : (
           <ul className="divide-y divide-border border border-border">
             {(links.data ?? []).map((link) => (
-              <li
-                key={link.id}
-                className="flex flex-wrap items-center justify-between gap-2 px-3 py-3"
-              >
-                <Link
-                  to="/components/$componentId"
-                  params={{ componentId: link.component_id }}
-                  className="text-sm hover:underline"
-                >
-                  {link.components?.name}
-                </Link>
-                <button
-                  type="button"
-                  className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => unlink.mutate(link.id)}
-                >
-                  UNLINK
-                </button>
+              <li key={link.id} className="space-y-2 px-3 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Link
+                    to="/components/$componentId"
+                    params={{ componentId: link.component_id }}
+                    className="text-sm hover:underline"
+                  >
+                    {link.components?.name}
+                  </Link>
+                  <button
+                    type="button"
+                    className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => unlink.mutate(link.id)}
+                  >
+                    UNLINK
+                  </button>
+                </div>
+                <ComponentUsageEditor
+                  link={link}
+                  onSave={(patch) => updateUsage.mutate({ linkId: link.id, patch })}
+                />
               </li>
             ))}
           </ul>
