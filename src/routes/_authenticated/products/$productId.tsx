@@ -108,6 +108,24 @@ function ProductDetailPage() {
     },
   });
 
+  const updateUsage = useMutation({
+    mutationFn: async ({
+      linkId,
+      patch,
+    }: {
+      linkId: string;
+      patch: { formula_version_id?: string | null; quantity_g?: number | null };
+    }) => {
+      const { error } = await supabase.from("product_components").update(patch).eq("id", linkId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["product_components", productId],
+      });
+    },
+  });
+
   const remove = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("products").delete().eq("id", productId);
