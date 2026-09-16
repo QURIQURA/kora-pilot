@@ -333,7 +333,7 @@ export const tagUsageQuery = () =>
 
 /* ── PHASE 3 — MOULDS / FORMULAS ─────────────────────────────── */
 
-import type { Formula, FormulaVersion, Mould } from "@/lib/formula";
+import type { Formula, FormulaVersion, FormulaVersionBatch, Mould } from "@/lib/formula";
 
 export const mouldsQuery = () =>
   queryOptions({
