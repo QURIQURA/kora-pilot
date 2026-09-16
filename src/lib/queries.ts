@@ -400,6 +400,23 @@ export const formulaVersionsQuery = (formulaId: string | null) =>
     },
   });
 
+/** Formula Version마다 저장된, 이름 붙인 배수 프리셋 (예: ×2 → "8인치 시폰몰드") */
+export const formulaVersionBatchesQuery = (versionId: string | null) =>
+  queryOptions({
+    queryKey: ["formula_version_batches", versionId],
+    enabled: Boolean(versionId),
+    queryFn: async (): Promise<FormulaVersionBatch[]> => {
+      if (!versionId) return [];
+      return unwrap(
+        await supabase
+          .from("formula_version_batches")
+          .select("*")
+          .eq("formula_version_id", versionId)
+          .order("sort_order", { ascending: true }),
+      );
+    },
+  });
+
 export interface VersionIngredientRow {
   id: string;
   amount: number;
@@ -440,6 +457,21 @@ export const formulasByComponentQuery = (componentId: string) =>
           .from("formulas")
           .select("*, components(id, name), formula_versions(id, version_number, status)")
           .eq("component_id", componentId)
+          .order("updated_at", { ascending: false }),
+      ) as unknown as FormulaListRow[],
+  });
+
+/** 기준 배합 라이브러리 — component_id가 없는 재사용용 Formula (Component를 빈 배합 대신 여기서 시작할 때 사용) */
+export const baseFormulaLibraryQuery = () =>
+  queryOptions({
+    queryKey: ["base_formula_library"],
+    queryFn: async (): Promise<FormulaListRow[]> =>
+      unwrap(
+        await supabase
+          .from("formulas")
+          .select("*, components(id, name), formula_versions(id, version_number, status)")
+          .is("component_id", null)
+          .eq("is_base_formula", true)
           .order("updated_at", { ascending: false }),
       ) as unknown as FormulaListRow[],
   });

@@ -8,6 +8,7 @@ export type Mould = Tables<"moulds">;
 export type Formula = Tables<"formulas">;
 export type FormulaVersion = Tables<"formula_versions">;
 export type FormulaVersionIngredient = Tables<"formula_version_ingredients">;
+export type FormulaVersionBatch = Tables<"formula_version_batches">;
 
 export const FORMULA_STATUSES = [
   "DRAFT",

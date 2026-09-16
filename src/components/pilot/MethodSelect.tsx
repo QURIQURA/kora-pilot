@@ -12,15 +12,17 @@ export function MethodSelect({
   value,
   onChange,
   className,
+  disabled: disabledProp,
 }: {
   techniqueCategoryId: string;
   value: string;
   onChange: (id: string) => void;
   className?: string;
+  disabled?: boolean;
 }) {
   const methods = useQuery(methodsByTechniqueCategoryQuery(techniqueCategoryId || null));
   const list = methods.data ?? [];
-  const disabled = !techniqueCategoryId;
+  const disabled = disabledProp || !techniqueCategoryId;
 
   return (
     <select
