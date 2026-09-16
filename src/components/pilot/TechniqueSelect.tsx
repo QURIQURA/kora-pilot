@@ -12,11 +12,13 @@ export function TechniqueSelect({
   onChange,
   emptyLabel = "기법 분류 없음",
   className,
+  disabled,
 }: {
   value: string;
   onChange: (id: string) => void;
   emptyLabel?: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const categories = useQuery(techniqueCategoriesQuery());
   const list = categories.data ?? [];
@@ -25,6 +27,7 @@ export function TechniqueSelect({
     <select
       className={className ?? selectClass}
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
     >
       <option value="">{emptyLabel}</option>

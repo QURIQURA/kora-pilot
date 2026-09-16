@@ -159,6 +159,7 @@ export type Database = {
           mould_id: string | null
           next_experiment: string | null
           notes: string | null
+          outcome: Database["public"]["Enums"]["development_outcome"] | null
           processed_weight_g: number | null
           product_id: string | null
           raw_weight_g: number | null
@@ -186,6 +187,7 @@ export type Database = {
           mould_id?: string | null
           next_experiment?: string | null
           notes?: string | null
+          outcome?: Database["public"]["Enums"]["development_outcome"] | null
           processed_weight_g?: number | null
           product_id?: string | null
           raw_weight_g?: number | null
@@ -213,6 +215,7 @@ export type Database = {
           mould_id?: string | null
           next_experiment?: string | null
           notes?: string | null
+          outcome?: Database["public"]["Enums"]["development_outcome"] | null
           processed_weight_g?: number | null
           product_id?: string | null
           raw_weight_g?: number | null
@@ -303,6 +306,47 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      formula_version_batches: {
+        Row: {
+          created_at: string
+          formula_version_id: string
+          id: string
+          label: string | null
+          multiplier: number
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          formula_version_id: string
+          id?: string
+          label?: string | null
+          multiplier?: number
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          formula_version_id?: string
+          id?: string
+          label?: string | null
+          multiplier?: number
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formula_version_batches_formula_version_id_fkey"
+            columns: ["formula_version_id"]
+            isOneToOne: false
+            referencedRelation: "formula_versions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       formula_version_ingredients: {
         Row: {
@@ -431,6 +475,7 @@ export type Database = {
         Row: {
           component_id: string | null
           created_at: string
+          derived_from_formula_id: string | null
           id: string
           is_base_formula: boolean
           method_id: string | null
@@ -443,6 +488,7 @@ export type Database = {
         Insert: {
           component_id?: string | null
           created_at?: string
+          derived_from_formula_id?: string | null
           id?: string
           is_base_formula?: boolean
           method_id?: string | null
@@ -455,6 +501,7 @@ export type Database = {
         Update: {
           component_id?: string | null
           created_at?: string
+          derived_from_formula_id?: string | null
           id?: string
           is_base_formula?: boolean
           method_id?: string | null
@@ -470,6 +517,13 @@ export type Database = {
             columns: ["component_id"]
             isOneToOne: false
             referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulas_derived_from_formula_id_fkey"
+            columns: ["derived_from_formula_id"]
+            isOneToOne: false
+            referencedRelation: "formulas"
             referencedColumns: ["id"]
           },
           {
@@ -1765,6 +1819,7 @@ export type Database = {
       }
     }
     Enums: {
+      development_outcome: "KEEP" | "FAILED" | "PARTIAL" | "REFERENCE"
       experiment_status:
         | "PLANNED"
         | "RUNNING"
@@ -1777,6 +1832,7 @@ export type Database = {
         | "CURRENT"
         | "SUPERSEDED"
         | "ARCHIVED"
+        | "LOGGED"
       process_event_type: "point" | "span"
       product_status: "IDEA" | "ACTIVE" | "TESTING" | "STABLE" | "ARCHIVED"
     }
@@ -1906,6 +1962,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      development_outcome: ["KEEP", "FAILED", "PARTIAL", "REFERENCE"],
       experiment_status: [
         "PLANNED",
         "RUNNING",
@@ -1913,7 +1970,14 @@ export const Constants = {
         "FAILED",
         "CANCELLED",
       ],
-      formula_status: ["DRAFT", "TESTING", "CURRENT", "SUPERSEDED", "ARCHIVED"],
+      formula_status: [
+        "DRAFT",
+        "TESTING",
+        "CURRENT",
+        "SUPERSEDED",
+        "ARCHIVED",
+        "LOGGED",
+      ],
       process_event_type: ["point", "span"],
       product_status: ["IDEA", "ACTIVE", "TESTING", "STABLE", "ARCHIVED"],
     },

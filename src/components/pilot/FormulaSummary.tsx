@@ -12,7 +12,7 @@ import { versionLabel } from "@/lib/formula";
 import { formatDateTime } from "@/lib/datetime";
 import { Field, SectionCard, StatusBadge, buttonClass, inputClass, primaryButtonClass } from "./ui";
 
-function currentVersion(formula: FormulaListRow) {
+export function currentVersion(formula: FormulaListRow) {
   const versions = formula.formula_versions ?? [];
   return (
     versions.find((v) => v.status === "CURRENT") ??
