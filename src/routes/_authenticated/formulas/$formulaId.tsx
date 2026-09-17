@@ -6,6 +6,7 @@ import {
   currentUserId,
   experimentsByVersionQuery,
   formulaQuery,
+  formulaVersionBatchesQuery,
   formulaVersionsQuery,
   mouldsQuery,
   versionIngredientsQuery,
@@ -26,15 +27,21 @@ import {
   versionLabel,
   type FormulaStatus,
   type FormulaVersion,
+  type FormulaVersionBatch,
 } from "@/lib/formula";
 import {
   balanceTotals,
   computeBases,
+  functionalRowCalc,
+  gelatinConvert,
   parseBasisOverrides,
   rowScaledGrams,
+  scaledAmount,
+  type BasisInfo,
+  type BasisKey,
   type BasisOverrides,
 } from "@/lib/formula-calc";
-import { functionShortName } from "@/lib/pilot";
+import { functionShortName, ingredientDisplayName } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { techniquePath } from "@/lib/technique";
 import { confirmBaseFormula } from "@/lib/technique-actions";
@@ -46,12 +53,10 @@ import { IngredientPicker } from "@/components/pilot/IngredientPicker";
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import { BasisPanel } from "@/components/pilot/formula/BasisPanel";
-import {
-  FunctionalIngredientTable,
-  type FunctionalRowPatch,
-} from "@/components/pilot/formula/FunctionalIngredientTable";
+import { RangeBar } from "@/components/pilot/RangeBar";
 import { CompositionPanel } from "@/components/pilot/formula/CompositionPanel";
 import { BalancePanel, balanceSummaryLine } from "@/components/pilot/formula/BalancePanel";
+import { cn } from "@/lib/utils";
 import {
   Field,
   SectionCard,
@@ -77,6 +82,41 @@ export const Route = createFileRoute("/_authenticated/formulas/$formulaId")({
   component: FormulaDetailPage,
 });
 
+/** ingredient row에 patch할 수 있는 필드 (functional/bulk 공통) */
+export interface FunctionalRowPatch {
+  amount?: number;
+  unit?: string;
+  note?: string | null;
+  amount_source?: string;
+}
+
+/** EDIT 모드에서 저장 전까지 들고 있는 로컬 초안 — SAVE를 눌러야 실제로 반영된다 */
+interface RowDraft {
+  amount: string;
+  unit: string;
+  note: string;
+}
+
+interface BatchDraft {
+  label: string;
+  multiplier: string;
+}
+
+interface PageDraft {
+  name: string;
+  techniqueId: string;
+  isBase: boolean;
+  methodId: string;
+  componentId: string;
+  mouldId: string;
+  yieldQuantity: string;
+  notes: string;
+  rows: Record<string, RowDraft>;
+  batches: Record<string, BatchDraft>;
+}
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
 function FormulaDetailPage() {
   const { formulaId } = Route.useParams();
   const queryClient = useQueryClient();
@@ -98,6 +138,10 @@ function FormulaDetailPage() {
   const [creatingVersion, setCreatingVersion] = useState(false);
   const [creatingExperiment, setCreatingExperiment] = useState(false);
 
+  // EDIT / SAVE — 페이지 전체(이름/기법/몰드/노트/재료/배수 프리셋)의 편집 모드
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<PageDraft | null>(null);
+
   useEffect(() => {
     if (versionList.length === 0) return;
     if (versionId && versionList.some((v) => v.id === versionId)) return;
@@ -109,10 +153,16 @@ function FormulaDetailPage() {
   const version = versionList.find((v) => v.id === versionId) ?? null;
   const ingredients = useQuery(versionIngredientsQuery(versionId));
   const rows = ingredients.data ?? [];
+  const batchPresetsQuery = useQuery(formulaVersionBatchesQuery(versionId));
+  const batchPresets = useMemo(() => batchPresetsQuery.data ?? [], [batchPresetsQuery.data]);
   const versionExperiments = useQuery(experimentsByVersionQuery(versionId));
   const experimentCount = versionExperiments.data?.length ?? 0;
 
-  useEffect(() => setUnlocked(false), [versionId]);
+  useEffect(() => {
+    setUnlocked(false);
+    setEditing(false);
+    setDraft(null);
+  }, [versionId]);
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -133,8 +183,58 @@ function FormulaDetailPage() {
     await queryClient.invalidateQueries({
       queryKey: ["formula_version_ingredients", versionId],
     });
+    await queryClient.invalidateQueries({ queryKey: ["formula_version_batches", versionId] });
     await queryClient.invalidateQueries({ queryKey: ["mould_usage"] });
     await queryClient.invalidateQueries({ queryKey: ["formulas_by_technique"] });
+  };
+
+  /** EDIT 진입 — 현재 저장된 값으로 초안을 초기화한다 */
+  const startEditing = () => {
+    if (!formula.data || !version) return;
+    setDraft({
+      name: formula.data.name,
+      techniqueId: formula.data.technique_category_id ?? "",
+      isBase: formula.data.is_base_formula,
+      methodId: formula.data.method_id ?? "",
+      componentId: formula.data.component_id ?? "",
+      mouldId: version.default_mould_id ?? "",
+      yieldQuantity: version.yield_quantity != null ? String(version.yield_quantity) : "",
+      notes: version.notes ?? "",
+      rows: Object.fromEntries(
+        rows.map((row) => [
+          row.id,
+          { amount: String(row.amount), unit: row.unit, note: row.note ?? "" },
+        ]),
+      ),
+      batches: Object.fromEntries(
+        batchPresets.map((preset) => [
+          preset.id,
+          { label: preset.label ?? "", multiplier: String(preset.multiplier) },
+        ]),
+      ),
+    });
+    setEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setDraft(null);
+  };
+
+  const patchRowDraft = (rowId: string, patch: Partial<RowDraft>) => {
+    setDraft((d) => {
+      if (!d) return d;
+      const current = d.rows[rowId] ?? { amount: "0", unit: "g", note: "" };
+      return { ...d, rows: { ...d.rows, [rowId]: { ...current, ...patch } } };
+    });
+  };
+
+  const patchBatchDraft = (batchId: string, patch: Partial<BatchDraft>) => {
+    setDraft((d) => {
+      if (!d) return d;
+      const current = d.batches[batchId] ?? { label: "", multiplier: "1" };
+      return { ...d, batches: { ...d.batches, [batchId]: { ...current, ...patch } } };
+    });
   };
 
   const updateFormula = useMutation({
@@ -144,53 +244,6 @@ function FormulaDetailPage() {
       notes?: string | null;
     }) => {
       const { error } = await supabase.from("formulas").update(patch).eq("id", formulaId);
-      if (error) throw error;
-    },
-    onSuccess: invalidate,
-  });
-
-  /** 기법 분류 변경 + 기준 배합 지정 — 중복 시 확인 후 교체.
-   *  기법이 바뀌면 이전에 고른 METHOD는 새 기법에 안 맞을 수 있으므로 clearMethod로 함께 초기화한다. */
-  const updateTechnique = useMutation({
-    mutationFn: async ({
-      techniqueId,
-      isBase,
-      clearMethod = false,
-    }: {
-      techniqueId: string | null;
-      isBase: boolean;
-      clearMethod?: boolean;
-    }) => {
-      const base = await confirmBaseFormula({ formulaId, techniqueId, isBase });
-      const { error } = await supabase
-        .from("formulas")
-        .update({
-          technique_category_id: techniqueId,
-          is_base_formula: base,
-          ...(clearMethod ? { method_id: null } : {}),
-        })
-        .eq("id", formulaId);
-      if (error) throw error;
-    },
-    onSuccess: invalidate,
-  });
-
-  /** METHOD 변경 — 기법 분류는 그대로 두고 method_id만 바꾼다 */
-  const updateMethod = useMutation({
-    mutationFn: async (methodId: string | null) => {
-      const { error } = await supabase
-        .from("formulas")
-        .update({ method_id: methodId })
-        .eq("id", formulaId);
-      if (error) throw error;
-    },
-    onSuccess: invalidate,
-  });
-
-  const updateVersion = useMutation({
-    mutationFn: async (patch: Partial<FormulaVersion>) => {
-      if (!versionId) return;
-      const { error } = await supabase.from("formula_versions").update(patch).eq("id", versionId);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -214,23 +267,142 @@ function FormulaDetailPage() {
     onSuccess: invalidate,
   });
 
-  const updateRow = useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: FunctionalRowPatch }) => {
-      const { error } = await supabase
-        .from("formula_version_ingredients")
-        .update(patch)
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: invalidate,
-  });
-
   const removeRow = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("formula_version_ingredients").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: invalidate,
+  });
+
+  const addBatchPreset = useMutation({
+    mutationFn: async () => {
+      if (!versionId) return;
+      const user_id = await currentUserId();
+      const { error } = await supabase.from("formula_version_batches").insert({
+        user_id,
+        formula_version_id: versionId,
+        multiplier: 2,
+        label: null,
+        sort_order: batchPresets.length,
+      });
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  const removeBatchPreset = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("formula_version_batches").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  /** SAVE — draft와 저장된 값을 비교해 바뀐 것만 커밋한다 */
+  const saveAll = useMutation({
+    mutationFn: async () => {
+      if (!draft || !formula.data || !version) return;
+
+      // 이름 / component
+      const formulaPatch: { name?: string; component_id?: string | null } = {};
+      const trimmedName = draft.name.trim();
+      if (trimmedName && trimmedName !== formula.data.name) formulaPatch.name = trimmedName;
+      if (draft.componentId !== (formula.data.component_id ?? ""))
+        formulaPatch.component_id = draft.componentId || null;
+      if (Object.keys(formulaPatch).length > 0) {
+        const { error } = await supabase.from("formulas").update(formulaPatch).eq("id", formulaId);
+        if (error) throw error;
+      }
+
+      // 기법 / 기준 배합 / METHOD
+      const techChanged = draft.techniqueId !== (formula.data.technique_category_id ?? "");
+      const baseChanged = draft.isBase !== formula.data.is_base_formula;
+      const methodChanged = draft.methodId !== (formula.data.method_id ?? "");
+      if (techChanged || baseChanged) {
+        const base = await confirmBaseFormula({
+          formulaId,
+          techniqueId: draft.techniqueId || null,
+          isBase: draft.isBase,
+        });
+        const { error } = await supabase
+          .from("formulas")
+          .update({
+            technique_category_id: draft.techniqueId || null,
+            is_base_formula: base,
+            method_id: draft.methodId || null,
+          })
+          .eq("id", formulaId);
+        if (error) throw error;
+      } else if (methodChanged) {
+        const { error } = await supabase
+          .from("formulas")
+          .update({ method_id: draft.methodId || null })
+          .eq("id", formulaId);
+        if (error) throw error;
+      }
+
+      // 버전(몰드/YIELD/NOTES)
+      const versionPatch: Partial<FormulaVersion> = {};
+      if (draft.mouldId !== (version.default_mould_id ?? ""))
+        versionPatch.default_mould_id = draft.mouldId || null;
+      const draftYield = draft.yieldQuantity ? parseNumber(draft.yieldQuantity) : null;
+      const currentYield = version.yield_quantity != null ? Number(version.yield_quantity) : null;
+      if (draftYield !== currentYield) versionPatch.yield_quantity = draftYield;
+      if (draft.notes !== (version.notes ?? "")) versionPatch.notes = draft.notes;
+      if (Object.keys(versionPatch).length > 0) {
+        const { error } = await supabase
+          .from("formula_versions")
+          .update(versionPatch)
+          .eq("id", versionId!);
+        if (error) throw error;
+      }
+
+      // 재료 행
+      for (const row of rows) {
+        const d = draft.rows[row.id];
+        if (!d) continue;
+        const patch: FunctionalRowPatch = {};
+        const nextAmount = parseNumber(d.amount);
+        if (nextAmount !== Number(row.amount)) {
+          patch.amount = nextAmount;
+          patch.amount_source = "manual";
+        }
+        if (d.unit !== row.unit) patch.unit = d.unit;
+        const nextNote = d.note.trim() || null;
+        if (nextNote !== (row.note ?? null)) patch.note = nextNote;
+        if (Object.keys(patch).length > 0) {
+          const { error } = await supabase
+            .from("formula_version_ingredients")
+            .update(patch)
+            .eq("id", row.id);
+          if (error) throw error;
+        }
+      }
+
+      // 배수 프리셋 (이름/배수)
+      for (const preset of batchPresets) {
+        const d = draft.batches[preset.id];
+        if (!d) continue;
+        const patch: Partial<FormulaVersionBatch> = {};
+        const nextMultiplier = parseNumber(d.multiplier) || Number(preset.multiplier);
+        if (nextMultiplier !== Number(preset.multiplier)) patch.multiplier = nextMultiplier;
+        const nextLabel = d.label.trim() || null;
+        if (nextLabel !== (preset.label ?? null)) patch.label = nextLabel;
+        if (Object.keys(patch).length > 0) {
+          const { error } = await supabase
+            .from("formula_version_batches")
+            .update(patch)
+            .eq("id", preset.id);
+          if (error) throw error;
+        }
+      }
+    },
+    onSuccess: async () => {
+      await invalidate();
+      setEditing(false);
+      setDraft(null);
+    },
   });
 
   const createVersion = useMutation({
@@ -303,9 +475,6 @@ function FormulaDetailPage() {
   const bathWaterG = version?.bath_water_g != null ? Number(version.bath_water_g) : null;
   const bases = computeBases(rows, overrides, bathWaterG);
 
-  const bulkRows = rows.filter((r) => !r.ingredients?.is_functional);
-  const functionalRows = rows.filter((r) => r.ingredients?.is_functional);
-
   // 총 중량 — N^k 스케일링 반영
   const totalGrams = rows.reduce((sum, row) => {
     const grams = toGrams(Number(row.amount), row.unit);
@@ -316,7 +485,7 @@ function FormulaDetailPage() {
   // 배수 ≥ 2 + process_note 보유 재료 → 공정 주의
   const processCautions = batchValue >= 2 ? rows.filter((r) => r.ingredients?.process_note) : [];
 
-  // baker's % 기준 (벌크 테이블 수동 선택)
+  // baker's % 기준 (테이블 수동 선택)
   const basisRow = rows.find((r) => r.ingredient_id === basisId) ?? null;
   const basisGrams = basisRow ? (toGrams(Number(basisRow.amount), basisRow.unit) ?? 0) : 0;
   const denominator = basisRow ? basisGrams : totalGrams;
@@ -329,18 +498,21 @@ function FormulaDetailPage() {
   const technique = techniquePathList[techniquePathList.length - 1] ?? null;
   const method = (methods.data ?? []).find((m) => m.id === formula.data.method_id) ?? null;
 
+  const canEditPage = !locked && Boolean(version);
+  const fieldsDisabled = locked || !editing;
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
           <input
-            className="w-full max-w-lg border border-transparent bg-transparent px-0 py-1 text-lg text-foreground outline-none hover:border-border focus:border-foreground"
-            defaultValue={formula.data.name}
-            onBlur={(e) => {
-              const name = e.target.value.trim();
-              if (name && name !== formula.data?.name) updateFormula.mutate({ name });
-            }}
+            className="w-full max-w-lg border border-transparent bg-transparent px-0 py-1 text-lg text-foreground outline-none hover:border-border focus:border-foreground disabled:cursor-not-allowed disabled:opacity-70"
+            value={editing ? (draft?.name ?? "") : formula.data.name}
+            disabled={fieldsDisabled}
+            onChange={(e) =>
+              setDraft((d) => (d ? { ...d, name: e.target.value } : d))
+            }
           />
           {technique && (
             <div className="flex flex-wrap items-center gap-2">
@@ -370,40 +542,41 @@ function FormulaDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <TechniqueSelect
             className={`${selectClass} w-auto`}
-            value={formula.data.technique_category_id ?? ""}
-            onChange={(id) =>
-              updateTechnique.mutate({
-                techniqueId: id || null,
-                isBase: id ? formula.data!.is_base_formula : false,
-                clearMethod: true,
-              })
-            }
+            value={editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")}
+            disabled={fieldsDisabled}
+            onChange={(id) => setDraft((d) => (d ? { ...d, techniqueId: id ?? "" } : d))}
           />
           <MethodSelect
             className={`${selectClass} w-auto`}
-            techniqueCategoryId={formula.data.technique_category_id ?? ""}
-            value={formula.data.method_id ?? ""}
-            onChange={(id) => updateMethod.mutate(id || null)}
+            techniqueCategoryId={
+              editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")
+            }
+            value={editing ? (draft?.methodId ?? "") : (formula.data.method_id ?? "")}
+            disabled={fieldsDisabled}
+            onChange={(id) => setDraft((d) => (d ? { ...d, methodId: id ?? "" } : d))}
           />
           <label className="flex min-h-[44px] items-center gap-2 text-xs">
             <input
               type="checkbox"
               className="h-5 w-5 border border-input"
-              checked={formula.data.is_base_formula}
-              disabled={!formula.data.technique_category_id}
+              checked={editing ? (draft?.isBase ?? false) : formula.data.is_base_formula}
+              disabled={
+                fieldsDisabled ||
+                !(editing ? draft?.techniqueId : formula.data.technique_category_id)
+              }
               onChange={(e) =>
-                updateTechnique.mutate({
-                  techniqueId: formula.data!.technique_category_id,
-                  isBase: e.target.checked,
-                })
+                setDraft((d) => (d ? { ...d, isBase: e.target.checked } : d))
               }
             />
             <span className="label-caps">기준 배합</span>
           </label>
           <select
             className={`${selectClass} w-auto`}
-            value={formula.data.component_id ?? ""}
-            onChange={(e) => updateFormula.mutate({ component_id: e.target.value || null })}
+            value={editing ? (draft?.componentId ?? "") : (formula.data.component_id ?? "")}
+            disabled={fieldsDisabled}
+            onChange={(e) =>
+              setDraft((d) => (d ? { ...d, componentId: e.target.value } : d))
+            }
           >
             <option value="">NO COMPONENT</option>
             {(components.data ?? []).map((component) => (
@@ -424,7 +597,40 @@ function FormulaDetailPage() {
         </div>
       </div>
 
-      {/* VERSION BAR */}
+      {/* EDIT/SAVE — 콘텐츠 편집 상태 전환은 버전 선택과 분리된 별도 줄에서, 항상 가장 먼저 보이게 */}
+      {canEditPage && (
+        <div className="flex flex-wrap items-center gap-3 border border-foreground bg-card px-4 py-3">
+          {!editing ? (
+            <>
+              <button type="button" className={primaryButtonClass} onClick={startEditing}>
+                EDIT
+              </button>
+              <span className="label-caps text-[11px] text-muted-foreground">
+                ✓ SAVED — 편집하려면 EDIT을 누르세요
+              </span>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={primaryButtonClass}
+                disabled={saveAll.isPending}
+                onClick={() => saveAll.mutate()}
+              >
+                {saveAll.isPending ? "SAVING…" : "SAVE"}
+              </button>
+              <button type="button" className={buttonClass} onClick={cancelEditing}>
+                CANCEL
+              </button>
+              <span className="label-caps text-[11px] text-muted-foreground">
+                편집 중 — 저장되지 않았습니다
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* VERSION BAR — 버전 전환/상태/잠금 해제는 별도 줄 */}
       <div className="flex flex-wrap items-center gap-2 border border-border bg-card p-4">
         <select
           className={`${selectClass} w-auto`}
@@ -441,7 +647,16 @@ function FormulaDetailPage() {
         <select
           className={`${selectClass} w-auto`}
           value={version?.status ?? "DRAFT"}
-          onChange={(e) => updateVersion.mutate({ status: e.target.value as FormulaStatus })}
+          onChange={(e) =>
+            supabase
+              .from("formula_versions")
+              .update({ status: e.target.value as FormulaStatus })
+              .eq("id", versionId!)
+              .then(({ error }) => {
+                if (error) throw error;
+                return invalidate();
+              })
+          }
         >
           {FORMULA_STATUSES.map((status) => (
             <option key={status} value={status}>
@@ -456,6 +671,7 @@ function FormulaDetailPage() {
             onClick={() => {
               if (unlocked) {
                 setUnlocked(false);
+                cancelEditing();
                 return;
               }
               const ok = confirm(
@@ -466,21 +682,23 @@ function FormulaDetailPage() {
               if (ok) setUnlocked(true);
             }}
           >
-            {unlocked ? "LOCK" : "EDIT"}
+            {unlocked ? "RE-LOCK" : "UNLOCK"}
           </button>
         )}
-        <button
-          type="button"
-          className={primaryButtonClass}
-          onClick={() => setCreatingVersion(true)}
-        >
+        <button type="button" className={buttonClass} onClick={() => setCreatingVersion(true)}>
           + NEW VERSION
         </button>
       </div>
 
       {locked && version && isLockedStatus(version.status) && (
         <p className="border border-dashed border-border px-4 py-3 font-mono text-xs uppercase text-muted-foreground">
-          READ ONLY — {version.status} VERSION. USE [EDIT] OR CREATE A NEW VERSION.
+          READ ONLY — {version.status} VERSION. USE [UNLOCK] OR CREATE A NEW VERSION.
+        </p>
+      )}
+
+      {!locked && !editing && (
+        <p className="border border-dashed border-border px-4 py-3 font-mono text-xs uppercase text-muted-foreground">
+          VIEW MODE — CLICK [EDIT] TO CHANGE NAME/TECHNIQUE/MOULD/NOTES/INGREDIENTS/BATCH PRESETS.
         </p>
       )}
 
@@ -503,9 +721,9 @@ function FormulaDetailPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="MOULD">
             <MouldSelect
-              value={version?.default_mould_id ?? ""}
-              disabled={locked}
-              onChange={(id) => updateVersion.mutate({ default_mould_id: id || null })}
+              value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
+              disabled={fieldsDisabled}
+              onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id ?? "" } : d))}
             />
           </Field>
           <Field label="YIELD (QTY)">
@@ -514,17 +732,14 @@ function FormulaDetailPage() {
               inputMode="decimal"
               step="0.5"
               className={`${inputClass} min-h-[52px] text-base`}
-              disabled={locked}
-              defaultValue={version?.yield_quantity ?? ""}
-              key={`yield-${versionId}`}
-              onBlur={(e) =>
-                updateVersion.mutate({
-                  yield_quantity: e.target.value ? parseNumber(e.target.value) : null,
-                })
+              disabled={fieldsDisabled}
+              value={editing ? draft?.yieldQuantity ?? "" : (version?.yield_quantity ?? "")}
+              onChange={(e) =>
+                setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))
               }
             />
           </Field>
-          <Field label="BATCH ×N (VIEW ONLY)">
+          <Field label="BATCH ×N (VIEW ONLY, QUICK PREVIEW)">
             <input
               type="number"
               inputMode="decimal"
@@ -562,19 +777,33 @@ function FormulaDetailPage() {
           bathWaterG={bathWaterG}
           locked={locked}
           onOverridesChange={(next) =>
-            updateVersion.mutate({
-              basis_overrides: next as unknown as FormulaVersion["basis_overrides"],
-            })
+            supabase
+              .from("formula_versions")
+              .update({ basis_overrides: next as unknown as FormulaVersion["basis_overrides"] })
+              .eq("id", versionId!)
+              .then(({ error }) => {
+                if (error) throw error;
+                return invalidate();
+              })
           }
-          onBathChange={(grams) => updateVersion.mutate({ bath_water_g: grams })}
+          onBathChange={(grams) =>
+            supabase
+              .from("formula_versions")
+              .update({ bath_water_g: grams })
+              .eq("id", versionId!)
+              .then(({ error }) => {
+                if (error) throw error;
+                return invalidate();
+              })
+          }
         />
       )}
 
-      {/* BULK INGREDIENTS */}
+      {/* INGREDIENTS — BASE ×1 vs 저장된 배수 프리셋을 한 표 안에서 박스로 구분해 보여준다 */}
       <SectionCard
-        title="BULK INGREDIENTS"
+        title="INGREDIENTS"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               className="label-caps border border-input bg-background px-2 py-2 text-xs"
               value={basisId}
@@ -587,6 +816,15 @@ function FormulaDetailPage() {
                 </option>
               ))}
             </select>
+            {editing && (
+              <button
+                type="button"
+                className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+                onClick={() => addBatchPreset.mutate()}
+              >
+                + ADD BATCH
+              </button>
+            )}
             {!locked && (
               <button
                 type="button"
@@ -599,40 +837,84 @@ function FormulaDetailPage() {
           </div>
         }
       >
-        {bulkRows.length === 0 ? (
+        {rows.length === 0 ? (
           <p className="font-mono text-xs uppercase text-muted-foreground">
-            NO BULK INGREDIENTS IN THIS VERSION
+            NO INGREDIENTS IN THIS VERSION
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse">
+            <table className="w-full min-w-[960px] border-collapse">
               <thead>
                 <tr className="border-b border-border text-left">
-                  {[
-                    "INGREDIENT",
-                    "BASE ×1",
-                    `×${fmtNumber(batchValue, 2)} BATCH`,
-                    "UNIT",
-                    "%",
-                    "FUNCTION",
-                    "NOTE",
-                    "",
-                  ].map((header) => (
-                    <th key={header} className="label-caps px-2 py-2 text-xs text-muted-foreground">
-                      {header}
+                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">
+                    INGREDIENT
+                  </th>
+                  <th className="label-caps border-r border-border bg-secondary/40 px-2 py-2 text-xs text-muted-foreground">
+                    BASE ×1
+                  </th>
+                  {batchPresets.map((preset) => (
+                    <th
+                      key={preset.id}
+                      className="label-caps border-r border-dashed border-border px-2 py-2 text-xs text-muted-foreground"
+                    >
+                      {editing ? (
+                        <div className="flex flex-col gap-1 normal-case">
+                          <input
+                            className="min-h-[36px] w-28 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
+                            placeholder="이름 (예: 8인치 시폰몰드)"
+                            value={draft?.batches[preset.id]?.label ?? ""}
+                            onChange={(e) => patchBatchDraft(preset.id, { label: e.target.value })}
+                          />
+                          <div className="flex items-center gap-1">
+                            <span>×</span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              step="0.1"
+                              className="min-h-[36px] w-16 border border-input bg-background px-1 py-1 font-mono text-xs outline-none focus:border-foreground"
+                              value={draft?.batches[preset.id]?.multiplier ?? ""}
+                              onChange={(e) =>
+                                patchBatchDraft(preset.id, { multiplier: e.target.value })
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="label-caps px-1 text-[10px] hover:bg-secondary"
+                              onClick={() => removeBatchPreset.mutate(preset.id)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          ×{fmtNumber(Number(preset.multiplier), 2)}
+                          {preset.label ? ` · ${preset.label}` : ""}
+                        </>
+                      )}
                     </th>
                   ))}
+                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">UNIT</th>
+                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">
+                    %  / RATE
+                  </th>
+                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">FUNCTION</th>
+                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">NOTE</th>
+                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground" />
                 </tr>
               </thead>
               <tbody>
-                {bulkRows.map((row) => (
-                  <IngredientTableRow
+                {rows.map((row) => (
+                  <UnifiedIngredientRow
                     key={row.id}
                     row={row}
                     locked={locked}
-                    batch={batchValue}
+                    editing={editing}
+                    batchPresets={batchPresets}
                     denominator={denominator}
-                    onPatch={(patch) => updateRow.mutate({ id: row.id, patch })}
+                    bases={bases}
+                    draft={draft?.rows[row.id] ?? null}
+                    onDraftChange={(patch) => patchRowDraft(row.id, patch)}
                     onRemove={() => removeRow.mutate(row.id)}
                   />
                 ))}
@@ -640,31 +922,6 @@ function FormulaDetailPage() {
             </table>
           </div>
         )}
-      </SectionCard>
-
-      {/* FUNCTIONAL INGREDIENTS */}
-      <SectionCard
-        title="FUNCTIONAL INGREDIENTS"
-        action={
-          !locked ? (
-            <button
-              type="button"
-              className="label-caps px-2 py-2 text-xs hover:bg-secondary"
-              onClick={() => setAdding(true)}
-            >
-              + ADD INGREDIENT
-            </button>
-          ) : undefined
-        }
-      >
-        <FunctionalIngredientTable
-          rows={functionalRows}
-          bases={bases}
-          locked={locked}
-          batch={batchValue}
-          onPatch={(id, patch) => updateRow.mutate({ id, patch })}
-          onRemove={(id) => removeRow.mutate(id)}
-        />
       </SectionCard>
 
       {/* COMPOSITION / BALANCE */}
@@ -675,17 +932,16 @@ function FormulaDetailPage() {
       <SectionCard title="VERSION NOTES">
         <textarea
           rows={3}
-          key={`notes-${versionId}`}
           className={inputClass}
-          disabled={locked}
-          defaultValue={version?.notes ?? ""}
-          onBlur={(e) => updateVersion.mutate({ notes: e.target.value })}
+          disabled={fieldsDisabled}
+          value={editing ? (draft?.notes ?? "") : (version?.notes ?? "")}
+          onChange={(e) => setDraft((d) => (d ? { ...d, notes: e.target.value } : d))}
         />
       </SectionCard>
 
-      {/* RELATED EXPERIMENTS */}
+      {/* DEVELOPMENT HISTORY — 이 배합(버전)에 대해 기록된 Development Entry들 */}
       <SectionCard
-        title="RELATED EXPERIMENTS"
+        title="DEVELOPMENT HISTORY"
         action={
           <button
             type="button"
@@ -693,7 +949,7 @@ function FormulaDetailPage() {
             onClick={() => setCreatingExperiment(true)}
             disabled={!versionId}
           >
-            + NEW EXPERIMENT
+            + START DEVELOPMENT
           </button>
         }
       >
@@ -701,11 +957,7 @@ function FormulaDetailPage() {
       </SectionCard>
 
       {/* HISTORY */}
-      <VersionHistory
-        formulaId={formulaId}
-        versions={versionList}
-        onOpen={(id) => setVersionId(id)}
-      />
+      <VersionHistory formulaId={formulaId} versions={versionList} onOpen={(id) => setVersionId(id)} />
 
       <button
         type="button"
@@ -727,11 +979,7 @@ function FormulaDetailPage() {
           <div className="w-full max-w-md border border-border bg-background">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <span className="label-caps">ADD INGREDIENT</span>
-              <button
-                type="button"
-                className="label-caps px-2 py-2"
-                onClick={() => setAdding(false)}
-              >
+              <button type="button" className="label-caps px-2 py-2" onClick={() => setAdding(false)}>
                 CLOSE
               </button>
             </div>
@@ -780,98 +1028,318 @@ function FormulaDetailPage() {
   );
 }
 
-function IngredientTableRow({
+/**
+ * 하나의 재료 행 — BULK/FUNCTIONAL을 구조적으로 나누지 않고 한 표 안에서
+ * FUNCTION 재료만 뱃지/틴트로 시각 구분한다. BASE ×1 옆에 저장된 배수 프리셋들이
+ * 같은 행에 열로 나열된다 (읽기 전용 스케일 표시 — 저장값은 amount 하나뿐).
+ */
+function UnifiedIngredientRow({
   row,
   locked,
-  batch,
+  editing,
+  batchPresets,
   denominator,
-  onPatch,
+  bases,
+  draft,
+  onDraftChange,
   onRemove,
 }: {
   row: VersionIngredientRow;
   locked: boolean;
-  batch: number;
+  editing: boolean;
+  batchPresets: FormulaVersionBatch[];
   denominator: number;
-  onPatch: (patch: FunctionalRowPatch) => void;
+  bases: Record<BasisKey, BasisInfo>;
+  draft: RowDraft | null;
+  onDraftChange: (patch: Partial<RowDraft>) => void;
   onRemove: () => void;
 }) {
-  const amount = Number(row.amount);
-  const grams = toGrams(amount, row.unit);
+  const [targetPctOpen, setTargetPctOpen] = useState(false);
+  const [targetPct, setTargetPct] = useState("");
+  const [bloomOpen, setBloomOpen] = useState(false);
+  const [myBloom, setMyBloom] = useState("");
+
+  const ing = row.ingredients;
+  const isFunctional = Boolean(ing?.is_functional);
+  const savedAmount = Number(row.amount);
+  const amount = editing && draft ? parseNumber(draft.amount) : savedAmount;
+  const unit = editing && draft ? draft.unit : row.unit;
+  const note = editing && draft ? draft.note : (row.note ?? "");
+  const source = row.amount_source ?? "manual";
+  const unitFactor = toGrams(1, unit);
+
+  const calc = isFunctional ? functionalRowCalc(row, bases) : null;
+  const grams = toGrams(amount, unit);
   const percent = denominator > 0 && grams !== null ? (grams / denominator) * 100 : null;
-  const functions = (row.ingredients?.ingredient_function_links ?? [])
+  const functions = (ing?.ingredient_function_links ?? [])
     .map((link) => link.ingredient_functions)
     .filter((fn) => Boolean(fn))
     .map((fn) => functionShortName(fn!))
     .join(" / ");
-  const scaled = rowScaledGrams(row, batch);
+
+  // 설계 모드 제안값 — 편집 중이고 양이 비어 있을 때만
+  const showSuggestion = editing && !locked && amount === 0 && calc?.suggestedInUnit != null;
+  const showResync =
+    editing &&
+    !locked &&
+    amount > 0 &&
+    calc?.suggestedInUnit != null &&
+    Math.abs(calc.suggestedInUnit - amount) / Math.max(amount, 1e-9) > 0.01 &&
+    (calc.status === "low" || calc.status === "high" || source === "suggested");
+
+  const bloomSuggestion =
+    ing?.bloom != null && amount > 0 && myBloom
+      ? gelatinConvert(amount, Number(ing.bloom), parseNumber(myBloom))
+      : null;
+
+  const applyTargetPct = () => {
+    const pct = parseNumber(targetPct);
+    if (pct <= 0 || calc?.basisGrams == null || !unitFactor) return;
+    onDraftChange({
+      amount: String(round2((calc.basisGrams * pct) / 100 / unitFactor)),
+    });
+    setTargetPctOpen(false);
+    setTargetPct("");
+  };
 
   return (
-    <tr className="border-b border-border align-middle">
+    <tr
+      className={cn(
+        "border-b border-border align-top",
+        isFunctional && "bg-secondary/20",
+      )}
+    >
+      {/* INGREDIENT + 출처/기능 뱃지 */}
       <td className="px-2 py-2 text-sm">
         <Link
           to="/ingredients/$ingredientId"
           params={{ ingredientId: row.ingredient_id }}
           className="hover:underline"
         >
-          {row.ingredients?.name ?? "—"}
+          {ing ? ingredientDisplayName(ing) : "—"}
         </Link>
+        {isFunctional && (
+          <span className="label-caps ml-2 border border-foreground px-1.5 py-0.5 text-[10px]">
+            FUNCTIONAL
+          </span>
+        )}
+        {source === "suggested" && (
+          <span className="label-caps ml-2 border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            권장값
+          </span>
+        )}
+        {source === "copied" && (
+          <span className="label-caps ml-2 border border-dashed border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            복사됨
+          </span>
+        )}
+        {ing?.bloom != null && editing && !locked && (
+          <button
+            type="button"
+            className="label-caps ml-2 px-1 py-0.5 text-[10px] text-muted-foreground hover:bg-secondary"
+            onClick={() => setBloomOpen((v) => !v)}
+          >
+            BLOOM {fmtNumber(Number(ing.bloom), 0)}
+          </button>
+        )}
+        {bloomOpen && ing?.bloom != null && (
+          <div className="mt-1 flex flex-wrap items-center gap-1 font-mono text-xs">
+            <span className="text-muted-foreground">내 제품 BLOOM</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              className="min-h-[44px] w-20 border border-input bg-background px-2 py-1 text-base outline-none focus:border-foreground"
+              value={myBloom}
+              onChange={(e) => setMyBloom(e.target.value)}
+            />
+            {bloomSuggestion != null && (
+              <>
+                <span className="tabular-nums">
+                  → {fmtNumber(bloomSuggestion, 1)}
+                  {unit}
+                </span>
+                <button
+                  type="button"
+                  className="label-caps border border-foreground px-2 py-1 text-[10px] hover:bg-secondary"
+                  onClick={() => {
+                    onDraftChange({ amount: String(round2(bloomSuggestion)) });
+                    setBloomOpen(false);
+                    setMyBloom("");
+                  }}
+                >
+                  적용
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        {ing?.process_note && (
+          <p className="mt-1 max-w-48 font-mono text-[10px] uppercase text-muted-foreground">
+            ⚠ {ing.process_note}
+          </p>
+        )}
       </td>
-      <td className="px-2 py-2">
+
+      {/* BASE ×1 — amount 입력 (EDIT 중에만 실제로 바뀌고, SAVE 전까지 저장되지 않는다) */}
+      <td className="border-r border-border bg-secondary/40 px-2 py-2">
         <input
           type="number"
           inputMode="decimal"
           step="0.1"
-          className="min-h-[48px] w-24 border border-input bg-background px-2 py-2 font-mono text-base tabular-nums outline-none focus:border-foreground disabled:opacity-60"
-          disabled={locked}
-          defaultValue={amount}
-          key={`amt-${row.id}-${amount}`}
-          onBlur={(e) => {
-            const next = parseNumber(e.target.value);
-            // 직접 수정하면 manual이 된다 (copied → manual 전환)
-            if (next !== amount) onPatch({ amount: next, amount_source: "manual" });
-          }}
+          className={cn(
+            "min-h-[48px] w-24 border bg-background px-2 py-2 font-mono text-base tabular-nums outline-none focus:border-foreground disabled:opacity-60",
+            showSuggestion ? "border-dashed border-input text-muted-foreground" : "border-input",
+          )}
+          disabled={locked || !editing}
+          placeholder="0"
+          value={editing ? (draft?.amount ?? "") : String(savedAmount)}
+          onChange={(e) => onDraftChange({ amount: e.target.value })}
         />
-      </td>
-      <td className="bg-secondary px-2 py-2 font-mono text-sm tabular-nums">
-        {fmtNumber(scaled.scaled, 2)}
-        {scaled.nonLinear && (
-          <span className="block text-[10px] text-muted-foreground">
-            비례 시 {fmtNumber(scaled.linear, 2)}
-          </span>
+        {showSuggestion && calc && (
+          <div className="mt-1 space-y-1">
+            <p className="font-mono text-xs tabular-nums text-muted-foreground">
+              ≈ {fmtNumber(calc.suggestedInUnit!, 2)}
+              {unit} ({fmtNumber(calc.midPct!, 1)}%) — 권장 중앙값
+            </p>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className="label-caps border border-foreground px-2 py-1 text-[10px] hover:bg-secondary"
+                onClick={() => onDraftChange({ amount: String(round2(calc.suggestedInUnit!)) })}
+              >
+                적용
+              </button>
+              <button
+                type="button"
+                className="label-caps border border-input px-2 py-1 text-[10px] hover:bg-secondary"
+                onClick={() => setTargetPctOpen((v) => !v)}
+              >
+                목표 %로 채우기
+              </button>
+            </div>
+            {targetPctOpen && (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  className="min-h-[44px] w-20 border border-input bg-background px-2 py-1 font-mono text-base outline-none focus:border-foreground"
+                  placeholder="%"
+                  value={targetPct}
+                  onChange={(e) => setTargetPct(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="label-caps border border-foreground px-2 py-1 text-[10px] hover:bg-secondary"
+                  onClick={applyTargetPct}
+                >
+                  적용
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {showResync && calc && (
+          <button
+            type="button"
+            className="label-caps mt-1 border border-dashed border-foreground px-2 py-1 text-[10px] hover:bg-secondary"
+            onClick={() => onDraftChange({ amount: String(round2(calc.suggestedInUnit!)) })}
+          >
+            기준량 변경됨 — {fmtNumber(calc.midPct!, 1)}%로 다시 맞추기 →{" "}
+            {fmtNumber(calc.suggestedInUnit!, 2)}
+            {unit}
+          </button>
         )}
       </td>
+
+      {/* 저장된 배수 프리셋 컬럼들 — 계산 전용, 저장하지 않음 */}
+      {batchPresets.map((preset) => {
+        const scaled = scaledAmount(
+          amount,
+          ing?.scaling_mode,
+          ing?.scaling_exponent != null ? Number(ing.scaling_exponent) : null,
+          Number(preset.multiplier),
+        );
+        return (
+          <td
+            key={preset.id}
+            className="border-r border-dashed border-border px-2 py-2 font-mono text-sm tabular-nums"
+          >
+            {fmtNumber(scaled.scaled, 2)}
+            {scaled.nonLinear && (
+              <span className="block text-[10px] text-muted-foreground">
+                비례 시 {fmtNumber(scaled.linear, 2)}
+              </span>
+            )}
+          </td>
+        );
+      })}
+
+      {/* UNIT */}
       <td className="px-2 py-2">
         <select
           className="min-h-[48px] w-20 border border-input bg-background px-2 py-2 font-mono text-sm disabled:opacity-60"
-          disabled={locked}
-          value={row.unit}
-          onChange={(e) => onPatch({ unit: e.target.value })}
+          disabled={locked || !editing}
+          value={unit}
+          onChange={(e) => onDraftChange({ unit: e.target.value })}
         >
-          {UNITS.map((unit) => (
-            <option key={unit} value={unit}>
-              {unit}
+          {UNITS.map((u) => (
+            <option key={u} value={u}>
+              {u}
             </option>
           ))}
         </select>
       </td>
+
+      {/* % / RATE */}
       <td className="px-2 py-2 font-mono text-sm tabular-nums">
-        {percent === null ? "—" : `${fmtNumber(percent, 1)}%`}
+        {isFunctional && calc ? (
+          calc.ratePct != null ? (
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex">
+                <RangeBar value={calc.ratePct} min={calc.recMinPct} max={calc.recMaxPct} />
+              </span>
+              <span>
+                {fmtNumber(calc.ratePct, 1)}%
+                <span className="block text-[10px] uppercase text-muted-foreground">
+                  of {calc.basisLabel}{" "}
+                  {calc.basisGrams != null ? `${fmtNumber(calc.basisGrams)}g` : "—"}
+                </span>
+                {calc.recMinPct != null && calc.recMaxPct != null && (
+                  <span className="block text-[10px] text-muted-foreground">
+                    권장 {fmtNumber(calc.recMinPct, 1)}–{fmtNumber(calc.recMaxPct, 1)}%{" "}
+                    {calc.status === "in" && "✓"}
+                    {calc.status === "low" && "LOW"}
+                    {calc.status === "high" && "HIGH"}
+                  </span>
+                )}
+              </span>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )
+        ) : percent === null ? (
+          "—"
+        ) : (
+          `${fmtNumber(percent, 1)}%`
+        )}
       </td>
+
+      {/* FUNCTION */}
       <td className="px-2 py-2 font-mono text-xs uppercase text-muted-foreground">
         {functions || "—"}
       </td>
+
+      {/* NOTE */}
       <td className="px-2 py-2">
         <input
           className="min-h-[48px] w-40 border border-input bg-background px-2 py-2 text-base outline-none focus:border-foreground disabled:opacity-60"
-          disabled={locked}
-          defaultValue={row.note ?? ""}
-          key={`note-${row.id}`}
-          onBlur={(e) => {
-            const note = e.target.value.trim() || null;
-            if (note !== (row.note ?? null)) onPatch({ note });
-          }}
+          disabled={locked || !editing}
+          value={note}
+          onChange={(e) => onDraftChange({ note: e.target.value })}
         />
       </td>
+
       <td className="px-2 py-2">
         {!locked && (
           <button
@@ -896,8 +1364,26 @@ function VersionHistory({
   versions: FormulaVersion[];
   onOpen: (id: string) => void;
 }) {
+  const queryClient = useQueryClient();
   const [left, setLeft] = useState("");
   const [right, setRight] = useState("");
+
+  /* "이 시점 배합이 지금보다 나았다" — 과거 스냅샷을 지우지 않고 CURRENT로 되돌린다.
+   * enforce_single_current_version 트리거가 기존 CURRENT를 자동으로 SUPERSEDED 처리한다. */
+  const makeCurrent = useMutation({
+    mutationFn: async (versionId: string) => {
+      const { error } = await supabase
+        .from("formula_versions")
+        .update({ status: "CURRENT" })
+        .eq("id", versionId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["formula_versions", formulaId] });
+      await queryClient.invalidateQueries({ queryKey: ["formulas_by_component"] });
+      await queryClient.invalidateQueries({ queryKey: ["formulas"] });
+    },
+  });
 
   const leftRows = useQuery(versionIngredientsQuery(left || null));
   const rightRows = useQuery(versionIngredientsQuery(right || null));
@@ -934,7 +1420,11 @@ function VersionHistory({
       : [];
 
   return (
-    <SectionCard title="VERSION HISTORY">
+    <SectionCard title="SNAPSHOT HISTORY">
+      <p className="mb-3 font-mono text-[11px] text-muted-foreground">
+        Development Entry가 만든 배합 스냅샷들입니다 — 지워지지 않습니다. 예전 스냅샷이 더 나았다면
+        MAKE CURRENT로 되돌릴 수 있습니다.
+      </p>
       <ul className="divide-y divide-border border border-border">
         {versions.map((version) => (
           <li key={version.id} className="flex flex-wrap items-center gap-2 px-3 py-3">
@@ -950,6 +1440,23 @@ function VersionHistory({
             <span className="font-mono text-xs text-muted-foreground">
               {formatDateTime(version.created_at)}
             </span>
+            {version.status !== "CURRENT" && (
+              <button
+                type="button"
+                className="label-caps border border-foreground px-2 py-1 text-[10px] hover:bg-secondary disabled:opacity-40"
+                disabled={makeCurrent.isPending}
+                onClick={() => {
+                  if (
+                    confirm(
+                      `${versionLabel(version.version_number)}을(를) CURRENT로 되돌릴까요? 지금의 CURRENT는 SUPERSEDED로 바뀌고 기록은 남습니다.`,
+                    )
+                  )
+                    makeCurrent.mutate(version.id);
+                }}
+              >
+                MAKE CURRENT
+              </button>
+            )}
           </li>
         ))}
       </ul>

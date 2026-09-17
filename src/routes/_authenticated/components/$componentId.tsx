@@ -13,7 +13,8 @@ import {
 import { techniquePath } from "@/lib/technique";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
-import { ComponentFormulasSection } from "@/components/pilot/FormulaSummary";
+import { CurrentFormulaPanel } from "@/components/pilot/CurrentFormulaPanel";
+import { ComponentTagsSection } from "@/components/pilot/ComponentTagsSection";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   SectionCard,
@@ -147,12 +148,13 @@ function ComponentDetailPage() {
         <TextArea value={data.notes ?? ""} onSave={(notes) => update.mutate({ notes })} />
       </SectionCard>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <ComponentFormulasSection componentId={componentId} />
-        <SectionCard title="EXPERIMENTS">
-          <ExperimentListItems items={experiments.data ?? []} />
-        </SectionCard>
-      </div>
+      <CurrentFormulaPanel componentId={componentId} componentName={data.name} />
+
+      <SectionCard title="DEVELOPMENT HISTORY">
+        <ExperimentListItems items={experiments.data ?? []} />
+      </SectionCard>
+
+      <ComponentTagsSection componentId={componentId} />
 
       <button
         type="button"
