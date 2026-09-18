@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { experimentsQuery, productsQuery } from "@/lib/queries";
 import { EXPERIMENT_STATUSES, experimentLabel } from "@/lib/experiment";
 import { versionLabel } from "@/lib/formula";
+import { developmentOutcomeLabel } from "@/lib/development";
+import { toLocalDateString } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import {
@@ -17,14 +19,16 @@ import {
 export const Route = createFileRoute("/_authenticated/experiments/")({
   head: () => ({
     meta: [
-      { title: "PILOT — Experiments" },
-      { name: "description", content: "Experiment log" },
-      { property: "og:title", content: "PILOT — Experiments" },
-      { property: "og:description", content: "Experiment log" },
+      { title: "PILOT — R&D Dashboard" },
+      { name: "description", content: "Development entries across all Components" },
+      { property: "og:title", content: "PILOT — R&D Dashboard" },
+      { property: "og:description", content: "Development entries across all Components" },
     ],
   }),
   component: ExperimentsPage,
 });
+
+type QuickFilter = "all" | "in_progress" | "today" | "failed" | "keep";
 
 function ExperimentsPage() {
   const navigate = useNavigate();
@@ -32,14 +36,32 @@ function ExperimentsPage() {
   const products = useQuery(productsQuery());
 
   const [creating, setCreating] = useState(false);
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [productFilter, setProductFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [sort, setSort] = useState<"recent" | "number">("recent");
 
+  const all = experiments.data ?? [];
+  const today = toLocalDateString();
+  const counts = useMemo(
+    () => ({
+      inProgress: all.filter((e) => e.status === "PLANNED" || e.status === "RUNNING").length,
+      today: all.filter((e) => e.date === today).length,
+      failed: all.filter((e) => e.outcome === "FAILED").length,
+      keep: all.filter((e) => e.outcome === "KEEP").length,
+    }),
+    [all, today],
+  );
+
   const rows = useMemo(() => {
-    let list = experiments.data ?? [];
+    let list = all;
+    if (quickFilter === "in_progress")
+      list = list.filter((e) => e.status === "PLANNED" || e.status === "RUNNING");
+    else if (quickFilter === "today") list = list.filter((e) => e.date === today);
+    else if (quickFilter === "failed") list = list.filter((e) => e.outcome === "FAILED");
+    else if (quickFilter === "keep") list = list.filter((e) => e.outcome === "KEEP");
     if (productFilter)
       list = list.filter((e) => e.product_id === productFilter);
     if (statusFilter) list = list.filter((e) => e.status === statusFilter);
@@ -52,22 +74,54 @@ function ExperimentsPage() {
       );
     }
     return list;
-  }, [experiments.data, productFilter, statusFilter, from, to, sort]);
+  }, [all, quickFilter, today, productFilter, statusFilter, from, to, sort]);
+
+  const quickFilters: { key: QuickFilter; label: string; count: number }[] = [
+    { key: "all", label: "ALL", count: all.length },
+    { key: "in_progress", label: "IN PROGRESS", count: counts.inProgress },
+    { key: "today", label: "TODAY", count: counts.today },
+    { key: "keep", label: "RECENTLY KEEP", count: counts.keep },
+    { key: "failed", label: "FAILED", count: counts.failed },
+  ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="EXPERIMENTS"
+        title="R&D DASHBOARD"
         action={
           <button
             type="button"
             className={primaryButtonClass}
             onClick={() => setCreating(true)}
           >
-            + NEW EXPERIMENT
+            + NEW DEVELOPMENT
           </button>
         }
       />
+
+      <p className="font-mono text-[11px] uppercase text-muted-foreground">
+        여기는 최종 저장 장소가 아닙니다 — Development는 항상 COMPONENT의 Current
+        Formula/Development History에도 함께 남습니다.
+      </p>
+
+      {/* 요약 위젯 — 전체 데이터를 한 번에 쏟아내지 않고 카테고리별 개수만 먼저 보여준다 */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {quickFilters.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setQuickFilter(f.key)}
+            className={`border px-3 py-3 text-left transition-colors ${
+              quickFilter === f.key
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-card hover:bg-secondary"
+            }`}
+          >
+            <span className="label-caps block text-[10px] opacity-80">{f.label}</span>
+            <span className="font-mono text-lg tabular-nums">{f.count}</span>
+          </button>
+        ))}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -121,16 +175,16 @@ function ExperimentsPage() {
 
       {rows.length === 0 ? (
         <EmptyState
-          message="NO EXPERIMENTS YET"
-          actionLabel="+ CREATE EXPERIMENT"
+          message="NO DEVELOPMENT ENTRIES YET"
+          actionLabel="+ NEW DEVELOPMENT"
           onAction={() => setCreating(true)}
         />
       ) : (
         <div className="overflow-x-auto border border-border bg-card">
-          <table className="w-full min-w-[780px] border-collapse">
+          <table className="w-full min-w-[860px] border-collapse">
             <thead>
               <tr className="border-b border-border text-left">
-                {["#", "PRODUCT", "COMPONENT", "FORMULA", "STATUS", "DATE"].map(
+                {["#", "PRODUCT", "COMPONENT", "FORMULA", "STATUS", "OUTCOME", "DATE"].map(
                   (header) => (
                     <th
                       key={header}
@@ -199,6 +253,9 @@ function ExperimentsPage() {
                   </td>
                   <td className="px-3 py-3">
                     <StatusBadge status={exp.status} />
+                  </td>
+                  <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
+                    {exp.outcome ? developmentOutcomeLabel(exp.outcome) : "—"}
                   </td>
                   <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
                     {exp.date}

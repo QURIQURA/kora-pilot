@@ -1,18 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
-import { currentUserId, experimentObservationsQuery, experimentQuery } from "@/lib/queries";
+import {
+  currentUserId,
+  experimentObservationsQuery,
+  experimentQuery,
+  ingredientsQuery,
+  versionIngredientsQuery,
+} from "@/lib/queries";
 import { EXPERIMENT_STATUSES, experimentLabel, type ExperimentStatus } from "@/lib/experiment";
-import { parseNumber, versionLabel } from "@/lib/formula";
+import { parseNumber, versionLabel, UNITS } from "@/lib/formula";
 import { formatDateLabel, formatDateTime, formatTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
+import { IngredientPicker } from "@/components/pilot/IngredientPicker";
 import { ProcessTimelineSection } from "@/components/pilot/ProcessTimelineSection";
 import { SensoryEvaluationSection } from "@/components/pilot/SensoryEvaluationSection";
 import { experimentsForBaselineQuery, experimentVariantsQuery } from "@/lib/queries";
 import { lossPct } from "@/lib/experiment";
+import { ingredientDisplayName } from "@/lib/pilot";
+import {
+  DEVELOPMENT_OUTCOMES,
+  developmentOutcomeLabel,
+  saveDevelopment,
+  type DevelopmentIngredientDraft,
+  type DevelopmentOutcome,
+} from "@/lib/development";
 import {
   Field,
   SectionCard,
@@ -52,6 +67,57 @@ function ExperimentDetailPage() {
 
   const [obsLabel, setObsLabel] = useState("");
   const [obsValue, setObsValue] = useState("");
+
+  /* ── FORMULA SNAPSHOT & SAVE DEVELOPMENT ─────────────────────
+   * "Save Development" = 이 화면의 가장 중요한 mutation. 재료 변경, 판정(outcome),
+   * product-specific 조정 여부를 한 번에 확정한다. hypothesis/result 등 텍스트 필드는
+   * 기존처럼 각자 blur 시 바로 저장되지만, 배합 스냅샷/판정은 이 버튼을 눌러야 반영된다. */
+  const currentRows = useQuery(versionIngredientsQuery(exp?.formula_version_id ?? null));
+  const ingredientMaster = useQuery(ingredientsQuery());
+  const [draftRows, setDraftRows] = useState<DevelopmentIngredientDraft[] | null>(null);
+  const [initializedFor, setInitializedFor] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<DevelopmentOutcome>("KEEP");
+  const [promoteComponentWide, setPromoteComponentWide] = useState(true);
+  const [changeSummary, setChangeSummary] = useState("");
+  const [quantityGForProduct, setQuantityGForProduct] = useState("");
+  const [addingIngredient, setAddingIngredient] = useState(false);
+
+  useEffect(() => {
+    if (exp?.formula_version_id && currentRows.data && initializedFor !== exp.formula_version_id) {
+      setDraftRows(
+        currentRows.data.map((row) => ({
+          ingredient_id: row.ingredient_id,
+          amount: Number(row.amount),
+          unit: row.unit,
+          note: row.note,
+          sort_order: row.sort_order,
+        })),
+      );
+      setInitializedFor(exp.formula_version_id);
+    }
+  }, [exp?.formula_version_id, currentRows.data, initializedFor]);
+
+  const ingredientName = (id: string) => {
+    const fromCurrent = (currentRows.data ?? []).find((r) => r.ingredient_id === id)?.ingredients;
+    if (fromCurrent) return ingredientDisplayName(fromCurrent);
+    const found = (ingredientMaster.data ?? []).find((i) => i.id === id);
+    return found ? ingredientDisplayName(found) : "—";
+  };
+
+  const updateDraftRow = (idx: number, patch: Partial<DevelopmentIngredientDraft>) => {
+    setDraftRows((rows) => (rows ? rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)) : rows));
+  };
+  const removeDraftRow = (idx: number) => {
+    setDraftRows((rows) => (rows ? rows.filter((_, i) => i !== idx) : rows));
+  };
+  const addDraftRow = (ingredientId: string, unit: string) => {
+    setDraftRows((rows) => {
+      const base = rows ?? [];
+      if (base.some((r) => r.ingredient_id === ingredientId)) return base;
+      return [...base, { ingredient_id: ingredientId, amount: 0, unit, note: null, sort_order: base.length }];
+    });
+    setAddingIngredient(false);
+  };
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -107,6 +173,47 @@ function ExperimentDetailPage() {
       if (error) throw error;
     },
     onSuccess: invalidate,
+  });
+
+  const saveDevelopmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!exp) throw new Error("no experiment");
+      if (!exp.formula_version_id || !exp.formula_versions) {
+        throw new Error("연결된 FORMULA VERSION이 없습니다");
+      }
+      if (!draftRows) throw new Error("재료표 로딩 중");
+      return saveDevelopment({
+        experimentId: exp.id,
+        formulaId: exp.formula_versions.formula_id,
+        baseFormulaVersionId: exp.formula_version_id,
+        draftRows,
+        currentRows: currentRows.data ?? [],
+        changeSummary: changeSummary.trim() || null,
+        hypothesis: exp.hypothesis,
+        variables: exp.variables,
+        controlVariables: exp.control_variables,
+        result: exp.result,
+        conclusion: exp.conclusion,
+        nextExperiment: exp.next_experiment,
+        outcome,
+        productId: exp.product_id,
+        promoteComponentWide,
+        componentId: exp.component_id,
+        batchMultiplier: Number(exp.batch_multiplier),
+        rawWeightG: exp.raw_weight_g,
+        processedWeightG: exp.processed_weight_g,
+        finishedWeightG: exp.finished_weight_g,
+        quantityGForProduct: quantityGForProduct.trim() ? parseNumber(quantityGForProduct) : null,
+      });
+    },
+    onSuccess: async (result) => {
+      await invalidate();
+      await queryClient.invalidateQueries({ queryKey: ["formula_version_ingredients"] });
+      await queryClient.invalidateQueries({ queryKey: ["formulas_by_component"] });
+      await queryClient.invalidateQueries({ queryKey: ["formula_versions"] });
+      await queryClient.invalidateQueries({ queryKey: ["product_components"] });
+      if (result.createdNewSnapshot) setInitializedFor(null);
+    },
   });
 
   if (!exp) {
@@ -241,6 +348,191 @@ function ExperimentDetailPage() {
             />
           </Field>
         </div>
+      </SectionCard>
+
+      {/* FORMULA SNAPSHOT & SAVE DEVELOPMENT — 이 화면의 가장 중요한 mutation */}
+      <SectionCard
+        title="FORMULA SNAPSHOT"
+        action={
+          exp.formula_version_id && (
+            <button
+              type="button"
+              className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+              onClick={() => setAddingIngredient(true)}
+            >
+              + ADD INGREDIENT
+            </button>
+          )
+        }
+      >
+        {!exp.formula_version_id || !exp.formula_versions ? (
+          <p className="font-mono text-xs uppercase text-muted-foreground">
+            연결된 FORMULA VERSION이 없습니다.
+          </p>
+        ) : draftRows === null ? (
+          <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
+        ) : (
+          <div className="space-y-4">
+            <p className="font-mono text-[11px] uppercase text-muted-foreground">
+              {exp.formula_versions.formulas?.name ?? "FORMULA"} ·{" "}
+              {versionLabel(exp.formula_versions.version_number)} 기준 — 여기서 바꾼 내용은 아래{" "}
+              <span className="font-semibold">SAVE DEVELOPMENT</span>를 눌러야 기록됩니다.
+            </p>
+            {draftRows.length === 0 ? (
+              <p className="font-mono text-xs uppercase text-muted-foreground">재료 없음</p>
+            ) : (
+              <table className="w-full min-w-[640px] border-collapse">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="label-caps px-2 py-2 text-xs text-muted-foreground">INGREDIENT</th>
+                    <th className="label-caps px-2 py-2 text-xs text-muted-foreground">AMOUNT</th>
+                    <th className="label-caps px-2 py-2 text-xs text-muted-foreground">UNIT</th>
+                    <th className="label-caps px-2 py-2 text-xs text-muted-foreground">NOTE</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {draftRows.map((row, idx) => (
+                    <tr key={row.ingredient_id} className="border-b border-border align-top">
+                      <td className="px-2 py-2 text-sm">{ingredientName(row.ingredient_id)}</td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          className={`${inputClass} w-28`}
+                          defaultValue={row.amount}
+                          key={`amt-${row.ingredient_id}-${initializedFor}`}
+                          onBlur={(e) => updateDraftRow(idx, { amount: parseNumber(e.target.value) })}
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <select
+                          className={`${selectClass} w-20`}
+                          value={row.unit}
+                          onChange={(e) => updateDraftRow(idx, { unit: e.target.value })}
+                        >
+                          {UNITS.map((u) => (
+                            <option key={u} value={u}>
+                              {u}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          className={`${inputClass} min-w-[8rem]`}
+                          defaultValue={row.note ?? ""}
+                          key={`note-${row.ingredient_id}-${initializedFor}`}
+                          onBlur={(e) => updateDraftRow(idx, { note: e.target.value || null })}
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <button
+                          type="button"
+                          className="label-caps px-2 py-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => removeDraftRow(idx)}
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <Field label="CHANGE SUMMARY (선택) — 이번에 뭘 바꿨는지 한 줄">
+              <input
+                className={inputClass}
+                value={changeSummary}
+                onChange={(e) => setChangeSummary(e.target.value)}
+                placeholder="설탕 120g → 110g"
+              />
+            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="OUTCOME — R&D 판정">
+                <select
+                  className={selectClass}
+                  value={outcome}
+                  onChange={(e) => setOutcome(e.target.value as DevelopmentOutcome)}
+                >
+                  {DEVELOPMENT_OUTCOMES.map((o) => (
+                    <option key={o} value={o}>
+                      {developmentOutcomeLabel(o)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {exp.product_id && (
+                <Field label="반영 범위">
+                  <label className="flex min-h-[44px] items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={promoteComponentWide}
+                      onChange={(e) => setPromoteComponentWide(e.target.checked)}
+                    />
+                    COMPONENT 전체(CURRENT FORMULA)에 반영
+                  </label>
+                  {!promoteComponentWide && (
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      className={`${inputClass} mt-1`}
+                      placeholder="이 PRODUCT 전용 사용량 (g)"
+                      value={quantityGForProduct}
+                      onChange={(e) => setQuantityGForProduct(e.target.value)}
+                    />
+                  )}
+                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                    {promoteComponentWide
+                      ? "이 COMPONENT를 쓰는 모든 PRODUCT에 반영됩니다."
+                      : "이 PRODUCT에만 적용되는 조정으로 기록됩니다 — 새 FORMULA를 만들지 않습니다."}
+                  </p>
+                </Field>
+              )}
+            </div>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={saveDevelopmentMutation.isPending}
+              onClick={() => saveDevelopmentMutation.mutate()}
+            >
+              SAVE DEVELOPMENT
+            </button>
+            {saveDevelopmentMutation.isError && (
+              <p className="font-mono text-xs uppercase text-destructive">
+                저장 실패 — 다시 시도해주세요
+              </p>
+            )}
+            {saveDevelopmentMutation.isSuccess && !saveDevelopmentMutation.isPending && (
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                ✓ SAVED — {saveDevelopmentMutation.data?.createdNewSnapshot ? "새 스냅샷 기록됨" : "변경사항 없음(기록만 갱신)"}
+                {saveDevelopmentMutation.data?.promotedToCurrent ? " · CURRENT로 승격" : ""}
+              </p>
+            )}
+          </div>
+        )}
+        {addingIngredient && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+            <div className="w-full max-w-md border border-border bg-background">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <span className="label-caps">ADD INGREDIENT</span>
+                <button
+                  type="button"
+                  className="label-caps px-2 py-2"
+                  onClick={() => setAddingIngredient(false)}
+                >
+                  CLOSE
+                </button>
+              </div>
+              <div className="p-4">
+                <IngredientPicker
+                  onCancel={() => setAddingIngredient(false)}
+                  onPick={(id, unit) => addDraftRow(id, unit)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </SectionCard>
 
       {/* BASELINE / VARIANT — 이번 실험의 비교 기준 (Formula의 is_base_formula와는 별개 개념) */}
