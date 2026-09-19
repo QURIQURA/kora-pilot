@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-09-14 (Phase 3–7) — SAVE DEVELOPMENT · MAKE CURRENT · R&D DASHBOARD · KNOWLEDGE/REFERENCE 태그
+
+### 무엇이 달라졌나
+
+- **SAVE DEVELOPMENT (재료표 저장의 핵심)**: Development Entry(실험) 상세 페이지에 **FORMULA SNAPSHOT** 섹션이 새로 생겼습니다. 그 시점 배합의 재료를 직접 고치거나(+ADD INGREDIENT/양·단위·메모 수정/삭제) OUTCOME(KEEP/FAILED/PARTIAL/REFERENCE)을 고른 뒤 **[SAVE DEVELOPMENT]**를 누르면 한 번에 기록됩니다. PRODUCT가 연결된 경우 "COMPONENT 전체에 반영"(체크 시 Current Formula 갱신) / "이 PRODUCT에만 적용"(체크 해제 시, 그 PRODUCT 전용 사용량만 기록 — 새 FORMULA를 만들지 않습니다)을 고를 수 있습니다. 재료가 실제로 안 바뀌었으면 새 버전을 만들지 않고 기록만 갱신합니다. 가설/변수/결과/무게 등 나머지 필드는 예전처럼 각자 입력칸을 벗어나면(blur) 바로 저장됩니다 — 이 부분만 새로 SAVE 버튼이 필요합니다.
+- **MAKE CURRENT**: FORMULA 상세 페이지의 SNAPSHOT HISTORY(예전 "VERSION HISTORY")에서, 지금 CURRENT가 아닌 예전 스냅샷 옆에 [MAKE CURRENT] 버튼이 생겼습니다 — "예전 버전이 더 나았다"고 판단되면 눌러서 되돌릴 수 있습니다. 되돌려도 지금 CURRENT였던 버전은 삭제되지 않고 SUPERSEDED로 남습니다.
+- **R&D DASHBOARD**: 예전 "EXPERIMENTS" 화면이 "R&D DASHBOARD"로 이름이 바뀌고, 위쪽에 ALL/IN PROGRESS/TODAY/RECENTLY KEEP/FAILED 요약 타일이 생겼습니다 — 눌러서 바로 그 그룹만 필터링해서 볼 수 있습니다. 표에 OUTCOME 열이 추가됐습니다. 왼쪽 메뉴에서도 "EXPERIMENTS" → "R&D DASHBOARD"로, "FORMULAS" 메뉴 항목은 없앴습니다(FORMULA는 이제 COMPONENT 하나당 하나라 COMPONENTS를 통해 들어가는 게 자연스럽습니다 — `/formulas` 페이지 자체는 그대로 있어서 COMPONENT에서 "OPEN FULL FORMULA"로는 계속 들어갈 수 있습니다).
+- **PRODUCT의 COMPONENT 조정 문구 정리**: PRODUCT 상세의 "COMPONENTS" 섹션 이름이 "COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"로 바뀌고, FORMULA VERSION/사용량을 수동으로 지정하는 대신 보통은 Development Entry에서 "이 PRODUCT에만 적용"으로 저장하면 자동으로 채워진다는 안내가 추가됐습니다. "EXPERIMENTS" 섹션도 "DEVELOPMENT HISTORY"로 이름이 바뀌었습니다.
+- **KNOWLEDGE/REFERENCE를 COMPONENT에 태그처럼**: COMPONENT 상세 페이지 맨 아래에 KNOWLEDGE/REFERENCES 두 칸이 생겨서, 이 COMPONENT에 연결된 항목을 바로 보고 추가할 수 있습니다(전체 목록은 기존 KNOWLEDGE/REFERENCES 메뉴에서 그대로 확인 가능).
+- DB 변경 없음 — 전부 이미 있던 테이블/컬럼(Phase 1에서 추가한 `outcome`/`derived_from_formula_id`/`LOGGED` 포함)을 화면에 연결한 것입니다.
+
+### 확인하는 방법
+
+1. COMPONENT 상세에서 [+ START DEVELOPMENT]로 Development Entry를 열고, FORMULA SNAPSHOT에서 재료 양을 바꾼 뒤 OUTCOME을 KEEP으로 두고 [SAVE DEVELOPMENT] — COMPONENT의 CURRENT FORMULA가 갱신되는지 확인합니다.
+2. FORMULA 상세의 SNAPSHOT HISTORY에서 예전 버전에 [MAKE CURRENT]를 눌러 되돌아가는지 확인합니다.
+3. R&D DASHBOARD에서 요약 타일을 눌러 필터가 바뀌는지 확인합니다.
+4. COMPONENT 상세 하단 KNOWLEDGE/REFERENCES에 항목을 추가하고 잘 붙는지 확인합니다.
+
+---
+
+## 2026-09-14 (Phase 2) — COMPONENT 상세를 R&D 허브로 재구성
+
+### 무엇이 달라졌나
+
+- **COMPONENT 상세 = R&D 허브**: COMPONENT 하나는 이제 배합(Formula) 하나만 가집니다. Formula를 계속 새로 만드는 대신, COMPONENT 상세 페이지에 **CURRENT FORMULA** 패널이 생겨서 지금 쓰는 배합을 한눈에 보여줍니다(재료 개수 · 총 중량 · 주요 재료 미리보기 · 마지막 수정일). 재료를 직접 고치려면 **[OPEN FULL FORMULA →]**로 이동해 기존 EDIT/SAVE 화면에서 수정합니다 — CURRENT FORMULA 패널 자체는 읽기 전용입니다(따로 수정 경로를 두면 "이게 기록으로 남는 건지" 헷갈리기 때문에 의도적으로 그렇게 했습니다).
+- **+ START DEVELOPMENT**: COMPONENT 상세에서 바로 새 실험(Development Entry)을 시작할 수 있습니다. FORMULA/FORMULA VERSION/COMPONENT는 자동으로 채워지고, PRODUCT는 선택 사항입니다.
+- **DEVELOPMENT HISTORY**: 예전 "EXPERIMENTS" 섹션 이름을 바꾼 것입니다 — 같은 데이터(실험 기록)이고, 각 항목에 KEEP/FAILED/PARTIAL/REFERENCE 판정(있는 경우)이 함께 표시됩니다. FORMULA 상세 페이지의 "RELATED EXPERIMENTS"도 같은 이름·버튼("+ START DEVELOPMENT")으로 바꿨습니다.
+- **처음 배합을 만들 때**: COMPONENT에 아직 배합이 없으면 "빈 배합으로 시작" 또는(재사용 가능한 기준 배합이 있으면) "기준 배합에서 시작"을 선택할 수 있습니다. 기준 배합에서 시작하면 그 배합의 재료·몰드·YIELD를 그대로 복사해서 새로 시작합니다(원본 기준 배합은 전혀 바뀌지 않습니다).
+- **DB 변경 없음** — 화면 구성과 라벨만 바꿨습니다. `formulas`/`formula_versions`/`experiments` 테이블 구조는 그대로입니다.
+
+### 확인하는 방법
+
+1. 배합이 이미 있는 COMPONENT 상세 페이지를 열면 CURRENT FORMULA 패널에 재료 요약이 보입니다.
+2. [+ START DEVELOPMENT]를 눌러 실험을 하나 만들어보면 FORMULA/COMPONENT가 이미 채워져 있는지 확인합니다.
+3. DEVELOPMENT HISTORY에 방금 만든 실험이 나타나는지 확인합니다.
+4. 아직 배합이 없는 COMPONENT를 열어 "빈 배합으로 시작"이 정상 동작하는지 확인합니다.
+
+---
+
 ## 2026-09-12 — PRODUCT의 COMPONENT마다 실사용 FORMULA VERSION·수량(g) 기록
 
 ### 무엇이 달라졌나
