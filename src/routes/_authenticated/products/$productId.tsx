@@ -188,7 +188,7 @@ function ProductDetailPage() {
       />
 
       <SectionCard
-        title="COMPONENTS"
+        title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
         action={
           <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
             {adding ? "CLOSE" : "+ ADD COMPONENT"}
@@ -243,7 +243,7 @@ function ProductDetailPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ProductFormulasSection productId={productId} />
         <SectionCard
-          title="EXPERIMENTS"
+          title="DEVELOPMENT HISTORY"
           action={
             <Link to="/experiments" className="label-caps px-2 py-2 text-xs hover:bg-secondary">
               VIEW ALL
@@ -696,6 +696,11 @@ function ComponentUsageEditor({
         />
         <span className="font-mono text-xs text-muted-foreground">G 실사용량</span>
       </div>
+      <p className="w-full font-mono text-[11px] text-muted-foreground">
+        이 PRODUCT에서만 다른 FORMULA VERSION/사용량을 쓸 때만 지정하세요 — 보통은 해당
+        COMPONENT의 Development Entry에서 "이 PRODUCT에만 적용"으로 저장하면 자동으로
+        여기 반영됩니다. COMPONENT의 Current Formula 자체는 바뀌지 않습니다.
+      </p>
     </div>
   );
 }
