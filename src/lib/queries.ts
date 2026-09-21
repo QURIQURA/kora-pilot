@@ -425,6 +425,9 @@ export interface VersionIngredientRow {
   note: string | null;
   /** 'manual' | 'suggested' | 'copied' — 양의 출처 */
   amount_source: string;
+  /** 표시 전용 보조 계량 (예: 3개, 1Tbsp) — %/배수 계산에는 관여하지 않는다 */
+  secondary_amount: number | null;
+  secondary_unit: string | null;
   ingredient_id: string;
   ingredients: IngredientRow;
 }
@@ -439,7 +442,7 @@ export const versionIngredientsQuery = (versionId: string | null) =>
         await supabase
           .from("formula_version_ingredients")
           .select(
-            "id, amount, unit, sort_order, note, amount_source, ingredient_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))",
+            "id, amount, unit, sort_order, note, amount_source, secondary_amount, secondary_unit, ingredient_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))",
           )
           .eq("formula_version_id", versionId)
           .order("sort_order"),

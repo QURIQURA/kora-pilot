@@ -357,6 +357,8 @@ export type Database = {
           id: string
           ingredient_id: string
           note: string | null
+          secondary_amount: number | null
+          secondary_unit: string | null
           sort_order: number
           unit: string
           updated_at: string
@@ -370,6 +372,8 @@ export type Database = {
           id?: string
           ingredient_id: string
           note?: string | null
+          secondary_amount?: number | null
+          secondary_unit?: string | null
           sort_order?: number
           unit?: string
           updated_at?: string
@@ -383,6 +387,8 @@ export type Database = {
           id?: string
           ingredient_id?: string
           note?: string | null
+          secondary_amount?: number | null
+          secondary_unit?: string | null
           sort_order?: number
           unit?: string
           updated_at?: string

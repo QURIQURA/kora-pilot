@@ -1,6 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
@@ -88,6 +104,9 @@ export interface FunctionalRowPatch {
   unit?: string;
   note?: string | null;
   amount_source?: string;
+  /** 표시 전용 보조 계량 (예: 3개, 1Tbsp) — %/배수 계산에는 관여하지 않는다 */
+  secondary_amount?: number | null;
+  secondary_unit?: string | null;
 }
 
 /** EDIT 모드에서 저장 전까지 들고 있는 로컬 초안 — SAVE를 눌러야 실제로 반영된다 */
@@ -95,6 +114,9 @@ interface RowDraft {
   amount: string;
   unit: string;
   note: string;
+  /** 보조 계량 초안 (예: "3" + "개") — 비워두면 저장 시 null */
+  secondaryAmount: string;
+  secondaryUnit: string;
 }
 
 interface BatchDraft {
@@ -203,7 +225,13 @@ function FormulaDetailPage() {
       rows: Object.fromEntries(
         rows.map((row) => [
           row.id,
-          { amount: String(row.amount), unit: row.unit, note: row.note ?? "" },
+          {
+            amount: String(row.amount),
+            unit: row.unit,
+            note: row.note ?? "",
+            secondaryAmount: row.secondary_amount != null ? String(row.secondary_amount) : "",
+            secondaryUnit: row.secondary_unit ?? "",
+          },
         ]),
       ),
       batches: Object.fromEntries(
@@ -224,7 +252,13 @@ function FormulaDetailPage() {
   const patchRowDraft = (rowId: string, patch: Partial<RowDraft>) => {
     setDraft((d) => {
       if (!d) return d;
-      const current = d.rows[rowId] ?? { amount: "0", unit: "g", note: "" };
+      const current = d.rows[rowId] ?? {
+        amount: "0",
+        unit: "g",
+        note: "",
+        secondaryAmount: "",
+        secondaryUnit: "",
+      };
       return { ...d, rows: { ...d.rows, [rowId]: { ...current, ...patch } } };
     });
   };
@@ -274,6 +308,43 @@ function FormulaDetailPage() {
     },
     onSuccess: invalidate,
   });
+
+  /** 재료 행 드래그 재정렬 — 공정 순서대로 배열하기 위한 것으로, EDIT 모드와 무관하게
+   *  (LOCK만 아니면) 바로 저장된다. sort_order만 바뀌므로 SAVE를 별도로 요구하지 않는다. */
+  const reorderRows = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      const updates = orderedIds
+        .map((id, index) => ({ id, index }))
+        .filter(({ id, index }) => rows.find((r) => r.id === id)?.sort_order !== index);
+      await Promise.all(
+        updates.map(({ id, index }) =>
+          supabase
+            .from("formula_version_ingredients")
+            .update({ sort_order: index })
+            .eq("id", id)
+            .then(({ error }) => {
+              if (error) throw error;
+            }),
+        ),
+      );
+    },
+    onSuccess: invalidate,
+  });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  const handleIngredientDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = rows.findIndex((r) => r.id === active.id);
+    const newIndex = rows.findIndex((r) => r.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(rows, oldIndex, newIndex);
+    queryClient.setQueryData(["formula_version_ingredients", versionId], reordered);
+    reorderRows.mutate(reordered.map((r) => r.id));
+  };
 
   const addBatchPreset = useMutation({
     mutationFn: async () => {
@@ -371,6 +442,12 @@ function FormulaDetailPage() {
         if (d.unit !== row.unit) patch.unit = d.unit;
         const nextNote = d.note.trim() || null;
         if (nextNote !== (row.note ?? null)) patch.note = nextNote;
+        const nextSecondaryAmount = d.secondaryAmount.trim() ? parseNumber(d.secondaryAmount) : null;
+        if (nextSecondaryAmount !== (row.secondary_amount ?? null))
+          patch.secondary_amount = nextSecondaryAmount;
+        const nextSecondaryUnit = d.secondaryUnit.trim() || null;
+        if (nextSecondaryUnit !== (row.secondary_unit ?? null))
+          patch.secondary_unit = nextSecondaryUnit;
         if (Object.keys(patch).length > 0) {
           const { error } = await supabase
             .from("formula_version_ingredients")
@@ -436,6 +513,8 @@ function FormulaDetailPage() {
             unit: row.unit,
             sort_order: row.sort_order,
             note: row.note,
+            secondary_amount: row.secondary_amount,
+            secondary_unit: row.secondary_unit,
             // 새 버전으로 복사된 값은 'copied'로 시작, 수정 시 'manual'이 된다
             amount_source: "copied",
           })),
@@ -763,6 +842,7 @@ function FormulaDetailPage() {
             <table className="w-full min-w-[960px] border-collapse">
               <thead>
                 <tr className="border-b border-border text-left">
+                  <th className="w-8 px-1 py-2" aria-label="공정 순서 드래그" />
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground">
                     INGREDIENT
                   </th>
@@ -820,22 +900,33 @@ function FormulaDetailPage() {
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground" />
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <UnifiedIngredientRow
-                    key={row.id}
-                    row={row}
-                    locked={locked}
-                    editing={editing}
-                    batchPresets={batchPresets}
-                    denominator={denominator}
-                    bases={bases}
-                    draft={draft?.rows[row.id] ?? null}
-                    onDraftChange={(patch) => patchRowDraft(row.id, patch)}
-                    onRemove={() => removeRow.mutate(row.id)}
-                  />
-                ))}
-              </tbody>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleIngredientDragEnd}
+              >
+                <SortableContext
+                  items={rows.map((r) => r.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <tbody>
+                    {rows.map((row) => (
+                      <UnifiedIngredientRow
+                        key={row.id}
+                        row={row}
+                        locked={locked}
+                        editing={editing}
+                        batchPresets={batchPresets}
+                        denominator={denominator}
+                        bases={bases}
+                        draft={draft?.rows[row.id] ?? null}
+                        onDraftChange={(patch) => patchRowDraft(row.id, patch)}
+                        onRemove={() => removeRow.mutate(row.id)}
+                      />
+                    ))}
+                  </tbody>
+                </SortableContext>
+              </DndContext>
             </table>
           </div>
         )}
@@ -1102,13 +1193,40 @@ function UnifiedIngredientRow({
     setTargetPct("");
   };
 
+  // 드래그 재정렬 — 공정 순서대로 배열할 수 있도록. LOCK된 버전에서는 손잡이를 숨긴다.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row.id,
+    disabled: locked,
+  });
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   return (
     <tr
+      ref={setNodeRef}
+      style={dragStyle}
       className={cn(
         "border-b border-border align-top",
         isFunctional && "bg-secondary/20",
+        isDragging && "relative z-10 bg-background shadow-md",
       )}
     >
+      {/* 드래그 손잡이 — 공정 순서대로 재정렬할 때 사용 */}
+      <td className="px-1 py-2 align-middle">
+        {!locked && (
+          <button
+            type="button"
+            className="flex h-8 w-6 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            aria-label="드래그해서 순서 변경"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        )}
+      </td>
       {/* INGREDIENT + 출처/기능 뱃지 — 여기서는 재료명을 눌러도 재료 마스터로 이동하지 않는다.
           (배합을 고치려는 클릭이 엉뚱하게 재료 상세 페이지로 튕겨나가던 문제 수정) */}
       <td className="px-2 py-2 text-sm">
@@ -1190,6 +1308,35 @@ function UnifiedIngredientRow({
           value={editing ? (draft?.amount ?? "") : String(savedAmount)}
           onChange={(e) => onDraftChange({ amount: e.target.value })}
         />
+        {/* 보조 계량 — 그램 외 개수/스푼 등을 표시용으로만 같이 적어둘 수 있다 (계산엔 관여 안 함) */}
+        {editing && !locked ? (
+          <div className="mt-1 flex items-center gap-1">
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              className="min-h-[36px] w-14 border border-input bg-background px-1 py-1 font-mono text-xs tabular-nums outline-none focus:border-foreground"
+              placeholder="개수"
+              value={draft?.secondaryAmount ?? ""}
+              onChange={(e) => onDraftChange({ secondaryAmount: e.target.value })}
+            />
+            <input
+              type="text"
+              className="min-h-[36px] w-16 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
+              placeholder="개/tsp"
+              value={draft?.secondaryUnit ?? ""}
+              onChange={(e) => onDraftChange({ secondaryUnit: e.target.value })}
+            />
+          </div>
+        ) : (
+          row.secondary_amount != null &&
+          row.secondary_unit && (
+            <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
+              · {fmtNumber(Number(row.secondary_amount), 2)}
+              {row.secondary_unit}
+            </p>
+          )
+        )}
         {showSuggestion && calc && (
           <div className="mt-1 space-y-1">
             <p className="font-mono text-xs tabular-nums text-muted-foreground">
