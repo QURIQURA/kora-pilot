@@ -325,3 +325,16 @@ export function aromaTagCandidates(used: string[]): AromaTagCandidate[] {
   }
   return list;
 }
+
+/** 카테고리 색상(hex) 배경 위에서 읽기 좋은 텍스트 색을 고른다 (밝으면 어두운 글자, 어두우면 밝은 글자). */
+export function readableTextColor(hex: string | null | undefined): string {
+  if (!hex) return "#1A1A18";
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return "#1A1A18";
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return "#1A1A18";
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#1A1A18" : "#F5F4F1";
+}

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { ProductStatus } from "@/lib/pilot";
+import { readableTextColor } from "@/lib/pilot";
 
 export const inputClass =
   "w-full min-h-[44px] border border-input bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-foreground";
@@ -76,6 +77,28 @@ export function StatusBadge({ status }: { status: ProductStatus | string }) {
       )}
     >
       {status}
+    </span>
+  );
+}
+
+export function CategoryBadge({
+  label,
+  color,
+}: {
+  label: string;
+  color?: string | null | undefined;
+}) {
+  if (!color) {
+    return (
+      <span className="label-caps text-xs text-muted-foreground">{label}</span>
+    );
+  }
+  return (
+    <span
+      className="label-caps inline-block px-2 py-0.5 text-[11px]"
+      style={{ backgroundColor: color, color: readableTextColor(color) }}
+    >
+      {label}
     </span>
   );
 }

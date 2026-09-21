@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ProductCreateModal } from "@/components/pilot/ProductCreateModal";
 import { categoriesQuery, productsQuery, tagsQuery } from "@/lib/queries";
 import {
+  categoryPath,
   categoryPathLabel,
   categoryWithDescendants,
   flattenCategories,
@@ -12,6 +13,7 @@ import {
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import {
+  CategoryBadge,
   Field,
   PageHeader,
   StatusBadge,
@@ -179,8 +181,13 @@ function ProductsPage() {
                   className="grid grid-cols-1 gap-1 px-4 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
                 >
                   <span className="col-span-4 text-sm">{product.name}</span>
-                  <span className="col-span-3 font-mono text-xs uppercase text-muted-foreground">
-                    {categoryPathLabel(categoryList, product.category_id)}
+                  <span className="col-span-3 font-mono text-xs uppercase">
+                    <CategoryBadge
+                      label={categoryPathLabel(categoryList, product.category_id)}
+                      color={
+                        categoryPath(categoryList, product.category_id).at(-1)?.color
+                      }
+                    />
                   </span>
                   <span className="col-span-2">
                     <StatusBadge status={product.status} />
