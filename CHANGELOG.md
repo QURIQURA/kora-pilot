@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-09-21 — PRODUCT 목록의 CATEGORY 색상 표시
+
+### 무엇이 달라졌나
+
+- PRODUCTS 목록의 CATEGORY 칸이 이제 그 카테고리에 지정한 색을 글자 배경색으로 보여줍니다(예전엔 색 없는 텍스트였습니다). 배경색이 밝으면 어두운 글자, 어두우면 밝은 글자로 자동 대비를 맞춰서 항상 읽을 수 있게 했습니다. 카테고리에 색이 지정 안 돼 있으면 예전처럼 그냥 회색 텍스트로 보입니다.
+
+### 확인하는 방법
+
+1. SETTINGS → CATEGORIES에서 카테고리 하나에 색을 지정합니다.
+2. PRODUCTS 목록에서 그 카테고리로 분류된 PRODUCT의 CATEGORY 칸이 그 색 배경으로 뜨는지 확인합니다.
+
+---
+
 ## 2026-09-14 (Phase 3–7) — SAVE DEVELOPMENT · MAKE CURRENT · R&D DASHBOARD · KNOWLEDGE/REFERENCE 태그
 
 ### 무엇이 달라졌나
