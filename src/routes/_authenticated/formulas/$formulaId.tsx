@@ -716,89 +716,6 @@ function FormulaDetailPage() {
         </div>
       )}
 
-      {/* YIELD & BATCH */}
-      <SectionCard title="YIELD & BATCH">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="MOULD">
-            <MouldSelect
-              value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
-              disabled={fieldsDisabled}
-              onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id ?? "" } : d))}
-            />
-          </Field>
-          <Field label="YIELD (QTY)">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.5"
-              className={`${inputClass} min-h-[52px] text-base`}
-              disabled={fieldsDisabled}
-              value={editing ? draft?.yieldQuantity ?? "" : (version?.yield_quantity ?? "")}
-              onChange={(e) =>
-                setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))
-              }
-            />
-          </Field>
-          <Field label="BATCH ×N (VIEW ONLY, QUICK PREVIEW)">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.5"
-              min="0"
-              className={`${inputClass} min-h-[52px] bg-secondary text-base`}
-              value={batch}
-              onChange={(e) => setBatch(e.target.value)}
-            />
-          </Field>
-          <div className="space-y-1">
-            <span className="label-caps block text-xs text-muted-foreground">TOTAL WEIGHT</span>
-            <p className="font-mono text-base tabular-nums">
-              {fmtNumber(totalGrams)}g
-              <span className="ml-2 bg-secondary px-2 py-0.5 text-sm">
-                ×{fmtNumber(batchValue, 2)} = {fmtNumber(totalScaled)}g
-              </span>
-            </p>
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              {mould ? mould.name : "NO MOULD"}
-              {yieldQty
-                ? ` ${fmtNumber(yieldQty * batchValue, 2)}개 · ${fmtNumber(totalScaled)}g`
-                : ""}
-            </p>
-          </div>
-        </div>
-      </SectionCard>
-
-      {/* BASIS — 기준량 자동 집계 */}
-      {version && (
-        <BasisPanel
-          bases={bases}
-          rows={rows}
-          overrides={overrides}
-          bathWaterG={bathWaterG}
-          locked={locked}
-          onOverridesChange={(next) =>
-            supabase
-              .from("formula_versions")
-              .update({ basis_overrides: next as unknown as FormulaVersion["basis_overrides"] })
-              .eq("id", versionId!)
-              .then(({ error }) => {
-                if (error) throw error;
-                return invalidate();
-              })
-          }
-          onBathChange={(grams) =>
-            supabase
-              .from("formula_versions")
-              .update({ bath_water_g: grams })
-              .eq("id", versionId!)
-              .then(({ error }) => {
-                if (error) throw error;
-                return invalidate();
-              })
-          }
-        />
-      )}
-
       {/* INGREDIENTS — BASE ×1 vs 저장된 배수 프리셋을 한 표 안에서 박스로 구분해 보여준다 */}
       <SectionCard
         title="INGREDIENTS"
@@ -923,6 +840,89 @@ function FormulaDetailPage() {
           </div>
         )}
       </SectionCard>
+
+      {/* YIELD & BATCH */}
+      <SectionCard title="YIELD & BATCH">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label="MOULD">
+            <MouldSelect
+              value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
+              disabled={fieldsDisabled}
+              onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id ?? "" } : d))}
+            />
+          </Field>
+          <Field label="YIELD (QTY)">
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              className={`${inputClass} min-h-[52px] text-base`}
+              disabled={fieldsDisabled}
+              value={editing ? draft?.yieldQuantity ?? "" : (version?.yield_quantity ?? "")}
+              onChange={(e) =>
+                setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))
+              }
+            />
+          </Field>
+          <Field label="BATCH ×N (VIEW ONLY, QUICK PREVIEW)">
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              min="0"
+              className={`${inputClass} min-h-[52px] bg-secondary text-base`}
+              value={batch}
+              onChange={(e) => setBatch(e.target.value)}
+            />
+          </Field>
+          <div className="space-y-1">
+            <span className="label-caps block text-xs text-muted-foreground">TOTAL WEIGHT</span>
+            <p className="font-mono text-base tabular-nums">
+              {fmtNumber(totalGrams)}g
+              <span className="ml-2 bg-secondary px-2 py-0.5 text-sm">
+                ×{fmtNumber(batchValue, 2)} = {fmtNumber(totalScaled)}g
+              </span>
+            </p>
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              {mould ? mould.name : "NO MOULD"}
+              {yieldQty
+                ? ` ${fmtNumber(yieldQty * batchValue, 2)}개 · ${fmtNumber(totalScaled)}g`
+                : ""}
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* BASIS — 기준량 자동 집계 */}
+      {version && (
+        <BasisPanel
+          bases={bases}
+          rows={rows}
+          overrides={overrides}
+          bathWaterG={bathWaterG}
+          locked={locked}
+          onOverridesChange={(next) =>
+            supabase
+              .from("formula_versions")
+              .update({ basis_overrides: next as unknown as FormulaVersion["basis_overrides"] })
+              .eq("id", versionId!)
+              .then(({ error }) => {
+                if (error) throw error;
+                return invalidate();
+              })
+          }
+          onBathChange={(grams) =>
+            supabase
+              .from("formula_versions")
+              .update({ bath_water_g: grams })
+              .eq("id", versionId!)
+              .then(({ error }) => {
+                if (error) throw error;
+                return invalidate();
+              })
+          }
+        />
+      )}
 
       {/* COMPOSITION / BALANCE */}
       <CompositionPanel rows={rows} batch={batchValue} />
@@ -1109,15 +1109,10 @@ function UnifiedIngredientRow({
         isFunctional && "bg-secondary/20",
       )}
     >
-      {/* INGREDIENT + 출처/기능 뱃지 */}
+      {/* INGREDIENT + 출처/기능 뱃지 — 여기서는 재료명을 눌러도 재료 마스터로 이동하지 않는다.
+          (배합을 고치려는 클릭이 엉뚱하게 재료 상세 페이지로 튕겨나가던 문제 수정) */}
       <td className="px-2 py-2 text-sm">
-        <Link
-          to="/ingredients/$ingredientId"
-          params={{ ingredientId: row.ingredient_id }}
-          className="hover:underline"
-        >
-          {ing ? ingredientDisplayName(ing) : "—"}
-        </Link>
+        <span>{ing ? ingredientDisplayName(ing) : "—"}</span>
         {isFunctional && (
           <span className="label-caps ml-2 border border-foreground px-1.5 py-0.5 text-[10px]">
             FUNCTIONAL
