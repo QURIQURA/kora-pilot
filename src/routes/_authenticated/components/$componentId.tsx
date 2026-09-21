@@ -14,6 +14,7 @@ import { techniquePath } from "@/lib/technique";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { CurrentFormulaPanel } from "@/components/pilot/CurrentFormulaPanel";
+import { DuplicateComponentModal } from "@/components/pilot/DuplicateComponentModal";
 import { ComponentTagsSection } from "@/components/pilot/ComponentTagsSection";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
@@ -48,6 +49,7 @@ function ComponentDetailPage() {
   const techniqueCategories = useQuery(techniqueCategoriesQuery());
   const usage = useQuery(componentUsageQuery(componentId));
   const experiments = useQuery(experimentsByComponentQuery(componentId));
+  const [duplicating, setDuplicating] = useState(false);
 
   const techniqueCategoryList = techniqueCategories.data ?? [];
   const path = techniquePath(techniqueCategoryList, component.data?.technique_category_id ?? null);
@@ -106,12 +108,17 @@ function ComponentDetailPage() {
             UPDATED {formatDateTime(data.updated_at)}
           </p>
         </div>
-        <TechniqueSelect
-          className={selectClass + " w-auto"}
-          value={data.technique_category_id ?? ""}
-          onChange={(id) => update.mutate({ technique_category_id: id || null })}
-          emptyLabel="NO TECHNIQUE CATEGORY"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <TechniqueSelect
+            className={selectClass + " w-auto"}
+            value={data.technique_category_id ?? ""}
+            onChange={(id) => update.mutate({ technique_category_id: id || null })}
+            emptyLabel="NO TECHNIQUE CATEGORY"
+          />
+          <button type="button" className={buttonClass} onClick={() => setDuplicating(true)}>
+            DUPLICATE COMPONENT
+          </button>
+        </div>
       </div>
 
       <SectionCard title="DESCRIPTION">
@@ -165,6 +172,15 @@ function ComponentDetailPage() {
       >
         DELETE COMPONENT
       </button>
+
+      {duplicating && (
+        <DuplicateComponentModal
+          sourceComponentId={componentId}
+          sourceComponentName={data.name}
+          onCancel={() => setDuplicating(false)}
+          onCreated={() => setDuplicating(false)}
+        />
+      )}
     </div>
   );
 }

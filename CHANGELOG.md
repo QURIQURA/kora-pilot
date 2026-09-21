@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-09-21 — DUPLICATE COMPONENT
+
+### 무엇이 달라졌나
+
+- COMPONENT 상세 페이지 상단에 **[DUPLICATE COMPONENT]** 버튼이 생겼습니다. 누르면 새 이름을 입력하는 창이 뜨고, 확인하면 지금 COMPONENT의 CURRENT FORMULA(재료 목록·몰드·수율·배쓰워터)를 그대로 복사해서 새 COMPONENT + 새 FORMULA를 한 번에 만들어줍니다. 예를 들어 "Vanilla Chiffon"을 복제해서 "Cacao Chiffon"을 만들고, 그 다음 카카오파우더만 추가/조정하면 됩니다 — 처음부터 재료를 다시 입력할 필요가 없습니다.
+- 복제된 FORMULA는 원본과의 관계가 `derived_from_formula_id`로 남습니다(기준 배합 라이브러리에서 시작할 때와 동일한 방식).
+- 원본에 아직 CURRENT 배합이 없으면 COMPONENT만 새로 생성됩니다(배합은 비어있는 상태로 시작).
+- DB 변경 없음 — 기존 테이블에 새 행을 추가하는 것뿐입니다.
+
+### 확인하는 방법
+
+1. 재료가 있는 아무 COMPONENT 상세 페이지로 들어갑니다.
+2. 상단 [DUPLICATE COMPONENT]를 누르고 새 이름을 입력한 뒤 [DUPLICATE]를 누릅니다.
+3. 새로 만들어진 COMPONENT 페이지로 자동 이동하고, CURRENT FORMULA에 원본과 같은 재료/수율이 복사되어 있는지 확인합니다.
+
+---
+
 ## 2026-09-21 — PRODUCT 목록의 CATEGORY 색상 표시
 
 ### 무엇이 달라졌나
