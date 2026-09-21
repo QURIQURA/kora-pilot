@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-09-21 — CURRENT FORMULA 패널을 상단으로 이동
+
+### 무엇이 달라졌나
+
+- COMPONENT 상세 페이지에서 CURRENT FORMULA(재료 요약 + OPEN FULL FORMULA 링크)가 이제 DESCRIPTION/USED IN/NOTES보다 위, 헤더 바로 아래에 뜹니다. 예전엔 스크롤을 내려야 배합을 볼 수 있었는데, 이제 페이지에 들어가자마자 바로 보이고 한 번 클릭으로 FORMULA 편집 페이지로 이동할 수 있습니다.
+- 코드/DB 변경 없음 — 화면 배치 순서만 바꿨습니다.
+
+### 확인하는 방법
+
+1. 아무 COMPONENT 상세 페이지로 들어갑니다.
+2. 스크롤 없이 바로 CURRENT FORMULA 패널이 보이는지 확인합니다.
+
+---
+
 ## 2026-09-21 — DUPLICATE COMPONENT
 
 ### 무엇이 달라졌나

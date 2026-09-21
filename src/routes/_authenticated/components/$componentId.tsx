@@ -121,6 +121,8 @@ function ComponentDetailPage() {
         </div>
       </div>
 
+      <CurrentFormulaPanel componentId={componentId} componentName={data.name} />
+
       <SectionCard title="DESCRIPTION">
         <TextArea
           value={data.description ?? ""}
@@ -154,8 +156,6 @@ function ComponentDetailPage() {
       <SectionCard title="NOTES">
         <TextArea value={data.notes ?? ""} onSave={(notes) => update.mutate({ notes })} />
       </SectionCard>
-
-      <CurrentFormulaPanel componentId={componentId} componentName={data.name} />
 
       <SectionCard title="DEVELOPMENT HISTORY">
         <ExperimentListItems items={experiments.data ?? []} />
