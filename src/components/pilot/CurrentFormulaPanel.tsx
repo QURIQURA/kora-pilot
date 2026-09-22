@@ -38,12 +38,9 @@ export function CurrentFormulaPanel({
     (sum, row) => sum + (toGrams(Number(row.amount), row.unit) ?? 0),
     0,
   );
-  const topRows = [...rows]
-    .sort(
-      (a, b) =>
-        (toGrams(Number(b.amount), b.unit) ?? 0) - (toGrams(Number(a.amount), a.unit) ?? 0),
-    )
-    .slice(0, 6);
+  // 공정 순서(sort_order) 그대로 전체 재료를 보여준다 — 예전엔 무게 기준 상위 6개만 보이고
+  // 나머지는 "OPEN FULL FORMULA"를 눌러야만 볼 수 있어서 불편하다는 피드백으로 전체 표시로 변경.
+  const orderedRows = [...rows].sort((a, b) => a.sort_order - b.sort_order);
 
   const [showBaseLibrary, setShowBaseLibrary] = useState(false);
   const [creatingDevelopment, setCreatingDevelopment] = useState(false);
@@ -241,20 +238,25 @@ export function CurrentFormulaPanel({
 
         {rows.length > 0 && (
           <ul className="divide-y divide-border border border-border">
-            {topRows.map((row) => (
-              <li key={row.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                <span>{row.ingredients ? ingredientDisplayName(row.ingredients) : "—"}</span>
-                <span className="font-mono text-xs text-muted-foreground">
+            {orderedRows.map((row) => (
+              <li key={row.id} className="flex items-baseline gap-2 px-3 py-2 text-sm">
+                <span className="shrink-0">
+                  {row.ingredients ? ingredientDisplayName(row.ingredients) : "—"}
+                </span>
+                {/* 재료명과 그램수를 점선으로 이어서 옆에 멀리 떨어져 있어도 한눈에 짝지어 보이게 함 */}
+                <span className="mb-1 flex-1 border-b border-dotted border-border" aria-hidden="true" />
+                <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
                   {fmtNumber(Number(row.amount), 1)}
                   {row.unit}
+                  {row.secondary_amount != null && row.secondary_unit && (
+                    <span className="ml-1 text-muted-foreground/70">
+                      ({fmtNumber(Number(row.secondary_amount), 2)}
+                      {row.secondary_unit})
+                    </span>
+                  )}
                 </span>
               </li>
             ))}
-            {rows.length > topRows.length && (
-              <li className="px-3 py-2 text-center font-mono text-[11px] uppercase text-muted-foreground">
-                +{rows.length - topRows.length}개 재료 더 있음 — OPEN FULL FORMULA에서 전체 보기
-              </li>
-            )}
           </ul>
         )}
 
