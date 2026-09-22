@@ -431,6 +431,10 @@ function FormulaDetailPage() {
       if (error) throw error;
     },
     onSuccess: invalidate,
+    onError: (error) => {
+      console.error("removeBatchPreset failed", error);
+      window.alert("배치 열 삭제에 실패했습니다. 다시 시도해 주세요.");
+    },
   });
 
   /** SAVE — draft와 저장된 값을 비교해 바뀐 것만 커밋한다 */
@@ -762,6 +766,55 @@ function FormulaDetailPage() {
         )}
       </div>
 
+      {/* YIELD & BATCH — 배치 숫자를 입력하면 바로 아래 INGREDIENTS 표가 반응하는 걸 스크롤 없이
+          볼 수 있도록 표 위로 올리고, 상단 SAVE 박스처럼 한 줄 컴팩트 박스로 축소한다 */}
+      <div className="flex flex-wrap items-center gap-3 border border-border bg-card px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className="label-caps text-[10px] text-muted-foreground">MOULD</span>
+          <MouldSelect
+            className={`${compactSelectClass} w-auto`}
+            value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
+            disabled={fieldsDisabled}
+            onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id ?? "" } : d))}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="label-caps text-[10px] text-muted-foreground">YIELD</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.5"
+            className={`${compactSelectClass} w-20`}
+            disabled={fieldsDisabled}
+            value={editing ? draft?.yieldQuantity ?? "" : (version?.yield_quantity ?? "")}
+            onChange={(e) => setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="label-caps text-[10px] text-muted-foreground">BATCH ×N</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.5"
+            min="0"
+            className={`${compactSelectClass} w-20 bg-secondary`}
+            value={batch}
+            onChange={(e) => setBatch(e.target.value)}
+          />
+        </div>
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <p className="font-mono text-xs tabular-nums">
+          {fmtNumber(totalGrams)}g
+          <span className="ml-2 bg-secondary px-1.5 py-0.5">
+            ×{fmtNumber(batchValue, 2)} = {fmtNumber(totalScaled)}g
+          </span>
+        </p>
+        <p className="label-caps text-[10px] uppercase text-muted-foreground">
+          {mould ? mould.name : "NO MOULD"}
+          {yieldQty ? ` ${fmtNumber(yieldQty * batchValue, 2)}개 · ${fmtNumber(totalScaled)}g` : ""}
+        </p>
+      </div>
+
       {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
       {processCautions.length > 0 && (
         <div className="border border-dashed border-foreground px-4 py-3">
@@ -853,14 +906,18 @@ function FormulaDetailPage() {
                                 patchBatchDraft(preset.id, { multiplier: e.target.value })
                               }
                             />
-                            <button
-                              type="button"
-                              className="label-caps px-1 text-[10px] hover:bg-secondary"
-                              onClick={() => removeBatchPreset.mutate(preset.id)}
-                            >
-                              ✕
-                            </button>
                           </div>
+                          <button
+                            type="button"
+                            className="label-caps min-h-[32px] w-full border border-input px-1 py-1 text-[10px] hover:bg-secondary active:bg-secondary"
+                            onClick={() => {
+                              if (removeBatchPreset.isPending) return;
+                              removeBatchPreset.mutate(preset.id);
+                            }}
+                            disabled={removeBatchPreset.isPending}
+                          >
+                            ✕ 열 삭제
+                          </button>
                         </div>
                       ) : (
                         <>
@@ -908,59 +965,6 @@ function FormulaDetailPage() {
             </table>
           </div>
         )}
-      </SectionCard>
-
-      {/* YIELD & BATCH — INGREDIENTS 바로 다음에 둬서, +ADD BATCH(위)로 만든 배수 프리셋과
-          여기 BATCH ×N 미리보기가 서로 멀어지지 않도록 한다 */}
-      <SectionCard title="YIELD & BATCH">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="MOULD">
-            <MouldSelect
-              value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
-              disabled={fieldsDisabled}
-              onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id ?? "" } : d))}
-            />
-          </Field>
-          <Field label="YIELD (QTY)">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.5"
-              className={`${inputClass} min-h-[52px] text-base`}
-              disabled={fieldsDisabled}
-              value={editing ? draft?.yieldQuantity ?? "" : (version?.yield_quantity ?? "")}
-              onChange={(e) =>
-                setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))
-              }
-            />
-          </Field>
-          <Field label="BATCH ×N (VIEW ONLY, QUICK PREVIEW)">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.5"
-              min="0"
-              className={`${inputClass} min-h-[52px] bg-secondary text-base`}
-              value={batch}
-              onChange={(e) => setBatch(e.target.value)}
-            />
-          </Field>
-          <div className="space-y-1">
-            <span className="label-caps block text-xs text-muted-foreground">TOTAL WEIGHT</span>
-            <p className="font-mono text-base tabular-nums">
-              {fmtNumber(totalGrams)}g
-              <span className="ml-2 bg-secondary px-2 py-0.5 text-sm">
-                ×{fmtNumber(batchValue, 2)} = {fmtNumber(totalScaled)}g
-              </span>
-            </p>
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              {mould ? mould.name : "NO MOULD"}
-              {yieldQty
-                ? ` ${fmtNumber(yieldQty * batchValue, 2)}개 · ${fmtNumber(totalScaled)}g`
-                : ""}
-            </p>
-          </div>
-        </div>
       </SectionCard>
 
       {/* VERSION BAR — 버전 전환/상태 선택은 부가 정보라 YIELD & BATCH 다음으로 내려둔다 */}
