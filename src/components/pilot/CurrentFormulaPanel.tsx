@@ -11,9 +11,9 @@ import {
 } from "@/lib/queries";
 import { currentVersion } from "./FormulaSummary";
 import { fmtNumber, toGrams, versionLabel } from "@/lib/formula";
-import { ingredientDisplayName } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { ExperimentCreateModal } from "./ExperimentCreateForm";
+import { VersionComparisonSheet } from "./VersionComparisonSheet";
 import { SectionCard, StatusBadge, buttonClass, primaryButtonClass } from "./ui";
 
 export function CurrentFormulaPanel({
@@ -38,10 +38,6 @@ export function CurrentFormulaPanel({
     (sum, row) => sum + (toGrams(Number(row.amount), row.unit) ?? 0),
     0,
   );
-  // 공정 순서(sort_order) 그대로 전체 재료를 보여준다 — 예전엔 무게 기준 상위 6개만 보이고
-  // 나머지는 "OPEN FULL FORMULA"를 눌러야만 볼 수 있어서 불편하다는 피드백으로 전체 표시로 변경.
-  const orderedRows = [...rows].sort((a, b) => a.sort_order - b.sort_order);
-
   const [showBaseLibrary, setShowBaseLibrary] = useState(false);
   const [creatingDevelopment, setCreatingDevelopment] = useState(false);
 
@@ -236,31 +232,11 @@ export function CurrentFormulaPanel({
           </div>
         </div>
 
-        {rows.length > 0 && (
-          <ul className="divide-y divide-border border border-border">
-            {orderedRows.map((row) => (
-              <li key={row.id} className="px-3 py-2 text-sm">
-                {/* 이름+점선+그램수를 한 덩어리(max-w)로 묶어서 패널이 넓어도 재료명과 그램수가
-                    화면 끝까지 벌어지지 않고 서로 가깝게 붙어 보이도록 함 */}
-                <div className="flex max-w-xs items-baseline gap-2">
-                  <span className="shrink-0">
-                    {row.ingredients ? ingredientDisplayName(row.ingredients) : "—"}
-                  </span>
-                  <span className="mb-1 flex-1 border-b border-dotted border-border" aria-hidden="true" />
-                  <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                    {fmtNumber(Number(row.amount), 1)}
-                    {row.unit}
-                    {row.secondary_amount != null && row.secondary_unit && (
-                      <span className="ml-1 text-muted-foreground/70">
-                        ({fmtNumber(Number(row.secondary_amount), 2)}
-                        {row.secondary_unit})
-                      </span>
-                    )}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
+        {/* 재료 리스트 대신 버전 비교 시트를 바로 보여준다 — Formula 상세 페이지까지 들어가지
+            않아도 이 Component의 모든 버전이 뭐가 다른지 한눈에 볼 수 있게. 실제 편집은 항상
+            "OPEN FULL FORMULA"에서 버전을 선택해서 한다 (읽기 전용). */}
+        {(formula.formula_versions ?? []).length > 0 && (
+          <VersionComparisonSheet versions={formula.formula_versions} />
         )}
 
         <button
