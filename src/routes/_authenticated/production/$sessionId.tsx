@@ -614,7 +614,7 @@ function AddFormulaVersionForm({
                 ? "선택한 기준중량을 찾을 수 없습니다"
                 : custom
                   ? "CUSTOM — 배수를 직접 수정해서 기준중량과 달라졌습니다"
-                  : `✓ BASE WEIGHT 기준 — ${fmtNumber(selectedBaseWeight.weight_g)}g × ${baseWeightQtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams ?? 0)}g`}
+                  : `✓ BASE WEIGHT 기준 — ${fmtNumber(selectedBaseWeight.weight_g)}g × ${baseWeightQtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams ?? 0)}g = 총 ${fmtNumber(selectedBaseWeight.weight_g * (baseWeightQtyNum ?? 0))}g`}
             </p>
           )
         : mouldId && (
@@ -623,7 +623,7 @@ function AddFormulaVersionForm({
                 ? "이 몰드엔 기준 반죽량이 없어 자동 계산이 안 됩니다 — SETTINGS에서 등록해 주세요"
                 : custom
                   ? "CUSTOM — 배수를 직접 수정해서 몰드 기준값과 달라졌습니다"
-                  : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams ?? 0)}g`}
+                  : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams ?? 0)}g = 총 ${fmtNumber(selectedMould.reference_weight_g * (qtyNum ?? 0))}g`}
             </p>
           )}
       {add.isError && (
@@ -934,7 +934,7 @@ function FormulaVersionRow({
                 ? "선택한 기준중량을 찾을 수 없습니다"
                 : isCustomMultiplier(Number(multiplierStr) || null, suggested)
                   ? "CUSTOM — 배수를 직접 수정해서 기준중량과 달라졌습니다"
-                  : `✓ BASE WEIGHT 기준 — ${fmtNumber(selectedBaseWeight.weight_g)}g × ${baseWeightQtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams)}g`}
+                  : `✓ BASE WEIGHT 기준 — ${fmtNumber(selectedBaseWeight.weight_g)}g × ${baseWeightQtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams)}g = 총 ${fmtNumber(selectedBaseWeight.weight_g * (baseWeightQtyNum ?? 0))}g`}
             </p>
           )
         : mouldId && (
@@ -943,7 +943,7 @@ function FormulaVersionRow({
                 ? "이 몰드엔 기준 반죽량이 없어 자동 계산이 안 됩니다 — SETTINGS에서 등록해 주세요"
                 : isCustomMultiplier(Number(multiplierStr) || null, suggested)
                   ? "CUSTOM — 배수를 직접 수정해서 몰드 기준값과 달라졌습니다"
-                  : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams)}g`}
+                  : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams)}g = 총 ${fmtNumber(selectedMould.reference_weight_g * (qtyNum ?? 0))}g`}
             </p>
           )}
       {applyBatch.isError && (
@@ -1141,7 +1141,7 @@ function WeighingView({
         <DndContext sensors={colSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
           <thead>
             <tr>
-              <th className="label-caps sticky left-0 top-0 z-20 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
+              <th className="label-caps sticky left-0 top-0 z-30 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
                 INGREDIENT
                 <div
                   role="separator"
@@ -1165,7 +1165,7 @@ function WeighingView({
                   />
                 ))}
               </SortableContext>
-              <th key={MATRIX_FILLER_COL_ID} className="sticky top-0 z-10 border-b border-l border-border bg-secondary" />
+              <th key={MATRIX_FILLER_COL_ID} className="sticky top-0 z-20 border-b border-l border-border bg-secondary" />
             </tr>
           </thead>
         </DndContext>
@@ -1208,8 +1208,8 @@ function MatrixColumnHeader({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "sticky top-0 z-10 relative border-b border-l border-border bg-secondary px-3 py-2 text-left align-bottom",
-        isDragging && "z-30 bg-secondary",
+        "sticky top-0 z-20 relative border-b border-l border-border bg-secondary px-3 py-2 text-left align-bottom",
+        isDragging && "z-40 bg-secondary",
       )}
     >
       <div className="flex items-start gap-1">
