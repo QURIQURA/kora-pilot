@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-09-23 — SETTINGS 화면 2열 그리드로 계열별 정리
+
+**무엇이 달라졌나**
+- SETTINGS의 각 항목(CATEGORIES/TAGS/COST ITEMS/MONTHLY OVERHEAD/MOULDS/BASE WEIGHTS 등)이 순서 없이 세로로 쭉 나열돼 있던 것을, PRODUCT TAXONOMY(카테고리/태그) · COST(코스트 아이템/월 고정비) · PRODUCTION BASIS(몰드/기준중량) · PROCESS · TECHNIQUE · INGREDIENT/SENSORY(재료 기능/관능/향미/아로마) 6개 계열로 묶고, 계열마다 2열 그리드로 배치했습니다.
+
+**확인 방법**
+- SETTINGS 화면에서 관련 있는 설정끼리 같은 줄에 나란히 뜨는지 확인.
+
+---
+
 ## 2026-09-23 — 원가구조 확장: Raw Material Cost와 Full Production Cost 분리
 
 **무엇이 달라졌나**

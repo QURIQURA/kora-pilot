@@ -61,54 +61,82 @@ function SettingsSection({
   );
 }
 
+/** 같은 계열 지표를 2열 그리드로 묶는 그룹 래퍼 (2026-09-23, 사용자 요청 — "규칙없이 나열" 개선) */
+function SettingsGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <p className="label-caps text-[11px] text-muted-foreground">{label}</p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>
+    </div>
+  );
+}
+
 function SettingsPage() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="border-b border-border pb-4">
         <h1 className="label-caps text-foreground">SETTINGS</h1>
       </div>
-      <SettingsSection title="CATEGORIES" defaultOpen>
-        <CategoryManager />
-      </SettingsSection>
-      <SettingsSection title="COST ITEMS (UTILITY / PACKAGING / CONSUMABLE / OVERHEAD)">
-        <CostItemManager />
-      </SettingsSection>
-      <SettingsSection title="MONTHLY OVERHEAD">
-        <MonthlyOverheadSettings />
-      </SettingsSection>
-      <SettingsSection title="TAGS">
-        <TagManager />
-      </SettingsSection>
-      <SettingsSection title="MOULDS">
-        <MouldManager />
-      </SettingsSection>
-      <SettingsSection title="BASE WEIGHTS">
-        <BaseWeightManager />
-      </SettingsSection>
-      <SettingsSection title="PROCESS CATEGORIES">
-        <ProcessCategoryManager />
-      </SettingsSection>
-      <SettingsSection title="PROCESS PARAMETERS">
-        <ProcessParameterManager />
-      </SettingsSection>
-      <SettingsSection title="TECHNIQUE CATEGORIES">
-        <TechniqueCategoryManager />
-      </SettingsSection>
-      <SettingsSection title="METHODS">
-        <MethodManager />
-      </SettingsSection>
-      <SettingsSection title="INGREDIENT FUNCTIONS">
-        <IngredientFunctionManager />
-      </SettingsSection>
-      <SettingsSection title="SENSORY ATTRIBUTES">
-        <SensoryAttributeManager />
-      </SettingsSection>
-      <SettingsSection title="FLAVOUR FAMILIES">
-        <FlavourFamilyManager />
-      </SettingsSection>
-      <SettingsSection title="AROMA TAGS">
-        <AromaTagManager />
-      </SettingsSection>
+
+      <SettingsGroup label="PRODUCT TAXONOMY">
+        <SettingsSection title="CATEGORIES" defaultOpen>
+          <CategoryManager />
+        </SettingsSection>
+        <SettingsSection title="TAGS">
+          <TagManager />
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="COST">
+        <SettingsSection title="COST ITEMS (UTILITY / PACKAGING / CONSUMABLE / OVERHEAD)">
+          <CostItemManager />
+        </SettingsSection>
+        <SettingsSection title="MONTHLY OVERHEAD">
+          <MonthlyOverheadSettings />
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="PRODUCTION BASIS">
+        <SettingsSection title="MOULDS">
+          <MouldManager />
+        </SettingsSection>
+        <SettingsSection title="BASE WEIGHTS">
+          <BaseWeightManager />
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="PROCESS">
+        <SettingsSection title="PROCESS CATEGORIES">
+          <ProcessCategoryManager />
+        </SettingsSection>
+        <SettingsSection title="PROCESS PARAMETERS">
+          <ProcessParameterManager />
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="TECHNIQUE">
+        <SettingsSection title="TECHNIQUE CATEGORIES">
+          <TechniqueCategoryManager />
+        </SettingsSection>
+        <SettingsSection title="METHODS">
+          <MethodManager />
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="INGREDIENT / SENSORY">
+        <SettingsSection title="INGREDIENT FUNCTIONS">
+          <IngredientFunctionManager />
+        </SettingsSection>
+        <SettingsSection title="SENSORY ATTRIBUTES">
+          <SensoryAttributeManager />
+        </SettingsSection>
+        <SettingsSection title="FLAVOUR FAMILIES">
+          <FlavourFamilyManager />
+        </SettingsSection>
+        <SettingsSection title="AROMA TAGS">
+          <AromaTagManager />
+        </SettingsSection>
+      </SettingsGroup>
     </div>
   );
 }
