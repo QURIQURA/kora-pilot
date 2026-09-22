@@ -896,7 +896,6 @@ function FormulaDetailPage() {
                     %  / RATE
                   </th>
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground">FUNCTION</th>
-                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">NOTE</th>
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground" />
                 </tr>
               </thead>
@@ -1155,7 +1154,6 @@ function UnifiedIngredientRow({
   const savedAmount = Number(row.amount);
   const amount = editing && draft ? parseNumber(draft.amount) : savedAmount;
   const unit = editing && draft ? draft.unit : row.unit;
-  const note = editing && draft ? draft.note : (row.note ?? "");
   const source = row.amount_source ?? "manual";
   const unitFactor = toGrams(1, unit);
 
@@ -1478,16 +1476,6 @@ function UnifiedIngredientRow({
       {/* FUNCTION */}
       <td className="px-2 py-2 font-mono text-xs uppercase text-muted-foreground">
         {functions || "—"}
-      </td>
-
-      {/* NOTE */}
-      <td className="px-2 py-2">
-        <input
-          className="min-h-[48px] w-40 border border-input bg-background px-2 py-2 text-base outline-none focus:border-foreground disabled:opacity-60"
-          disabled={locked || !editing}
-          value={note}
-          onChange={(e) => onDraftChange({ note: e.target.value })}
-        />
       </td>
 
       <td className="px-2 py-2">
