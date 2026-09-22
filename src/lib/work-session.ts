@@ -165,5 +165,41 @@ export function buildMultiplierSnapshot(
     working_amount: workingAmount(Number(line.amount), multiplier),
   }));
 }
+
+/* ── PRODUCTION: 몰드 기준 배수 자동 계산 ──────────────────────────
+ * 몰드의 "기준 반죽량(g)"(실측값)과 개수, 그리고 BASE(×1) 레시피의 총 반죽량을 알면
+ * 목표 몰드를 몇 개 만들지로부터 필요한 배수를 역산할 수 있다.
+ *   배수 = (기준 반죽량 × 개수) ÷ BASE 총 반죽량
+ */
+
+/** BASE(×1) 재료 라인들의 총 무게(g) — %/배수 계산과 동일하게 amount(그램) 합산만 사용한다 */
+export function sumBaseGrams(lines: VersionIngredientRow[]): number {
+  return lines.reduce((sum, line) => sum + Number(line.amount), 0);
+}
+
+const MULTIPLIER_MATCH_EPSILON = 0.01;
+
+/** 몰드 + 개수 + BASE 총량으로부터 제안 배수를 계산한다. 필요한 값이 없으면 null. */
+export function suggestedMultiplierFromMould(
+  mould: { reference_weight_g: number | null } | null | undefined,
+  qty: number | null,
+  baseTotalGrams: number | null,
+): number | null {
+  if (!mould || mould.reference_weight_g == null) return null;
+  if (qty == null || !(qty > 0)) return null;
+  if (baseTotalGrams == null || !(baseTotalGrams > 0)) return null;
+  return (mould.reference_weight_g * qty) / baseTotalGrams;
+}
+
+/**
+ * 몰드+개수가 선택된 상태에서, 현재 배수 입력값이 그 조합의 제안 배수와 다르면
+ * "CUSTOM"(수동으로 어긋난 값)으로 취급한다. 몰드가 선택되지 않았다면 원래부터
+ * 몰드와 무관한 수동 배수이므로 CUSTOM 취급하지 않는다.
+ */
+export function isCustomMultiplier(current: number | null, suggested: number | null): boolean {
+  if (suggested == null) return false;
+  if (current == null) return true;
+  return Math.abs(current - suggested) > MULTIPLIER_MATCH_EPSILON;
+}
  
 

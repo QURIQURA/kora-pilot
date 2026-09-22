@@ -24,7 +24,12 @@ export function MouldManager() {
       patch,
     }: {
       id: string;
-      patch: { name?: string; shape_size?: string | null; notes?: string | null };
+      patch: {
+        name?: string;
+        shape_size?: string | null;
+        reference_weight_g?: number | null;
+        notes?: string | null;
+      };
     }) => {
       const { error } = await supabase.from("moulds").update(patch).eq("id", id);
       if (error) throw error;
@@ -97,6 +102,23 @@ export function MouldManager() {
                       update.mutate({ id: mould.id, patch: { shape_size } });
                   }}
                 />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="1"
+                    min="0"
+                    className={`${inputClass} w-24 border-transparent text-right hover:border-input`}
+                    placeholder="기준(g)"
+                    defaultValue={mould.reference_weight_g ?? ""}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim() ? Number(e.target.value) : null;
+                      if (next !== (mould.reference_weight_g ?? null))
+                        update.mutate({ id: mould.id, patch: { reference_weight_g: next } });
+                    }}
+                  />
+                  <span className="label-caps text-[10px] text-muted-foreground">G</span>
+                </div>
                 <span className="label-caps text-xs text-muted-foreground">
                   {used > 0 ? `${used} IN USE` : "UNUSED"}
                 </span>

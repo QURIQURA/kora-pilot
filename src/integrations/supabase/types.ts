@@ -909,6 +909,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          reference_weight_g: number | null
           shape_size: string | null
           updated_at: string
           user_id: string
@@ -918,6 +919,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          reference_weight_g?: number | null
           shape_size?: string | null
           updated_at?: string
           user_id: string
@@ -927,6 +929,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          reference_weight_g?: number | null
           shape_size?: string | null
           updated_at?: string
           user_id?: string
@@ -1557,6 +1560,8 @@ export type Database = {
           added_at: string
           formula_version_id: string
           id: string
+          mould_id: string | null
+          mould_qty: number | null
           multiplier: number
           sort_order: number
           updated_at: string
@@ -1567,6 +1572,8 @@ export type Database = {
           added_at?: string
           formula_version_id: string
           id?: string
+          mould_id?: string | null
+          mould_qty?: number | null
           multiplier?: number
           sort_order?: number
           updated_at?: string
@@ -1577,6 +1584,8 @@ export type Database = {
           added_at?: string
           formula_version_id?: string
           id?: string
+          mould_id?: string | null
+          mould_qty?: number | null
           multiplier?: number
           sort_order?: number
           updated_at?: string
@@ -1589,6 +1598,13 @@ export type Database = {
             columns: ["formula_version_id"]
             isOneToOne: false
             referencedRelation: "formula_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_formula_versions_mould_id_fkey"
+            columns: ["mould_id"]
+            isOneToOne: false
+            referencedRelation: "moulds"
             referencedColumns: ["id"]
           },
           {

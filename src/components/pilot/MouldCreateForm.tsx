@@ -18,6 +18,7 @@ export function MouldCreateForm({
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [shapeSize, setShapeSize] = useState("");
+  const [referenceWeight, setReferenceWeight] = useState("");
   const [notes, setNotes] = useState("");
 
   const create = useMutation({
@@ -29,6 +30,7 @@ export function MouldCreateForm({
           user_id,
           name: name.trim(),
           shape_size: shapeSize.trim() || null,
+          reference_weight_g: referenceWeight.trim() ? Number(referenceWeight) : null,
           notes: notes.trim() || null,
         })
         .select("id")
@@ -40,6 +42,7 @@ export function MouldCreateForm({
       await queryClient.invalidateQueries({ queryKey: ["moulds"] });
       setName("");
       setShapeSize("");
+      setReferenceWeight("");
       setNotes("");
       onCreated?.(id);
     },
@@ -69,6 +72,18 @@ export function MouldCreateForm({
           placeholder="ROUND · Ø15 × H8"
           value={shapeSize}
           onChange={(e) => setShapeSize(e.target.value)}
+        />
+      </Field>
+      <Field label="기준 반죽량 g (OPTIONAL — PRODUCTION 배수 자동 계산에 사용)">
+        <input
+          type="number"
+          inputMode="decimal"
+          step="1"
+          min="0"
+          className={inputClass}
+          placeholder="예: 340"
+          value={referenceWeight}
+          onChange={(e) => setReferenceWeight(e.target.value)}
         />
       </Field>
       <Field label="NOTES (OPTIONAL)">

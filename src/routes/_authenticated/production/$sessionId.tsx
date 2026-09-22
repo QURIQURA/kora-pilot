@@ -23,7 +23,9 @@ import { cn } from "@/lib/utils";
 import {
   currentUserId,
   formulasQuery,
+  mouldsQuery,
   versionIngredientsBulkQuery,
+  versionIngredientsQuery,
   workSessionFormulaVersionsQuery,
   workSessionMultiplierHistoryQuery,
   workSessionProgressQuery,
@@ -33,17 +35,22 @@ import {
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
 import { fmtNumber, versionLabel } from "@/lib/formula";
+import type { Mould } from "@/lib/formula";
 import { formatDateTime } from "@/lib/datetime";
 import {
   buildMultiplierSnapshot,
   buildWeighingGroups,
+  isCustomMultiplier,
   PROGRESS_STATUS_ICON,
   PROGRESS_STATUS_LABEL,
+  sumBaseGrams,
+  suggestedMultiplierFromMould,
   WORK_SESSION_PROGRESS_STATUSES,
   workingAmount,
   type WorkSessionProgressStatus,
 } from "@/lib/work-session";
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
+import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
@@ -401,14 +408,25 @@ function AddFormulaVersionForm({
 }) {
   const formulas = useQuery(formulasQuery());
   const formulaList = formulas.data ?? [];
+  const moulds = useQuery(mouldsQuery());
+  const mouldList = moulds.data ?? [];
   const [formulaId, setFormulaId] = useState("");
   const [versionId, setVersionId] = useState("");
   const [multiplier, setMultiplier] = useState("1");
+  const [mouldId, setMouldId] = useState("");
+  const [mouldQty, setMouldQty] = useState("1");
 
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
   const versionOptions = [...(formula?.formula_versions ?? [])].sort(
     (a, b) => b.version_number - a.version_number,
   );
+
+  const baseIngredients = useQuery(versionIngredientsQuery(versionId || null));
+  const baseTotalGrams = baseIngredients.data ? sumBaseGrams(baseIngredients.data) : null;
+  const selectedMould = mouldList.find((m) => m.id === mouldId) ?? null;
+  const qtyNum = mouldQty.trim() ? Number(mouldQty) : null;
+  const suggested = suggestedMultiplierFromMould(selectedMould, qtyNum, baseTotalGrams);
+  const custom = mouldId ? isCustomMultiplier(Number(multiplier) || null, suggested) : false;
 
   const add = useMutation({
     mutationFn: async () => {
@@ -421,6 +439,8 @@ function AddFormulaVersionForm({
         work_session_id: sessionId,
         formula_version_id: versionId,
         multiplier: Number(multiplier) || 1,
+        mould_id: mouldId && !custom ? mouldId : null,
+        mould_qty: mouldId && !custom && qtyNum != null ? qtyNum : null,
         sort_order: nextSort,
       });
       if (error) throw error;
@@ -436,7 +456,7 @@ function AddFormulaVersionForm({
         add.mutate();
       }}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Field label="FORMULA">
           <select
             className={selectClass}
@@ -472,6 +492,42 @@ function AddFormulaVersionForm({
             ))}
           </select>
         </Field>
+        <Field label="MOULD (OPTIONAL — 배수 자동 계산)">
+          <MouldSelect
+            className={selectClass}
+            value={mouldId}
+            onChange={(id) => {
+              setMouldId(id);
+              const nextSuggested = suggestedMultiplierFromMould(
+                mouldList.find((m) => m.id === id) ?? null,
+                qtyNum,
+                baseTotalGrams,
+              );
+              if (nextSuggested != null) setMultiplier(String(Math.round(nextSuggested * 100) / 100));
+            }}
+          />
+        </Field>
+        <Field label="QTY">
+          <input
+            type="number"
+            inputMode="decimal"
+            step="1"
+            min="1"
+            className={inputClass}
+            disabled={!mouldId}
+            value={mouldQty}
+            onChange={(e) => {
+              setMouldQty(e.target.value);
+              const nextQty = e.target.value.trim() ? Number(e.target.value) : null;
+              const nextSuggested = suggestedMultiplierFromMould(
+                selectedMould,
+                nextQty,
+                baseTotalGrams,
+              );
+              if (nextSuggested != null) setMultiplier(String(Math.round(nextSuggested * 100) / 100));
+            }}
+          />
+        </Field>
         <Field label="MULTIPLIER ×N">
           <input
             type="number"
@@ -484,6 +540,15 @@ function AddFormulaVersionForm({
           />
         </Field>
       </div>
+      {mouldId && (
+        <p className="label-caps text-[10px] text-muted-foreground">
+          {selectedMould?.reference_weight_g == null
+            ? "이 몰드엔 기준 반죽량이 없어 자동 계산이 안 됩니다 — SETTINGS에서 등록해 주세요"
+            : custom
+              ? "CUSTOM — 배수를 직접 수정해서 몰드 기준값과 달라졌습니다"
+              : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams ?? 0)}g`}
+        </p>
+      )}
       {add.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
           {(add.error as Error).message}
@@ -520,29 +585,55 @@ function FormulaVersionRow({
     ...workSessionMultiplierHistoryQuery(sessionId, row.formula_version_id),
     enabled: showHistory,
   });
+  const moulds = useQuery(mouldsQuery());
+  const mouldList = moulds.data ?? [];
 
-  const setMultiplier = useMutation({
-    mutationFn: async (nextMultiplier: number) => {
+  const baseTotalGrams = sumBaseGrams(lines);
+  const [mouldId, setMouldId] = useState(row.mould_id ?? "");
+  const [mouldQty, setMouldQty] = useState(row.mould_qty != null ? String(row.mould_qty) : "1");
+  const [multiplierStr, setMultiplierStr] = useState(String(Number(row.multiplier)));
+  useEffect(() => {
+    setMouldId(row.mould_id ?? "");
+    setMouldQty(row.mould_qty != null ? String(row.mould_qty) : "1");
+    setMultiplierStr(String(Number(row.multiplier)));
+  }, [row.id, row.mould_id, row.mould_qty, row.multiplier]);
+
+  const selectedMould = mouldList.find((m) => m.id === mouldId) ?? null;
+  const qtyNum = mouldQty.trim() ? Number(mouldQty) : null;
+  const suggested = suggestedMultiplierFromMould(selectedMould, qtyNum, baseTotalGrams);
+
+  const applyBatch = useMutation({
+    mutationFn: async (next: { multiplier: number; mouldId: string | null; mouldQty: number | null }) => {
       const previous = Number(row.multiplier);
-      if (nextMultiplier === previous) return;
+      const changed =
+        next.multiplier !== previous ||
+        next.mouldId !== (row.mould_id ?? null) ||
+        next.mouldQty !== (row.mould_qty ?? null);
+      if (!changed) return;
       const user_id = await currentUserId();
-      const snapshot = buildMultiplierSnapshot(lines, nextMultiplier);
+      if (next.multiplier !== previous) {
+        const snapshot = buildMultiplierSnapshot(lines, next.multiplier);
+        const { error: historyError } = await supabase
+          .from("work_session_multiplier_history")
+          .insert({
+            user_id,
+            work_session_id: sessionId,
+            formula_version_id: row.formula_version_id,
+            previous_multiplier: previous,
+            applied_multiplier: next.multiplier,
+            resulting_working_quantity_snapshot: snapshot,
+          });
+        if (historyError) throw historyError;
+      }
       const { error: updateError } = await supabase
         .from("work_session_formula_versions")
-        .update({ multiplier: nextMultiplier })
+        .update({
+          multiplier: next.multiplier,
+          mould_id: next.mouldId,
+          mould_qty: next.mouldQty,
+        })
         .eq("id", row.id);
       if (updateError) throw updateError;
-      const { error: historyError } = await supabase
-        .from("work_session_multiplier_history")
-        .insert({
-          user_id,
-          work_session_id: sessionId,
-          formula_version_id: row.formula_version_id,
-          previous_multiplier: previous,
-          applied_multiplier: nextMultiplier,
-          resulting_working_quantity_snapshot: snapshot,
-        });
-      if (historyError) throw historyError;
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
@@ -553,6 +644,43 @@ function FormulaVersionRow({
       });
     },
   });
+
+  const commitMultiplier = (nextMultiplier: number) => {
+    const custom = mouldId ? isCustomMultiplier(nextMultiplier, suggested) : false;
+    applyBatch.mutate({
+      multiplier: nextMultiplier,
+      mouldId: mouldId && !custom ? mouldId : null,
+      mouldQty: mouldId && !custom && qtyNum != null ? qtyNum : null,
+    });
+  };
+
+  const handleMouldChange = (id: string) => {
+    setMouldId(id);
+    if (!id) {
+      const current = Number(multiplierStr) || Number(row.multiplier);
+      applyBatch.mutate({ multiplier: current, mouldId: null, mouldQty: null });
+      return;
+    }
+    const mould = mouldList.find((m) => m.id === id) ?? null;
+    const nextSuggested = suggestedMultiplierFromMould(mould, qtyNum, baseTotalGrams);
+    if (nextSuggested != null) {
+      const rounded = Math.round(nextSuggested * 100) / 100;
+      setMultiplierStr(String(rounded));
+      applyBatch.mutate({ multiplier: rounded, mouldId: id, mouldQty: qtyNum });
+    }
+  };
+
+  const handleMouldQtyChange = (qtyStr: string) => {
+    setMouldQty(qtyStr);
+    if (!mouldId) return;
+    const q = qtyStr.trim() ? Number(qtyStr) : null;
+    const nextSuggested = suggestedMultiplierFromMould(selectedMould, q, baseTotalGrams);
+    if (nextSuggested != null) {
+      const rounded = Math.round(nextSuggested * 100) / 100;
+      setMultiplierStr(String(rounded));
+      applyBatch.mutate({ multiplier: rounded, mouldId, mouldQty: q });
+    }
+  };
 
   const formula = row.formula_versions.formulas;
 
@@ -569,6 +697,28 @@ function FormulaVersionRow({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5">
+            <span className="label-caps text-[10px] text-muted-foreground">MOULD</span>
+            <MouldSelect
+              className={`${selectClass} w-auto text-xs`}
+              value={mouldId}
+              onChange={handleMouldChange}
+            />
+          </label>
+          {mouldId && (
+            <label className="flex items-center gap-1.5">
+              <span className="label-caps text-[10px] text-muted-foreground">QTY</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="1"
+                min="1"
+                className={`${inputClass} w-16 text-center`}
+                value={mouldQty}
+                onChange={(e) => handleMouldQtyChange(e.target.value)}
+              />
+            </label>
+          )}
           <label className="flex items-center gap-2">
             <span className="label-caps text-xs text-muted-foreground">×</span>
             <input
@@ -577,11 +727,11 @@ function FormulaVersionRow({
               step="0.1"
               min="0.1"
               className={`${inputClass} w-24 text-center`}
-              defaultValue={Number(row.multiplier)}
-              key={`multiplier-${row.id}-${row.multiplier}`}
+              value={multiplierStr}
+              onChange={(e) => setMultiplierStr(e.target.value)}
               onBlur={(e) => {
                 const next = Number(e.target.value);
-                if (Number.isFinite(next) && next > 0) setMultiplier.mutate(next);
+                if (Number.isFinite(next) && next > 0) commitMultiplier(next);
               }}
             />
           </label>
@@ -610,9 +760,18 @@ function FormulaVersionRow({
           </button>
         </div>
       </div>
-      {setMultiplier.isError && (
+      {mouldId && (
+        <p className="label-caps text-[10px] text-muted-foreground">
+          {selectedMould?.reference_weight_g == null
+            ? "이 몰드엔 기준 반죽량이 없어 자동 계산이 안 됩니다 — SETTINGS에서 등록해 주세요"
+            : isCustomMultiplier(Number(multiplierStr) || null, suggested)
+              ? "CUSTOM — 배수를 직접 수정해서 몰드 기준값과 달라졌습니다"
+              : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams)}g`}
+        </p>
+      )}
+      {applyBatch.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
-          {(setMultiplier.error as Error).message}
+          {(applyBatch.error as Error).message}
         </p>
       )}
       {showHistory && (
