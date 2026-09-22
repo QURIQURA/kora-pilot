@@ -781,8 +781,8 @@ function FormulaVersionRow({
           ) : (
             (history.data ?? []).map((h) => (
               <li key={h.id} className="font-mono text-xs text-muted-foreground">
-                {formatDateTime(h.applied_at)} · ×{fmtNumber(Number(h.previous_multiplier))} → ×
-                {fmtNumber(Number(h.applied_multiplier))}
+                {formatDateTime(h.applied_at)} · ×{fmtNumber(Number(h.previous_multiplier), 2)} → ×
+                {fmtNumber(Number(h.applied_multiplier), 2)}
               </li>
             ))
           )}
@@ -1047,7 +1047,7 @@ function MatrixColumnHeader({
         </button>
         <div>
           <p className="text-xs leading-tight">{formulaName}</p>
-          <p className="label-caps text-[11px] text-muted-foreground">×{fmtNumber(multiplier)}</p>
+          <p className="label-caps text-[11px] text-muted-foreground">×{fmtNumber(multiplier, 2)}</p>
         </div>
       </div>
       {/* 열 너비 조절 손잡이 — 오른쪽 경계를 드래그 */}
@@ -1267,7 +1267,7 @@ function FormulaView({
               <span className="label-caps text-sm">
                 {row.formula_versions.formulas.name} ·{" "}
                 {versionLabel(row.formula_versions.version_number)}
-                {multiplier !== 1 ? ` · ×${fmtNumber(multiplier)}` : ""}
+                {multiplier !== 1 ? ` · ×${fmtNumber(multiplier, 2)}` : ""}
               </span>
             </div>
             <ul className="divide-y divide-border">
