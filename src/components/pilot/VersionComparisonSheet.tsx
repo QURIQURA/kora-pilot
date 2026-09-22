@@ -426,6 +426,13 @@ function SheetBodyRow({
               <>
                 {fmtNumber(Number(cell.amount), 1)}
                 {cell.unit}
+                {cell.secondary_amount != null && cell.secondary_unit && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {fmtNumber(Number(cell.secondary_amount), 2)}
+                    {cell.secondary_unit}
+                  </span>
+                )}
                 {isNew && (
                   <span className="label-caps ml-1 border border-foreground px-1 py-0.5 text-[9px]">
                     NEW
