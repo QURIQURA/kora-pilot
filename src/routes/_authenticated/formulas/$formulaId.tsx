@@ -1413,6 +1413,14 @@ function UnifiedIngredientRow({
                 비례 시 {fmtNumber(scaled.linear, 2)}
               </span>
             )}
+            {/* 보조 계량도 이 배치의 배수만큼 같이 곱해서 보여준다 (예: BASE×1=3개 → ×2배치=6개) —
+                그램수와 별개로 항상 배수에 선형 비례, 딱 떨어지지 않아도 반올림 없이 그대로 표시 */}
+            {row.secondary_amount != null && row.secondary_unit && (
+              <span className="block text-[10px] text-muted-foreground">
+                · {fmtNumber(Number(row.secondary_amount) * Number(preset.multiplier), 2)}
+                {row.secondary_unit}
+              </span>
+            )}
           </td>
         );
       })}
