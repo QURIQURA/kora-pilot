@@ -21,7 +21,15 @@ import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass, select
  * DB canonical unit은 mm, 이 UI는 cm로 입력/표시하고 저장 직전 mm로 변환한다.
  * Area/Volume은 저장하지 않고 lib/product-size.ts로 read-time 계산한다.
  */
-export function ProductSizesSection({ productId }: { productId: string }) {
+export function ProductSizesSection({
+  productId,
+  usageTotals,
+}: {
+  productId: string;
+  /** sizeId → 그 사이즈에 연결된 컴포넌트 사용량(g) 합산 — COMPONENTS 섹션에서 계산해 넘겨준다.
+   * 형태/치수(area/volume)와는 별개 개념이라 참고용으로만 나란히 보여준다. */
+  usageTotals?: Record<string, number>;
+}) {
   const queryClient = useQueryClient();
   const sizes = useQuery(productSizesQuery(productId));
   const [adding, setAdding] = useState(false);
@@ -120,11 +128,22 @@ export function ProductSizesSection({ productId }: { productId: string }) {
                       </span>
                       <span className="text-sm">{formatProductSizeLabel(size)}</span>
                     </div>
-                    {calc && (
-                      <p className="font-mono text-xs text-muted-foreground">
-                        AREA {formatAreaCm2(calc.areaCm2)} · VOLUME {formatVolumeCm3(calc.volumeCm3)}
-                      </p>
-                    )}
+                    {(() => {
+                      const usageTotal = usageTotals?.[size.id];
+                      const usageLabel =
+                        usageTotal != null ? `재료 합산 ${usageTotal.toFixed(1).replace(/\.0$/, "")}g` : null;
+                      if (calc) {
+                        return (
+                          <p className="font-mono text-xs text-muted-foreground">
+                            AREA {formatAreaCm2(calc.areaCm2)} · VOLUME {formatVolumeCm3(calc.volumeCm3)}
+                            {usageLabel ? ` · ${usageLabel}` : ""}
+                          </p>
+                        );
+                      }
+                      return usageLabel ? (
+                        <p className="font-mono text-xs text-muted-foreground">{usageLabel}</p>
+                      ) : null;
+                    })()}
                     {size.notes && <p className="text-xs text-muted-foreground">{size.notes}</p>}
                   </div>
                   <div className="flex flex-wrap gap-2">

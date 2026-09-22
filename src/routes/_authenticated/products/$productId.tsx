@@ -14,6 +14,7 @@ import {
   observationsByProductQuery,
   productComponentsQuery,
   productQuery,
+  productSizesQuery,
   productTagsQuery,
   tagsQuery,
   type ProductComponentRow,
@@ -27,12 +28,14 @@ import {
   type ProductStatus,
   type TargetAttribute,
 } from "@/lib/pilot";
+import { formatProductSizeLabel, type ProductSize } from "@/lib/product-size";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { experimentLabel } from "@/lib/experiment";
 import { formatDateTime, formatTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
 import { ProductSizesSection } from "@/components/pilot/ProductSizesSection";
+import { ProductDesignSection } from "@/components/pilot/ProductDesignSection";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   Field,
@@ -59,6 +62,55 @@ export const Route = createFileRoute("/_authenticated/products/$productId")({
   component: ProductDetailPage,
 });
 
+/** COMPONENTS 목록을 컴포넌트별로 묶는다 — 사이즈별 사용량 행이 여러 개여도 한 그룹으로 표시. */
+function groupComponentLinks(
+  rows: ProductComponentRow[],
+): { componentId: string; componentName: string; rows: ProductComponentRow[] }[] {
+  const byComponent = new Map<
+    string,
+    { componentId: string; componentName: string; rows: ProductComponentRow[] }
+  >();
+  for (const row of rows) {
+    const existing = byComponent.get(row.component_id);
+    if (existing) {
+      existing.rows.push(row);
+    } else {
+      byComponent.set(row.component_id, {
+        componentId: row.component_id,
+        componentName: row.components?.name ?? "—",
+        rows: [row],
+      });
+    }
+  }
+  // 사이즈 미지정(null) 행을 먼저, 그다음 sort_order 순
+  for (const group of byComponent.values()) {
+    group.rows.sort((a, b) => {
+      if ((a.product_size_id == null) !== (b.product_size_id == null)) {
+        return a.product_size_id == null ? -1 : 1;
+      }
+      return a.sort_order - b.sort_order;
+    });
+  }
+  return [...byComponent.values()];
+}
+
+function sizeLabelFor(sizes: ProductSize[], sizeId: string): string {
+  const size = sizes.find((s) => s.id === sizeId);
+  return size ? formatProductSizeLabel(size) : "삭제된 사이즈";
+}
+
+/** 각 Product Size별 재료 합산 총중량(g) — 사이즈에 연결된 모든 컴포넌트의 quantity_g 합.
+ * 사이즈 미지정 행은 특정 사이즈에 속하지 않으므로 합산에서 제외한다. */
+function sumUsageBySize(rows: ProductComponentRow[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.product_size_id && row.quantity_g != null) {
+      totals[row.product_size_id] = (totals[row.product_size_id] ?? 0) + Number(row.quantity_g);
+    }
+  }
+  return totals;
+}
+
 function ProductDetailPage() {
   const { productId } = Route.useParams();
   const navigate = useNavigate();
@@ -67,6 +119,7 @@ function ProductDetailPage() {
   const product = useQuery(productQuery(productId));
   const categories = useQuery(categoriesQuery());
   const links = useQuery(productComponentsQuery(productId));
+  const sizes = useQuery(productSizesQuery(productId));
   const tags = useQuery(tagsQuery());
   const productTags = useQuery(productTagsQuery(productId));
   const experiments = useQuery(experimentsByProductQuery(productId));
@@ -95,17 +148,22 @@ function ProductDetailPage() {
     onSuccess: invalidate,
   });
 
+  const invalidateLinks = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["product_components", productId] });
+    await queryClient.invalidateQueries({ queryKey: ["products"] });
+  };
+
+  // 컴포넌트 전체 UNLINK — 사이즈별로 나뉜 사용량 행이 여러 개여도 그 컴포넌트의 모든 행을 지운다.
   const unlink = useMutation({
-    mutationFn: async (linkId: string) => {
-      const { error } = await supabase.from("product_components").delete().eq("id", linkId);
+    mutationFn: async (componentId: string) => {
+      const { error } = await supabase
+        .from("product_components")
+        .delete()
+        .eq("product_id", productId)
+        .eq("component_id", componentId);
       if (error) throw error;
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["product_components", productId],
-      });
-      await queryClient.invalidateQueries({ queryKey: ["products"] });
-    },
+    onSuccess: invalidateLinks,
   });
 
   const updateUsage = useMutation({
@@ -124,6 +182,39 @@ function ProductDetailPage() {
         queryKey: ["product_components", productId],
       });
     },
+  });
+
+  // 사이즈별 사용량 행 하나만 제거 (컴포넌트 전체 UNLINK와 달리 다른 사이즈 행은 남긴다)
+  const removeUsageRow = useMutation({
+    mutationFn: async (linkId: string) => {
+      const { error } = await supabase.from("product_components").delete().eq("id", linkId);
+      if (error) throw error;
+    },
+    onSuccess: invalidateLinks,
+  });
+
+  // 이미 링크된 컴포넌트에 특정 Product Size 전용 사용량 행을 추가한다
+  const addSizeUsage = useMutation({
+    mutationFn: async ({
+      componentId,
+      productSizeId,
+      sortOrder,
+    }: {
+      componentId: string;
+      productSizeId: string | null;
+      sortOrder: number;
+    }) => {
+      const userId = await currentUserId();
+      const { error } = await supabase.from("product_components").insert({
+        user_id: userId,
+        product_id: productId,
+        component_id: componentId,
+        product_size_id: productSizeId,
+        sort_order: sortOrder,
+      });
+      if (error) throw error;
+    },
+    onSuccess: invalidateLinks,
   });
 
   const remove = useMutation({
@@ -187,6 +278,8 @@ function ProductDetailPage() {
         onSave={(next) => updateProduct.mutate({ product_target: next })}
       />
 
+      <ProductDesignSection productId={productId} product={data} />
+
       <SectionCard
         title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
         action={
@@ -198,7 +291,7 @@ function ProductDetailPage() {
         {adding && (
           <AddComponentPanel
             productId={productId}
-            linkedIds={(links.data ?? []).map((l) => l.component_id)}
+            linkedIds={[...new Set((links.data ?? []).map((l) => l.component_id))]}
             onDone={() => setAdding(false)}
           />
         )}
@@ -206,28 +299,80 @@ function ProductDetailPage() {
           <p className="font-mono text-xs uppercase text-muted-foreground">NO COMPONENTS LINKED</p>
         ) : (
           <ul className="divide-y divide-border border border-border">
-            {(links.data ?? []).map((link) => (
-              <li key={link.id} className="space-y-2 px-3 py-3">
+            {groupComponentLinks(links.data ?? []).map((group) => (
+              <li key={group.componentId} className="space-y-3 px-3 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Link
                     to="/components/$componentId"
-                    params={{ componentId: link.component_id }}
+                    params={{ componentId: group.componentId }}
                     className="text-sm hover:underline"
                   >
-                    {link.components?.name}
+                    {group.componentName}
                   </Link>
                   <button
                     type="button"
                     className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => unlink.mutate(link.id)}
+                    onClick={() => {
+                      if (confirm("이 COMPONENT의 모든 사이즈별 사용량이 함께 삭제됩니다. UNLINK 할까요?"))
+                        unlink.mutate(group.componentId);
+                    }}
                   >
                     UNLINK
                   </button>
                 </div>
-                <ComponentUsageEditor
-                  link={link}
-                  onSave={(patch) => updateUsage.mutate({ linkId: link.id, patch })}
-                />
+                {group.rows.map((link) => (
+                  <div key={link.id} className="space-y-1.5 border-l-2 border-border pl-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="label-caps text-[11px] text-muted-foreground">
+                        {link.product_size_id
+                          ? sizeLabelFor(sizes.data ?? [], link.product_size_id)
+                          : "전체 (사이즈 미지정)"}
+                      </span>
+                      {group.rows.length > 1 && (
+                        <button
+                          type="button"
+                          className="label-caps px-1 text-[10px] text-muted-foreground hover:text-foreground"
+                          onClick={() => removeUsageRow.mutate(link.id)}
+                        >
+                          이 사이즈 행 제거
+                        </button>
+                      )}
+                    </div>
+                    <ComponentUsageEditor
+                      link={link}
+                      onSave={(patch) => updateUsage.mutate({ linkId: link.id, patch })}
+                    />
+                  </div>
+                ))}
+                {(() => {
+                  const availableSizes = (sizes.data ?? []).filter(
+                    (s) => !group.rows.some((r) => r.product_size_id === s.id),
+                  );
+                  if (availableSizes.length === 0) return null;
+                  return (
+                    <select
+                      className={selectClass + " w-auto"}
+                      value=""
+                      onChange={(e) => {
+                        const sizeId = e.target.value;
+                        if (!sizeId) return;
+                        addSizeUsage.mutate({
+                          componentId: group.componentId,
+                          productSizeId: sizeId,
+                          sortOrder: group.rows.length,
+                        });
+                      }}
+                    >
+                      <option value="">+ 사이즈별 사용량 추가…</option>
+                      {availableSizes.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {formatProductSizeLabel(s)}
+                          {s.is_default ? " (DEFAULT)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                })()}
               </li>
             ))}
           </ul>
@@ -238,7 +383,7 @@ function ProductDetailPage() {
         <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateProduct.mutate({ notes })} />
       </SectionCard>
 
-      <ProductSizesSection productId={productId} />
+      <ProductSizesSection productId={productId} usageTotals={sumUsageBySize(links.data ?? [])} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ProductFormulasSection productId={productId} />

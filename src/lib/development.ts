@@ -89,6 +89,9 @@ export interface SaveDevelopmentInput {
   finishedWeightG: number | null;
   /** promoteComponentWide=false && productId가 있을 때 product_components.quantity_g에 반영할 값 */
   quantityGForProduct: number | null;
+  /** product_components가 Product SIZES별로 나뉘어 있을 때 어느 사이즈 행을 갱신할지.
+   *  null이면 "사이즈 미지정(전체)" 행만 대상으로 한다 — 사이즈별 행을 실수로 덮어쓰지 않기 위함. */
+  productSizeId?: string | null;
 }
 
 export interface SaveDevelopmentResult {
@@ -198,8 +201,10 @@ export async function saveDevelopment(input: SaveDevelopmentInput): Promise<Save
   if (experimentError) throw experimentError;
 
   // Product-specific adjustment — 새 Formula/엔티티를 만들지 않고 기존 연결 포인터만 갱신
+  // product_components가 Product SIZES별로 여러 행일 수 있으므로 항상 특정 행(사이즈)만 대상으로 한다 —
+  // productSizeId 미지정 시 "사이즈 미지정(전체)" 행만 건드리고, 사이즈별 행은 그대로 둔다.
   if (input.productId && !wantsPromote && input.componentId) {
-    const { error: usageError } = await supabase
+    let query = supabase
       .from("product_components")
       .update({
         formula_version_id: formulaVersionId,
@@ -207,6 +212,8 @@ export async function saveDevelopment(input: SaveDevelopmentInput): Promise<Save
       })
       .eq("product_id", input.productId)
       .eq("component_id", input.componentId);
+    query = input.productSizeId ? query.eq("product_size_id", input.productSizeId) : query.is("product_size_id", null);
+    const { error: usageError } = await query;
     if (usageError) throw usageError;
   }
 

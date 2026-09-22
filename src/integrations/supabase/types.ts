@@ -1214,6 +1214,45 @@ export type Database = {
           },
         ]
       }
+      product_allergen_ingredients: {
+        Row: {
+          created_at: string
+          id: string
+          ingredient_id: string
+          product_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ingredient_id: string
+          product_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ingredient_id?: string
+          product_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_allergen_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_allergen_ingredients_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_components: {
         Row: {
           component_id: string
@@ -1221,6 +1260,7 @@ export type Database = {
           formula_version_id: string | null
           id: string
           product_id: string
+          product_size_id: string | null
           quantity_g: number | null
           sort_order: number
           user_id: string
@@ -1231,6 +1271,7 @@ export type Database = {
           formula_version_id?: string | null
           id?: string
           product_id: string
+          product_size_id?: string | null
           quantity_g?: number | null
           sort_order?: number
           user_id: string
@@ -1241,6 +1282,7 @@ export type Database = {
           formula_version_id?: string | null
           id?: string
           product_id?: string
+          product_size_id?: string | null
           quantity_g?: number | null
           sort_order?: number
           user_id?: string
@@ -1262,6 +1304,52 @@ export type Database = {
           },
           {
             foreignKeyName: "product_components_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_components_product_size_id_fkey"
+            columns: ["product_size_id"]
+            isOneToOne: false
+            referencedRelation: "product_sizes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_preferred_ingredients: {
+        Row: {
+          created_at: string
+          id: string
+          ingredient_id: string
+          product_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ingredient_id: string
+          product_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ingredient_id?: string
+          product_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_preferred_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_preferred_ingredients_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
@@ -1363,38 +1451,47 @@ export type Database = {
       }
       products: {
         Row: {
+          allergy_notes: string | null
           category_id: string | null
           created_at: string
           description: string | null
+          has_allergies: boolean
           id: string
           name: string
           notes: string | null
           product_target: Json
           status: Database["public"]["Enums"]["product_status"]
+          target_customer_notes: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          allergy_notes?: string | null
           category_id?: string | null
           created_at?: string
           description?: string | null
+          has_allergies?: boolean
           id?: string
           name: string
           notes?: string | null
           product_target?: Json
           status?: Database["public"]["Enums"]["product_status"]
+          target_customer_notes?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          allergy_notes?: string | null
           category_id?: string | null
           created_at?: string
           description?: string | null
+          has_allergies?: boolean
           id?: string
           name?: string
           notes?: string | null
           product_target?: Json
           status?: Database["public"]["Enums"]["product_status"]
+          target_customer_notes?: string | null
           updated_at?: string
           user_id?: string
         }

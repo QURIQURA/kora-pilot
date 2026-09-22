@@ -94,6 +94,8 @@ export interface ProductComponentRow {
   components: Component;
   formula_version_id: string | null;
   quantity_g: number | null;
+  /** null = 사이즈 무관(전체) 사용량. Product에 SIZES가 등록돼 있으면 사이즈별로 행이 나뉠 수 있다. */
+  product_size_id: string | null;
   formula_versions: {
     id: string;
     version_number: number;
@@ -110,7 +112,7 @@ export const productComponentsQuery = (productId: string) =>
         await supabase
           .from("product_components")
           .select(
-            "id, sort_order, component_id, components(*), formula_version_id, quantity_g, formula_versions(id, version_number, status, formulas(id, name))",
+            "id, sort_order, component_id, components(*), formula_version_id, quantity_g, product_size_id, formula_versions(id, version_number, status, formulas(id, name))",
           )
           .eq("product_id", productId)
           .order("sort_order"),
@@ -144,13 +146,51 @@ export const componentUsageQuery = (componentId: string | null) =>
     enabled: Boolean(componentId),
     queryFn: async (): Promise<ComponentUsageRow[]> => {
       if (!componentId) return [];
-      return unwrap(
+      const rows = unwrap(
         await supabase
           .from("product_components")
           .select("id, products(*)")
           .eq("component_id", componentId),
       ) as unknown as ComponentUsageRow[];
+      // 사이즈별 사용량 행이 여러 개면 같은 Product가 중복으로 뜰 수 있어 Product 기준으로 합친다.
+      const byProductId = new Map<string, ComponentUsageRow>();
+      for (const row of rows) {
+        if (row.products && !byProductId.has(row.products.id)) byProductId.set(row.products.id, row);
+      }
+      return [...byProductId.values()];
     },
+  });
+
+export interface ProductIngredientTagRow {
+  id: string;
+  ingredient_id: string;
+  ingredients: { name: string } | null;
+}
+
+/** PRODUCT DESIGN 섹션 — 이 Product에서 선호하는 재료 태그(Ingredient Master 참조) */
+export const productPreferredIngredientsQuery = (productId: string) =>
+  queryOptions({
+    queryKey: ["product_preferred_ingredients", productId],
+    queryFn: async (): Promise<ProductIngredientTagRow[]> =>
+      unwrap(
+        await supabase
+          .from("product_preferred_ingredients")
+          .select("id, ingredient_id, ingredients(name)")
+          .eq("product_id", productId),
+      ) as unknown as ProductIngredientTagRow[],
+  });
+
+/** PRODUCT DESIGN 섹션 — 이 Product에서 피해야 할 알레르기 재료 태그(Ingredient Master 참조) */
+export const productAllergenIngredientsQuery = (productId: string) =>
+  queryOptions({
+    queryKey: ["product_allergen_ingredients", productId],
+    queryFn: async (): Promise<ProductIngredientTagRow[]> =>
+      unwrap(
+        await supabase
+          .from("product_allergen_ingredients")
+          .select("id, ingredient_id, ingredients(name)")
+          .eq("product_id", productId),
+      ) as unknown as ProductIngredientTagRow[],
   });
 
 export interface IngredientRow extends Ingredient {
