@@ -6,6 +6,7 @@ import { currentUserId } from "@/lib/queries";
 import type { Product } from "@/lib/pilot";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
+import { ImageCropModal } from "@/components/pilot/ImageCropModal";
 
 /**
  * PRODUCT 상세 최상단 이미지 2단 그리드(2개) — 순서 고정(2026-09-22 사용자 지정):
@@ -13,6 +14,8 @@ import { cn } from "@/lib/utils";
  * 2행: 단면 배치도 · 단면 실제 사진
  * Supabase Storage "product-images" 버킷(공개 읽기, 소유자만 쓰기)에 업로드하고
  * public URL을 products.image_* 컬럼에 저장한다. 재료/배합과 무관한 순수 참고 이미지.
+ * 박스는 1:1 정사각형(2026-09-22) — 파일 선택 직후 크롭 모달(ImageCropModal)에서
+ * 드래그/줌으로 영역을 조정한 뒤, 잘라낸 결과만 업로드한다.
  */
 type ImageSlot =
   | "image_imagination_url"
@@ -119,10 +122,17 @@ function ImageSlotBox({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [hover, setHover] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [pendingName, setPendingName] = useState("photo.jpg");
+
+  const closeCrop = () => {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
+  };
 
   return (
     <div
-      className="group relative aspect-[4/3] w-full overflow-hidden border border-border bg-secondary"
+      className="group relative aspect-square w-full overflow-hidden border border-border bg-secondary"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
@@ -133,10 +143,26 @@ function ImageSlotBox({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) onUpload(file);
+          if (file) {
+            setPendingName(file.name);
+            setCropSrc(URL.createObjectURL(file));
+          }
           e.target.value = "";
         }}
       />
+      {cropSrc && (
+        <ImageCropModal
+          imageSrc={cropSrc}
+          label={label}
+          onCancel={closeCrop}
+          onApply={(blob) => {
+            const ext = pendingName.split(".").pop()?.toLowerCase();
+            const name = ext && ext !== "jpg" && ext !== "jpeg" ? pendingName.replace(/\.[^.]+$/, ".jpg") : pendingName;
+            onUpload(new File([blob], name, { type: "image/jpeg" }));
+            closeCrop();
+          }}
+        />
+      )}
       {url ? (
         <>
           <img src={url} alt={label} className="h-full w-full object-cover" />
