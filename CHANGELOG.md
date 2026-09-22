@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-09-22 — PRODUCTION 보조 계량 표시 안 되던 진짜 원인 수정
+
+**무엇이 달라졌나**
+- 바로 전 항목에서 WEIGHING MATRIX에 보조 계량(계란 갯수 등)을 표시하도록 코드를 추가했는데도 화면에 안 뜨던 문제를 고쳤습니다. 원인은 PRODUCTION 페이지가 재료를 불러올 때 쓰는 별도의 조회 쿼리(`versionIngredientsBulkQuery`)가 애초에 보조 계량 칼럼(secondary_amount/secondary_unit)을 DB에서 가져오지도 않고 있었던 것 — 표시 코드는 맞았지만 데이터 자체가 항상 비어 있었습니다. 이제 이 쿼리도 보조 계량 칼럼을 함께 가져옵니다.
+
+**확인하는 방법**
+1. 계란처럼 보조 계량을 입력해둔 재료가 포함된 Formula로 PRODUCTION 작업 세션을 만듭니다.
+2. WEIGHING MATRIX 표에서 그램수 아래에 "· N개"가 실제로 표시되는지 확인합니다.
+
+---
+
 ## 2026-09-22 — PRODUCTION WEIGHING MATRIX에도 보조 계량(계란 갯수 등) 표시
 
 **무엇이 달라졌나**

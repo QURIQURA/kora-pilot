@@ -859,7 +859,7 @@ export const versionIngredientsBulkQuery = (versionIds: string[]) =>
         await supabase
           .from("formula_version_ingredients")
           .select(
-            "id, amount, unit, sort_order, note, amount_source, ingredient_id, formula_version_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))",
+            "id, amount, unit, sort_order, note, amount_source, secondary_amount, secondary_unit, ingredient_id, formula_version_id, ingredients(*, ingredient_function_links(function_id, ingredient_functions(*)))",
           )
           .in("formula_version_id", versionIds)
           .order("sort_order"),
