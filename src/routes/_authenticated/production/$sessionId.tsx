@@ -1025,6 +1025,11 @@ function WeighingMatrixCell({
     onSuccess: onChanged,
   });
 
+  // 보조 계량(예: 계란 개수)도 이 셀의 배수만큼 곱해서 함께 보여준다 — Formula 페이지/버전
+  // 비교 시트와 동일한 형식("· 3개"), %/그램 계산에는 관여하지 않는 표시 전용 값이다.
+  const scaledSecondary =
+    cell.secondaryAmount != null ? cell.secondaryAmount * cell.multiplier : null;
+
   return (
     <div
       className={`relative flex min-w-[110px] items-center justify-between gap-2 rounded-sm px-1 py-1 ${STATUS_CELL_TONE[cell.progressStatus]}`}
@@ -1039,6 +1044,12 @@ function WeighingMatrixCell({
       >
         {fmtNumber(cell.workingAmount, 2)}
         {cell.unit}
+        {scaledSecondary != null && cell.secondaryUnit && (
+          <span className="block text-[10px] font-normal text-muted-foreground">
+            · {fmtNumber(scaledSecondary, 2)}
+            {cell.secondaryUnit}
+          </span>
+        )}
       </button>
       <button
         type="button"

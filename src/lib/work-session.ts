@@ -63,6 +63,10 @@ export interface WeighingCell {
   workingAmount: number;
   progressStatus: WorkSessionProgressStatus;
   note: string | null;
+  /** 표시 전용 보조 계량(예: 계란 개수) — Formula 페이지/버전 비교 시트와 동일하게, 배수만큼
+   * 곱해서 함께 보여준다. %/계산에는 관여하지 않는다. */
+  secondaryAmount: number | null;
+  secondaryUnit: string | null;
 }
  
 export interface WeighingGroup {
@@ -127,6 +131,8 @@ export function buildWeighingGroups(params: {
         workingAmount: workingAmount(Number(line.amount), sel.multiplier),
         progressStatus: (progress?.status as WorkSessionProgressStatus) ?? "NOT_STARTED",
         note: progress?.note ?? null,
+        secondaryAmount: line.secondary_amount != null ? Number(line.secondary_amount) : null,
+        secondaryUnit: line.secondary_unit ?? null,
       });
     }
   }

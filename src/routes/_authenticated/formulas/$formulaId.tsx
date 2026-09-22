@@ -137,6 +137,16 @@ interface PageDraft {
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+/** 헤더의 기법/방법/기준배합/컴포넌트/SAVE — 중요도가 낮은 부가 정보라 한 박스에 모으고
+ * 버튼도 표준 크기(min-h-44px)보다 작게 줄인다. 앱 전역 selectClass/buttonClass는 그대로
+ * 두고(다른 화면 터치 타겟에 영향 없게) 이 페이지 안에서만 쓰는 축소 버전. */
+const compactSelectClass =
+  "min-h-[32px] border border-input bg-background px-2 py-1 font-body text-xs text-foreground outline-none focus:border-foreground disabled:opacity-60";
+const compactButtonClass =
+  "label-caps inline-flex min-h-[30px] items-center justify-center border border-input bg-background px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-secondary disabled:opacity-40";
+const compactPrimaryButtonClass =
+  "label-caps inline-flex min-h-[30px] items-center justify-center border border-foreground bg-foreground px-2 py-1 text-[11px] text-background transition-colors hover:opacity-90 disabled:opacity-40";
+
 function FormulaDetailPage() {
   const { formulaId } = Route.useParams();
   const queryClient = useQueryClient();
@@ -682,80 +692,75 @@ function FormulaDetailPage() {
             UPDATED {formatDateTime(formula.data.updated_at)}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <TechniqueSelect
-            className={`${selectClass} w-auto`}
-            value={editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")}
-            disabled={fieldsDisabled}
-            onChange={(id) => setDraft((d) => (d ? { ...d, techniqueId: id ?? "" } : d))}
-          />
-          <MethodSelect
-            className={`${selectClass} w-auto`}
-            techniqueCategoryId={
-              editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")
-            }
-            value={editing ? (draft?.methodId ?? "") : (formula.data.method_id ?? "")}
-            disabled={fieldsDisabled}
-            onChange={(id) => setDraft((d) => (d ? { ...d, methodId: id ?? "" } : d))}
-          />
-          <label className="flex min-h-[44px] items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              className="h-5 w-5 border border-input"
-              checked={editing ? (draft?.isBase ?? false) : formula.data.is_base_formula}
-              disabled={
-                fieldsDisabled ||
-                !(editing ? draft?.techniqueId : formula.data.technique_category_id)
-              }
-              onChange={(e) =>
-                setDraft((d) => (d ? { ...d, isBase: e.target.checked } : d))
-              }
-            />
-            <span className="label-caps">기준 배합</span>
-          </label>
-          <select
-            className={`${selectClass} w-auto`}
-            value={editing ? (draft?.componentId ?? "") : (formula.data.component_id ?? "")}
-            disabled={fieldsDisabled}
-            onChange={(e) =>
-              setDraft((d) => (d ? { ...d, componentId: e.target.value } : d))
-            }
-          >
-            <option value="">NO COMPONENT</option>
-            {(components.data ?? []).map((component) => (
-              <option key={component.id} value={component.id}>
-                {component.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
-      {/* SAVE — UNLOCK→EDIT 2단계를 없애고 항상 바로 수정 가능. 변경 사항이 있을 때만 활성화된다. */}
-      {canEditPage && (
-        <div className="flex flex-wrap items-center gap-3 border border-foreground bg-card px-4 py-3">
-          <button
-            type="button"
-            className={primaryButtonClass}
-            disabled={!draft || !isDirty || saveAll.isPending}
-            onClick={() => saveAll.mutate()}
-          >
-            {saveAll.isPending ? "SAVING…" : "SAVE"}
-          </button>
-          {isDirty && (
+      {/* 부가 정보(기법/방법/기준배합/컴포넌트)와 SAVE를 한 박스에 — 중요도가 낮은 편집
+          컨트롤들이라 하나로 모으고 버튼도 작게 줄여서, 페이지 상단이 INGREDIENTS 앞을
+          너무 많이 차지하지 않도록 한다. */}
+      <div className="flex flex-wrap items-center gap-2 border border-border bg-card px-3 py-2">
+        <TechniqueSelect
+          className={`${compactSelectClass} w-auto`}
+          value={editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")}
+          disabled={fieldsDisabled}
+          onChange={(id) => setDraft((d) => (d ? { ...d, techniqueId: id ?? "" } : d))}
+        />
+        <MethodSelect
+          className={`${compactSelectClass} w-auto`}
+          techniqueCategoryId={
+            editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")
+          }
+          value={editing ? (draft?.methodId ?? "") : (formula.data.method_id ?? "")}
+          disabled={fieldsDisabled}
+          onChange={(id) => setDraft((d) => (d ? { ...d, methodId: id ?? "" } : d))}
+        />
+        <label className="flex items-center gap-1.5 text-xs">
+          <input
+            type="checkbox"
+            className="h-4 w-4 border border-input"
+            checked={editing ? (draft?.isBase ?? false) : formula.data.is_base_formula}
+            disabled={
+              fieldsDisabled || !(editing ? draft?.techniqueId : formula.data.technique_category_id)
+            }
+            onChange={(e) => setDraft((d) => (d ? { ...d, isBase: e.target.checked } : d))}
+          />
+          <span className="label-caps">기준 배합</span>
+        </label>
+        <select
+          className={`${compactSelectClass} w-auto`}
+          value={editing ? (draft?.componentId ?? "") : (formula.data.component_id ?? "")}
+          disabled={fieldsDisabled}
+          onChange={(e) => setDraft((d) => (d ? { ...d, componentId: e.target.value } : d))}
+        >
+          <option value="">NO COMPONENT</option>
+          {(components.data ?? []).map((component) => (
+            <option key={component.id} value={component.id}>
+              {component.name}
+            </option>
+          ))}
+        </select>
+
+        {canEditPage && (
+          <>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
             <button
               type="button"
-              className={buttonClass}
-              onClick={() => setDraft(buildDraft())}
+              className={compactPrimaryButtonClass}
+              disabled={!draft || !isDirty || saveAll.isPending}
+              onClick={() => saveAll.mutate()}
             >
-              되돌리기
+              {saveAll.isPending ? "SAVING…" : "SAVE"}
             </button>
-          )}
-          <span className="label-caps text-[11px] text-muted-foreground">
-            {!draft ? "LOADING…" : isDirty ? "변경 사항이 있습니다 — 저장하려면 SAVE" : "✓ SAVED"}
-          </span>
-        </div>
-      )}
+            {isDirty && (
+              <button type="button" className={compactButtonClass} onClick={() => setDraft(buildDraft())}>
+                되돌리기
+              </button>
+            )}
+            <span className="label-caps text-[10px] text-muted-foreground">
+              {!draft ? "LOADING…" : isDirty ? "변경 사항이 있습니다 — 저장하려면 SAVE" : "✓ SAVED"}
+            </span>
+          </>
+        )}
+      </div>
 
       {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
       {processCautions.length > 0 && (
@@ -905,46 +910,8 @@ function FormulaDetailPage() {
         )}
       </SectionCard>
 
-      {/* VERSION BAR — 버전 전환/상태는 INGREDIENTS 아래로, 편집의 핵심에서 한 걸음 물러난 부가 정보 */}
-      <div className="flex flex-wrap items-center gap-2 border border-border bg-card p-4">
-        <select
-          className={`${selectClass} w-auto`}
-          value={versionId ?? ""}
-          onChange={(e) => setVersionId(e.target.value)}
-        >
-          {versionList.map((v) => (
-            <option key={v.id} value={v.id}>
-              {`${versionLabel(v.version_number)} · ${v.status}`}
-            </option>
-          ))}
-        </select>
-        {version && <StatusBadge status={version.status} />}
-        <select
-          className={`${selectClass} w-auto`}
-          value={version?.status ?? "DRAFT"}
-          onChange={(e) =>
-            supabase
-              .from("formula_versions")
-              .update({ status: e.target.value as FormulaStatus })
-              .eq("id", versionId!)
-              .then(({ error }) => {
-                if (error) throw error;
-                return invalidate();
-              })
-          }
-        >
-          {FORMULA_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              SET {status}
-            </option>
-          ))}
-        </select>
-        <button type="button" className={buttonClass} onClick={() => setCreatingVersion(true)}>
-          + NEW VERSION
-        </button>
-      </div>
-
-      {/* YIELD & BATCH */}
+      {/* YIELD & BATCH — INGREDIENTS 바로 다음에 둬서, +ADD BATCH(위)로 만든 배수 프리셋과
+          여기 BATCH ×N 미리보기가 서로 멀어지지 않도록 한다 */}
       <SectionCard title="YIELD & BATCH">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="MOULD">
@@ -995,6 +962,45 @@ function FormulaDetailPage() {
           </div>
         </div>
       </SectionCard>
+
+      {/* VERSION BAR — 버전 전환/상태 선택은 부가 정보라 YIELD & BATCH 다음으로 내려둔다 */}
+      <div className="flex flex-wrap items-center gap-2 border border-border bg-card p-4">
+        <select
+          className={`${selectClass} w-auto`}
+          value={versionId ?? ""}
+          onChange={(e) => setVersionId(e.target.value)}
+        >
+          {versionList.map((v) => (
+            <option key={v.id} value={v.id}>
+              {`${versionLabel(v.version_number)} · ${v.status}`}
+            </option>
+          ))}
+        </select>
+        {version && <StatusBadge status={version.status} />}
+        <select
+          className={`${selectClass} w-auto`}
+          value={version?.status ?? "DRAFT"}
+          onChange={(e) =>
+            supabase
+              .from("formula_versions")
+              .update({ status: e.target.value as FormulaStatus })
+              .eq("id", versionId!)
+              .then(({ error }) => {
+                if (error) throw error;
+                return invalidate();
+              })
+          }
+        >
+          {FORMULA_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              SET {status}
+            </option>
+          ))}
+        </select>
+        <button type="button" className={buttonClass} onClick={() => setCreatingVersion(true)}>
+          + NEW VERSION
+        </button>
+      </div>
 
       {/* BASIS — 기준량 자동 집계 */}
       {version && (
