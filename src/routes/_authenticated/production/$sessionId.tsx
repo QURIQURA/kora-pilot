@@ -1126,7 +1126,7 @@ function WeighingView({
     <div className="max-h-[70vh] overflow-auto border border-border">
       <table
         className="w-full border-collapse text-sm"
-        style={{ tableLayout: "fixed", minWidth: dataWidth }}
+        style={{ tableLayout: "auto", minWidth: dataWidth }}
       >
         <colgroup>
           <col style={{ width: ingredientColWidth }} />
@@ -1223,8 +1223,10 @@ function MatrixColumnHeader({
           <GripVertical className="h-3 w-3" />
         </button>
         <div>
-          <p className="text-xs leading-tight">{formulaName}</p>
-          <p className="label-caps text-[11px] text-muted-foreground">×{fmtNumber(multiplier, 2)}</p>
+          <p className="whitespace-nowrap text-xs leading-tight">{formulaName}</p>
+          <p className="label-caps whitespace-nowrap text-[11px] text-muted-foreground">
+            ×{fmtNumber(multiplier, 2)}
+          </p>
         </div>
       </div>
       {/* 열 너비 조절 손잡이 — 오른쪽 경계를 드래그 */}
@@ -1281,7 +1283,7 @@ function MatrixBodyRow({
           >
             <GripVertical className="h-3 w-3" />
           </button>
-          <span className="text-right text-sm">{group.ingredientName}</span>
+          <span className="whitespace-nowrap text-right text-sm">{group.ingredientName}</span>
         </div>
         {/* 행 높이 조절 손잡이 — 아래쪽 경계를 드래그 */}
         <div

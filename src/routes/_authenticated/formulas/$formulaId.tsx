@@ -1283,7 +1283,7 @@ function UnifiedIngredientRow({
       </td>
       {/* INGREDIENT + 출처/기능 뱃지 — 여기서는 재료명을 눌러도 재료 마스터로 이동하지 않는다.
           (배합을 고치려는 클릭이 엉뚱하게 재료 상세 페이지로 튕겨나가던 문제 수정) */}
-      <td className="px-2 py-2 text-sm">
+      <td className="whitespace-nowrap px-2 py-2 text-sm">
         <span>{ing ? ingredientDisplayName(ing) : "—"}</span>
         {isFunctional && (
           <span className="label-caps ml-2 border border-foreground px-1.5 py-0.5 text-[10px]">

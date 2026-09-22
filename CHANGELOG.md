@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-09-22 — 엑셀 스타일 표(FORMULA/VERSION 비교/PRODUCTION) 열너비 텍스트 기준 자동 맞춤
+
+**무엇이 달라졌나**
+- FORMULA 페이지 INGREDIENTS 표, 버전 비교 시트(VERSION HISTORY / Component의 CURRENT FORMULA), PRODUCTION의 WEIGHING MATRIX — 이 세 곳의 재료명/값 텍스트가 열 너비에 눌려 두 줄로 줄바꿈되던 문제를 고쳤습니다. 이제 각 열이 그 안의 텍스트 길이에 맞춰 자동으로 넓어지고, 표 전체가 넓어지면 좌우로 스크롤됩니다(세로 줄바꿈 없음).
+- 드래그로 열 너비를 좁히더라도 글자가 잘리기 전까지는 줄바꿈되지 않습니다.
+
+**확인하는 방법**
+1. FORMULA 페이지에서 재료명이 긴 재료가 있는 버전을 열어 INGREDIENTS 표/버전 비교 시트를 확인 — 재료명이 한 줄로 보이는지 확인
+2. PRODUCTION → WEIGHING MATRIX에서 포뮬라 이름이 긴 열을 확인 — 헤더/값이 한 줄로 보이는지 확인
+
+---
+
 ## 2026-09-22 — PRODUCTION: WEIGHING MATRIX 헤더 고정 + 계산식에 총중량 표시
 
 **무엇이 달라졌나**

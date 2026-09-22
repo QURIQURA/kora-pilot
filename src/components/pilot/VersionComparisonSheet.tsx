@@ -242,7 +242,7 @@ export function VersionComparisonSheet({
 
   return (
     <div className="overflow-x-auto border border-border">
-      <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed", minWidth: dataWidth }}>
+      <table className="w-full border-collapse text-sm" style={{ tableLayout: "auto", minWidth: dataWidth }}>
         <colgroup>
           <col style={{ width: ingredientColWidth }} />
           {displayVersions.map((v) => (
@@ -319,7 +319,7 @@ function SheetColumnHeader({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "label-caps relative border-l border-dashed border-border px-3 py-2 text-xs text-muted-foreground",
+        "label-caps relative whitespace-nowrap border-l border-dashed border-border px-3 py-2 text-xs text-muted-foreground",
         isDragging && "relative z-10 bg-secondary",
       )}
     >
@@ -333,7 +333,7 @@ function SheetColumnHeader({
         >
           <GripVertical className="h-3 w-3" />
         </button>
-        <span>{label}</span>
+        <span className="whitespace-nowrap">{label}</span>
         <StatusBadge status={status} />
       </div>
       {/* 열 너비 조절 손잡이 — 오른쪽 경계를 드래그 */}
@@ -391,7 +391,7 @@ function SheetBodyRow({
           >
             <GripVertical className="h-3 w-3" />
           </button>
-          <span className="text-right">{row.name}</span>
+          <span className="whitespace-nowrap text-right">{row.name}</span>
         </div>
         {/* 행 높이 조절 손잡이 — 아래쪽 경계를 드래그 */}
         <div
@@ -417,7 +417,7 @@ function SheetBodyRow({
             key={v.id}
             style={{ height }}
             className={cn(
-              "border-l border-dashed border-border px-3 py-2 font-mono text-xs tabular-nums",
+              "whitespace-nowrap border-l border-dashed border-border px-3 py-2 font-mono text-xs tabular-nums",
               changed && "bg-secondary font-semibold",
               isNew && "text-foreground",
             )}
