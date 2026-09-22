@@ -186,9 +186,23 @@ function FormulaDetailPage() {
     setDraft(null);
   }, [versionId]);
 
+  // 이 Formula가 속한 Component — 브레드크럼/상단 링크에서 "어디서 왔는지"가 바로 보이도록.
+  // Component 없는 기준 배합(라이브러리)은 여전히 FORMULAS로 표시.
+  const linkedComponent = (components.data ?? []).find(
+    (c) => c.id === formula.data?.component_id,
+  );
+
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
-    { label: "FORMULAS", path: "/formulas" },
+    ...(linkedComponent
+      ? [
+          { label: "COMPONENTS", path: "/components" },
+          {
+            label: linkedComponent.name.toUpperCase(),
+            path: `/components/${linkedComponent.id}`,
+          },
+        ]
+      : [{ label: "FORMULAS", path: "/formulas" }]),
     { label: (formula.data?.name ?? "…").toUpperCase() },
     ...(version ? [{ label: versionLabel(version.version_number) }] : []),
   ]);
@@ -585,6 +599,17 @@ function FormulaDetailPage() {
       {/* HEADER */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
+          {/* Component로 돌아가는 링크 — 스크롤 없이 바로 보이도록 제목 바로 위, 항상 맨 먼저 표시.
+              Component에서 넘어왔든 다른 경로로 들어왔든 component_id만 있으면 항상 뜬다. */}
+          {linkedComponent && (
+            <Link
+              to="/components/$componentId"
+              params={{ componentId: linkedComponent.id }}
+              className="label-caps inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              ← {linkedComponent.name.toUpperCase()}
+            </Link>
+          )}
           <input
             className="w-full max-w-lg border border-transparent bg-transparent px-0 py-1 text-lg text-foreground outline-none hover:border-border focus:border-foreground disabled:cursor-not-allowed disabled:opacity-70"
             value={editing ? (draft?.name ?? "") : formula.data.name}
@@ -664,15 +689,6 @@ function FormulaDetailPage() {
               </option>
             ))}
           </select>
-          {formula.data.component_id && (
-            <Link
-              to="/components/$componentId"
-              params={{ componentId: formula.data.component_id }}
-              className={`${buttonClass} px-3 text-xs`}
-            >
-              OPEN COMPONENT
-            </Link>
-          )}
         </div>
       </div>
 
