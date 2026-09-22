@@ -24,6 +24,7 @@ import {
   functionDisplayParts,
 } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
+import { costPerGram, fmtWon, PURCHASE_UNITS } from "@/lib/cost";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";
 import { FlavourFamilySelect } from "@/components/pilot/FlavourFamilySelect";
@@ -235,6 +236,50 @@ function IngredientDetailPage() {
             />
           </Field>
         </div>
+      </CollapsibleSection>
+
+      {/* 원가 — 구입가/구입량/구입단위만 입력하면 g당 단가로 환산해 배합·제품 원가 계산에 자동 반영됨 */}
+      <CollapsibleSection
+        title="원가 COST"
+        badge={
+          costPerGram(data) != null ? (
+            <span className="label-caps border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {fmtWon(costPerGram(data)!)}/g
+            </span>
+          ) : undefined
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Field label="구입가 PURCHASE PRICE (원)">
+            <NullableNumberInput
+              value={data.purchase_price}
+              onSave={(v) => update.mutate({ purchase_price: v })}
+            />
+          </Field>
+          <Field label="구입량 PURCHASE QTY">
+            <NullableNumberInput
+              value={data.purchase_qty}
+              onSave={(v) => update.mutate({ purchase_qty: v })}
+            />
+          </Field>
+          <Field label="구입 단위 PURCHASE UNIT">
+            <select
+              className={selectClass}
+              value={data.purchase_unit}
+              onChange={(e) => update.mutate({ purchase_unit: e.target.value })}
+            >
+              {PURCHASE_UNITS.map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <p className="mt-3 font-mono text-xs text-muted-foreground">
+          예: 설탕 20kg에 32,000원이면 구입가 32000 / 구입량 20 / 단위 kg → 자동으로 g당
+          단가가 계산됩니다.
+        </p>
       </CollapsibleSection>
 
       {/* 기능 */}

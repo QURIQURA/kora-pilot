@@ -13,6 +13,7 @@ import {
   type ProductSize,
   type ProductSizeShape,
 } from "@/lib/product-size";
+import { fmtWon } from "@/lib/cost";
 import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 /**
@@ -24,11 +25,14 @@ import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass, select
 export function ProductSizesSection({
   productId,
   usageTotals,
+  costTotals,
 }: {
   productId: string;
   /** sizeId → 그 사이즈에 연결된 컴포넌트 사용량(g) 합산 — COMPONENTS 섹션에서 계산해 넘겨준다.
    * 형태/치수(area/volume)와는 별개 개념이라 참고용으로만 나란히 보여준다. */
   usageTotals?: Record<string, number>;
+  /** sizeId → 그 사이즈의 예상 원가(원) 합산 — usageTotals와 같은 규칙, COST 계산용. */
+  costTotals?: Record<string, number>;
 }) {
   const queryClient = useQueryClient();
   const sizes = useQuery(productSizesQuery(productId));
@@ -132,16 +136,19 @@ export function ProductSizesSection({
                       const usageTotal = usageTotals?.[size.id];
                       const usageLabel =
                         usageTotal != null ? `재료 합산 ${usageTotal.toFixed(1).replace(/\.0$/, "")}g` : null;
+                      const costTotal = costTotals?.[size.id];
+                      const costLabel = costTotal != null ? `예상원가 ${fmtWon(costTotal)}` : null;
+                      const extra = [usageLabel, costLabel].filter(Boolean).join(" · ");
                       if (calc) {
                         return (
                           <p className="font-mono text-xs text-muted-foreground">
                             AREA {formatAreaCm2(calc.areaCm2)} · VOLUME {formatVolumeCm3(calc.volumeCm3)}
-                            {usageLabel ? ` · ${usageLabel}` : ""}
+                            {extra ? ` · ${extra}` : ""}
                           </p>
                         );
                       }
-                      return usageLabel ? (
-                        <p className="font-mono text-xs text-muted-foreground">{usageLabel}</p>
+                      return extra ? (
+                        <p className="font-mono text-xs text-muted-foreground">{extra}</p>
                       ) : null;
                     })()}
                     {size.notes && <p className="text-xs text-muted-foreground">{size.notes}</p>}

@@ -6,6 +6,7 @@ import { CategorySelect } from "@/components/pilot/CategorySelect";
 import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import {
   categoriesQuery,
+  componentCostsQuery,
   componentsQuery,
   currentUserId,
   experimentsByProductQuery,
@@ -17,8 +18,10 @@ import {
   productSizesQuery,
   productTagsQuery,
   tagsQuery,
+  type ComponentCostInfo,
   type ProductComponentRow,
 } from "@/lib/queries";
+import { fmtWon } from "@/lib/cost";
 import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
 import {
   categoryPath,
@@ -108,6 +111,33 @@ function sumUsageBySize(rows: ProductComponentRow[]): Record<string, number> {
   return totals;
 }
 
+/** 이 사용량 행 1개의 예상 원가(원) — 사용량(g) × 그 COMPONENT의 CURRENT FORMULA 기준 g당 단가.
+ * COMPONENT에 CURRENT FORMULA가 없거나 원가 정보가 없으면 null. */
+function rowCost(
+  row: ProductComponentRow,
+  costsByComponent: Record<string, ComponentCostInfo>,
+): number | null {
+  if (row.quantity_g == null) return null;
+  const info = costsByComponent[row.component_id];
+  if (!info || info.costPerGram == null) return null;
+  return Number(row.quantity_g) * info.costPerGram;
+}
+
+/** 사이즈별 예상 원가 합산(원) — sumUsageBySize와 같은 규칙으로 사이즈 지정 행만 합산. */
+function sumCostBySize(
+  rows: ProductComponentRow[],
+  costsByComponent: Record<string, ComponentCostInfo>,
+): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of rows) {
+    if (!row.product_size_id) continue;
+    const cost = rowCost(row, costsByComponent);
+    if (cost == null) continue;
+    totals[row.product_size_id] = (totals[row.product_size_id] ?? 0) + cost;
+  }
+  return totals;
+}
+
 function ProductDetailPage() {
   const { productId } = Route.useParams();
   const navigate = useNavigate();
@@ -121,6 +151,9 @@ function ProductDetailPage() {
   const productTags = useQuery(productTagsQuery(productId));
   const experiments = useQuery(experimentsByProductQuery(productId));
   const observations = useQuery(observationsByProductQuery(productId));
+  const componentIds = [...new Set((links.data ?? []).map((l) => l.component_id))];
+  const componentCosts = useQuery(componentCostsQuery(componentIds));
+  const costsByComponent = componentCosts.data ?? {};
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, product.data?.category_id ?? null);
@@ -283,8 +316,26 @@ function ProductDetailPage() {
         {(links.data ?? []).length === 0 ? (
           <p className="font-mono text-xs uppercase text-muted-foreground">NO COMPONENTS LINKED</p>
         ) : (
+          <>
+            {(() => {
+              const noSizeRows = (links.data ?? []).filter((r) => !r.product_size_id);
+              const costs = noSizeRows.map((r) => rowCost(r, costsByComponent));
+              if (!costs.some((c) => c != null)) return null;
+              const total = costs.reduce((sum: number, c) => sum + (c ?? 0), 0);
+              return (
+                <p className="mb-2 font-mono text-xs uppercase text-muted-foreground">
+                  전체(사이즈 미지정) 예상 원가 합계: {fmtWon(total)}
+                </p>
+              );
+            })()}
           <ul className="divide-y divide-border border border-border">
-            {groupComponentLinks(links.data ?? []).map((group) => (
+            {groupComponentLinks(links.data ?? []).map((group) => {
+              const groupCosts = group.rows.map((r) => rowCost(r, costsByComponent));
+              const groupTotal = groupCosts.some((c) => c != null)
+                ? groupCosts.reduce((sum: number, c) => sum + (c ?? 0), 0)
+                : null;
+              const groupCostInfo = costsByComponent[group.componentId];
+              return (
               <li key={group.componentId} className="space-y-3 px-3 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Link
@@ -294,6 +345,13 @@ function ProductDetailPage() {
                   >
                     {group.componentName}
                   </Link>
+                  <div className="flex items-center gap-2">
+                    {groupTotal != null && (
+                      <span className="label-caps text-xs text-muted-foreground">
+                        예상원가 {fmtWon(groupTotal)}
+                        {groupCostInfo?.hasMissingPrice ? "*" : ""}
+                      </span>
+                    )}
                   <button
                     type="button"
                     className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
@@ -304,6 +362,7 @@ function ProductDetailPage() {
                   >
                     UNLINK
                   </button>
+                  </div>
                 </div>
                 {group.rows.map((link) => (
                   <div key={link.id} className="space-y-1.5 border-l-2 border-border pl-3">
@@ -327,6 +386,17 @@ function ProductDetailPage() {
                       link={link}
                       onSave={(patch) => updateUsage.mutate({ linkId: link.id, patch })}
                     />
+                    {(() => {
+                      const cost = rowCost(link, costsByComponent);
+                      if (link.quantity_g == null) return null;
+                      return (
+                        <p className="font-mono text-[11px] text-muted-foreground">
+                          {cost != null
+                            ? `예상원가 ${fmtWon(cost)}`
+                            : "원가 정보 없음 — COMPONENT에 CURRENT FORMULA/재료 구입가를 확인하세요"}
+                        </p>
+                      );
+                    })()}
                   </div>
                 ))}
                 {(() => {
@@ -359,8 +429,10 @@ function ProductDetailPage() {
                   );
                 })()}
               </li>
-            ))}
+              );
+            })}
           </ul>
+          </>
         )}
       </SectionCard>
 
@@ -368,7 +440,11 @@ function ProductDetailPage() {
         <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateProduct.mutate({ notes })} />
       </SectionCard>
 
-      <ProductSizesSection productId={productId} usageTotals={sumUsageBySize(links.data ?? [])} />
+      <ProductSizesSection
+        productId={productId}
+        usageTotals={sumUsageBySize(links.data ?? [])}
+        costTotals={sumCostBySize(links.data ?? [], costsByComponent)}
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ProductFormulasSection productId={productId} />

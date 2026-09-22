@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { computeLineCosts } from "@/lib/cost";
 import type {
   Category,
   Component,
@@ -117,6 +118,56 @@ export const productComponentsQuery = (productId: string) =>
           .eq("product_id", productId)
           .order("sort_order"),
       ) as unknown as ProductComponentRow[],
+  });
+
+/** COMPONENT의 CURRENT FORMULA 기준 g당 단가(원가 계산용) — componentId → 요약 정보. */
+export interface ComponentCostInfo {
+  costPerGram: number | null;
+  totalGrams: number;
+  hasMissingPrice: boolean;
+}
+
+export const componentCostsQuery = (componentIds: string[]) =>
+  queryOptions({
+    queryKey: ["component_costs", [...new Set(componentIds)].sort()],
+    enabled: componentIds.length > 0,
+    queryFn: async (): Promise<Record<string, ComponentCostInfo>> => {
+      const ids = [...new Set(componentIds)];
+      const { data, error } = await supabase
+        .from("formulas")
+        .select(
+          "component_id, formula_versions!inner(status, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
+        )
+        .in("component_id", ids)
+        .eq("formula_versions.status", "CURRENT");
+      if (error) throw error;
+      const map: Record<string, ComponentCostInfo> = {};
+      for (const formula of (data ?? []) as unknown as {
+        component_id: string | null;
+        formula_versions: {
+          formula_version_ingredients: {
+            amount: number;
+            unit: string;
+            ingredients: {
+              purchase_price: number | null;
+              purchase_qty: number | null;
+              purchase_unit: string | null;
+            } | null;
+          }[];
+        }[];
+      }[]) {
+        if (!formula.component_id) continue;
+        const version = formula.formula_versions[0];
+        if (!version) continue;
+        const result = computeLineCosts(version.formula_version_ingredients ?? []);
+        map[formula.component_id] = {
+          costPerGram: result.costPerGram,
+          totalGrams: result.totalGrams,
+          hasMissingPrice: result.hasMissingPrice,
+        };
+      }
+      return map;
+    },
   });
 
 export const componentsQuery = () =>

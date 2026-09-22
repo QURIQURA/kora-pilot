@@ -92,6 +92,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          pinned: boolean
           scaling_mode: string
           technique_category_id: string | null
           updated_at: string
@@ -103,6 +104,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          pinned?: boolean
           scaling_mode?: string
           technique_category_id?: string | null
           updated_at?: string
@@ -114,6 +116,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          pinned?: boolean
           scaling_mode?: string
           technique_category_id?: string | null
           updated_at?: string
@@ -698,6 +701,9 @@ export type Database = {
           pac_value: number | null
           pod_value: number | null
           process_note: string | null
+          purchase_price: number | null
+          purchase_qty: number | null
+          purchase_unit: string
           reference_basis: string | null
           role_drier: boolean
           role_moistener: boolean
@@ -747,6 +753,9 @@ export type Database = {
           pac_value?: number | null
           pod_value?: number | null
           process_note?: string | null
+          purchase_price?: number | null
+          purchase_qty?: number | null
+          purchase_unit?: string
           reference_basis?: string | null
           role_drier?: boolean
           role_moistener?: boolean
@@ -796,6 +805,9 @@ export type Database = {
           pac_value?: number | null
           pod_value?: number | null
           process_note?: string | null
+          purchase_price?: number | null
+          purchase_qty?: number | null
+          purchase_unit?: string
           reference_basis?: string | null
           role_drier?: boolean
           role_moistener?: boolean
@@ -1459,6 +1471,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          pinned: boolean
           product_target: Json
           status: Database["public"]["Enums"]["product_status"]
           target_customer_notes: string | null
@@ -1474,6 +1487,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          pinned?: boolean
           product_target?: Json
           status?: Database["public"]["Enums"]["product_status"]
           target_customer_notes?: string | null
@@ -1489,6 +1503,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          pinned?: boolean
           product_target?: Json
           status?: Database["public"]["Enums"]["product_status"]
           target_customer_notes?: string | null

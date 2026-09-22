@@ -10,7 +10,8 @@ import {
   type FormulaListRow,
 } from "@/lib/queries";
 import { currentVersion } from "./FormulaSummary";
-import { fmtNumber, toGrams, versionLabel } from "@/lib/formula";
+import { fmtNumber, versionLabel } from "@/lib/formula";
+import { computeLineCosts, fmtWon } from "@/lib/cost";
 import { formatDateTime } from "@/lib/datetime";
 import { ExperimentCreateModal } from "./ExperimentCreateForm";
 import { VersionComparisonSheet } from "./VersionComparisonSheet";
@@ -34,10 +35,8 @@ export function CurrentFormulaPanel({
   const ingredients = useQuery(versionIngredientsQuery(version?.id ?? null));
   const rows = ingredients.data ?? [];
 
-  const totalGrams = rows.reduce(
-    (sum, row) => sum + (toGrams(Number(row.amount), row.unit) ?? 0),
-    0,
-  );
+  const cost = computeLineCosts(rows);
+  const totalGrams = cost.totalGrams;
   const [showBaseLibrary, setShowBaseLibrary] = useState(false);
   const [creatingDevelopment, setCreatingDevelopment] = useState(false);
 
@@ -225,12 +224,31 @@ export function CurrentFormulaPanel({
             <p className="font-mono text-base tabular-nums">{rows.length}</p>
           </div>
           <div className="space-y-1">
+            <span className="label-caps block text-xs text-muted-foreground">배치 원가</span>
+            <p className="font-mono text-base tabular-nums">
+              {fmtWon(cost.totalCost)}
+              {cost.hasMissingPrice && <span className="ml-1 text-destructive">*</span>}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <span className="label-caps block text-xs text-muted-foreground">g당 단가</span>
+            <p className="font-mono text-base tabular-nums">
+              {cost.costPerGram != null ? `${fmtWon(cost.costPerGram)}/g` : "—"}
+            </p>
+          </div>
+          <div className="space-y-1">
             <span className="label-caps block text-xs text-muted-foreground">UPDATED</span>
             <p className="font-mono text-xs text-muted-foreground">
               {formatDateTime(formula.updated_at)}
             </p>
           </div>
         </div>
+        {cost.hasMissingPrice && (
+          <p className="font-mono text-[11px] text-muted-foreground">
+            * 일부 재료에 구입가 정보가 없어 원가가 실제보다 낮게 계산됐을 수 있습니다 —
+            INGREDIENTS 상세에서 구입가를 입력하세요.
+          </p>
+        )}
 
         {/* 재료 리스트 대신 버전 비교 시트를 바로 보여준다 — Formula 상세 페이지까지 들어가지
             않아도 이 Component의 모든 버전이 뭐가 다른지 한눈에 볼 수 있게. 실제 편집은 항상
