@@ -1,7 +1,25 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import {
   currentUserId,
   formulasQuery,
@@ -622,6 +640,21 @@ type WeighingColumn = {
   sortOrder: number;
 };
 
+const DEFAULT_MATRIX_COL_WIDTH = 150;
+const MIN_MATRIX_COL_WIDTH = 90;
+const DEFAULT_MATRIX_ROW_HEIGHT = 44;
+const MIN_MATRIX_ROW_HEIGHT = 32;
+const DEFAULT_MATRIX_INGREDIENT_COL_WIDTH = 170;
+const MIN_MATRIX_INGREDIENT_COL_WIDTH = 110;
+/** 열 너비 합계보다 표(패널)가 넓을 때 남는 공간을 흡수해서 각 행의 구분선이 화면 끝까지
+ * 자연스럽게 이어지도록 하는 실제 데이터 없는 "채움" 열 — VersionComparisonSheet와 동일한 패턴. */
+const MATRIX_FILLER_COL_ID = "__filler__";
+
+/** WORK VIEW의 WEIGHING MATRIX — Component/Formula 페이지의 버전 비교 시트와 동일하게, 실제
+ * 엑셀처럼 행(재료)/열(포뮬라 버전)을 드래그로 재배치하거나 크기를 조절할 수 있다. 순서/크기는
+ * 이 화면을 보는 동안만 유지되는 세션 전용 상태로, 실제 계량 진행 상태(그램수/체크/메모)와는
+ * 무관하다 — 새로고침하면 원래 순서(선택한 순서)로 돌아간다. 첫 열/헤더 행의 sticky 고정은
+ * 그대로 유지한다. */
 function WeighingView({
   sessionId,
   groups,
@@ -633,6 +666,114 @@ function WeighingView({
   columns: WeighingColumn[];
   onProgressChanged: () => void;
 }) {
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [rowOrder, setRowOrder] = useState<string[]>([]);
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
+  const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
+  const [ingredientColWidth, setIngredientColWidth] = useState(
+    DEFAULT_MATRIX_INGREDIENT_COL_WIDTH,
+  );
+
+  // 선택된 포뮬라 버전(열)/재료(행)이 바뀌면 순서 목록을 맞춰준다 — 기존 순서는 최대한
+  // 유지하고, 새로 생긴 항목만 뒤에 붙이고 사라진 항목은 뺀다.
+  useEffect(() => {
+    setColumnOrder((prev) => {
+      const ids = columns.map((c) => c.formulaVersionId);
+      const kept = prev.filter((id) => ids.includes(id));
+      const added = ids.filter((id) => !kept.includes(id));
+      return [...kept, ...added];
+    });
+  }, [columns]);
+
+  useEffect(() => {
+    setRowOrder((prev) => {
+      const ids = groups.map((g) => g.ingredientId);
+      const kept = prev.filter((id) => ids.includes(id));
+      const added = ids.filter((id) => !kept.includes(id));
+      return [...kept, ...added];
+    });
+  }, [groups]);
+
+  const displayColumns = useMemo(() => {
+    const byId = new Map(columns.map((c) => [c.formulaVersionId, c]));
+    return columnOrder.map((id) => byId.get(id)).filter((c): c is WeighingColumn => Boolean(c));
+  }, [columns, columnOrder]);
+
+  const displayGroups = useMemo(() => {
+    const byId = new Map(groups.map((g) => [g.ingredientId, g]));
+    return rowOrder
+      .map((id) => byId.get(id))
+      .filter((g): g is (typeof groups)[number] => Boolean(g));
+  }, [groups, rowOrder]);
+
+  const colSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const rowSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  const handleColumnDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setColumnOrder((prev) => {
+      const oldIndex = prev.indexOf(String(active.id));
+      const newIndex = prev.indexOf(String(over.id));
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const handleRowDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setRowOrder((prev) => {
+      const oldIndex = prev.indexOf(String(active.id));
+      const newIndex = prev.indexOf(String(over.id));
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const startColumnResize = (colId: string, startX: number) => {
+    const startWidth = colWidths[colId] ?? DEFAULT_MATRIX_COL_WIDTH;
+    const onMove = (e: PointerEvent) => {
+      const next = Math.max(MIN_MATRIX_COL_WIDTH, startWidth + (e.clientX - startX));
+      setColWidths((prev) => ({ ...prev, [colId]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const startIngredientColResize = (startX: number) => {
+    const startWidth = ingredientColWidth;
+    const onMove = (e: PointerEvent) => {
+      setIngredientColWidth(
+        Math.max(MIN_MATRIX_INGREDIENT_COL_WIDTH, startWidth + (e.clientX - startX)),
+      );
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const startRowResize = (rowId: string, startY: number) => {
+    const startHeight = rowHeights[rowId] ?? DEFAULT_MATRIX_ROW_HEIGHT;
+    const onMove = (e: PointerEvent) => {
+      const next = Math.max(MIN_MATRIX_ROW_HEIGHT, startHeight + (e.clientY - startY));
+      setRowHeights((prev) => ({ ...prev, [rowId]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   if (groups.length === 0 || columns.length === 0) {
     return (
       <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -641,57 +782,203 @@ function WeighingView({
     );
   }
 
+  const dataWidth =
+    ingredientColWidth +
+    displayColumns.reduce((sum, c) => sum + (colWidths[c.formulaVersionId] ?? DEFAULT_MATRIX_COL_WIDTH), 0);
+
   return (
     <div className="max-h-[70vh] overflow-auto border border-border">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="sticky left-0 top-0 z-20 min-w-[160px] border-b border-r border-border bg-secondary px-3 py-2 text-left">
-              <span className="label-caps text-xs text-muted-foreground">INGREDIENT</span>
-            </th>
-            {columns.map((col) => (
-              <th
-                key={col.formulaVersionId}
-                className="sticky top-0 z-10 min-w-[140px] border-b border-l border-border bg-secondary px-3 py-2 text-left align-bottom"
-              >
-                <p className="text-xs leading-tight">{col.formulaName}</p>
-                <p className="label-caps text-[11px] text-muted-foreground">
-                  ×{fmtNumber(col.multiplier)}
-                </p>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((group) => (
-            <tr key={group.ingredientId} className="border-b border-border">
-              <td className="sticky left-0 z-10 border-r border-border bg-background px-3 py-1.5 align-middle">
-                <span className="text-sm">{group.ingredientName}</span>
-              </td>
-              {columns.map((col) => {
-                const cell = group.cells.find((c) => c.formulaVersionId === col.formulaVersionId);
-                return (
-                  <td
-                    key={col.formulaVersionId}
-                    className="border-l border-border px-2 py-1 align-middle"
-                  >
-                    {cell ? (
-                      <WeighingMatrixCell
-                        sessionId={sessionId}
-                        cell={cell}
-                        onChanged={onProgressChanged}
-                      />
-                    ) : (
-                      <span className="block text-center text-muted-foreground">—</span>
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
+      <table
+        className="w-full border-collapse text-sm"
+        style={{ tableLayout: "fixed", minWidth: dataWidth }}
+      >
+        <colgroup>
+          <col style={{ width: ingredientColWidth }} />
+          {displayColumns.map((col) => (
+            <col
+              key={col.formulaVersionId}
+              style={{ width: colWidths[col.formulaVersionId] ?? DEFAULT_MATRIX_COL_WIDTH }}
+            />
           ))}
-        </tbody>
+          <col />
+        </colgroup>
+        <DndContext sensors={colSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
+          <thead>
+            <tr>
+              <th className="label-caps sticky left-0 top-0 z-20 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
+                INGREDIENT
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    startIngredientColResize(e.clientX);
+                  }}
+                />
+              </th>
+              <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
+                {displayColumns.map((col) => (
+                  <MatrixColumnHeader
+                    key={col.formulaVersionId}
+                    id={col.formulaVersionId}
+                    formulaName={col.formulaName}
+                    multiplier={col.multiplier}
+                    onResizeStart={(clientX) => startColumnResize(col.formulaVersionId, clientX)}
+                  />
+                ))}
+              </SortableContext>
+              <th key={MATRIX_FILLER_COL_ID} className="sticky top-0 z-10 border-b border-l border-border bg-secondary" />
+            </tr>
+          </thead>
+        </DndContext>
+        <DndContext sensors={rowSensors} collisionDetection={closestCenter} onDragEnd={handleRowDragEnd}>
+          <SortableContext items={rowOrder} strategy={verticalListSortingStrategy}>
+            <tbody>
+              {displayGroups.map((group) => (
+                <MatrixBodyRow
+                  key={group.ingredientId}
+                  group={group}
+                  columns={displayColumns}
+                  height={rowHeights[group.ingredientId] ?? DEFAULT_MATRIX_ROW_HEIGHT}
+                  sessionId={sessionId}
+                  onResizeStart={(clientY) => startRowResize(group.ingredientId, clientY)}
+                  onProgressChanged={onProgressChanged}
+                />
+              ))}
+            </tbody>
+          </SortableContext>
+        </DndContext>
       </table>
     </div>
+  );
+}
+
+function MatrixColumnHeader({
+  id,
+  formulaName,
+  multiplier,
+  onResizeStart,
+}: {
+  id: string;
+  formulaName: string;
+  multiplier: number;
+  onResizeStart: (clientX: number) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <th
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "sticky top-0 z-10 relative border-b border-l border-border bg-secondary px-3 py-2 text-left align-bottom",
+        isDragging && "z-30 bg-secondary",
+      )}
+    >
+      <div className="flex items-start gap-1">
+        {/* 열(포뮬라 버전) 드래그 손잡이 */}
+        <button
+          type="button"
+          className="mt-0.5 shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-3 w-3" />
+        </button>
+        <div>
+          <p className="text-xs leading-tight">{formulaName}</p>
+          <p className="label-caps text-[11px] text-muted-foreground">×{fmtNumber(multiplier)}</p>
+        </div>
+      </div>
+      {/* 열 너비 조절 손잡이 — 오른쪽 경계를 드래그 */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onResizeStart(e.clientX);
+        }}
+      />
+    </th>
+  );
+}
+
+function MatrixBodyRow({
+  group,
+  columns,
+  height,
+  sessionId,
+  onResizeStart,
+  onProgressChanged,
+}: {
+  group: ReturnType<typeof buildWeighingGroups>[number];
+  columns: WeighingColumn[];
+  height: number;
+  sessionId: string;
+  onResizeStart: (clientY: number) => void;
+  onProgressChanged: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: group.ingredientId,
+  });
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, height }}
+      className={cn("relative border-b border-border align-middle", isDragging && "z-10 bg-background shadow-md")}
+    >
+      <td
+        className="sticky left-0 z-10 relative border-r border-border bg-background px-3 py-1.5 align-middle"
+        style={{ height }}
+      >
+        {/* 재료명은 오른쪽(버전 열 쪽)으로 붙이고, 드래그 손잡이는 왼쪽에 고정 */}
+        <div className="flex items-center justify-between gap-1.5">
+          <button
+            type="button"
+            className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-3 w-3" />
+          </button>
+          <span className="text-right text-sm">{group.ingredientName}</span>
+        </div>
+        {/* 행 높이 조절 손잡이 — 아래쪽 경계를 드래그 */}
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          className="absolute bottom-0 left-0 h-1.5 w-full cursor-row-resize touch-none hover:bg-foreground/20"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onResizeStart(e.clientY);
+          }}
+        />
+      </td>
+      {columns.map((col) => {
+        const cell = group.cells.find((c) => c.formulaVersionId === col.formulaVersionId);
+        return (
+          <td
+            key={col.formulaVersionId}
+            className="border-l border-border px-2 py-1 align-middle"
+            style={{ height }}
+          >
+            {cell ? (
+              <WeighingMatrixCell sessionId={sessionId} cell={cell} onChanged={onProgressChanged} />
+            ) : (
+              <span className="block text-center text-muted-foreground">—</span>
+            )}
+          </td>
+        );
+      })}
+      {/* 채움 열 — 표 너비 합계보다 패널이 넓을 때 남는 공간에도 이 행의 구분선이 자연스럽게
+          이어지도록 빈 셀을 하나 더 둔다. */}
+      <td className="border-l border-border" style={{ height }} />
+    </tr>
   );
 }
 
