@@ -18,10 +18,12 @@ import {
   productSizesQuery,
   productTagsQuery,
   tagsQuery,
+  versionIngredientsQuery,
   type ComponentCostInfo,
   type ProductComponentRow,
 } from "@/lib/queries";
 import { fmtWon } from "@/lib/cost";
+import { fmtNumber, toGrams } from "@/lib/formula";
 import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
 import {
   categoryPath,
@@ -854,6 +856,13 @@ function ComponentUsageEditor({
     })),
   );
 
+  // 실사용량 입력 시 해당 FORMULA VERSION의 총량(g)을 바로 옆에 보여줘서 "전체 중 몇 g을 쓰는지" 비교하며 입력하기 쉽게 함
+  const versionIngredients = useQuery(versionIngredientsQuery(link.formula_version_id ?? null));
+  const versionTotalGrams = (versionIngredients.data ?? []).reduce(
+    (sum, row) => sum + (toGrams(Number(row.amount), row.unit) ?? 0),
+    0,
+  );
+
   const [quantityDraft, setQuantityDraft] = useState(link.quantity_g?.toString() ?? "");
   useEffect(() => {
     setQuantityDraft(link.quantity_g?.toString() ?? "");
@@ -870,7 +879,7 @@ function ComponentUsageEditor({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
-        className={selectClass + " w-auto min-w-[14rem]"}
+        className="min-h-[44px] w-auto max-w-full border border-input bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-foreground"
         value={link.formula_version_id ?? ""}
         onChange={(e) => onSave({ formula_version_id: e.target.value || null })}
       >
@@ -902,6 +911,11 @@ function ComponentUsageEditor({
         />
         <span className="font-mono text-xs text-muted-foreground">G 실사용량</span>
       </div>
+      {link.formula_version_id && versionTotalGrams > 0 && (
+        <span className="font-mono text-xs text-muted-foreground">
+          / 이 레시피 총량 {fmtNumber(versionTotalGrams)}g
+        </span>
+      )}
       <p className="w-full font-mono text-[11px] text-muted-foreground">
         이 PRODUCT에서만 다른 FORMULA VERSION/사용량을 쓸 때만 지정하세요 — 보통은 해당
         COMPONENT의 Development Entry에서 "이 PRODUCT에만 적용"으로 저장하면 자동으로
