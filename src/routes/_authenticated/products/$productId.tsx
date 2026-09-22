@@ -6,7 +6,6 @@ import { CategorySelect } from "@/components/pilot/CategorySelect";
 import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import {
   categoriesQuery,
-  componentCostItemsBulkQuery,
   componentCostsQuery,
   componentsQuery,
   currentUserId,
@@ -24,11 +23,10 @@ import {
   tagsQuery,
   versionIngredientsQuery,
   type ComponentCostInfo,
-  type ComponentCostItemRow,
   type ProductComponentRow,
 } from "@/lib/queries";
-import { costPerGram, fmtCurrency, overheadPerBatch, sumCostItemAssignments } from "@/lib/cost";
-import { ProductPackagingSection } from "@/components/pilot/ProductPackagingSection";
+import { costPerGram, fmtCurrency, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
+import { ProductCostItemsSection } from "@/components/pilot/ProductCostItemsSection";
 import { fmtNumber, toGrams } from "@/lib/formula";
 import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
 import {
@@ -163,43 +161,6 @@ function sumCostBySize(
   return totals;
 }
 
-/**
- * 이 사용량 행 1개의 FULL PRODUCTION COST(2026-09-23) — Raw Material에 UTILITY/CONSUMABLE
- * 배정액 + OVERHEAD 배분액을 더한 값 기준 g당 단가 × 사용량(g). COMPONENT 링크에만 적용되고
- * (배치 개념이 있는 건 COMPONENT뿐), 재료 직접 링크는 Raw Material Cost와 동일하게 처리한다.
- */
-function rowProductionCost(
-  row: ProductComponentRow,
-  costsByComponent: Record<string, ComponentCostInfo>,
-  costItemsByComponent: Record<string, ComponentCostItemRow[]>,
-  overhead: number,
-): number | null {
-  if (row.quantity_g == null) return null;
-  if (row.component_id == null) return costPerGram(row.ingredients) != null ? rowCost(row, costsByComponent) : null;
-  const info = costsByComponent[row.component_id];
-  if (!info || info.costPerGram == null || info.totalGrams <= 0) return null;
-  const extra = sumCostItemAssignments(costItemsByComponent[row.component_id] ?? []) + overhead;
-  const productionCpg = info.costPerGram + extra / info.totalGrams;
-  return Number(row.quantity_g) * productionCpg;
-}
-
-/** 사이즈별 FULL PRODUCTION COST 합산(원) — sumCostBySize와 같은 규칙. */
-function sumProductionCostBySize(
-  rows: ProductComponentRow[],
-  costsByComponent: Record<string, ComponentCostInfo>,
-  costItemsByComponent: Record<string, ComponentCostItemRow[]>,
-  overhead: number,
-): Record<string, number> {
-  const totals: Record<string, number> = {};
-  for (const row of rows) {
-    if (!row.product_size_id) continue;
-    const cost = rowProductionCost(row, costsByComponent, costItemsByComponent, overhead);
-    if (cost == null) continue;
-    totals[row.product_size_id] = (totals[row.product_size_id] ?? 0) + cost;
-  }
-  return totals;
-}
-
 function ProductDetailPage() {
   const { productId } = Route.useParams();
   const navigate = useNavigate();
@@ -218,22 +179,23 @@ function ProductDetailPage() {
   ];
   const componentCosts = useQuery(componentCostsQuery(componentIds));
   const costsByComponent = componentCosts.data ?? {};
-  const componentCostItems = useQuery(componentCostItemsBulkQuery(componentIds));
-  const costItemsByComponent = componentCostItems.data ?? {};
+
+  // FULL PRODUCTION COST(2026-09-23) — UTILITY/CONSUMABLE/PACKAGING은 전부 케익(제품) 1개당
+  // 고정 배정(Product 단위)이고, OVERHEAD도 월 고정비÷월 케익 개수로 케익 1개당 동일하게 더해진다.
+  // "배치" 기준(Component별로 배수됨)은 폐기 — 사용자 판단(케익에 들어가는 Component 개수만큼
+  // 배치 횟수가 무한히 늘어나 고정 기준으로 쓰기 애매함).
   const pilotSettings = useQuery(pilotSettingsQuery());
-  const overhead =
-    overheadPerBatch(
+  const overheadPerCake =
+    overheadPerUnit(
       pilotSettings.data
         ? {
             monthly_overhead: pilotSettings.data.monthly_overhead,
-            monthly_batch_count: pilotSettings.data.monthly_batch_count,
+            monthly_unit_count: pilotSettings.data.monthly_unit_count,
           }
         : null,
     ) ?? 0;
   const productCostItems = useQuery(productCostItemsQuery(productId));
-  const packagingCost = sumCostItemAssignments(
-    (productCostItems.data ?? []).filter((r) => r.cost_items.category === "PACKAGING"),
-  );
+  const perCakeExtras = sumCostItemAssignments(productCostItems.data ?? []) + overheadPerCake;
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, product.data?.category_id ?? null);
@@ -589,16 +551,10 @@ function ProductDetailPage() {
         productId={productId}
         usageTotals={sumUsageBySize(links.data ?? [])}
         costTotals={sumCostBySize(links.data ?? [], costsByComponent)}
-        productionCostTotals={sumProductionCostBySize(
-          links.data ?? [],
-          costsByComponent,
-          costItemsByComponent,
-          overhead,
-        )}
-        packagingCost={packagingCost}
+        perCakeExtras={perCakeExtras}
       />
 
-      <ProductPackagingSection productId={productId} />
+      <ProductCostItemsSection productId={productId} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ProductFormulasSection productId={productId} />

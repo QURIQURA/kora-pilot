@@ -1109,20 +1109,20 @@ export type Database = {
       }
       pilot_settings: {
         Row: {
-          monthly_batch_count: number
           monthly_overhead: number
+          monthly_unit_count: number
           updated_at: string
           user_id: string
         }
         Insert: {
-          monthly_batch_count?: number
           monthly_overhead?: number
+          monthly_unit_count?: number
           updated_at?: string
           user_id?: string
         }
         Update: {
-          monthly_batch_count?: number
           monthly_overhead?: number
+          monthly_unit_count?: number
           updated_at?: string
           user_id?: string
         }

@@ -1,29 +1,26 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  componentCostItemsQuery,
-  costItemsQuery,
-  currentUserId,
-} from "@/lib/queries";
+import { costItemsQuery, currentUserId, productCostItemsQuery } from "@/lib/queries";
 import { fmtCurrency } from "@/lib/cost";
 import { SectionCard, buttonClass, inputClass, selectClass } from "./ui";
 
 /**
- * COMPONENT DETAIL — PRODUCTION COST 항목 (2026-09-23).
- * Raw Material Cost(배합 재료비)와 별개로, 이 Component의 배치마다 드는 UTILITY/CONSUMABLE
- * 항목(전기/가스/소모품 등)을 배정한다. PACKAGING/OVERHEAD는 여기서 다루지 않는다
- * (PACKAGING은 Product 단위, OVERHEAD는 SETTINGS의 월 배분액을 모든 배치에 공통 적용).
+ * PRODUCT DETAIL — PRODUCTION COST 항목 (2026-09-23, 케익 1개당).
+ * UTILITY(전기/가스 등)/CONSUMABLE(소모품)/PACKAGING(상자/보드 등)을 전부 여기서, Product 1개
+ * (사이즈 무관) 기준으로 배정한다. 원래 UTILITY/CONSUMABLE은 Component 단위·배치당으로 배정했었는데,
+ * 케익 하나에 들어가는 Component 개수만큼 "배치" 횟수가 무한히 배수될 수 있어 고정 기준으로 삼기
+ * 애매하다는 사용자 판단(2026-09-23)에 따라 PACKAGING과 동일하게 Product 단위·개당으로 통일했다.
+ * OVERHEAD는 여기서 배정하지 않는다 — SETTINGS의 월 고정비÷월 케익 개수로 모든 Product에 공통 적용.
  */
-export function ComponentCostItemsSection({ componentId }: { componentId: string }) {
+export function ProductCostItemsSection({ productId }: { productId: string }) {
   const queryClient = useQueryClient();
-  const linked = useQuery(componentCostItemsQuery(componentId));
+  const linked = useQuery(productCostItemsQuery(productId));
   const allItems = useQuery(costItemsQuery());
   const [selecting, setSelecting] = useState(false);
 
   const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["component_cost_items", componentId] });
-    await queryClient.invalidateQueries({ queryKey: ["component_cost_items_bulk"] });
+    await queryClient.invalidateQueries({ queryKey: ["product_cost_items", productId] });
     await queryClient.invalidateQueries({ queryKey: ["cost_item_usage"] });
   };
 
@@ -31,8 +28,8 @@ export function ComponentCostItemsSection({ componentId }: { componentId: string
     mutationFn: async (costItemId: string) => {
       const user_id = await currentUserId();
       const { error } = await supabase
-        .from("component_cost_items")
-        .insert({ user_id, component_id: componentId, cost_item_id: costItemId, quantity: 1 });
+        .from("product_cost_items")
+        .insert({ user_id, product_id: productId, cost_item_id: costItemId, quantity: 1 });
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -41,7 +38,7 @@ export function ComponentCostItemsSection({ componentId }: { componentId: string
   const updateQuantity = useMutation({
     mutationFn: async ({ id, quantity }: { id: string; quantity: number }) => {
       const { error } = await supabase
-        .from("component_cost_items")
+        .from("product_cost_items")
         .update({ quantity })
         .eq("id", id);
       if (error) throw error;
@@ -51,7 +48,7 @@ export function ComponentCostItemsSection({ componentId }: { componentId: string
 
   const unlink = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("component_cost_items").delete().eq("id", id);
+      const { error } = await supabase.from("product_cost_items").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -60,14 +57,16 @@ export function ComponentCostItemsSection({ componentId }: { componentId: string
   const rows = linked.data ?? [];
   const candidates = (allItems.data ?? []).filter(
     (item) =>
-      (item.category === "UTILITY" || item.category === "CONSUMABLE") &&
+      (item.category === "UTILITY" ||
+        item.category === "CONSUMABLE" ||
+        item.category === "PACKAGING") &&
       !rows.some((r) => r.cost_item_id === item.id),
   );
   const total = rows.reduce((sum, r) => sum + r.quantity * r.cost_items.unit_cost, 0);
 
   return (
     <SectionCard
-      title="PRODUCTION COST 항목 (배치당 — UTILITY / CONSUMABLE)"
+      title="PRODUCTION COST 항목 (케익 1개당 — UTILITY / CONSUMABLE / PACKAGING)"
       action={
         candidates.length > 0 ? (
           <button
@@ -106,7 +105,7 @@ export function ComponentCostItemsSection({ componentId }: { componentId: string
       )}
       {rows.length === 0 ? (
         <p className="font-mono text-xs uppercase text-muted-foreground">
-          배정된 항목 없음 — SETTINGS에서 COST ITEMS를 먼저 등록하세요.
+          배정된 항목 없음 — SETTINGS에서 COST ITEMS(UTILITY/CONSUMABLE/PACKAGING)를 먼저 등록하세요.
         </p>
       ) : (
         <ul className="divide-y divide-border border border-border">
@@ -148,7 +147,7 @@ export function ComponentCostItemsSection({ componentId }: { componentId: string
       )}
       {rows.length > 0 && (
         <p className="mt-2 font-mono text-xs uppercase text-muted-foreground">
-          배치당 합계: {fmtCurrency(total)}
+          개당 합계: {fmtCurrency(total)}
         </p>
       )}
     </SectionCard>

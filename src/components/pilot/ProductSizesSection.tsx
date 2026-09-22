@@ -26,8 +26,7 @@ export function ProductSizesSection({
   productId,
   usageTotals,
   costTotals,
-  productionCostTotals,
-  packagingCost,
+  perCakeExtras,
 }: {
   productId: string;
   /** sizeId → 그 사이즈에 연결된 컴포넌트 사용량(g) 합산 — COMPONENTS 섹션에서 계산해 넘겨준다.
@@ -35,10 +34,13 @@ export function ProductSizesSection({
   usageTotals?: Record<string, number>;
   /** sizeId → 그 사이즈의 예상 원가(Raw Material, AUD) 합산 — usageTotals와 같은 규칙, COST 계산용. */
   costTotals?: Record<string, number>;
-  /** sizeId → 그 사이즈의 FULL PRODUCTION COST(원재료+UTILITY/CONSUMABLE+OVERHEAD 배분, AUD) 합산(2026-09-23). */
-  productionCostTotals?: Record<string, number>;
-  /** Product 1개당 PACKAGING 배정 합계(AUD) — 사이즈 무관, FULL PRODUCTION COST에 더해 보여준다. */
-  packagingCost?: number;
+  /**
+   * 케익(제품) 1개당 고정으로 더해지는 추가 원가(AUD, 사이즈 무관) — UTILITY+CONSUMABLE+PACKAGING
+   * (PRODUCTION COST 항목 섹션에서 Product 단위로 배정) + OVERHEAD 배분(월 고정비÷월 케익 개수) 합계.
+   * "배치" 기준은 폐기(2026-09-23) — 케익 하나에 Component가 몇 개 들어가는지에 따라 배치 횟수가
+   * 무한히 배수될 수 있어 고정 기준으로 쓰기 애매하다는 판단.
+   */
+  perCakeExtras?: number;
 }) {
   const queryClient = useQueryClient();
   const sizes = useQuery(productSizesQuery(productId));
@@ -146,11 +148,7 @@ export function ProductSizesSection({
                       const costLabel =
                         costTotal != null ? `RAW MATERIAL ${fmtCurrency(costTotal)}` : null;
                       const extra = [usageLabel, costLabel].filter(Boolean).join(" · ");
-                      const productionTotal = productionCostTotals?.[size.id];
-                      const fullCost =
-                        productionTotal != null
-                          ? productionTotal + (packagingCost ?? 0)
-                          : null;
+                      const fullCost = costTotal != null ? costTotal + (perCakeExtras ?? 0) : null;
                       return (
                         <>
                           {calc ? (
@@ -165,7 +163,9 @@ export function ProductSizesSection({
                           {fullCost != null && (
                             <p className="font-mono text-xs text-muted-foreground">
                               FULL PRODUCTION COST {fmtCurrency(fullCost)}
-                              {packagingCost ? ` (PACKAGING ${fmtCurrency(packagingCost)} 포함)` : ""}
+                              {perCakeExtras
+                                ? ` (UTILITY/CONSUMABLE/PACKAGING/OVERHEAD ${fmtCurrency(perCakeExtras)} 포함)`
+                                : ""}
                             </p>
                           )}
                         </>

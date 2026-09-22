@@ -1366,48 +1366,10 @@ export const costItemUsageQuery = () =>
     },
   });
 
-export interface ComponentCostItemRow {
-  id: string;
-  cost_item_id: string;
-  quantity: number;
-  cost_items: CostItem;
-}
-
-/** COMPONENT DETAIL — 이 Component에 배정된 UTILITY/CONSUMABLE 항목 (배치당) */
-export const componentCostItemsQuery = (componentId: string | null) =>
-  queryOptions({
-    queryKey: ["component_cost_items", componentId],
-    enabled: Boolean(componentId),
-    queryFn: async (): Promise<ComponentCostItemRow[]> => {
-      if (!componentId) return [];
-      return unwrap(
-        await supabase
-          .from("component_cost_items")
-          .select("id, cost_item_id, quantity, cost_items(*)")
-          .eq("component_id", componentId),
-      ) as unknown as ComponentCostItemRow[];
-    },
-  });
-
-/** 여러 Component의 배정 항목을 한 번에 — Product COMPONENTS 섹션의 원가 합산용 */
-export const componentCostItemsBulkQuery = (componentIds: string[]) =>
-  queryOptions({
-    queryKey: ["component_cost_items_bulk", [...new Set(componentIds)].sort()],
-    enabled: componentIds.length > 0,
-    queryFn: async (): Promise<Record<string, ComponentCostItemRow[]>> => {
-      const ids = [...new Set(componentIds)];
-      if (ids.length === 0) return {};
-      const rows = unwrap(
-        await supabase
-          .from("component_cost_items")
-          .select("id, component_id, cost_item_id, quantity, cost_items(*)")
-          .in("component_id", ids),
-      ) as unknown as (ComponentCostItemRow & { component_id: string })[];
-      const map: Record<string, ComponentCostItemRow[]> = {};
-      for (const row of rows) (map[row.component_id] ??= []).push(row);
-      return map;
-    },
-  });
+// NOTE(2026-09-23): Component 단위(배치당) UTILITY/CONSUMABLE 배정은 폐기됐다 — 케익에 들어가는
+// Component 개수만큼 배치 횟수가 무한히 배수될 수 있어 고정 기준으로 쓰기 애매하다는 사용자 판단.
+// component_cost_items 테이블 자체는 남아있지만(과거 데이터 롤백 대비) 더 이상 쓰지 않는다 —
+// UTILITY/CONSUMABLE도 PACKAGING과 동일하게 productCostItemsQuery(Product 단위·개당)로 배정한다.
 
 export interface ProductCostItemRow {
   id: string;
@@ -1434,7 +1396,7 @@ export const productCostItemsQuery = (productId: string | null) =>
 
 export type PilotSettings = import("@/integrations/supabase/types").Tables<"pilot_settings">;
 
-/** SETTINGS — 월 고정비(OVERHEAD)/월 예상 배치 수. 유저당 단일 행(없으면 null). */
+/** SETTINGS — 월 고정비(OVERHEAD)/월 예상 케익(제품 단위) 개수. 유저당 단일 행(없으면 null). */
 export const pilotSettingsQuery = () =>
   queryOptions({
     queryKey: ["pilot_settings"],

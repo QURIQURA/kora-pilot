@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-09-23 — UTILITY/CONSUMABLE/OVERHEAD 기준을 "배치" → "케익 개수"로 변경
+
+**무엇이 달라졌나**
+- 원래 UTILITY/CONSUMABLE은 COMPONENT(시트/필링/가나슈 등) 단위·배치당으로 배정했는데, 케익 하나에 Component가 몇 개 들어가는지에 따라 "배치" 횟수가 무한히 배수될 수 있어 고정 기준으로 쓰기 애매하다는 판단으로, PACKAGING과 똑같이 PRODUCT(케익) 단위·개당으로 통일했습니다.
+- COMPONENT 상세의 "PRODUCTION COST 항목" 섹션은 없앴습니다 — RAW MATERIAL COST만 남습니다.
+- PRODUCT 상세의 "PACKAGING (개당)" 섹션이 "PRODUCTION COST 항목 (케익 1개당 — UTILITY/CONSUMABLE/PACKAGING)"으로 넓어져서, 세 카테고리를 전부 한 곳에서 케익 1개 기준으로 배정합니다.
+- SETTINGS의 MONTHLY OVERHEAD도 "월 예상 배치 수" → "월 예상 케익(제품) 개수"로 바뀌었고, 배분액은 이제 "케익 1개당"으로 표시됩니다.
+- 기존에 CHIFFON/CHIFFON CACAO(시트)에 배정해뒀던 UTILITY/CONSUMABLE은 각각의 Product(Strawberry Chiffon Cake / W5 Cacao Banana Chiffon)로 옮겨 재배정했습니다. 월 예상 케익 개수는 주 10개 기준으로 40개/월로 설정했습니다.
+
+**확인 방법**
+- PRODUCT 상세 → PRODUCTION COST 항목 섹션에서 UTILITY/CONSUMABLE/PACKAGING이 전부 한 목록에 뜨는지, SIZES 섹션의 FULL PRODUCTION COST에 반영되는지 확인.
+
+---
+
 ## 2026-09-23 — SETTINGS 화면 2열 그리드로 계열별 정리
 
 **무엇이 달라졌나**
