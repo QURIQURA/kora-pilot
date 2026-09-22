@@ -24,7 +24,7 @@ import {
   functionDisplayParts,
 } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
-import { costPerGram, fmtWon, PURCHASE_UNITS } from "@/lib/cost";
+import { costPerGram, fmtCurrency, PURCHASE_UNITS } from "@/lib/cost";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { FunctionPicker } from "@/components/pilot/FunctionPicker";
 import { FlavourFamilySelect } from "@/components/pilot/FlavourFamilySelect";
@@ -244,13 +244,13 @@ function IngredientDetailPage() {
         badge={
           costPerGram(data) != null ? (
             <span className="label-caps border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-              {fmtWon(costPerGram(data)!)}/g
+              {fmtCurrency(costPerGram(data)!)}/g
             </span>
           ) : undefined
         }
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="구입가 PURCHASE PRICE (원)">
+          <Field label="구입가 PURCHASE PRICE (AUD)">
             <NullableNumberInput
               value={data.purchase_price}
               onSave={(v) => update.mutate({ purchase_price: v })}
@@ -277,7 +277,7 @@ function IngredientDetailPage() {
           </Field>
         </div>
         <p className="mt-3 font-mono text-xs text-muted-foreground">
-          예: 설탕 20kg에 32,000원이면 구입가 32000 / 구입량 20 / 단위 kg → 자동으로 g당
+          예: 설탕 20kg에 $32.00(AUD)이면 구입가 32 / 구입량 20 / 단위 kg → 자동으로 g당
           단가가 계산됩니다.
         </p>
       </CollapsibleSection>

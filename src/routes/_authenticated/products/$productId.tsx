@@ -23,7 +23,7 @@ import {
   type ComponentCostInfo,
   type ProductComponentRow,
 } from "@/lib/queries";
-import { costPerGram, fmtWon } from "@/lib/cost";
+import { costPerGram, fmtCurrency } from "@/lib/cost";
 import { fmtNumber, toGrams } from "@/lib/formula";
 import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
 import {
@@ -386,7 +386,7 @@ function ProductDetailPage() {
               const total = costs.reduce((sum: number, c) => sum + (c ?? 0), 0);
               return (
                 <p className="mb-2 font-mono text-xs uppercase text-muted-foreground">
-                  전체(사이즈 미지정) 예상 원가 합계: {fmtWon(total)}
+                  전체(사이즈 미지정) 예상 원가 합계: {fmtCurrency(total)}
                 </p>
               );
             })()}
@@ -426,7 +426,7 @@ function ProductDetailPage() {
                   <div className="flex items-center gap-2">
                     {groupTotal != null && (
                       <span className="label-caps text-xs text-muted-foreground">
-                        예상원가 {fmtWon(groupTotal)}
+                        예상원가 {fmtCurrency(groupTotal)}
                         {groupHasMissingPrice ? "*" : ""}
                       </span>
                     )}
@@ -476,7 +476,7 @@ function ProductDetailPage() {
                       return (
                         <p className="font-mono text-[11px] text-muted-foreground">
                           {cost != null
-                            ? `예상원가 ${fmtWon(cost)}`
+                            ? `예상원가 ${fmtCurrency(cost)}`
                             : link.component_id != null
                               ? "원가 정보 없음 — COMPONENT에 CURRENT FORMULA/재료 구입가를 확인하세요"
                               : "원가 정보 없음 — 이 재료에 구입가를 확인하세요"}

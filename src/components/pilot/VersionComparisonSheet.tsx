@@ -21,7 +21,7 @@ import { Link } from "@tanstack/react-router";
 import { versionIngredientsQuery, type VersionIngredientRow } from "@/lib/queries";
 import { fmtNumber, toGrams, versionLabel } from "@/lib/formula";
 import { ingredientDisplayName } from "@/lib/pilot";
-import { costPerGram, fmtWon } from "@/lib/cost";
+import { costPerGram, fmtCurrency } from "@/lib/cost";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./ui";
 
@@ -442,7 +442,7 @@ function SheetBodyRow({
         className="whitespace-nowrap border-l border-dashed border-border px-3 py-2 font-mono text-xs tabular-nums text-muted-foreground"
         style={{ height }}
       >
-        {row.priceCost != null ? fmtWon(row.priceCost) : "—"}
+        {row.priceCost != null ? fmtCurrency(row.priceCost) : "—"}
       </td>
       {versions.map((v) => {
         const cell = row.byVersion.get(v.id);

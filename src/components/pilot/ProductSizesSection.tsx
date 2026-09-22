@@ -13,7 +13,7 @@ import {
   type ProductSize,
   type ProductSizeShape,
 } from "@/lib/product-size";
-import { fmtWon } from "@/lib/cost";
+import { fmtCurrency } from "@/lib/cost";
 import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 /**
@@ -137,7 +137,7 @@ export function ProductSizesSection({
                       const usageLabel =
                         usageTotal != null ? `재료 합산 ${usageTotal.toFixed(1).replace(/\.0$/, "")}g` : null;
                       const costTotal = costTotals?.[size.id];
-                      const costLabel = costTotal != null ? `예상원가 ${fmtWon(costTotal)}` : null;
+                      const costLabel = costTotal != null ? `예상원가 ${fmtCurrency(costTotal)}` : null;
                       const extra = [usageLabel, costLabel].filter(Boolean).join(" · ");
                       if (calc) {
                         return (

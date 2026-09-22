@@ -68,7 +68,18 @@ export function computeLineCosts(rows: IngredientLine[]): LineCostResult {
   };
 }
 
-/** 원화 표시 — 반올림 + 천단위 구분자 */
-export function fmtWon(value: number): string {
-  return `₩${Math.round(value).toLocaleString("ko-KR")}`;
+/**
+ * AUD 통화 표시(2026-09-23, 원화 ₩ 표시에서 변경 — Kora Cakes는 호주 캔버라 기준 사업).
+ * g당 단가처럼 소수점 이하가 작은 값은 소수 2자리로 반올림하면 $0.00으로 보여버리는 문제가
+ * 있어서(예: 구입가 2.2÷구입량 1000g = $0.0022/g), 절댓값이 $0.01 미만이면 소수 4자리까지 보여준다.
+ */
+export function fmtCurrency(value: number): string {
+  const abs = Math.abs(value);
+  const maximumFractionDigits = abs > 0 && abs < 0.01 ? 4 : 2;
+  return new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits,
+  }).format(value);
 }

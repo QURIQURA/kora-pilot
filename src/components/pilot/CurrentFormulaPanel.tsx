@@ -11,7 +11,7 @@ import {
 } from "@/lib/queries";
 import { currentVersion } from "./FormulaSummary";
 import { fmtNumber, versionLabel } from "@/lib/formula";
-import { computeLineCosts, fmtWon } from "@/lib/cost";
+import { computeLineCosts, fmtCurrency } from "@/lib/cost";
 import { formatDateTime } from "@/lib/datetime";
 import { ExperimentCreateModal } from "./ExperimentCreateForm";
 import { VersionComparisonSheet } from "./VersionComparisonSheet";
@@ -226,14 +226,14 @@ export function CurrentFormulaPanel({
           <div className="space-y-1">
             <span className="label-caps block text-xs text-muted-foreground">배치 원가</span>
             <p className="font-mono text-base tabular-nums">
-              {fmtWon(cost.totalCost)}
+              {fmtCurrency(cost.totalCost)}
               {cost.hasMissingPrice && <span className="ml-1 text-destructive">*</span>}
             </p>
           </div>
           <div className="space-y-1">
             <span className="label-caps block text-xs text-muted-foreground">g당 단가</span>
             <p className="font-mono text-base tabular-nums">
-              {cost.costPerGram != null ? `${fmtWon(cost.costPerGram)}/g` : "—"}
+              {cost.costPerGram != null ? `${fmtCurrency(cost.costPerGram)}/g` : "—"}
             </p>
           </div>
           <div className="space-y-1">
