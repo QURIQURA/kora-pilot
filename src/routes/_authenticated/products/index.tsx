@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pin } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { ProductCreateModal } from "@/components/pilot/ProductCreateModal";
 import { categoriesQuery, productsQuery, tagsQuery } from "@/lib/queries";
 import {
@@ -35,6 +37,7 @@ function ProductsPage() {
   const products = useQuery(productsQuery());
   const categories = useQuery(categoriesQuery());
   const tags = useQuery(tagsQuery());
+  const queryClient = useQueryClient();
 
   const [categoryFilter, setCategoryFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
@@ -42,7 +45,18 @@ function ProductsPage() {
 
   const categoryList = categories.data ?? [];
 
-  // 정렬은 항상 이름순 고정 — 정렬 기준을 고를 필요가 없다는 판단(2026-09-22)
+  const togglePin = useMutation({
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
+      const { error } = await supabase.from("products").update({ pinned }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+
+  // 정렬은 항상 이름순 고정(2026-09-22) — 단, 📌 고정한 제품은 지금 작업 중인 레시피이므로
+  // 이름순과 무관하게 항상 맨 위에 온다(2026-09-22 추가).
   const rows = useMemo(() => {
     let list = [...(products.data ?? [])];
     if (categoryFilter) {
@@ -54,7 +68,10 @@ function ProductsPage() {
         (p.product_tags ?? []).some((t) => t.tag_id === tagFilter)
       );
     }
-    list.sort((a, b) => a.name.localeCompare(b.name));
+    list.sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
     return list;
   }, [products.data, categoryList, categoryFilter, tagFilter]);
 
@@ -120,7 +137,9 @@ function ProductsPage() {
         />
       ) : (
         <div className="border border-border bg-card">
-          <div className="hidden grid-cols-12 gap-2 border-b border-border px-4 py-2 md:grid">
+          <div className="hidden items-center border-b border-border py-2 md:flex">
+          <span className="w-10 shrink-0" aria-hidden />
+          <div className="grid flex-1 grid-cols-12 gap-2 pr-4">
             <span className="label-caps col-span-5 text-xs text-muted-foreground">
               NAME
             </span>
@@ -134,13 +153,30 @@ function ProductsPage() {
               UPDATED
             </span>
           </div>
+          </div>
           <ul>
             {rows.map((product) => (
-              <li key={product.id} className="border-b border-border last:border-b-0">
+              <li
+                key={product.id}
+                className="flex items-stretch border-b border-border last:border-b-0"
+              >
+                <button
+                  type="button"
+                  title={product.pinned ? "고정 해제" : "목록 맨 위에 고정"}
+                  className={`flex shrink-0 items-center px-3 hover:bg-secondary ${
+                    product.pinned ? "text-foreground" : "text-muted-foreground/40"
+                  }`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    togglePin.mutate({ id: product.id, pinned: !product.pinned });
+                  }}
+                >
+                  <Pin className="h-4 w-4" fill={product.pinned ? "currentColor" : "none"} />
+                </button>
                 <Link
                   to="/products/$productId"
                   params={{ productId: product.id }}
-                  className="grid grid-cols-1 gap-1 px-4 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
+                  className="grid flex-1 grid-cols-1 gap-1 py-3 pr-4 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
                 >
                   <span className="col-span-5 text-sm">{product.name}</span>
                   <span className="col-span-4 font-mono text-xs uppercase">

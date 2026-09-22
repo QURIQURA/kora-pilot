@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { versionIngredientsQuery, type VersionIngredientRow } from "@/lib/queries";
 import { fmtNumber, versionLabel } from "@/lib/formula";
 import { ingredientDisplayName } from "@/lib/pilot";
@@ -391,7 +392,17 @@ function SheetBodyRow({
           >
             <GripVertical className="h-3 w-3" />
           </button>
-          <span className="whitespace-nowrap text-right">{row.name}</span>
+          {/* 재료명 → INGREDIENT MASTER 상세로 이동 (구입가 등 원가 정보 입력하러 바로 가기 위해
+              2026-09-22 원복 — 2026-09-21에 "실수로 편집 대신 이동됨" 버그로 판단해 없앴었으나,
+              원가 입력 워크플로우에는 오히려 이 바로가기가 필요하다는 사용자 판단) */}
+          <Link
+            to="/ingredients/$ingredientId"
+            params={{ ingredientId: row.id }}
+            className="whitespace-nowrap text-right hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {row.name}
+          </Link>
         </div>
         {/* 행 높이 조절 손잡이 — 아래쪽 경계를 드래그 */}
         <div

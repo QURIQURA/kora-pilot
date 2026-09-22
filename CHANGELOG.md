@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-09-22 — PRODUCTS/COMPONENTS 목록 📌 고정 + 재료명 링크 원복
+
+**무엇이 달라졌나**
+- PRODUCTS/COMPONENTS 목록에 📌 고정 버튼을 추가했습니다. 지금 작업 중인 레시피를 고정해두면 이름순(PRODUCTS)/최근 수정순(COMPONENTS) 정렬과 무관하게 항상 목록 맨 위에 표시됩니다.
+- COMPONENT 상세(CURRENT FORMULA)와 FORMULA 버전 비교 표에서 재료명을 다시 클릭하면 INGREDIENT MASTER 상세로 이동합니다 — 재료별 구입가(원가)를 빠르게 입력하러 갈 수 있도록, 2026-09-21에 없앴던 이동 기능을 이 용도로 다시 복원했습니다. (FORMULA 상세 페이지 자체의 편집 가능한 재료 표는 그대로 유지 — 거기서는 이름을 눌러도 이동하지 않고 그 자리에서 편집합니다.)
+
+**확인 방법**
+- PRODUCTS 또는 COMPONENTS 목록에서 📌 버튼을 눌러 특정 항목을 맨 위로 고정 → 다시 눌러 해제.
+- COMPONENT 상세의 CURRENT FORMULA 표에서 재료명을 클릭하면 INGREDIENTS 상세로 이동하는지 확인.
+
+---
+
 ## 2026-09-22 — PRODUCT 실사용량 입력 UI 개선 (드롭다운 축소 + 레시피 총량 표기)
 
 **무엇이 달라졌나**
