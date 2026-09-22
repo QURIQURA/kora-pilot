@@ -253,7 +253,7 @@ export function VersionComparisonSheet({
         <DndContext sensors={colSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
           <thead>
             <tr className="border-b border-border bg-secondary/40 text-left">
-              <th className="label-caps relative px-3 py-2 text-xs text-muted-foreground">
+              <th className="label-caps relative px-3 py-2 text-right text-xs text-muted-foreground">
                 INGREDIENT
                 {/* INGREDIENT 열도 다른 열들처럼 너비 조절 가능 */}
                 <div
@@ -380,17 +380,18 @@ function SheetBodyRow({
       )}
     >
       <td className="relative px-3 py-2" style={{ height }}>
-        <div className="flex items-center gap-1.5">
+        {/* 재료명은 오른쪽(버전 열 쪽)으로 붙이고, 드래그 손잡이는 왼쪽에 고정 */}
+        <div className="flex items-center justify-between gap-1.5">
           {/* 행(재료) 드래그 손잡이 — 실제 엑셀처럼 행 순서를 바꿀 수 있게 */}
           <button
             type="button"
-            className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
             {...attributes}
             {...listeners}
           >
             <GripVertical className="h-3 w-3" />
           </button>
-          <span>{row.name}</span>
+          <span className="text-right">{row.name}</span>
         </div>
         {/* 행 높이 조절 손잡이 — 아래쪽 경계를 드래그 */}
         <div
