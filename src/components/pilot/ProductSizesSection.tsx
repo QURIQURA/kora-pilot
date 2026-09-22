@@ -26,13 +26,19 @@ export function ProductSizesSection({
   productId,
   usageTotals,
   costTotals,
+  productionCostTotals,
+  packagingCost,
 }: {
   productId: string;
   /** sizeId → 그 사이즈에 연결된 컴포넌트 사용량(g) 합산 — COMPONENTS 섹션에서 계산해 넘겨준다.
    * 형태/치수(area/volume)와는 별개 개념이라 참고용으로만 나란히 보여준다. */
   usageTotals?: Record<string, number>;
-  /** sizeId → 그 사이즈의 예상 원가(원) 합산 — usageTotals와 같은 규칙, COST 계산용. */
+  /** sizeId → 그 사이즈의 예상 원가(Raw Material, AUD) 합산 — usageTotals와 같은 규칙, COST 계산용. */
   costTotals?: Record<string, number>;
+  /** sizeId → 그 사이즈의 FULL PRODUCTION COST(원재료+UTILITY/CONSUMABLE+OVERHEAD 배분, AUD) 합산(2026-09-23). */
+  productionCostTotals?: Record<string, number>;
+  /** Product 1개당 PACKAGING 배정 합계(AUD) — 사이즈 무관, FULL PRODUCTION COST에 더해 보여준다. */
+  packagingCost?: number;
 }) {
   const queryClient = useQueryClient();
   const sizes = useQuery(productSizesQuery(productId));
@@ -137,19 +143,33 @@ export function ProductSizesSection({
                       const usageLabel =
                         usageTotal != null ? `재료 합산 ${usageTotal.toFixed(1).replace(/\.0$/, "")}g` : null;
                       const costTotal = costTotals?.[size.id];
-                      const costLabel = costTotal != null ? `예상원가 ${fmtCurrency(costTotal)}` : null;
+                      const costLabel =
+                        costTotal != null ? `RAW MATERIAL ${fmtCurrency(costTotal)}` : null;
                       const extra = [usageLabel, costLabel].filter(Boolean).join(" · ");
-                      if (calc) {
-                        return (
-                          <p className="font-mono text-xs text-muted-foreground">
-                            AREA {formatAreaCm2(calc.areaCm2)} · VOLUME {formatVolumeCm3(calc.volumeCm3)}
-                            {extra ? ` · ${extra}` : ""}
-                          </p>
-                        );
-                      }
-                      return extra ? (
-                        <p className="font-mono text-xs text-muted-foreground">{extra}</p>
-                      ) : null;
+                      const productionTotal = productionCostTotals?.[size.id];
+                      const fullCost =
+                        productionTotal != null
+                          ? productionTotal + (packagingCost ?? 0)
+                          : null;
+                      return (
+                        <>
+                          {calc ? (
+                            <p className="font-mono text-xs text-muted-foreground">
+                              AREA {formatAreaCm2(calc.areaCm2)} · VOLUME{" "}
+                              {formatVolumeCm3(calc.volumeCm3)}
+                              {extra ? ` · ${extra}` : ""}
+                            </p>
+                          ) : extra ? (
+                            <p className="font-mono text-xs text-muted-foreground">{extra}</p>
+                          ) : null}
+                          {fullCost != null && (
+                            <p className="font-mono text-xs text-muted-foreground">
+                              FULL PRODUCTION COST {fmtCurrency(fullCost)}
+                              {packagingCost ? ` (PACKAGING ${fmtCurrency(packagingCost)} 포함)` : ""}
+                            </p>
+                          )}
+                        </>
+                      );
                     })()}
                     {size.notes && <p className="text-xs text-muted-foreground">{size.notes}</p>}
                   </div>

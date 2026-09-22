@@ -14,6 +14,7 @@ import { techniquePath } from "@/lib/technique";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { CurrentFormulaPanel } from "@/components/pilot/CurrentFormulaPanel";
+import { ComponentCostItemsSection } from "@/components/pilot/ComponentCostItemsSection";
 import { DuplicateComponentModal } from "@/components/pilot/DuplicateComponentModal";
 import { ComponentTagsSection } from "@/components/pilot/ComponentTagsSection";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
@@ -132,6 +133,8 @@ function ComponentDetailPage() {
       </div>
 
       <CurrentFormulaPanel componentId={componentId} componentName={data.name} />
+
+      <ComponentCostItemsSection componentId={componentId} />
 
       <SectionCard title="DESCRIPTION">
         <TextArea

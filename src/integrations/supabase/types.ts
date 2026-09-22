@@ -85,6 +85,48 @@ export type Database = {
           },
         ]
       }
+      component_cost_items: {
+        Row: {
+          component_id: string
+          cost_item_id: string
+          created_at: string
+          id: string
+          quantity: number
+          user_id: string
+        }
+        Insert: {
+          component_id: string
+          cost_item_id: string
+          created_at?: string
+          id?: string
+          quantity?: number
+          user_id?: string
+        }
+        Update: {
+          component_id?: string
+          cost_item_id?: string
+          created_at?: string
+          id?: string
+          quantity?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "component_cost_items_component_id_fkey"
+            columns: ["component_id"]
+            isOneToOne: false
+            referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "component_cost_items_cost_item_id_fkey"
+            columns: ["cost_item_id"]
+            isOneToOne: false
+            referencedRelation: "cost_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       components: {
         Row: {
           created_at: string
@@ -131,6 +173,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      cost_items: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          unit_cost: number
+          unit_label: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          unit_cost?: number
+          unit_label?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          unit_cost?: number
+          unit_label?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       experiment_sensory_scores: {
         Row: {
@@ -1029,6 +1107,27 @@ export type Database = {
           },
         ]
       }
+      pilot_settings: {
+        Row: {
+          monthly_batch_count: number
+          monthly_overhead: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          monthly_batch_count?: number
+          monthly_overhead?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          monthly_batch_count?: number
+          monthly_overhead?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       process_categories: {
         Row: {
           color: string
@@ -1336,6 +1435,48 @@ export type Database = {
             columns: ["product_size_id"]
             isOneToOne: false
             referencedRelation: "product_sizes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_cost_items: {
+        Row: {
+          cost_item_id: string
+          created_at: string
+          id: string
+          product_id: string
+          quantity: number
+          user_id: string
+        }
+        Insert: {
+          cost_item_id: string
+          created_at?: string
+          id?: string
+          product_id: string
+          quantity?: number
+          user_id?: string
+        }
+        Update: {
+          cost_item_id?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+          quantity?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_cost_items_cost_item_id_fkey"
+            columns: ["cost_item_id"]
+            isOneToOne: false
+            referencedRelation: "cost_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_cost_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]

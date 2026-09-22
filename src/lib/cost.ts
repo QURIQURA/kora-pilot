@@ -73,6 +73,41 @@ export function computeLineCosts(rows: IngredientLine[]): LineCostResult {
  * g당 단가처럼 소수점 이하가 작은 값은 소수 2자리로 반올림하면 $0.00으로 보여버리는 문제가
  * 있어서(예: 구입가 2.2÷구입량 1000g = $0.0022/g), 절댓값이 $0.01 미만이면 소수 4자리까지 보여준다.
  */
+/**
+ * FULL PRODUCTION COST(2026-09-23) — Raw Material Cost와 별개로 계산되는 추가 원가.
+ * cost_items(UTILITY/PACKAGING/CONSUMABLE/OVERHEAD)를 Component/Product에 배정한 값(quantity)과
+ * 항목의 unit_cost를 곱해 합산한다. 어디에도 저장하지 않고 볼 때마다 계산한다.
+ */
+export interface CostableCostItem {
+  unit_cost: number;
+}
+
+export interface CostItemAssignment {
+  quantity: number;
+  cost_items: CostableCostItem;
+}
+
+/** 배정된 원가 항목들의 합계 — Σ(quantity × unit_cost). Component의 UTILITY/CONSUMABLE, Product의 PACKAGING 공통. */
+export function sumCostItemAssignments(rows: CostItemAssignment[]): number {
+  return rows.reduce((sum, row) => sum + row.quantity * row.cost_items.unit_cost, 0);
+}
+
+export interface OverheadSettings {
+  monthly_overhead: number;
+  monthly_batch_count: number;
+}
+
+/**
+ * 월 고정비(OVERHEAD) ÷ 월 예상 배치 수 = 배치 1회당 배분액.
+ * SETTINGS에 입력된 값 기준이며 모든 배치에 동일하게 적용한다.
+ * 배치 수가 미입력/0이면 계산할 수 없으므로 null.
+ */
+export function overheadPerBatch(settings: OverheadSettings | null | undefined): number | null {
+  if (!settings) return null;
+  if (!settings.monthly_batch_count || settings.monthly_batch_count <= 0) return null;
+  return settings.monthly_overhead / settings.monthly_batch_count;
+}
+
 export function fmtCurrency(value: number): string {
   const abs = Math.abs(value);
   const maximumFractionDigits = abs > 0 && abs < 0.01 ? 4 : 2;

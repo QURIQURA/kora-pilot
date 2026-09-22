@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-09-23 — 원가구조 확장: Raw Material Cost와 Full Production Cost 분리
+
+**무엇이 달라졌나**
+- 지금까지의 원가 계산(재료비만)은 그대로 두고, 여기에 UTILITY(전기/수도/가스 등 배치당), CONSUMABLE(배치당 소모품), PACKAGING(제품 개당 상자/스티커 등), OVERHEAD(월 고정비를 월 배치 수로 나눈 배분액)를 더한 "PRODUCTION COST"를 별도로 계산해 보여줍니다.
+- SETTINGS에 새 섹션 두 개가 생겼습니다: "COST ITEMS" — UTILITY/CONSUMABLE/PACKAGING/OVERHEAD 항목을 이름·단가로 등록, "MONTHLY OVERHEAD" — 월 고정비 총액과 월 예상 배치 수를 입력하면 배치당 배분액을 자동 계산.
+- COMPONENT 상세에 "PRODUCTION COST 항목" 섹션이 생겨서 그 COMPONENT의 배치에 드는 UTILITY/CONSUMABLE 항목을 배정(수량 입력)할 수 있습니다. CURRENT FORMULA 카드에 RAW MATERIAL COST와 나란히 PRODUCTION COST(배치)/PRODUCTION 단가(g당)가 추가로 뜹니다.
+- PRODUCT 상세에 "PACKAGING (개당)" 섹션이 생겨서 그 제품 1개에 드는 포장 원가를 배정할 수 있습니다. SIZES 섹션에는 사이즈별 RAW MATERIAL 원가 아래에 FULL PRODUCTION COST(= 원재료+UTILITY/CONSUMABLE+OVERHEAD 배분 + PACKAGING)가 함께 표시됩니다.
+- Labour(인건비) 추적은 이번 단계에는 포함하지 않았습니다 — 다음 단계로 남겨둡니다.
+
+**확인 방법**
+- SETTINGS → COST ITEMS에서 항목을 몇 개 등록하고, MONTHLY OVERHEAD에 월 고정비/월 배치 수를 입력.
+- COMPONENT 상세 → PRODUCTION COST 항목 섹션에서 UTILITY/CONSUMABLE 항목을 배정 → CURRENT FORMULA 카드의 PRODUCTION COST가 RAW MATERIAL COST보다 커지는지 확인.
+- PRODUCT 상세 → PACKAGING 섹션에서 포장 항목을 배정 → SIZES 섹션 각 사이즈에 FULL PRODUCTION COST가 표시되는지 확인.
+
+---
+
 ## 2026-09-23 — 통화 단위 AUD로 변경 + g당 단가 ₩0 표시 버그 수정
 
 **무엇이 달라졌나**

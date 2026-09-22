@@ -4,14 +4,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   baseFormulaLibraryQuery,
+  componentCostItemsQuery,
   currentUserId,
   formulasByComponentQuery,
+  pilotSettingsQuery,
   versionIngredientsQuery,
   type FormulaListRow,
 } from "@/lib/queries";
 import { currentVersion } from "./FormulaSummary";
 import { fmtNumber, versionLabel } from "@/lib/formula";
-import { computeLineCosts, fmtCurrency } from "@/lib/cost";
+import { computeLineCosts, fmtCurrency, overheadPerBatch, sumCostItemAssignments } from "@/lib/cost";
 import { formatDateTime } from "@/lib/datetime";
 import { ExperimentCreateModal } from "./ExperimentCreateForm";
 import { VersionComparisonSheet } from "./VersionComparisonSheet";
@@ -37,6 +39,22 @@ export function CurrentFormulaPanel({
 
   const cost = computeLineCosts(rows);
   const totalGrams = cost.totalGrams;
+
+  const costItems = useQuery(componentCostItemsQuery(componentId));
+  const settings = useQuery(pilotSettingsQuery());
+  const utilityConsumableCost = sumCostItemAssignments(costItems.data ?? []);
+  const overhead =
+    overheadPerBatch(
+      settings.data
+        ? {
+            monthly_overhead: settings.data.monthly_overhead,
+            monthly_batch_count: settings.data.monthly_batch_count,
+          }
+        : null,
+    ) ?? 0;
+  const productionCost = cost.totalCost + utilityConsumableCost + overhead;
+  const productionCostPerGram = totalGrams > 0 ? productionCost / totalGrams : null;
+
   const [showBaseLibrary, setShowBaseLibrary] = useState(false);
   const [creatingDevelopment, setCreatingDevelopment] = useState(false);
 
@@ -224,7 +242,9 @@ export function CurrentFormulaPanel({
             <p className="font-mono text-base tabular-nums">{rows.length}</p>
           </div>
           <div className="space-y-1">
-            <span className="label-caps block text-xs text-muted-foreground">배치 원가</span>
+            <span className="label-caps block text-xs text-muted-foreground">
+              RAW MATERIAL COST (배치)
+            </span>
             <p className="font-mono text-base tabular-nums">
               {fmtCurrency(cost.totalCost)}
               {cost.hasMissingPrice && <span className="ml-1 text-destructive">*</span>}
@@ -242,7 +262,30 @@ export function CurrentFormulaPanel({
               {formatDateTime(formula.updated_at)}
             </p>
           </div>
+          <div className="space-y-1">
+            <span className="label-caps block text-xs text-muted-foreground">
+              PRODUCTION COST (배치)
+            </span>
+            <p className="font-mono text-base tabular-nums">
+              {fmtCurrency(productionCost)}
+              {cost.hasMissingPrice && <span className="ml-1 text-destructive">*</span>}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <span className="label-caps block text-xs text-muted-foreground">
+              PRODUCTION 단가/g
+            </span>
+            <p className="font-mono text-base tabular-nums">
+              {productionCostPerGram != null ? `${fmtCurrency(productionCostPerGram)}/g` : "—"}
+            </p>
+          </div>
         </div>
+        {(utilityConsumableCost > 0 || overhead > 0) && (
+          <p className="font-mono text-[11px] text-muted-foreground">
+            PRODUCTION COST = RAW MATERIAL {fmtCurrency(cost.totalCost)} + UTILITY/CONSUMABLE{" "}
+            {fmtCurrency(utilityConsumableCost)} + OVERHEAD 배분 {fmtCurrency(overhead)}
+          </p>
+        )}
         {cost.hasMissingPrice && (
           <p className="font-mono text-[11px] text-muted-foreground">
             * 일부 재료에 구입가 정보가 없어 원가가 실제보다 낮게 계산됐을 수 있습니다 —

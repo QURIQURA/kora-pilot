@@ -12,6 +12,8 @@ import { IngredientFunctionManager } from "@/components/pilot/IngredientFunction
 import { SensoryAttributeManager } from "@/components/pilot/SensoryAttributeManager";
 import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
 import { AromaTagManager } from "@/components/pilot/AromaTagManager";
+import { CostItemManager } from "@/components/pilot/CostItemManager";
+import { MonthlyOverheadSettings } from "@/components/pilot/MonthlyOverheadSettings";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -67,6 +69,12 @@ function SettingsPage() {
       </div>
       <SettingsSection title="CATEGORIES" defaultOpen>
         <CategoryManager />
+      </SettingsSection>
+      <SettingsSection title="COST ITEMS (UTILITY / PACKAGING / CONSUMABLE / OVERHEAD)">
+        <CostItemManager />
+      </SettingsSection>
+      <SettingsSection title="MONTHLY OVERHEAD">
+        <MonthlyOverheadSettings />
       </SettingsSection>
       <SettingsSection title="TAGS">
         <TagManager />

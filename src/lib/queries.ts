@@ -1332,6 +1332,119 @@ export const workSessionTasksQuery = (sessionId: string) =>
 
 
 
+/* ── PRODUCTION COST — cost_items / component/product 배정 / SETTINGS (2026-09-23) ── */
+
+export type CostItem = import("@/integrations/supabase/types").Tables<"cost_items">;
+export type CostItemCategory = CostItem["category"];
+
+export const costItemsQuery = () =>
+  queryOptions({
+    queryKey: ["cost_items"],
+    queryFn: async (): Promise<CostItem[]> =>
+      unwrap(
+        await supabase
+          .from("cost_items")
+          .select("*")
+          .order("category", { ascending: true })
+          .order("name", { ascending: true }),
+      ),
+  });
+
+/** cost_item별 사용 횟수(component+product 배정 합산) — 삭제 보호용 */
+export const costItemUsageQuery = () =>
+  queryOptions({
+    queryKey: ["cost_item_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const [comp, prod] = await Promise.all([
+        supabase.from("component_cost_items").select("cost_item_id"),
+        supabase.from("product_cost_items").select("cost_item_id"),
+      ]);
+      const map: Record<string, number> = {};
+      for (const row of unwrap(comp)) map[row.cost_item_id] = (map[row.cost_item_id] ?? 0) + 1;
+      for (const row of unwrap(prod)) map[row.cost_item_id] = (map[row.cost_item_id] ?? 0) + 1;
+      return map;
+    },
+  });
+
+export interface ComponentCostItemRow {
+  id: string;
+  cost_item_id: string;
+  quantity: number;
+  cost_items: CostItem;
+}
+
+/** COMPONENT DETAIL — 이 Component에 배정된 UTILITY/CONSUMABLE 항목 (배치당) */
+export const componentCostItemsQuery = (componentId: string | null) =>
+  queryOptions({
+    queryKey: ["component_cost_items", componentId],
+    enabled: Boolean(componentId),
+    queryFn: async (): Promise<ComponentCostItemRow[]> => {
+      if (!componentId) return [];
+      return unwrap(
+        await supabase
+          .from("component_cost_items")
+          .select("id, cost_item_id, quantity, cost_items(*)")
+          .eq("component_id", componentId),
+      ) as unknown as ComponentCostItemRow[];
+    },
+  });
+
+/** 여러 Component의 배정 항목을 한 번에 — Product COMPONENTS 섹션의 원가 합산용 */
+export const componentCostItemsBulkQuery = (componentIds: string[]) =>
+  queryOptions({
+    queryKey: ["component_cost_items_bulk", [...new Set(componentIds)].sort()],
+    enabled: componentIds.length > 0,
+    queryFn: async (): Promise<Record<string, ComponentCostItemRow[]>> => {
+      const ids = [...new Set(componentIds)];
+      if (ids.length === 0) return {};
+      const rows = unwrap(
+        await supabase
+          .from("component_cost_items")
+          .select("id, component_id, cost_item_id, quantity, cost_items(*)")
+          .in("component_id", ids),
+      ) as unknown as (ComponentCostItemRow & { component_id: string })[];
+      const map: Record<string, ComponentCostItemRow[]> = {};
+      for (const row of rows) (map[row.component_id] ??= []).push(row);
+      return map;
+    },
+  });
+
+export interface ProductCostItemRow {
+  id: string;
+  cost_item_id: string;
+  quantity: number;
+  cost_items: CostItem;
+}
+
+/** PRODUCT DETAIL — 이 Product에 배정된 PACKAGING 항목 (개당) */
+export const productCostItemsQuery = (productId: string | null) =>
+  queryOptions({
+    queryKey: ["product_cost_items", productId],
+    enabled: Boolean(productId),
+    queryFn: async (): Promise<ProductCostItemRow[]> => {
+      if (!productId) return [];
+      return unwrap(
+        await supabase
+          .from("product_cost_items")
+          .select("id, cost_item_id, quantity, cost_items(*)")
+          .eq("product_id", productId),
+      ) as unknown as ProductCostItemRow[];
+    },
+  });
+
+export type PilotSettings = import("@/integrations/supabase/types").Tables<"pilot_settings">;
+
+/** SETTINGS — 월 고정비(OVERHEAD)/월 예상 배치 수. 유저당 단일 행(없으면 null). */
+export const pilotSettingsQuery = () =>
+  queryOptions({
+    queryKey: ["pilot_settings"],
+    queryFn: async (): Promise<PilotSettings | null> => {
+      const { data, error } = await supabase.from("pilot_settings").select("*").maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
 /** Multiplier 변경 이력 — append-only, 최신순 */
 export const workSessionMultiplierHistoryQuery = (
   sessionId: string,

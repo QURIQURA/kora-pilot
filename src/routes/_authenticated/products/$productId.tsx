@@ -6,6 +6,7 @@ import { CategorySelect } from "@/components/pilot/CategorySelect";
 import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import {
   categoriesQuery,
+  componentCostItemsBulkQuery,
   componentCostsQuery,
   componentsQuery,
   currentUserId,
@@ -14,16 +15,20 @@ import {
   ingredientsQuery,
   knowledgeEntriesByProductQuery,
   observationsByProductQuery,
+  pilotSettingsQuery,
   productComponentsQuery,
+  productCostItemsQuery,
   productQuery,
   productSizesQuery,
   productTagsQuery,
   tagsQuery,
   versionIngredientsQuery,
   type ComponentCostInfo,
+  type ComponentCostItemRow,
   type ProductComponentRow,
 } from "@/lib/queries";
-import { costPerGram, fmtCurrency } from "@/lib/cost";
+import { costPerGram, fmtCurrency, overheadPerBatch, sumCostItemAssignments } from "@/lib/cost";
+import { ProductPackagingSection } from "@/components/pilot/ProductPackagingSection";
 import { fmtNumber, toGrams } from "@/lib/formula";
 import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
 import {
@@ -158,6 +163,43 @@ function sumCostBySize(
   return totals;
 }
 
+/**
+ * 이 사용량 행 1개의 FULL PRODUCTION COST(2026-09-23) — Raw Material에 UTILITY/CONSUMABLE
+ * 배정액 + OVERHEAD 배분액을 더한 값 기준 g당 단가 × 사용량(g). COMPONENT 링크에만 적용되고
+ * (배치 개념이 있는 건 COMPONENT뿐), 재료 직접 링크는 Raw Material Cost와 동일하게 처리한다.
+ */
+function rowProductionCost(
+  row: ProductComponentRow,
+  costsByComponent: Record<string, ComponentCostInfo>,
+  costItemsByComponent: Record<string, ComponentCostItemRow[]>,
+  overhead: number,
+): number | null {
+  if (row.quantity_g == null) return null;
+  if (row.component_id == null) return costPerGram(row.ingredients) != null ? rowCost(row, costsByComponent) : null;
+  const info = costsByComponent[row.component_id];
+  if (!info || info.costPerGram == null || info.totalGrams <= 0) return null;
+  const extra = sumCostItemAssignments(costItemsByComponent[row.component_id] ?? []) + overhead;
+  const productionCpg = info.costPerGram + extra / info.totalGrams;
+  return Number(row.quantity_g) * productionCpg;
+}
+
+/** 사이즈별 FULL PRODUCTION COST 합산(원) — sumCostBySize와 같은 규칙. */
+function sumProductionCostBySize(
+  rows: ProductComponentRow[],
+  costsByComponent: Record<string, ComponentCostInfo>,
+  costItemsByComponent: Record<string, ComponentCostItemRow[]>,
+  overhead: number,
+): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of rows) {
+    if (!row.product_size_id) continue;
+    const cost = rowProductionCost(row, costsByComponent, costItemsByComponent, overhead);
+    if (cost == null) continue;
+    totals[row.product_size_id] = (totals[row.product_size_id] ?? 0) + cost;
+  }
+  return totals;
+}
+
 function ProductDetailPage() {
   const { productId } = Route.useParams();
   const navigate = useNavigate();
@@ -176,6 +218,22 @@ function ProductDetailPage() {
   ];
   const componentCosts = useQuery(componentCostsQuery(componentIds));
   const costsByComponent = componentCosts.data ?? {};
+  const componentCostItems = useQuery(componentCostItemsBulkQuery(componentIds));
+  const costItemsByComponent = componentCostItems.data ?? {};
+  const pilotSettings = useQuery(pilotSettingsQuery());
+  const overhead =
+    overheadPerBatch(
+      pilotSettings.data
+        ? {
+            monthly_overhead: pilotSettings.data.monthly_overhead,
+            monthly_batch_count: pilotSettings.data.monthly_batch_count,
+          }
+        : null,
+    ) ?? 0;
+  const productCostItems = useQuery(productCostItemsQuery(productId));
+  const packagingCost = sumCostItemAssignments(
+    (productCostItems.data ?? []).filter((r) => r.cost_items.category === "PACKAGING"),
+  );
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, product.data?.category_id ?? null);
@@ -531,7 +589,16 @@ function ProductDetailPage() {
         productId={productId}
         usageTotals={sumUsageBySize(links.data ?? [])}
         costTotals={sumCostBySize(links.data ?? [], costsByComponent)}
+        productionCostTotals={sumProductionCostBySize(
+          links.data ?? [],
+          costsByComponent,
+          costItemsByComponent,
+          overhead,
+        )}
+        packagingCost={packagingCost}
       />
+
+      <ProductPackagingSection productId={productId} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ProductFormulasSection productId={productId} />
