@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-09-23 — CURRENT FORMULA 표에 PRICE(원가) 열 추가
+
+**무엇이 달라졌나**
+- COMPONENT 상세의 CURRENT FORMULA 표(버전 비교 스프레드시트)에 재료명 바로 옆에 "PRICE" 열이 새로 생겼습니다. 재료별로 CURRENT 버전 사용량 기준 원가(₩)를 바로 보여줍니다.
+- 재료에 구입가 정보가 없거나 무게 단위가 아니면 "—"로 표시됩니다.
+
+**확인 방법**
+- 아무 COMPONENT 상세의 CURRENT FORMULA 표에서 재료명 옆 PRICE 열 확인.
+
+---
+
+## 2026-09-23 — PRODUCT에 재료(원물) 직접 링크
+
+**무엇이 달라졌나**
+- PRODUCT 상세의 COMPONENTS 섹션에 "+ ADD INGREDIENT" 버튼이 새로 생겼습니다. 카카오바나나케익의 바나나처럼 별도 배합(Formula)이 필요 없는 원물 재료를 Component를 만들지 않고 바로 Product에 링크할 수 있습니다.
+- 재료로 링크한 행은 기존 COMPONENT 링크와 똑같이 사이즈별 실사용량(g) 입력·UNLINK가 가능하고, FORMULA VERSION 선택 없이 그 재료의 구입가 기준으로 바로 원가가 계산됩니다.
+- 재료명을 누르면 Ingredient Master 상세로 이동합니다.
+
+**확인 방법**
+- 아무 PRODUCT 상세의 COMPONENTS 섹션에서 "+ ADD INGREDIENT"로 재료를 검색해 링크하고, 사용량을 입력해 원가가 뜨는지 확인.
+
+---
+
 ## 2026-09-22 — PRODUCT 이미지 1:1 크롭/줌 조정 기능
 
 **무엇이 달라졌나**

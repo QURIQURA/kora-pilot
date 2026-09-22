@@ -91,8 +91,15 @@ export const productSizesQuery = (productId: string) =>
 export interface ProductComponentRow {
   id: string;
   sort_order: number;
-  component_id: string;
-  components: Component;
+  /** COMPONENT 링크일 때만 값 있음 — ingredient_id와 정확히 하나만 non-null(2026-09-23, DB 체크 제약). */
+  component_id: string | null;
+  components: Component | null;
+  /** 재료(원물)를 배합/포뮬라 없이 바로 Product에 링크할 때 사용(예: 카카오바나나케익의 바나나 슬라이스, 2026-09-23). */
+  ingredient_id: string | null;
+  ingredients: Pick<
+    Ingredient,
+    "id" | "name" | "purchase_price" | "purchase_qty" | "purchase_unit"
+  > | null;
   formula_version_id: string | null;
   quantity_g: number | null;
   /** null = 사이즈 무관(전체) 사용량. Product에 SIZES가 등록돼 있으면 사이즈별로 행이 나뉠 수 있다. */
@@ -113,7 +120,7 @@ export const productComponentsQuery = (productId: string) =>
         await supabase
           .from("product_components")
           .select(
-            "id, sort_order, component_id, components(*), formula_version_id, quantity_g, product_size_id, formula_versions(id, version_number, status, formulas(id, name))",
+            "id, sort_order, component_id, components(*), ingredient_id, ingredients(id, name, purchase_price, purchase_qty, purchase_unit), formula_version_id, quantity_g, product_size_id, formula_versions(id, version_number, status, formulas(id, name))",
           )
           .eq("product_id", productId)
           .order("sort_order"),

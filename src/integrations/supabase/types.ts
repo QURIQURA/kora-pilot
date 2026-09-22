@@ -1267,10 +1267,11 @@ export type Database = {
       }
       product_components: {
         Row: {
-          component_id: string
+          component_id: string | null
           created_at: string
           formula_version_id: string | null
           id: string
+          ingredient_id: string | null
           product_id: string
           product_size_id: string | null
           quantity_g: number | null
@@ -1278,10 +1279,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          component_id: string
+          component_id?: string | null
           created_at?: string
           formula_version_id?: string | null
           id?: string
+          ingredient_id?: string | null
           product_id: string
           product_size_id?: string | null
           quantity_g?: number | null
@@ -1289,10 +1291,11 @@ export type Database = {
           user_id: string
         }
         Update: {
-          component_id?: string
+          component_id?: string | null
           created_at?: string
           formula_version_id?: string | null
           id?: string
+          ingredient_id?: string | null
           product_id?: string
           product_size_id?: string | null
           quantity_g?: number | null
@@ -1312,6 +1315,13 @@ export type Database = {
             columns: ["formula_version_id"]
             isOneToOne: false
             referencedRelation: "formula_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_components_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
             referencedColumns: ["id"]
           },
           {

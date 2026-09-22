@@ -11,6 +11,7 @@ import {
   currentUserId,
   experimentsByProductQuery,
   formulasByComponentQuery,
+  ingredientsQuery,
   knowledgeEntriesByProductQuery,
   observationsByProductQuery,
   productComponentsQuery,
@@ -22,7 +23,7 @@ import {
   type ComponentCostInfo,
   type ProductComponentRow,
 } from "@/lib/queries";
-import { fmtWon } from "@/lib/cost";
+import { costPerGram, fmtWon } from "@/lib/cost";
 import { fmtNumber, toGrams } from "@/lib/formula";
 import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
 import {
@@ -65,28 +66,40 @@ export const Route = createFileRoute("/_authenticated/products/$productId")({
   component: ProductDetailPage,
 });
 
-/** COMPONENTS 목록을 컴포넌트별로 묶는다 — 사이즈별 사용량 행이 여러 개여도 한 그룹으로 표시. */
-function groupComponentLinks(
-  rows: ProductComponentRow[],
-): { componentId: string; componentName: string; rows: ProductComponentRow[] }[] {
-  const byComponent = new Map<
-    string,
-    { componentId: string; componentName: string; rows: ProductComponentRow[] }
-  >();
+/** COMPONENTS 섹션에 묶여 표시되는 한 그룹 — COMPONENT 링크 또는 재료(원물) 직접 링크(2026-09-23). */
+interface LinkGroup {
+  key: string;
+  kind: "component" | "ingredient";
+  /** kind==="component"일 때만 값 있음 */
+  componentId: string | null;
+  /** kind==="ingredient"일 때만 값 있음 */
+  ingredientId: string | null;
+  name: string;
+  rows: ProductComponentRow[];
+}
+
+/** COMPONENTS 목록을 컴포넌트(또는 재료 직접 링크)별로 묶는다 — 사이즈별 사용량 행이 여러 개여도 한 그룹으로 표시. */
+function groupComponentLinks(rows: ProductComponentRow[]): LinkGroup[] {
+  const byKey = new Map<string, LinkGroup>();
   for (const row of rows) {
-    const existing = byComponent.get(row.component_id);
+    const isIngredient = row.component_id == null;
+    const key = isIngredient ? `ingredient:${row.ingredient_id}` : `component:${row.component_id}`;
+    const existing = byKey.get(key);
     if (existing) {
       existing.rows.push(row);
     } else {
-      byComponent.set(row.component_id, {
+      byKey.set(key, {
+        key,
+        kind: isIngredient ? "ingredient" : "component",
         componentId: row.component_id,
-        componentName: row.components?.name ?? "—",
+        ingredientId: row.ingredient_id,
+        name: isIngredient ? (row.ingredients?.name ?? "—") : (row.components?.name ?? "—"),
         rows: [row],
       });
     }
   }
   // 사이즈 미지정(null) 행을 먼저, 그다음 sort_order 순
-  for (const group of byComponent.values()) {
+  for (const group of byKey.values()) {
     group.rows.sort((a, b) => {
       if ((a.product_size_id == null) !== (b.product_size_id == null)) {
         return a.product_size_id == null ? -1 : 1;
@@ -94,7 +107,7 @@ function groupComponentLinks(
       return a.sort_order - b.sort_order;
     });
   }
-  return [...byComponent.values()];
+  return [...byKey.values()];
 }
 
 function sizeLabelFor(sizes: ProductSize[], sizeId: string): string {
@@ -114,16 +127,20 @@ function sumUsageBySize(rows: ProductComponentRow[]): Record<string, number> {
   return totals;
 }
 
-/** 이 사용량 행 1개의 예상 원가(원) — 사용량(g) × 그 COMPONENT의 CURRENT FORMULA 기준 g당 단가.
- * COMPONENT에 CURRENT FORMULA가 없거나 원가 정보가 없으면 null. */
+/** 이 사용량 행 1개의 예상 원가(원) — 사용량(g) × g당 단가.
+ * COMPONENT 링크는 그 COMPONENT의 CURRENT FORMULA 기준, 재료 직접 링크는 그 재료의 구입가 기준(2026-09-23).
+ * 정보가 없으면 null. */
 function rowCost(
   row: ProductComponentRow,
   costsByComponent: Record<string, ComponentCostInfo>,
 ): number | null {
   if (row.quantity_g == null) return null;
-  const info = costsByComponent[row.component_id];
-  if (!info || info.costPerGram == null) return null;
-  return Number(row.quantity_g) * info.costPerGram;
+  const cpg =
+    row.component_id != null
+      ? (costsByComponent[row.component_id]?.costPerGram ?? null)
+      : costPerGram(row.ingredients);
+  if (cpg == null) return null;
+  return Number(row.quantity_g) * cpg;
 }
 
 /** 사이즈별 예상 원가 합산(원) — sumUsageBySize와 같은 규칙으로 사이즈 지정 행만 합산. */
@@ -154,7 +171,9 @@ function ProductDetailPage() {
   const productTags = useQuery(productTagsQuery(productId));
   const experiments = useQuery(experimentsByProductQuery(productId));
   const observations = useQuery(observationsByProductQuery(productId));
-  const componentIds = [...new Set((links.data ?? []).map((l) => l.component_id))];
+  const componentIds = [
+    ...new Set((links.data ?? []).map((l) => l.component_id).filter((id): id is string => id != null)),
+  ];
   const componentCosts = useQuery(componentCostsQuery(componentIds));
   const costsByComponent = componentCosts.data ?? {};
 
@@ -186,14 +205,14 @@ function ProductDetailPage() {
     await queryClient.invalidateQueries({ queryKey: ["products"] });
   };
 
-  // 컴포넌트 전체 UNLINK — 사이즈별로 나뉜 사용량 행이 여러 개여도 그 컴포넌트의 모든 행을 지운다.
+  // 그룹 전체 UNLINK — 사이즈별로 나뉜 사용량 행이 여러 개여도 그 그룹(COMPONENT 또는 재료)의 모든 행을 지운다.
   const unlink = useMutation({
-    mutationFn: async (componentId: string) => {
-      const { error } = await supabase
-        .from("product_components")
-        .delete()
-        .eq("product_id", productId)
-        .eq("component_id", componentId);
+    mutationFn: async (group: { componentId: string | null; ingredientId: string | null }) => {
+      let query = supabase.from("product_components").delete().eq("product_id", productId);
+      query = group.componentId != null
+        ? query.eq("component_id", group.componentId)
+        : query.eq("ingredient_id", group.ingredientId as string);
+      const { error } = await query;
       if (error) throw error;
     },
     onSuccess: invalidateLinks,
@@ -226,14 +245,16 @@ function ProductDetailPage() {
     onSuccess: invalidateLinks,
   });
 
-  // 이미 링크된 컴포넌트에 특정 Product Size 전용 사용량 행을 추가한다
+  // 이미 링크된 그룹(COMPONENT 또는 재료)에 특정 Product Size 전용 사용량 행을 추가한다
   const addSizeUsage = useMutation({
     mutationFn: async ({
       componentId,
+      ingredientId,
       productSizeId,
       sortOrder,
     }: {
-      componentId: string;
+      componentId: string | null;
+      ingredientId: string | null;
       productSizeId: string | null;
       sortOrder: number;
     }) => {
@@ -242,6 +263,7 @@ function ProductDetailPage() {
         user_id: userId,
         product_id: productId,
         component_id: componentId,
+        ingredient_id: ingredientId,
         product_size_id: productSizeId,
         sort_order: sortOrder,
       });
@@ -262,6 +284,7 @@ function ProductDetailPage() {
   });
 
   const [adding, setAdding] = useState(false);
+  const [addingIngredient, setAddingIngredient] = useState(false);
 
   if (product.isLoading) {
     return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
@@ -306,16 +329,50 @@ function ProductDetailPage() {
       <SectionCard
         title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
         action={
-          <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
-            {adding ? "CLOSE" : "+ ADD COMPONENT"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => {
+                setAdding((v) => !v);
+                setAddingIngredient(false);
+              }}
+            >
+              {adding ? "CLOSE" : "+ ADD COMPONENT"}
+            </button>
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => {
+                setAddingIngredient((v) => !v);
+                setAdding(false);
+              }}
+            >
+              {addingIngredient ? "CLOSE" : "+ ADD INGREDIENT"}
+            </button>
+          </div>
         }
       >
         {adding && (
           <AddComponentPanel
             productId={productId}
-            linkedIds={[...new Set((links.data ?? []).map((l) => l.component_id))]}
+            linkedIds={[
+              ...new Set(
+                (links.data ?? []).map((l) => l.component_id).filter((id): id is string => id != null),
+              ),
+            ]}
             onDone={() => setAdding(false)}
+          />
+        )}
+        {addingIngredient && (
+          <AddIngredientPanel
+            productId={productId}
+            linkedIds={[
+              ...new Set(
+                (links.data ?? []).map((l) => l.ingredient_id).filter((id): id is string => id != null),
+              ),
+            ]}
+            onDone={() => setAddingIngredient(false)}
           />
         )}
         {(links.data ?? []).length === 0 ? (
@@ -339,30 +396,52 @@ function ProductDetailPage() {
               const groupTotal = groupCosts.some((c) => c != null)
                 ? groupCosts.reduce((sum: number, c) => sum + (c ?? 0), 0)
                 : null;
-              const groupCostInfo = costsByComponent[group.componentId];
+              const groupHasMissingPrice =
+                group.kind === "component"
+                  ? (costsByComponent[group.componentId as string]?.hasMissingPrice ?? false)
+                  : costPerGram(group.rows[0]?.ingredients) == null;
               return (
-              <li key={group.componentId} className="space-y-3 px-3 py-3">
+              <li key={group.key} className="space-y-3 px-3 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Link
-                    to="/components/$componentId"
-                    params={{ componentId: group.componentId }}
-                    className="text-sm hover:underline"
-                  >
-                    {group.componentName}
-                  </Link>
+                  {group.kind === "component" ? (
+                    <Link
+                      to="/components/$componentId"
+                      params={{ componentId: group.componentId as string }}
+                      className="text-sm hover:underline"
+                    >
+                      {group.name}
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-2 text-sm">
+                      <Link
+                        to="/ingredients/$ingredientId"
+                        params={{ ingredientId: group.ingredientId as string }}
+                        className="hover:underline"
+                      >
+                        {group.name}
+                      </Link>
+                      <span className="label-caps text-[10px] text-muted-foreground">재료 직접 링크</span>
+                    </span>
+                  )}
                   <div className="flex items-center gap-2">
                     {groupTotal != null && (
                       <span className="label-caps text-xs text-muted-foreground">
                         예상원가 {fmtWon(groupTotal)}
-                        {groupCostInfo?.hasMissingPrice ? "*" : ""}
+                        {groupHasMissingPrice ? "*" : ""}
                       </span>
                     )}
                   <button
                     type="button"
                     className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => {
-                      if (confirm("이 COMPONENT의 모든 사이즈별 사용량이 함께 삭제됩니다. UNLINK 할까요?"))
-                        unlink.mutate(group.componentId);
+                      if (
+                        confirm(
+                          group.kind === "component"
+                            ? "이 COMPONENT의 모든 사이즈별 사용량이 함께 삭제됩니다. UNLINK 할까요?"
+                            : "이 재료의 모든 사이즈별 사용량이 함께 삭제됩니다. UNLINK 할까요?",
+                        )
+                      )
+                        unlink.mutate({ componentId: group.componentId, ingredientId: group.ingredientId });
                     }}
                   >
                     UNLINK
@@ -398,7 +477,9 @@ function ProductDetailPage() {
                         <p className="font-mono text-[11px] text-muted-foreground">
                           {cost != null
                             ? `예상원가 ${fmtWon(cost)}`
-                            : "원가 정보 없음 — COMPONENT에 CURRENT FORMULA/재료 구입가를 확인하세요"}
+                            : link.component_id != null
+                              ? "원가 정보 없음 — COMPONENT에 CURRENT FORMULA/재료 구입가를 확인하세요"
+                              : "원가 정보 없음 — 이 재료에 구입가를 확인하세요"}
                         </p>
                       );
                     })()}
@@ -418,6 +499,7 @@ function ProductDetailPage() {
                         if (!sizeId) return;
                         addSizeUsage.mutate({
                           componentId: group.componentId,
+                          ingredientId: group.ingredientId,
                           productSizeId: sizeId,
                           sortOrder: group.rows.length,
                         });
@@ -840,10 +922,161 @@ function AddComponentPanel({
 }
 
 /**
+ * 원물 재료(예: 바나나 슬라이스)를 배합/Component 없이 바로 Product에 링크(2026-09-23).
+ * Ingredient Master를 검색해서 링크만 하고, 없으면 그 자리서 새 재료를 만들어 링크한다.
+ */
+function AddIngredientPanel({
+  productId,
+  linkedIds,
+  onDone,
+}: {
+  productId: string;
+  linkedIds: string[];
+  onDone: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const ingredients = useQuery(ingredientsQuery());
+  const [search, setSearch] = useState("");
+
+  const results = (ingredients.data ?? []).filter(
+    (i) => !linkedIds.includes(i.id) && i.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
+  const link = useMutation({
+    mutationFn: async (ingredientId: string) => {
+      const userId = await currentUserId();
+      const { error } = await supabase.from("product_components").insert({
+        user_id: userId,
+        product_id: productId,
+        ingredient_id: ingredientId,
+        sort_order: linkedIds.length,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["product_components", productId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      onDone();
+    },
+  });
+
+  const createAndLink = useMutation({
+    mutationFn: async () => {
+      const userId = await currentUserId();
+      const { data, error } = await supabase
+        .from("ingredients")
+        .insert({ user_id: userId, name: search.trim() })
+        .select("id")
+        .single();
+      if (error) throw error;
+      const { error: linkError } = await supabase.from("product_components").insert({
+        user_id: userId,
+        product_id: productId,
+        ingredient_id: data.id,
+        sort_order: linkedIds.length,
+      });
+      if (linkError) throw linkError;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["ingredients"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["product_components", productId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      onDone();
+    },
+  });
+
+  return (
+    <div className="mb-4 space-y-3 border border-dashed border-border p-3">
+      <Field label="SEARCH INGREDIENT MASTER">
+        <input
+          autoFocus
+          className={inputClass}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="바나나"
+        />
+      </Field>
+      {results.length > 0 && (
+        <ul className="divide-y divide-border border border-border">
+          {results.slice(0, 8).map((ingredient) => (
+            <li key={ingredient.id} className="flex items-center justify-between gap-2 px-3 py-2">
+              <span className="text-sm">{ingredient.name}</span>
+              <button
+                type="button"
+                className="label-caps px-2 py-1 text-xs"
+                onClick={() => link.mutate(ingredient.id)}
+              >
+                LINK
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {search.trim() && results.length === 0 && (
+        <div className="space-y-3">
+          <p className="font-mono text-xs uppercase text-muted-foreground">NO MATCH</p>
+          <button
+            type="button"
+            className={primaryButtonClass}
+            disabled={createAndLink.isPending}
+            onClick={() => createAndLink.mutate()}
+          >
+            {`CREATE "${search.trim().toUpperCase()}"`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Component 링크마다 "이 Product에서 실제로 어떤 Formula Version을, 몇 그램 쓰는지" 지정.
  * Component는 Formula Version을 여러 개 가질 수 있으므로 버전까지 지정한다.
  * Formula 자체의 기준 배합량과 이 Product에서의 실사용량은 다를 수 있다 (예: 배치 1kg 중 150g만 사용).
  */
+function UsageQuantityInput({
+  quantityG,
+  onSave,
+  unitLabel = "G 실사용량",
+}: {
+  quantityG: number | null;
+  onSave: (quantityG: number | null) => void;
+  unitLabel?: string;
+}) {
+  const [quantityDraft, setQuantityDraft] = useState(quantityG?.toString() ?? "");
+  useEffect(() => {
+    setQuantityDraft(quantityG?.toString() ?? "");
+  }, [quantityG]);
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="number"
+        inputMode="decimal"
+        step="any"
+        className={inputClass + " w-28"}
+        placeholder="0"
+        value={quantityDraft}
+        onChange={(e) => setQuantityDraft(e.target.value)}
+        onBlur={() => {
+          const trimmed = quantityDraft.trim();
+          const next = trimmed === "" ? null : Number(trimmed);
+          if (next !== null && Number.isNaN(next)) {
+            setQuantityDraft(quantityG?.toString() ?? "");
+            return;
+          }
+          if (next !== (quantityG ?? null)) onSave(next);
+        }}
+      />
+      <span className="font-mono text-xs text-muted-foreground">{unitLabel}</span>
+    </div>
+  );
+}
+
 function ComponentUsageEditor({
   link,
   onSave,
@@ -851,7 +1084,7 @@ function ComponentUsageEditor({
   link: ProductComponentRow;
   onSave: (patch: { formula_version_id?: string | null; quantity_g?: number | null }) => void;
 }) {
-  const formulas = useQuery(formulasByComponentQuery(link.component_id));
+  const formulas = useQuery(formulasByComponentQuery(link.component_id ?? ""));
   const versionOptions = (formulas.data ?? []).flatMap((formula) =>
     formula.formula_versions.map((version) => ({
       id: version.id,
@@ -866,10 +1099,15 @@ function ComponentUsageEditor({
     0,
   );
 
-  const [quantityDraft, setQuantityDraft] = useState(link.quantity_g?.toString() ?? "");
-  useEffect(() => {
-    setQuantityDraft(link.quantity_g?.toString() ?? "");
-  }, [link.quantity_g]);
+  // 재료(원물) 직접 링크는 배합/FORMULA VERSION이 없으므로 실사용량(g)만 입력한다(2026-09-23).
+  if (link.component_id == null) {
+    return (
+      <UsageQuantityInput
+        quantityG={link.quantity_g}
+        onSave={(quantity_g) => onSave({ quantity_g })}
+      />
+    );
+  }
 
   if (versionOptions.length === 0) {
     return (
@@ -893,27 +1131,10 @@ function ComponentUsageEditor({
           </option>
         ))}
       </select>
-      <div className="flex items-center gap-1">
-        <input
-          type="number"
-          inputMode="decimal"
-          step="any"
-          className={inputClass + " w-28"}
-          placeholder="0"
-          value={quantityDraft}
-          onChange={(e) => setQuantityDraft(e.target.value)}
-          onBlur={() => {
-            const trimmed = quantityDraft.trim();
-            const next = trimmed === "" ? null : Number(trimmed);
-            if (next !== null && Number.isNaN(next)) {
-              setQuantityDraft(link.quantity_g?.toString() ?? "");
-              return;
-            }
-            if (next !== (link.quantity_g ?? null)) onSave({ quantity_g: next });
-          }}
-        />
-        <span className="font-mono text-xs text-muted-foreground">G 실사용량</span>
-      </div>
+      <UsageQuantityInput
+        quantityG={link.quantity_g}
+        onSave={(quantity_g) => onSave({ quantity_g })}
+      />
       {link.formula_version_id && versionTotalGrams > 0 && (
         <span className="font-mono text-xs text-muted-foreground">
           / 이 레시피 총량 {fmtNumber(versionTotalGrams)}g

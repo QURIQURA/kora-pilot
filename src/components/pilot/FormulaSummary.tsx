@@ -192,7 +192,10 @@ function ComponentFormulaGroup({
 /** PRODUCT DETAIL — 연결된 component들의 current formula 요약 */
 export function ProductFormulasSection({ productId }: { productId: string }) {
   const links = useQuery(productComponentsQuery(productId));
-  const rows = links.data ?? [];
+  // 재료(원물) 직접 링크 행은 배합/포뮬라가 없으므로 이 섹션에서는 제외한다(2026-09-23).
+  const rows = (links.data ?? []).filter(
+    (row): row is typeof row & { component_id: string } => row.component_id != null,
+  );
   return (
     <SectionCard title="FORMULAS">
       {rows.length === 0 ? (

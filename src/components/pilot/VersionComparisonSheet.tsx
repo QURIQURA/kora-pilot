@@ -19,8 +19,9 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { versionIngredientsQuery, type VersionIngredientRow } from "@/lib/queries";
-import { fmtNumber, versionLabel } from "@/lib/formula";
+import { fmtNumber, toGrams, versionLabel } from "@/lib/formula";
 import { ingredientDisplayName } from "@/lib/pilot";
+import { costPerGram, fmtWon } from "@/lib/cost";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./ui";
 
@@ -30,6 +31,7 @@ const DEFAULT_ROW_HEIGHT = 40;
 const MIN_ROW_HEIGHT = 28;
 const DEFAULT_INGREDIENT_COL_WIDTH = 180;
 const MIN_INGREDIENT_COL_WIDTH = 100;
+const PRICE_COL_WIDTH = 84;
 /** 열 너비 합계보다 표가 넓은(컨테이너가 넓은) 경우를 위한 "채움" 열 id — 실제 데이터 열이
  * 아니라 남는 공간을 흡수해서 행의 점선 구분선이 자연스럽게 끝까지 이어지도록 하는 용도. */
 const FILLER_COL_ID = "__filler__";
@@ -49,6 +51,10 @@ interface SheetRow {
   // NEW/변경됨/삭제됨 표시는 항상 버전의 실제 시간 순서(오래된→최신) 기준으로 미리 계산해둔다 —
   // 화면에서 열 순서를 드래그로 바꿔도(display order) 이 표시는 흔들리지 않게 하기 위함.
   flags: Map<string, CellFlags>;
+  /** PRICE 열 표시용 — CURRENT 버전(없으면 가장 최신 버전)에서의 이 재료 사용량×구입가 기준 원가.
+   * 재료에 구입가 정보가 없거나 무게/부피 단위가 아니면 null(2026-09-23, "배치증량이 안 보이는 화면이라
+   * 재료별 원가를 바로 옆에 보여주면 된다"는 사용자 요청). */
+  priceCost: number | null;
 }
 
 /** VersionHistory(Formula 상세 페이지)와 CurrentFormulaPanel(Component 페이지)이 함께 쓰는
@@ -94,11 +100,13 @@ export function VersionComparisonSheet({
             sortOrder: row.sort_order,
             byVersion: new Map([[v.id, row]]),
             flags: new Map(),
+            priceCost: null,
           });
         }
       });
     });
     // NEW/변경됨/삭제됨 플래그를 버전의 실제 시간 순서로 한 번 계산해둔다.
+    const currentVersion = baseVersions.find((v) => v.status === "CURRENT");
     for (const sheetRow of byIngredient.values()) {
       let prevCell: VersionIngredientRow | undefined;
       baseVersions.forEach((v, vIdx) => {
@@ -113,6 +121,16 @@ export function VersionComparisonSheet({
         sheetRow.flags.set(v.id, { isNew, changed, removed });
         if (cell) prevCell = cell;
       });
+      // PRICE — CURRENT 버전의 사용량 기준, 없으면 가장 최신에 값이 있던 버전 기준(Map은
+      // baseVersions 순서로 채워졌으므로 마지막 entry가 곧 가장 최신 버전의 셀).
+      const priceCell =
+        (currentVersion && sheetRow.byVersion.get(currentVersion.id)) ??
+        [...sheetRow.byVersion.values()].at(-1);
+      if (priceCell) {
+        const grams = toGrams(Number(priceCell.amount), priceCell.unit);
+        const cpg = costPerGram(priceCell.ingredients);
+        sheetRow.priceCost = grams != null && cpg != null ? grams * cpg : null;
+      }
     }
     return [...byIngredient.values()].sort(
       (a, b) => a.firstSeenAt - b.firstSeenAt || a.sortOrder - b.sortOrder,
@@ -246,6 +264,7 @@ export function VersionComparisonSheet({
       <table className="w-full border-collapse text-sm" style={{ tableLayout: "auto", minWidth: dataWidth }}>
         <colgroup>
           <col style={{ width: ingredientColWidth }} />
+          <col style={{ width: PRICE_COL_WIDTH }} />
           {displayVersions.map((v) => (
             <col key={v.id} style={{ width: colWidths[v.id] ?? DEFAULT_COL_WIDTH }} />
           ))}
@@ -267,6 +286,9 @@ export function VersionComparisonSheet({
                     startIngredientColResize(e.clientX);
                   }}
                 />
+              </th>
+              <th className="label-caps whitespace-nowrap border-l border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                PRICE
               </th>
               <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
                 {displayVersions.map((v) => (
@@ -415,6 +437,12 @@ function SheetBodyRow({
             onResizeStart(e.clientY);
           }}
         />
+      </td>
+      <td
+        className="whitespace-nowrap border-l border-dashed border-border px-3 py-2 font-mono text-xs tabular-nums text-muted-foreground"
+        style={{ height }}
+      >
+        {row.priceCost != null ? fmtWon(row.priceCost) : "—"}
       </td>
       {versions.map((v) => {
         const cell = row.byVersion.get(v.id);
