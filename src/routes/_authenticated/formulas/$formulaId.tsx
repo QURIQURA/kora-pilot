@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   PointerSensor,
@@ -35,7 +35,6 @@ import { methodLabel } from "@/lib/method";
 import {
   FORMULA_STATUSES,
   UNITS,
-  diffIngredients,
   fmtNumber,
   isLockedStatus,
   parseNumber,
@@ -46,7 +45,6 @@ import {
   type FormulaVersionBatch,
 } from "@/lib/formula";
 import {
-  balanceTotals,
   computeBases,
   functionalRowCalc,
   gelatinConvert,
@@ -71,7 +69,7 @@ import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import { BasisPanel } from "@/components/pilot/formula/BasisPanel";
 import { RangeBar } from "@/components/pilot/RangeBar";
 import { CompositionPanel } from "@/components/pilot/formula/CompositionPanel";
-import { BalancePanel, balanceSummaryLine } from "@/components/pilot/formula/BalancePanel";
+import { BalancePanel } from "@/components/pilot/formula/BalancePanel";
 import { cn } from "@/lib/utils";
 import {
   Field,
@@ -1519,8 +1517,6 @@ function VersionHistory({
   onOpen: (id: string) => void;
 }) {
   const queryClient = useQueryClient();
-  const [left, setLeft] = useState("");
-  const [right, setRight] = useState("");
 
   /* "이 시점 배합이 지금보다 나았다" — 과거 스냅샷을 지우지 않고 CURRENT로 되돌린다.
    * enforce_single_current_version 트리거가 기존 CURRENT를 자동으로 SUPERSEDED 처리한다. */
@@ -1539,39 +1535,47 @@ function VersionHistory({
     },
   });
 
-  const leftRows = useQuery(versionIngredientsQuery(left || null));
-  const rightRows = useQuery(versionIngredientsQuery(right || null));
+  // 버전 순서(오래된 → 최신)로 정렬 — 시트 열 순서를 V1, V2, V3... 순으로 고정
+  const orderedVersions = useMemo(
+    () => [...versions].sort((a, b) => a.version_number - b.version_number),
+    [versions],
+  );
 
-  const simplify = (rows: VersionIngredientRow[] | undefined) =>
-    (rows ?? []).map((row) => ({
-      name: row.ingredients?.name ?? "—",
-      amount: Number(row.amount),
-      unit: row.unit,
-    }));
+  // 모든 버전의 재료를 한번에 조회 — 버전 개수가 가변이라 useQueries 사용
+  const versionIngredientQueries = useQueries({
+    queries: orderedVersions.map((v) => versionIngredientsQuery(v.id)),
+  });
 
-  const diff =
-    left && right ? diffIngredients(simplify(leftRows.data), simplify(rightRows.data)) : [];
+  // 전체 버전에 등장한 재료를 하나의 행 목록으로 합친다. 순서는 가장 먼저 등장한 버전에서의
+  // sort_order를 기준으로 — 나중 버전에서만 추가된 재료는 그 뒤에 자연스럽게 붙는다.
+  const sheetRows = useMemo(() => {
+    const byIngredient = new Map<
+      string,
+      { name: string; firstSeenAt: number; sortOrder: number; byVersion: Map<string, VersionIngredientRow> }
+    >();
+    orderedVersions.forEach((v, vIdx) => {
+      const rows = versionIngredientQueries[vIdx]?.data ?? [];
+      rows.forEach((row) => {
+        const key = row.ingredient_id;
+        const existing = byIngredient.get(key);
+        if (existing) {
+          existing.byVersion.set(v.id, row);
+        } else {
+          byIngredient.set(key, {
+            name: row.ingredients ? ingredientDisplayName(row.ingredients) : "—",
+            firstSeenAt: vIdx,
+            sortOrder: row.sort_order,
+            byVersion: new Map([[v.id, row]]),
+          });
+        }
+      });
+    });
+    return [...byIngredient.values()].sort(
+      (a, b) => a.firstSeenAt - b.firstSeenAt || a.sortOrder - b.sortOrder,
+    );
+  }, [orderedVersions, versionIngredientQueries]);
 
-  // 버전 간 균형 이동
-  const leftBalance = left ? balanceTotals(leftRows.data ?? [], 1) : null;
-  const rightBalance = right ? balanceTotals(rightRows.data ?? [], 1) : null;
-  const balanceDelta =
-    leftBalance && rightBalance
-      ? [
-          leftBalance.toughenTender && rightBalance.toughenTender
-            ? {
-                label: "연화",
-                delta: rightBalance.toughenTender.right - leftBalance.toughenTender.right,
-              }
-            : null,
-          leftBalance.moistenDry && rightBalance.moistenDry
-            ? {
-                label: "습윤",
-                delta: rightBalance.moistenDry.left - leftBalance.moistenDry.left,
-              }
-            : null,
-        ].filter((d): d is { label: string; delta: number } => Boolean(d))
-      : [];
+  const sheetLoading = versionIngredientQueries.some((q) => q.isLoading);
 
   return (
     <SectionCard title="SNAPSHOT HISTORY">
@@ -1615,63 +1619,85 @@ function VersionHistory({
         ))}
       </ul>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="COMPARE FROM">
-          <select className={selectClass} value={left} onChange={(e) => setLeft(e.target.value)}>
-            <option value="">—</option>
-            {versions.map((version) => (
-              <option key={version.id} value={version.id}>
-                {versionLabel(version.version_number)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="COMPARE TO">
-          <select className={selectClass} value={right} onChange={(e) => setRight(e.target.value)}>
-            <option value="">—</option>
-            {versions.map((version) => (
-              <option key={version.id} value={version.id}>
-                {versionLabel(version.version_number)}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      {left && right && (
-        <div className="mt-4 border border-border" key={`${formulaId}-diff`}>
-          {diff.length === 0 ? (
-            <p className="px-3 py-3 font-mono text-xs uppercase text-muted-foreground">
-              NO DIFFERENCE
-            </p>
+      {/* 버전 비교 시트 — 모든 버전을 열로 나란히 두고 재료별로 뭐가 달라졌는지 한눈에 본다.
+          첫 등장 버전엔 값만, 이전 값과 다르면 굵게 강조, 그 재료가 없던 버전은 빈칸. */}
+      {orderedVersions.length > 0 && (
+        <div className="mt-4">
+          <p className="label-caps mb-2 text-[11px] text-muted-foreground">
+            VERSION COMPARISON SHEET
+          </p>
+          {sheetLoading ? (
+            <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
           ) : (
-            <ul className="divide-y divide-border">
-              {diff.map((row) => (
-                <li
-                  key={row.name}
-                  className="flex flex-wrap items-center gap-2 px-3 py-2 font-mono text-sm"
-                >
-                  <span className="label-caps min-w-[8rem]">{row.name}</span>
-                  <span className="text-muted-foreground">{row.from ?? "NONE"}</span>
-                  <span>→</span>
-                  <span>{row.to ?? "REMOVED"}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {leftBalance && rightBalance && (
-            <div className="border-t border-border px-3 py-3">
-              <p className="label-caps text-[11px] text-muted-foreground">BALANCE SHIFT</p>
-              <p className="mt-1 font-mono text-xs tabular-nums">
-                {balanceSummaryLine(leftBalance)} → {balanceSummaryLine(rightBalance)}
-              </p>
-              {balanceDelta.length > 0 && (
-                <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
-                  {balanceDelta
-                    .map((d) => `${d.label} ${d.delta >= 0 ? "+" : ""}${fmtNumber(d.delta, 1)}%`)
-                    .join(" · ")}
-                </p>
-              )}
+            <div className="overflow-x-auto border border-border">
+              <table className="w-full min-w-[480px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-secondary/40 text-left">
+                    <th className="label-caps px-3 py-2 text-xs text-muted-foreground">
+                      INGREDIENT
+                    </th>
+                    {orderedVersions.map((v) => (
+                      <th
+                        key={v.id}
+                        className="label-caps border-l border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>{versionLabel(v.version_number)}</span>
+                          <StatusBadge status={v.status} />
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sheetRows.map((row) => {
+                    let prevCell: VersionIngredientRow | undefined;
+                    return (
+                      <tr key={row.name + row.firstSeenAt} className="border-b border-border align-top">
+                        <td className="px-3 py-2">{row.name}</td>
+                        {orderedVersions.map((v, vIdx) => {
+                          const cell = row.byVersion.get(v.id);
+                          const isNew = vIdx === row.firstSeenAt;
+                          const changed =
+                            !isNew &&
+                            cell &&
+                            prevCell &&
+                            (Number(cell.amount) !== Number(prevCell.amount) ||
+                              cell.unit !== prevCell.unit);
+                          const removed = !cell && prevCell != null;
+                          if (cell) prevCell = cell;
+                          return (
+                            <td
+                              key={v.id}
+                              className={cn(
+                                "border-l border-dashed border-border px-3 py-2 font-mono text-xs tabular-nums",
+                                changed && "bg-secondary font-semibold",
+                                isNew && "text-foreground",
+                              )}
+                            >
+                              {cell ? (
+                                <>
+                                  {fmtNumber(Number(cell.amount), 1)}
+                                  {cell.unit}
+                                  {isNew && (
+                                    <span className="label-caps ml-1 border border-foreground px-1 py-0.5 text-[9px]">
+                                      NEW
+                                    </span>
+                                  )}
+                                </>
+                              ) : removed ? (
+                                <span className="text-muted-foreground line-through">삭제됨</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
