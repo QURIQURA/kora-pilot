@@ -27,6 +27,11 @@ const DEFAULT_COL_WIDTH = 140;
 const MIN_COL_WIDTH = 72;
 const DEFAULT_ROW_HEIGHT = 40;
 const MIN_ROW_HEIGHT = 28;
+const DEFAULT_INGREDIENT_COL_WIDTH = 180;
+const MIN_INGREDIENT_COL_WIDTH = 100;
+/** 열 너비 합계보다 표가 넓은(컨테이너가 넓은) 경우를 위한 "채움" 열 id — 실제 데이터 열이
+ * 아니라 남는 공간을 흡수해서 행의 점선 구분선이 자연스럽게 끝까지 이어지도록 하는 용도. */
+const FILLER_COL_ID = "__filler__";
 
 interface CellFlags {
   isNew: boolean;
@@ -121,6 +126,7 @@ export function VersionComparisonSheet({
   const [rowOrder, setRowOrder] = useState<string[]>([]);
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
+  const [ingredientColWidth, setIngredientColWidth] = useState(DEFAULT_INGREDIENT_COL_WIDTH);
 
   // 데이터가 바뀌면(버전/재료 추가·삭제) 순서 목록을 맞춰준다 — 기존에 정해둔 순서는
   // 최대한 유지하고, 새로 생긴 항목만 뒤에 붙이고 사라진 항목은 뺀다.
@@ -191,6 +197,19 @@ export function VersionComparisonSheet({
     window.addEventListener("pointerup", onUp);
   };
 
+  const startIngredientColResize = (startX: number) => {
+    const startWidth = ingredientColWidth;
+    const onMove = (e: PointerEvent) => {
+      setIngredientColWidth(Math.max(MIN_INGREDIENT_COL_WIDTH, startWidth + (e.clientX - startX)));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   const startRowResize = (rowId: string, startY: number) => {
     const startHeight = rowHeights[rowId] ?? DEFAULT_ROW_HEIGHT;
     const onMove = (e: PointerEvent) => {
@@ -211,32 +230,43 @@ export function VersionComparisonSheet({
     return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
   }
 
-  const INGREDIENT_COL_WIDTH = 180;
-  // 열 너비의 실제 합계를 table 자체 width로 못박아둔다 — w-full(100%)로 두면
-  // 합계가 컨테이너보다 좁을 때 브라우저가 남는 공간을 다른 열에 멋대로 나눠줘서,
-  // 한번 줄인 열이 다시 늘어나지 않는 것처럼 보이는 버그가 있었다(table-layout:fixed +
-  // width:100%의 알려진 상호작용). 합계만큼 명시적 width를 주면 컨테이너보다 좁든 넓든
-  // colgroup의 각 열 너비가 항상 그대로 반영되고, 넓을 땐 overflow-x-auto가 스크롤을 준다.
-  const totalWidth =
-    INGREDIENT_COL_WIDTH +
+  // 열 너비의 실제 합계를 table 자체 min-width로 못박아둔다 — w-full(100%)만 두면
+  // table-layout:fixed 상태에서 합계가 컨테이너보다 좁을 때 브라우저가 남는 공간을
+  // 데이터 열에 멋대로 나눠줘서, 한번 줄인 열이 다시 늘어나지 않는 것처럼 보이는 버그가
+  // 있었다. 대신 데이터 열들 뒤에 실제 데이터가 없는 "채움" 열을 하나 더 두면, 표가
+  // 컨테이너보다 좁을 때 남는 공간은 전부 그 채움 열이 흡수하고(데이터 열들은 정확히
+  // 지정한 너비 그대로 유지) — 그 결과 행의 점선 구분선도 화면 끝까지 자연스럽게 이어진다.
+  const dataWidth =
+    ingredientColWidth +
     displayVersions.reduce((sum, v) => sum + (colWidths[v.id] ?? DEFAULT_COL_WIDTH), 0);
 
   return (
     <div className="overflow-x-auto border border-border">
-      <table
-        className="border-collapse text-sm"
-        style={{ tableLayout: "fixed", width: totalWidth }}
-      >
+      <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed", minWidth: dataWidth }}>
         <colgroup>
-          <col style={{ width: INGREDIENT_COL_WIDTH }} />
+          <col style={{ width: ingredientColWidth }} />
           {displayVersions.map((v) => (
             <col key={v.id} style={{ width: colWidths[v.id] ?? DEFAULT_COL_WIDTH }} />
           ))}
+          <col />
         </colgroup>
         <DndContext sensors={colSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
           <thead>
             <tr className="border-b border-border bg-secondary/40 text-left">
-              <th className="label-caps px-3 py-2 text-xs text-muted-foreground">INGREDIENT</th>
+              <th className="label-caps relative px-3 py-2 text-xs text-muted-foreground">
+                INGREDIENT
+                {/* INGREDIENT 열도 다른 열들처럼 너비 조절 가능 */}
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    startIngredientColResize(e.clientX);
+                  }}
+                />
+              </th>
               <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
                 {displayVersions.map((v) => (
                   <SheetColumnHeader
@@ -248,6 +278,7 @@ export function VersionComparisonSheet({
                   />
                 ))}
               </SortableContext>
+              <th key={FILLER_COL_ID} className="border-l border-dashed border-border" />
             </tr>
           </thead>
         </DndContext>
@@ -408,6 +439,9 @@ function SheetBodyRow({
           </td>
         );
       })}
+      {/* 채움 열 — 데이터 열 너비 합계보다 표가 넓을 때 남는 공간에도 이 행의 점선
+          구분선(위/아래)이 자연스럽게 이어지도록 빈 셀을 하나 더 둔다. */}
+      <td className="border-l border-dashed border-border" style={{ height }} />
     </tr>
   );
 }
