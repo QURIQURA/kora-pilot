@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -36,7 +36,6 @@ import {
   FORMULA_STATUSES,
   UNITS,
   fmtNumber,
-  isLockedStatus,
   parseNumber,
   toGrams,
   versionLabel,
@@ -152,16 +151,17 @@ function FormulaDetailPage() {
 
   const versionList = useMemo(() => versions.data ?? [], [versions.data]);
   const [versionId, setVersionId] = useState<string | null>(null);
-  const [unlocked, setUnlocked] = useState(false);
   const [batch, setBatch] = useState("1");
   const [basisId, setBasisId] = useState(""); // baker's % 기준 재료
   const [adding, setAdding] = useState(false);
   const [creatingVersion, setCreatingVersion] = useState(false);
   const [creatingExperiment, setCreatingExperiment] = useState(false);
 
-  // EDIT / SAVE — 페이지 전체(이름/기법/몰드/노트/재료/배수 프리셋)의 편집 모드
-  const [editing, setEditing] = useState(false);
+  // UNLOCK→EDIT 2단계를 없애고, 페이지를 열자마자 바로 수정할 수 있게 한다 — draft가 로드되면
+  // 곧 "편집 중"인 것이므로 별도의 editing 상태를 두지 않고 draft 존재 여부로 파생한다.
   const [draft, setDraft] = useState<PageDraft | null>(null);
+  const editing = Boolean(draft);
+  const initializedVersionRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (versionList.length === 0) return;
@@ -177,12 +177,11 @@ function FormulaDetailPage() {
   const batchPresetsQuery = useQuery(formulaVersionBatchesQuery(versionId));
   const batchPresets = useMemo(() => batchPresetsQuery.data ?? [], [batchPresetsQuery.data]);
   const versionExperiments = useQuery(experimentsByVersionQuery(versionId));
-  const experimentCount = versionExperiments.data?.length ?? 0;
 
+  // 버전을 바꾸면 이전 버전의 초안은 버리고, 아래 초기화 effect가 새 버전 데이터로 다시 채운다.
   useEffect(() => {
-    setUnlocked(false);
-    setEditing(false);
     setDraft(null);
+    initializedVersionRef.current = null;
   }, [versionId]);
 
   // 이 Formula가 속한 Component — 브레드크럼/상단 링크에서 "어디서 왔는지"가 바로 보이도록.
@@ -206,7 +205,6 @@ function FormulaDetailPage() {
     ...(version ? [{ label: versionLabel(version.version_number) }] : []),
   ]);
 
-  const locked = version ? isLockedStatus(version.status) && !unlocked : true;
   const batchValue = Math.max(parseNumber(batch) || 0, 0) || 1;
 
   const invalidate = async () => {
@@ -223,10 +221,11 @@ function FormulaDetailPage() {
     await queryClient.invalidateQueries({ queryKey: ["formulas_by_technique"] });
   };
 
-  /** EDIT 진입 — 현재 저장된 값으로 초안을 초기화한다 */
-  const startEditing = () => {
-    if (!formula.data || !version) return;
-    setDraft({
+  /** 현재 저장된 값으로부터 초안을 새로 만든다 — 페이지 첫 로드 시 자동 초기화, 그리고
+   * "되돌리기"(변경 취소)에도 재사용한다. */
+  const buildDraft = (): PageDraft | null => {
+    if (!formula.data || !version) return null;
+    return {
       name: formula.data.name,
       techniqueId: formula.data.technique_category_id ?? "",
       isBase: formula.data.is_base_formula,
@@ -253,14 +252,55 @@ function FormulaDetailPage() {
           { label: preset.label ?? "", multiplier: String(preset.multiplier) },
         ]),
       ),
-    });
-    setEditing(true);
+    };
   };
 
-  const cancelEditing = () => {
-    setEditing(false);
-    setDraft(null);
-  };
+  // 페이지를 열면(또는 버전을 바꾸면) 곧바로 편집 가능한 초안을 만든다 — UNLOCK→EDIT 없이 바로 수정.
+  // 각 버전마다 한 번만 초기화하고, 그 뒤로는 진행 중인 편집을 데이터 재조회가 덮어쓰지 않는다.
+  useEffect(() => {
+    if (!versionId || initializedVersionRef.current === versionId) return;
+    if (!formula.data || !version) return;
+    if (!ingredients.isSuccess || !batchPresetsQuery.isSuccess) return;
+    const next = buildDraft();
+    if (!next) return;
+    setDraft(next);
+    initializedVersionRef.current = versionId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versionId, formula.data, version, ingredients.isSuccess, batchPresetsQuery.isSuccess]);
+
+  /** draft가 저장된 값과 실제로 다른 부분이 있는지 — SAVE 버튼 활성화 조건 */
+  const isDirty = (() => {
+    if (!draft || !formula.data || !version) return false;
+    if (draft.name.trim() !== formula.data.name) return true;
+    if (draft.techniqueId !== (formula.data.technique_category_id ?? "")) return true;
+    if (draft.isBase !== formula.data.is_base_formula) return true;
+    if (draft.methodId !== (formula.data.method_id ?? "")) return true;
+    if (draft.componentId !== (formula.data.component_id ?? "")) return true;
+    if (draft.mouldId !== (version.default_mould_id ?? "")) return true;
+    const draftYield = draft.yieldQuantity ? parseNumber(draft.yieldQuantity) : null;
+    const currentYield = version.yield_quantity != null ? Number(version.yield_quantity) : null;
+    if (draftYield !== currentYield) return true;
+    if (draft.notes !== (version.notes ?? "")) return true;
+    for (const row of rows) {
+      const d = draft.rows[row.id];
+      if (!d) continue;
+      if (parseNumber(d.amount) !== Number(row.amount)) return true;
+      if (d.unit !== row.unit) return true;
+      if ((d.note.trim() || null) !== (row.note ?? null)) return true;
+      const nextSecondaryAmount = d.secondaryAmount.trim() ? parseNumber(d.secondaryAmount) : null;
+      if (nextSecondaryAmount !== (row.secondary_amount ?? null)) return true;
+      const nextSecondaryUnit = d.secondaryUnit.trim() || null;
+      if (nextSecondaryUnit !== (row.secondary_unit ?? null)) return true;
+    }
+    for (const preset of batchPresets) {
+      const d = draft.batches[preset.id];
+      if (!d) continue;
+      const nextMultiplier = parseNumber(d.multiplier) || Number(preset.multiplier);
+      if (nextMultiplier !== Number(preset.multiplier)) return true;
+      if ((d.label.trim() || null) !== (preset.label ?? null)) return true;
+    }
+    return false;
+  })();
 
   const patchRowDraft = (rowId: string, patch: Partial<RowDraft>) => {
     setDraft((d) => {
@@ -489,9 +529,9 @@ function FormulaDetailPage() {
       }
     },
     onSuccess: async () => {
+      // draft는 그대로 둔다 — 방금 저장한 값과 이미 같으므로, 재조회가 끝나면 isDirty가
+      // 자연히 false가 된다(별도로 편집모드를 껐다 켤 필요 없음 — 페이지는 항상 편집 가능).
       await invalidate();
-      setEditing(false);
-      setDraft(null);
     },
   });
 
@@ -590,8 +630,8 @@ function FormulaDetailPage() {
   const technique = techniquePathList[techniquePathList.length - 1] ?? null;
   const method = (methods.data ?? []).find((m) => m.id === formula.data.method_id) ?? null;
 
-  const canEditPage = !locked && Boolean(version);
-  const fieldsDisabled = locked || !editing;
+  const canEditPage = Boolean(version);
+  const fieldsDisabled = !editing;
 
   return (
     <div className="space-y-6">
@@ -691,109 +731,30 @@ function FormulaDetailPage() {
         </div>
       </div>
 
-      {/* EDIT/SAVE — 콘텐츠 편집 상태 전환은 버전 선택과 분리된 별도 줄에서, 항상 가장 먼저 보이게 */}
+      {/* SAVE — UNLOCK→EDIT 2단계를 없애고 항상 바로 수정 가능. 변경 사항이 있을 때만 활성화된다. */}
       {canEditPage && (
         <div className="flex flex-wrap items-center gap-3 border border-foreground bg-card px-4 py-3">
-          {!editing ? (
-            <>
-              <button type="button" className={primaryButtonClass} onClick={startEditing}>
-                EDIT
-              </button>
-              <span className="label-caps text-[11px] text-muted-foreground">
-                ✓ SAVED — 편집하려면 EDIT을 누르세요
-              </span>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                className={primaryButtonClass}
-                disabled={saveAll.isPending}
-                onClick={() => saveAll.mutate()}
-              >
-                {saveAll.isPending ? "SAVING…" : "SAVE"}
-              </button>
-              <button type="button" className={buttonClass} onClick={cancelEditing}>
-                CANCEL
-              </button>
-              <span className="label-caps text-[11px] text-muted-foreground">
-                편집 중 — 저장되지 않았습니다
-              </span>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* VERSION BAR — 버전 전환/상태/잠금 해제는 별도 줄 */}
-      <div className="flex flex-wrap items-center gap-2 border border-border bg-card p-4">
-        <select
-          className={`${selectClass} w-auto`}
-          value={versionId ?? ""}
-          onChange={(e) => setVersionId(e.target.value)}
-        >
-          {versionList.map((v) => (
-            <option key={v.id} value={v.id}>
-              {`${versionLabel(v.version_number)} · ${v.status}`}
-            </option>
-          ))}
-        </select>
-        {version && <StatusBadge status={version.status} />}
-        <select
-          className={`${selectClass} w-auto`}
-          value={version?.status ?? "DRAFT"}
-          onChange={(e) =>
-            supabase
-              .from("formula_versions")
-              .update({ status: e.target.value as FormulaStatus })
-              .eq("id", versionId!)
-              .then(({ error }) => {
-                if (error) throw error;
-                return invalidate();
-              })
-          }
-        >
-          {FORMULA_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              SET {status}
-            </option>
-          ))}
-        </select>
-        {version && isLockedStatus(version.status) && (
           <button
             type="button"
-            className={buttonClass}
-            onClick={() => {
-              if (unlocked) {
-                setUnlocked(false);
-                cancelEditing();
-                return;
-              }
-              const ok = confirm(
-                experimentCount > 0
-                  ? `실험 ${experimentCount}개가 이 버전을 참조 중 — 배합 변경은 새 버전 생성을 권장합니다.\n오타 수정 등을 위해 잠금을 해제할까요?`
-                  : "이 버전은 확정 상태입니다.\n배합 변경은 새 버전 생성을 권장합니다. 오타 수정 등을 위해 잠금을 해제할까요?",
-              );
-              if (ok) setUnlocked(true);
-            }}
+            className={primaryButtonClass}
+            disabled={!draft || !isDirty || saveAll.isPending}
+            onClick={() => saveAll.mutate()}
           >
-            {unlocked ? "RE-LOCK" : "UNLOCK"}
+            {saveAll.isPending ? "SAVING…" : "SAVE"}
           </button>
-        )}
-        <button type="button" className={buttonClass} onClick={() => setCreatingVersion(true)}>
-          + NEW VERSION
-        </button>
-      </div>
-
-      {locked && version && isLockedStatus(version.status) && (
-        <p className="border border-dashed border-border px-4 py-3 font-mono text-xs uppercase text-muted-foreground">
-          READ ONLY — {version.status} VERSION. USE [UNLOCK] OR CREATE A NEW VERSION.
-        </p>
-      )}
-
-      {!locked && !editing && (
-        <p className="border border-dashed border-border px-4 py-3 font-mono text-xs uppercase text-muted-foreground">
-          VIEW MODE — CLICK [EDIT] TO CHANGE NAME/TECHNIQUE/MOULD/NOTES/INGREDIENTS/BATCH PRESETS.
-        </p>
+          {isDirty && (
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => setDraft(buildDraft())}
+            >
+              되돌리기
+            </button>
+          )}
+          <span className="label-caps text-[11px] text-muted-foreground">
+            {!draft ? "LOADING…" : isDirty ? "변경 사항이 있습니다 — 저장하려면 SAVE" : "✓ SAVED"}
+          </span>
+        </div>
       )}
 
       {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
@@ -836,15 +797,13 @@ function FormulaDetailPage() {
                 + ADD BATCH
               </button>
             )}
-            {!locked && (
-              <button
-                type="button"
-                className="label-caps px-2 py-2 text-xs hover:bg-secondary"
-                onClick={() => setAdding(true)}
-              >
-                + ADD INGREDIENT
-              </button>
-            )}
+            <button
+              type="button"
+              className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+              onClick={() => setAdding(true)}
+            >
+              + ADD INGREDIENT
+            </button>
           </div>
         }
       >
@@ -928,7 +887,7 @@ function FormulaDetailPage() {
                       <UnifiedIngredientRow
                         key={row.id}
                         row={row}
-                        locked={locked}
+                        locked={false}
                         editing={editing}
                         batchPresets={batchPresets}
                         denominator={denominator}
@@ -945,6 +904,45 @@ function FormulaDetailPage() {
           </div>
         )}
       </SectionCard>
+
+      {/* VERSION BAR — 버전 전환/상태는 INGREDIENTS 아래로, 편집의 핵심에서 한 걸음 물러난 부가 정보 */}
+      <div className="flex flex-wrap items-center gap-2 border border-border bg-card p-4">
+        <select
+          className={`${selectClass} w-auto`}
+          value={versionId ?? ""}
+          onChange={(e) => setVersionId(e.target.value)}
+        >
+          {versionList.map((v) => (
+            <option key={v.id} value={v.id}>
+              {`${versionLabel(v.version_number)} · ${v.status}`}
+            </option>
+          ))}
+        </select>
+        {version && <StatusBadge status={version.status} />}
+        <select
+          className={`${selectClass} w-auto`}
+          value={version?.status ?? "DRAFT"}
+          onChange={(e) =>
+            supabase
+              .from("formula_versions")
+              .update({ status: e.target.value as FormulaStatus })
+              .eq("id", versionId!)
+              .then(({ error }) => {
+                if (error) throw error;
+                return invalidate();
+              })
+          }
+        >
+          {FORMULA_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              SET {status}
+            </option>
+          ))}
+        </select>
+        <button type="button" className={buttonClass} onClick={() => setCreatingVersion(true)}>
+          + NEW VERSION
+        </button>
+      </div>
 
       {/* YIELD & BATCH */}
       <SectionCard title="YIELD & BATCH">
@@ -1005,7 +1003,7 @@ function FormulaDetailPage() {
           rows={rows}
           overrides={overrides}
           bathWaterG={bathWaterG}
-          locked={locked}
+          locked={false}
           onOverridesChange={(next) =>
             supabase
               .from("formula_versions")
