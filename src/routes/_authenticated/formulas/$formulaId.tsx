@@ -34,7 +34,6 @@ import {
 } from "@/lib/queries";
 import { methodLabel } from "@/lib/method";
 import {
-  FORMULA_STATUSES,
   UNITS,
   fmtNumber,
   parseNumber,
@@ -758,6 +757,52 @@ function FormulaDetailPage() {
           ))}
         </select>
 
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+
+        {/* VERSION — 버전 전환/CURRENT·ARCHIVE 지정. DRAFT/TESTING/SUPERSEDED/LOGGED 같은 세부
+            상태는 수동으로 고를 필요가 없다는 판단으로 CURRENT/ARCHIVE 두 가지만 남겼다(2026-09-22) —
+            SUPERSEDED는 다른 버전을 CURRENT로 바꿀 때 DB 트리거가 자동 처리하고, LOGGED는
+            Development Entry 저장 시 자동으로 붙는 값이라 여기서 고를 필요가 없다. */}
+        <select
+          className={`${compactSelectClass} w-auto`}
+          value={versionId ?? ""}
+          onChange={(e) => setVersionId(e.target.value)}
+        >
+          {versionList.map((v) => (
+            <option key={v.id} value={v.id}>
+              {`${versionLabel(v.version_number)} · ${v.status}`}
+            </option>
+          ))}
+        </select>
+        {version && <StatusBadge status={version.status} />}
+        <select
+          className={`${compactSelectClass} w-auto`}
+          value=""
+          onChange={(e) => {
+            const next = e.target.value as FormulaStatus;
+            if (!next || !versionId) return;
+            supabase
+              .from("formula_versions")
+              .update({ status: next })
+              .eq("id", versionId)
+              .then(({ error }) => {
+                if (error) throw error;
+                return invalidate();
+              });
+          }}
+        >
+          <option value="">SET…</option>
+          <option value="CURRENT" disabled={version?.status === "CURRENT"}>
+            SET CURRENT
+          </option>
+          <option value="ARCHIVED" disabled={version?.status === "ARCHIVED"}>
+            ARCHIVE
+          </option>
+        </select>
+        <button type="button" className={compactButtonClass} onClick={() => setCreatingVersion(true)}>
+          + NEW VERSION
+        </button>
+
         {canEditPage && (
           <>
             <span className="mx-1 h-4 w-px bg-border" aria-hidden />
@@ -999,45 +1044,6 @@ function FormulaDetailPage() {
           </div>
         )}
       </SectionCard>
-
-      {/* VERSION BAR — 버전 전환/상태 선택은 부가 정보라 YIELD & BATCH 다음으로 내려둔다 */}
-      <div className="flex flex-wrap items-center gap-2 border border-border bg-card p-4">
-        <select
-          className={`${selectClass} w-auto`}
-          value={versionId ?? ""}
-          onChange={(e) => setVersionId(e.target.value)}
-        >
-          {versionList.map((v) => (
-            <option key={v.id} value={v.id}>
-              {`${versionLabel(v.version_number)} · ${v.status}`}
-            </option>
-          ))}
-        </select>
-        {version && <StatusBadge status={version.status} />}
-        <select
-          className={`${selectClass} w-auto`}
-          value={version?.status ?? "DRAFT"}
-          onChange={(e) =>
-            supabase
-              .from("formula_versions")
-              .update({ status: e.target.value as FormulaStatus })
-              .eq("id", versionId!)
-              .then(({ error }) => {
-                if (error) throw error;
-                return invalidate();
-              })
-          }
-        >
-          {FORMULA_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              SET {status}
-            </option>
-          ))}
-        </select>
-        <button type="button" className={buttonClass} onClick={() => setCreatingVersion(true)}>
-          + NEW VERSION
-        </button>
-      </div>
 
       {/* BASIS — 기준량 자동 집계 */}
       {version && (

@@ -8,7 +8,6 @@ import {
   categoryPathLabel,
   categoryWithDescendants,
   flattenCategories,
-  PRODUCT_STATUSES,
 } from "@/lib/pilot";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
@@ -16,7 +15,6 @@ import {
   CategoryBadge,
   Field,
   PageHeader,
-  StatusBadge,
   primaryButtonClass,
   selectClass,
 } from "@/components/pilot/ui";
@@ -33,40 +31,32 @@ export const Route = createFileRoute("/_authenticated/products/")({
   component: ProductsPage,
 });
 
-type SortKey = "UPDATED" | "CREATED" | "NAME";
-
 function ProductsPage() {
   const products = useQuery(productsQuery());
   const categories = useQuery(categoriesQuery());
   const tags = useQuery(tagsQuery());
 
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
-  const [sort, setSort] = useState<SortKey>("UPDATED");
   const [creating, setCreating] = useState(false);
 
   const categoryList = categories.data ?? [];
 
+  // 정렬은 항상 이름순 고정 — 정렬 기준을 고를 필요가 없다는 판단(2026-09-22)
   const rows = useMemo(() => {
     let list = [...(products.data ?? [])];
     if (categoryFilter) {
       const ids = categoryWithDescendants(categoryList, categoryFilter);
       list = list.filter((p) => p.category_id && ids.includes(p.category_id));
     }
-    if (statusFilter) list = list.filter((p) => p.status === statusFilter);
     if (tagFilter) {
       list = list.filter((p) =>
         (p.product_tags ?? []).some((t) => t.tag_id === tagFilter)
       );
     }
-    list.sort((a, b) => {
-      if (sort === "NAME") return a.name.localeCompare(b.name);
-      if (sort === "CREATED") return b.created_at.localeCompare(a.created_at);
-      return b.updated_at.localeCompare(a.updated_at);
-    });
+    list.sort((a, b) => a.name.localeCompare(b.name));
     return list;
-  }, [products.data, categoryList, categoryFilter, statusFilter, tagFilter, sort]);
+  }, [products.data, categoryList, categoryFilter, tagFilter]);
 
   return (
     <div className="space-y-6">
@@ -83,7 +73,7 @@ function ProductsPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 border border-border bg-card p-4 sm:grid-cols-2">
         <Field label="CATEGORY">
           <select
             className={selectClass}
@@ -94,20 +84,6 @@ function ProductsPage() {
             {flattenCategories(categoryList).map(({ category, depth }) => (
               <option key={category.id} value={category.id}>
                 {`${"— ".repeat(depth)}${category.name}`}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="STATUS">
-          <select
-            className={selectClass}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">ALL</option>
-            {PRODUCT_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
               </option>
             ))}
           </select>
@@ -124,17 +100,6 @@ function ProductsPage() {
                 {t.name}
               </option>
             ))}
-          </select>
-        </Field>
-        <Field label="SORT">
-          <select
-            className={selectClass}
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-          >
-            <option value="UPDATED">UPDATED</option>
-            <option value="CREATED">CREATED</option>
-            <option value="NAME">NAME</option>
           </select>
         </Field>
       </div>
@@ -156,14 +121,11 @@ function ProductsPage() {
       ) : (
         <div className="border border-border bg-card">
           <div className="hidden grid-cols-12 gap-2 border-b border-border px-4 py-2 md:grid">
-            <span className="label-caps col-span-4 text-xs text-muted-foreground">
+            <span className="label-caps col-span-5 text-xs text-muted-foreground">
               NAME
             </span>
-            <span className="label-caps col-span-3 text-xs text-muted-foreground">
+            <span className="label-caps col-span-4 text-xs text-muted-foreground">
               CATEGORY
-            </span>
-            <span className="label-caps col-span-2 text-xs text-muted-foreground">
-              STATUS
             </span>
             <span className="label-caps col-span-1 text-xs text-muted-foreground">
               COMP
@@ -180,17 +142,14 @@ function ProductsPage() {
                   params={{ productId: product.id }}
                   className="grid grid-cols-1 gap-1 px-4 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
                 >
-                  <span className="col-span-4 text-sm">{product.name}</span>
-                  <span className="col-span-3 font-mono text-xs uppercase">
+                  <span className="col-span-5 text-sm">{product.name}</span>
+                  <span className="col-span-4 font-mono text-xs uppercase">
                     <CategoryBadge
                       label={categoryPathLabel(categoryList, product.category_id)}
                       color={
                         categoryPath(categoryList, product.category_id).at(-1)?.color
                       }
                     />
-                  </span>
-                  <span className="col-span-2">
-                    <StatusBadge status={product.status} />
                   </span>
                   <span className="col-span-1 font-mono text-xs text-muted-foreground">
                     {product.product_components?.[0]?.count ?? 0}

@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-09-22 — PRODUCT STATUS 폐지 + FORMULA VERSION 상태 단순화 + 정렬 고정
+
+**무엇이 달라졌나**
+- PRODUCT의 IDEA/ACTIVE/TESTING/STABLE/ARCHIVED 구분(상태 뱃지/선택/필터)을 없앴습니다 — 만들 때 바로 입력하는 워크플로우라 단계 구분이 불필요하다는 판단입니다. 새 제품 만들기 모달, 제품 상세, 제품 목록 필터/컬럼, 컴포넌트의 "USED IN" 목록에서 모두 제거했습니다. (DB 컬럼 자체는 남아있어 데이터 손실은 없습니다.)
+- FORMULA 버전의 상태 조작을 SET CURRENT / ARCHIVE 두 가지로 줄였습니다 — DRAFT/TESTING을 수동으로 고를 필요가 없고, SUPERSEDED는 다른 버전을 CURRENT로 바꿀 때 자동 처리되며, LOGGED는 Development Entry 저장 시 자동으로 붙습니다.
+- 버전 전환/상태 컨트롤을 FORMULA 페이지 맨 위, 기법/방법/컴포넌트가 있는 그 컴팩트 박스 안으로 옮겼습니다 — 스크롤 없이 바로 보입니다.
+- PRODUCTS 목록의 정렬을 이름순으로 고정했습니다 — SORT 선택 없이 항상 이름순으로 뜹니다.
+
+**확인하는 방법**
+1. + CREATE PRODUCT / 제품 상세 / 제품 목록에서 STATUS 관련 UI가 안 보이는지 확인
+2. FORMULA 상세 페이지 맨 위 박스에서 버전 선택 + SET CURRENT/ARCHIVE + NEW VERSION이 한 줄에 보이는지 확인
+3. PRODUCTS 목록이 항상 이름순으로 정렬되는지 확인
+
+---
+
 ## 2026-09-22 — PRODUCT 사이즈별 컴포넌트 사용량 + PRODUCT DESIGN 섹션 신설
 
 **무엇이 달라졌나**

@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CategorySelect } from "@/components/pilot/CategorySelect";
 import { currentUserId } from "@/lib/queries";
-import { PRODUCT_STATUSES, type ProductStatus } from "@/lib/pilot";
 import {
   Field,
   buttonClass,
@@ -15,14 +14,15 @@ import {
 
 /**
  * + CREATE PRODUCT 공용 모달.
- * 이름 + 카테고리 + 상태만 받고 생성 즉시 Product Detail로 이동.
+ * 이름 + 카테고리만 받고 생성 즉시 Product Detail로 이동.
+ * (STATUS 구분은 2026-09-22부로 폐지 — 만들 때 바로 입력하는 워크플로우라 IDEA/ACTIVE/…
+ * 단계 구분이 실사용에 불필요하다는 판단. DB 컬럼/기본값(IDEA)은 그대로 두고 UI에서만 뺐다.)
  */
 export function ProductCreateModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [status, setStatus] = useState<ProductStatus>("IDEA");
 
   const create = useMutation({
     mutationFn: async () => {
@@ -33,7 +33,6 @@ export function ProductCreateModal({ onClose }: { onClose: () => void }) {
           user_id: userId,
           name: name.trim(),
           category_id: categoryId || null,
-          status,
         })
         .select("id")
         .single();
@@ -79,19 +78,6 @@ export function ProductCreateModal({ onClose }: { onClose: () => void }) {
               onChange={setCategoryId}
               emptyLabel="—"
             />
-          </Field>
-          <Field label="STATUS">
-            <select
-              className={selectClass}
-              value={status}
-              onChange={(e) => setStatus(e.target.value as ProductStatus)}
-            >
-              {PRODUCT_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
           </Field>
           {create.isError && (
             <p className="font-mono text-xs uppercase text-destructive">

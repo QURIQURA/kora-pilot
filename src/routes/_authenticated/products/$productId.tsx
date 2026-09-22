@@ -24,8 +24,6 @@ import {
   categoryPath,
   DEFAULT_TARGET_KEYS,
   parseTarget,
-  PRODUCT_STATUSES,
-  type ProductStatus,
   type TargetAttribute,
 } from "@/lib/pilot";
 import { formatProductSizeLabel, type ProductSize } from "@/lib/product-size";
@@ -40,7 +38,6 @@ import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   Field,
   SectionCard,
-  StatusBadge,
   buttonClass,
   inputClass,
   primaryButtonClass,
@@ -250,18 +247,6 @@ function ProductDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={data.status} />
-          <select
-            className={selectClass + " w-auto"}
-            value={data.status}
-            onChange={(e) => updateProduct.mutate({ status: e.target.value as ProductStatus })}
-          >
-            {PRODUCT_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
           <CategorySelect
             className={selectClass + " w-auto"}
             value={data.category_id ?? ""}

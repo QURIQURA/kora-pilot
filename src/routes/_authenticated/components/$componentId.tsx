@@ -19,7 +19,6 @@ import { ComponentTagsSection } from "@/components/pilot/ComponentTagsSection";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   SectionCard,
-  StatusBadge,
   buttonClass,
   inputClass,
   selectClass,
@@ -156,7 +155,6 @@ function ComponentDetailPage() {
                   className="flex items-center justify-between gap-2 px-3 py-3 hover:bg-secondary"
                 >
                   <span className="text-sm">{row.products.name}</span>
-                  <StatusBadge status={row.products.status} />
                 </Link>
               </li>
             ))}
