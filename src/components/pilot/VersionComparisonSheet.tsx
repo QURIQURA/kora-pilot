@@ -211,14 +211,24 @@ export function VersionComparisonSheet({
     return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
   }
 
+  const INGREDIENT_COL_WIDTH = 180;
+  // 열 너비의 실제 합계를 table 자체 width로 못박아둔다 — w-full(100%)로 두면
+  // 합계가 컨테이너보다 좁을 때 브라우저가 남는 공간을 다른 열에 멋대로 나눠줘서,
+  // 한번 줄인 열이 다시 늘어나지 않는 것처럼 보이는 버그가 있었다(table-layout:fixed +
+  // width:100%의 알려진 상호작용). 합계만큼 명시적 width를 주면 컨테이너보다 좁든 넓든
+  // colgroup의 각 열 너비가 항상 그대로 반영되고, 넓을 땐 overflow-x-auto가 스크롤을 준다.
+  const totalWidth =
+    INGREDIENT_COL_WIDTH +
+    displayVersions.reduce((sum, v) => sum + (colWidths[v.id] ?? DEFAULT_COL_WIDTH), 0);
+
   return (
     <div className="overflow-x-auto border border-border">
       <table
-        className="w-full border-collapse text-sm"
-        style={{ tableLayout: "fixed", minWidth: 220 + displayVersions.length * DEFAULT_COL_WIDTH }}
+        className="border-collapse text-sm"
+        style={{ tableLayout: "fixed", width: totalWidth }}
       >
         <colgroup>
-          <col style={{ width: 180 }} />
+          <col style={{ width: INGREDIENT_COL_WIDTH }} />
           {displayVersions.map((v) => (
             <col key={v.id} style={{ width: colWidths[v.id] ?? DEFAULT_COL_WIDTH }} />
           ))}
