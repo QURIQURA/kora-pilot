@@ -90,7 +90,10 @@ export function VersionComparisonSheet({
                 <td className="px-3 py-2">{row.name}</td>
                 {orderedVersions.map((v, vIdx) => {
                   const cell = row.byVersion.get(v.id);
-                  const isNew = vIdx === row.firstSeenAt;
+                  // 맨 처음 버전(V1)에 있는 재료는 "새로 추가된" 게 아니라 원래 다 있던 것이므로
+                  // NEW 뱃지를 달지 않는다 — 그 버전 자체가 CURRENT/과거 뱃지로 이미 구분된다.
+                  // 이후 버전에서 처음 등장한 재료만 진짜 "추가"라서 NEW를 붙인다.
+                  const isNew = vIdx === row.firstSeenAt && vIdx > 0;
                   const changed =
                     !isNew &&
                     cell &&
