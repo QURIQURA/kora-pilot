@@ -238,7 +238,7 @@ function ExperimentDetailPage() {
     "flex min-h-[44px] items-center border border-input bg-background px-3 text-sm hover:bg-secondary";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* HEADER */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">

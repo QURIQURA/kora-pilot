@@ -102,7 +102,7 @@ function ReferencesPage() {
             : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <h1 className="label-caps text-foreground">REFERENCES</h1>
         <button type="button" className={buttonClass} onClick={() => setCreating((v) => !v)}>

@@ -1469,6 +1469,10 @@ export type Database = {
           description: string | null
           has_allergies: boolean
           id: string
+          image_actual_url: string | null
+          image_cross_section_actual_url: string | null
+          image_cross_section_layout_url: string | null
+          image_imagination_url: string | null
           name: string
           notes: string | null
           pinned: boolean
@@ -1485,6 +1489,10 @@ export type Database = {
           description?: string | null
           has_allergies?: boolean
           id?: string
+          image_actual_url?: string | null
+          image_cross_section_actual_url?: string | null
+          image_cross_section_layout_url?: string | null
+          image_imagination_url?: string | null
           name: string
           notes?: string | null
           pinned?: boolean
@@ -1501,6 +1509,10 @@ export type Database = {
           description?: string | null
           has_allergies?: boolean
           id?: string
+          image_actual_url?: string | null
+          image_cross_section_actual_url?: string | null
+          image_cross_section_layout_url?: string | null
+          image_imagination_url?: string | null
           name?: string
           notes?: string | null
           pinned?: boolean

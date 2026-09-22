@@ -32,11 +32,11 @@ export function SectionCard({
         muted && "border-dashed opacity-70"
       )}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+      <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <h2 className="label-caps text-muted-foreground">{title}</h2>
         {action}
       </header>
-      <div className="p-4">{children}</div>
+      <div className="p-3">{children}</div>
     </section>
   );
 }
@@ -132,7 +132,7 @@ export function CollapsibleSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex min-h-[48px] w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-secondary",
+          "flex min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-secondary",
           open && "border-b border-border"
         )}
       >
@@ -144,7 +144,7 @@ export function CollapsibleSection({
           </span>
         </span>
       </button>
-      {open && <div className="p-4">{children}</div>}
+      {open && <div className="p-3">{children}</div>}
     </section>
   );
 }
@@ -157,7 +157,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
       <h1 className="label-caps text-foreground">{title}</h1>
       {action}
     </div>

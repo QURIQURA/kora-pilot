@@ -39,6 +39,7 @@ import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
 import { ProductSizesSection } from "@/components/pilot/ProductSizesSection";
 import { ProductDesignSection } from "@/components/pilot/ProductDesignSection";
+import { ProductImagesSection } from "@/components/pilot/ProductImagesSection";
 import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   Field,
@@ -273,7 +274,7 @@ function ProductDetailPage() {
   const linkedTagIds = (productTags.data ?? []).map((t) => t.tag_id);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
           <InlineName value={data.name} onSave={(name) => updateProduct.mutate({ name })} />
@@ -291,14 +292,16 @@ function ProductDetailPage() {
         </div>
       </div>
 
-      <TagEditor productId={productId} allTags={tags.data ?? []} linkedTagIds={linkedTagIds} />
+      <ProductImagesSection productId={productId} product={data} />
+
+      <ProductDesignSection productId={productId} product={data} />
 
       <TargetSection
         target={parseTarget(data.product_target)}
         onSave={(next) => updateProduct.mutate({ product_target: next })}
       />
 
-      <ProductDesignSection productId={productId} product={data} />
+      <TagEditor productId={productId} allTags={tags.data ?? []} linkedTagIds={linkedTagIds} />
 
       <SectionCard
         title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"

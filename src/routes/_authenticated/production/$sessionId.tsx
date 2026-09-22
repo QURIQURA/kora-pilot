@@ -226,7 +226,7 @@ function WorkSessionPage() {
   const promotingRow = rows.find((r) => r.formula_version_id === promotingVersionId) ?? null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
           <InlineName value={data.name} onSave={(name) => updateSession.mutate({ name })} />

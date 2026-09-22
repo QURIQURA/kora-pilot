@@ -40,7 +40,7 @@ function ProductionDashboardPage() {
   const rows = sessions.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="PRODUCTION / WEIGHING"
         action={

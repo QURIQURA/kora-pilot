@@ -46,7 +46,7 @@ function ComponentsPage() {
     .sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="COMPONENTS"
         action={

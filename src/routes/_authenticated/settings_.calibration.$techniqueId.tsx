@@ -129,7 +129,7 @@ function CalibrationPage() {
   const baseIndex = columns.findIndex((c) => c.formula.is_base_formula);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* HEADER */}
       <div className="space-y-2 border-b border-border pb-4">
         <p className="label-caps text-xs text-muted-foreground">
