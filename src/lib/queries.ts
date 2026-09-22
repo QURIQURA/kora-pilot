@@ -356,8 +356,35 @@ export const mouldUsageQuery = () =>
     },
   });
 
+/** 몰드가 아닌 제품군(가나슈/필링/크림 등)의 기준 배치 중량(g) 프리셋 — moulds와 대응 */
+export type BaseWeightPreset = import("@/integrations/supabase/types").Tables<"base_weight_presets">;
+
+export const baseWeightsQuery = () =>
+  queryOptions({
+    queryKey: ["base_weight_presets"],
+    queryFn: async (): Promise<BaseWeightPreset[]> =>
+      unwrap(await supabase.from("base_weight_presets").select("*").order("name")),
+  });
+
+/** 기준중량 프리셋별 사용 횟수 (formula_versions.default_base_weight_id) */
+export const baseWeightUsageQuery = () =>
+  queryOptions({
+    queryKey: ["base_weight_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(
+        await supabase.from("formula_versions").select("default_base_weight_id"),
+      );
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.default_base_weight_id)
+          map[row.default_base_weight_id] = (map[row.default_base_weight_id] ?? 0) + 1;
+      }
+      return map;
+    },
+  });
+
 export interface FormulaListRow extends Formula {
-  components: { id: string; name: string } | null;
+  components: { id: string; name: string; scaling_mode: string } | null;
   formula_versions: {
     id: string;
     version_number: number;
@@ -372,7 +399,9 @@ export const formulasQuery = () =>
       unwrap(
         await supabase
           .from("formulas")
-          .select("*, components(id, name), formula_versions(id, version_number, status)")
+          .select(
+            "*, components(id, name, scaling_mode), formula_versions(id, version_number, status)",
+          )
           .order("updated_at", { ascending: false }),
       ) as unknown as FormulaListRow[],
   });
@@ -1150,11 +1179,12 @@ export interface WorkSessionFormulaVersionRow extends WorkSessionFormulaVersion 
     version_number: number;
     status: string;
     default_mould_id: string | null;
+    default_base_weight_id: string | null;
     formulas: {
       id: string;
       name: string;
       component_id: string | null;
-      components: { id: string; name: string } | null;
+      components: { id: string; name: string; scaling_mode: string } | null;
     };
   };
 }
@@ -1168,7 +1198,7 @@ export const workSessionFormulaVersionsQuery = (sessionId: string) =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "*, formula_versions(id, version_number, status, default_mould_id, formulas(id, name, component_id, components(id, name)))",
+            "*, formula_versions(id, version_number, status, default_mould_id, default_base_weight_id, formulas(id, name, component_id, components(id, name, scaling_mode)))",
           )
           .eq("work_session_id", sessionId)
           .order("sort_order"),

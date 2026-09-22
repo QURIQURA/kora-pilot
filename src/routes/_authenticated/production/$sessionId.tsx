@@ -24,6 +24,7 @@ import {
   currentUserId,
   formulasQuery,
   mouldsQuery,
+  baseWeightsQuery,
   versionIngredientsBulkQuery,
   versionIngredientsQuery,
   workSessionFormulaVersionsQuery,
@@ -45,12 +46,14 @@ import {
   PROGRESS_STATUS_LABEL,
   sumBaseGrams,
   suggestedMultiplierFromMould,
+  suggestedMultiplierFromBaseWeight,
   WORK_SESSION_PROGRESS_STATUSES,
   workingAmount,
   type WorkSessionProgressStatus,
 } from "@/lib/work-session";
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
+import { BaseWeightSelect } from "@/components/pilot/BaseWeightSelect";
 import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
@@ -410,13 +413,18 @@ function AddFormulaVersionForm({
   const formulaList = formulas.data ?? [];
   const moulds = useQuery(mouldsQuery());
   const mouldList = moulds.data ?? [];
+  const baseWeights = useQuery(baseWeightsQuery());
+  const baseWeightList = baseWeights.data ?? [];
   const [formulaId, setFormulaId] = useState("");
   const [versionId, setVersionId] = useState("");
   const [multiplier, setMultiplier] = useState("1");
   const [mouldId, setMouldId] = useState("");
   const [mouldQty, setMouldQty] = useState("1");
+  const [baseWeightId, setBaseWeightId] = useState("");
+  const [baseWeightQty, setBaseWeightQty] = useState("1");
 
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
+  const scalingMode = formula?.components?.scaling_mode ?? "MOULD";
   const versionOptions = [...(formula?.formula_versions ?? [])].sort(
     (a, b) => b.version_number - a.version_number,
   );
@@ -424,9 +432,15 @@ function AddFormulaVersionForm({
   const baseIngredients = useQuery(versionIngredientsQuery(versionId || null));
   const baseTotalGrams = baseIngredients.data ? sumBaseGrams(baseIngredients.data) : null;
   const selectedMould = mouldList.find((m) => m.id === mouldId) ?? null;
+  const selectedBaseWeight = baseWeightList.find((b) => b.id === baseWeightId) ?? null;
   const qtyNum = mouldQty.trim() ? Number(mouldQty) : null;
-  const suggested = suggestedMultiplierFromMould(selectedMould, qtyNum, baseTotalGrams);
-  const custom = mouldId ? isCustomMultiplier(Number(multiplier) || null, suggested) : false;
+  const baseWeightQtyNum = baseWeightQty.trim() ? Number(baseWeightQty) : null;
+  const suggested =
+    scalingMode === "BASE_WEIGHT"
+      ? suggestedMultiplierFromBaseWeight(selectedBaseWeight, baseWeightQtyNum, baseTotalGrams)
+      : suggestedMultiplierFromMould(selectedMould, qtyNum, baseTotalGrams);
+  const targetId = scalingMode === "BASE_WEIGHT" ? baseWeightId : mouldId;
+  const custom = targetId ? isCustomMultiplier(Number(multiplier) || null, suggested) : false;
 
   const add = useMutation({
     mutationFn: async () => {
@@ -434,13 +448,19 @@ function AddFormulaVersionForm({
       if (existingIds.includes(versionId))
         throw new Error("이미 이 Work Session에 추가된 버전입니다");
       const user_id = await currentUserId();
+      const useMould = scalingMode !== "BASE_WEIGHT";
       const { error } = await supabase.from("work_session_formula_versions").insert({
         user_id,
         work_session_id: sessionId,
         formula_version_id: versionId,
         multiplier: Number(multiplier) || 1,
-        mould_id: mouldId && !custom ? mouldId : null,
-        mould_qty: mouldId && !custom && qtyNum != null ? qtyNum : null,
+        mould_id: useMould && mouldId && !custom ? mouldId : null,
+        mould_qty: useMould && mouldId && !custom && qtyNum != null ? qtyNum : null,
+        base_weight_id: !useMould && baseWeightId && !custom ? baseWeightId : null,
+        base_weight_qty:
+          !useMould && baseWeightId && !custom && baseWeightQtyNum != null
+            ? baseWeightQtyNum
+            : null,
         sort_order: nextSort,
       });
       if (error) throw error;
@@ -492,42 +512,89 @@ function AddFormulaVersionForm({
             ))}
           </select>
         </Field>
-        <Field label="MOULD (OPTIONAL — 배수 자동 계산)">
-          <MouldSelect
-            className={selectClass}
-            value={mouldId}
-            onChange={(id) => {
-              setMouldId(id);
-              const nextSuggested = suggestedMultiplierFromMould(
-                mouldList.find((m) => m.id === id) ?? null,
-                qtyNum,
-                baseTotalGrams,
-              );
-              if (nextSuggested != null) setMultiplier(String(Math.round(nextSuggested * 100) / 100));
-            }}
-          />
-        </Field>
-        <Field label="QTY">
-          <input
-            type="number"
-            inputMode="decimal"
-            step="1"
-            min="1"
-            className={inputClass}
-            disabled={!mouldId}
-            value={mouldQty}
-            onChange={(e) => {
-              setMouldQty(e.target.value);
-              const nextQty = e.target.value.trim() ? Number(e.target.value) : null;
-              const nextSuggested = suggestedMultiplierFromMould(
-                selectedMould,
-                nextQty,
-                baseTotalGrams,
-              );
-              if (nextSuggested != null) setMultiplier(String(Math.round(nextSuggested * 100) / 100));
-            }}
-          />
-        </Field>
+        {scalingMode === "BASE_WEIGHT" ? (
+          <>
+            <Field label="BASE WEIGHT (OPTIONAL — 배수 자동 계산)">
+              <BaseWeightSelect
+                className={selectClass}
+                value={baseWeightId}
+                onChange={(id) => {
+                  setBaseWeightId(id);
+                  const nextSuggested = suggestedMultiplierFromBaseWeight(
+                    baseWeightList.find((b) => b.id === id) ?? null,
+                    baseWeightQtyNum,
+                    baseTotalGrams,
+                  );
+                  if (nextSuggested != null)
+                    setMultiplier(String(Math.round(nextSuggested * 100) / 100));
+                }}
+              />
+            </Field>
+            <Field label="QTY">
+              <input
+                type="number"
+                inputMode="decimal"
+                step="1"
+                min="1"
+                className={inputClass}
+                disabled={!baseWeightId}
+                value={baseWeightQty}
+                onChange={(e) => {
+                  setBaseWeightQty(e.target.value);
+                  const nextQty = e.target.value.trim() ? Number(e.target.value) : null;
+                  const nextSuggested = suggestedMultiplierFromBaseWeight(
+                    selectedBaseWeight,
+                    nextQty,
+                    baseTotalGrams,
+                  );
+                  if (nextSuggested != null)
+                    setMultiplier(String(Math.round(nextSuggested * 100) / 100));
+                }}
+              />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label="MOULD (OPTIONAL — 배수 자동 계산)">
+              <MouldSelect
+                className={selectClass}
+                value={mouldId}
+                onChange={(id) => {
+                  setMouldId(id);
+                  const nextSuggested = suggestedMultiplierFromMould(
+                    mouldList.find((m) => m.id === id) ?? null,
+                    qtyNum,
+                    baseTotalGrams,
+                  );
+                  if (nextSuggested != null)
+                    setMultiplier(String(Math.round(nextSuggested * 100) / 100));
+                }}
+              />
+            </Field>
+            <Field label="QTY">
+              <input
+                type="number"
+                inputMode="decimal"
+                step="1"
+                min="1"
+                className={inputClass}
+                disabled={!mouldId}
+                value={mouldQty}
+                onChange={(e) => {
+                  setMouldQty(e.target.value);
+                  const nextQty = e.target.value.trim() ? Number(e.target.value) : null;
+                  const nextSuggested = suggestedMultiplierFromMould(
+                    selectedMould,
+                    nextQty,
+                    baseTotalGrams,
+                  );
+                  if (nextSuggested != null)
+                    setMultiplier(String(Math.round(nextSuggested * 100) / 100));
+                }}
+              />
+            </Field>
+          </>
+        )}
         <Field label="MULTIPLIER ×N">
           <input
             type="number"
@@ -540,15 +607,25 @@ function AddFormulaVersionForm({
           />
         </Field>
       </div>
-      {mouldId && (
-        <p className="label-caps text-[10px] text-muted-foreground">
-          {selectedMould?.reference_weight_g == null
-            ? "이 몰드엔 기준 반죽량이 없어 자동 계산이 안 됩니다 — SETTINGS에서 등록해 주세요"
-            : custom
-              ? "CUSTOM — 배수를 직접 수정해서 몰드 기준값과 달라졌습니다"
-              : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams ?? 0)}g`}
-        </p>
-      )}
+      {scalingMode === "BASE_WEIGHT"
+        ? baseWeightId && (
+            <p className="label-caps text-[10px] text-muted-foreground">
+              {selectedBaseWeight == null
+                ? "선택한 기준중량을 찾을 수 없습니다"
+                : custom
+                  ? "CUSTOM — 배수를 직접 수정해서 기준중량과 달라졌습니다"
+                  : `✓ BASE WEIGHT 기준 — ${fmtNumber(selectedBaseWeight.weight_g)}g × ${baseWeightQtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams ?? 0)}g`}
+            </p>
+          )
+        : mouldId && (
+            <p className="label-caps text-[10px] text-muted-foreground">
+              {selectedMould?.reference_weight_g == null
+                ? "이 몰드엔 기준 반죽량이 없어 자동 계산이 안 됩니다 — SETTINGS에서 등록해 주세요"
+                : custom
+                  ? "CUSTOM — 배수를 직접 수정해서 몰드 기준값과 달라졌습니다"
+                  : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams ?? 0)}g`}
+            </p>
+          )}
       {add.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
           {(add.error as Error).message}
@@ -587,28 +664,51 @@ function FormulaVersionRow({
   });
   const moulds = useQuery(mouldsQuery());
   const mouldList = moulds.data ?? [];
+  const baseWeights = useQuery(baseWeightsQuery());
+  const baseWeightList = baseWeights.data ?? [];
+  const scalingMode = row.formula_versions.formulas.components?.scaling_mode ?? "MOULD";
 
   const baseTotalGrams = sumBaseGrams(lines);
   const [mouldId, setMouldId] = useState(row.mould_id ?? "");
   const [mouldQty, setMouldQty] = useState(row.mould_qty != null ? String(row.mould_qty) : "1");
+  const [baseWeightId, setBaseWeightId] = useState(row.base_weight_id ?? "");
+  const [baseWeightQty, setBaseWeightQty] = useState(
+    row.base_weight_qty != null ? String(row.base_weight_qty) : "1",
+  );
   const [multiplierStr, setMultiplierStr] = useState(String(Number(row.multiplier)));
   useEffect(() => {
     setMouldId(row.mould_id ?? "");
     setMouldQty(row.mould_qty != null ? String(row.mould_qty) : "1");
+    setBaseWeightId(row.base_weight_id ?? "");
+    setBaseWeightQty(row.base_weight_qty != null ? String(row.base_weight_qty) : "1");
     setMultiplierStr(String(Number(row.multiplier)));
-  }, [row.id, row.mould_id, row.mould_qty, row.multiplier]);
+  }, [row.id, row.mould_id, row.mould_qty, row.base_weight_id, row.base_weight_qty, row.multiplier]);
 
   const selectedMould = mouldList.find((m) => m.id === mouldId) ?? null;
+  const selectedBaseWeight = baseWeightList.find((b) => b.id === baseWeightId) ?? null;
   const qtyNum = mouldQty.trim() ? Number(mouldQty) : null;
-  const suggested = suggestedMultiplierFromMould(selectedMould, qtyNum, baseTotalGrams);
+  const baseWeightQtyNum = baseWeightQty.trim() ? Number(baseWeightQty) : null;
+  const suggested =
+    scalingMode === "BASE_WEIGHT"
+      ? suggestedMultiplierFromBaseWeight(selectedBaseWeight, baseWeightQtyNum, baseTotalGrams)
+      : suggestedMultiplierFromMould(selectedMould, qtyNum, baseTotalGrams);
+  const targetId = scalingMode === "BASE_WEIGHT" ? baseWeightId : mouldId;
 
   const applyBatch = useMutation({
-    mutationFn: async (next: { multiplier: number; mouldId: string | null; mouldQty: number | null }) => {
+    mutationFn: async (next: {
+      multiplier: number;
+      mouldId: string | null;
+      mouldQty: number | null;
+      baseWeightId: string | null;
+      baseWeightQty: number | null;
+    }) => {
       const previous = Number(row.multiplier);
       const changed =
         next.multiplier !== previous ||
         next.mouldId !== (row.mould_id ?? null) ||
-        next.mouldQty !== (row.mould_qty ?? null);
+        next.mouldQty !== (row.mould_qty ?? null) ||
+        next.baseWeightId !== (row.base_weight_id ?? null) ||
+        next.baseWeightQty !== (row.base_weight_qty ?? null);
       if (!changed) return;
       const user_id = await currentUserId();
       if (next.multiplier !== previous) {
@@ -631,6 +731,8 @@ function FormulaVersionRow({
           multiplier: next.multiplier,
           mould_id: next.mouldId,
           mould_qty: next.mouldQty,
+          base_weight_id: next.baseWeightId,
+          base_weight_qty: next.baseWeightQty,
         })
         .eq("id", row.id);
       if (updateError) throw updateError;
@@ -645,20 +747,28 @@ function FormulaVersionRow({
     },
   });
 
-  const commitMultiplier = (nextMultiplier: number) => {
-    const custom = mouldId ? isCustomMultiplier(nextMultiplier, suggested) : false;
+  /** targetId/targetQty를 현재 scalingMode에 맞는 컬럼 쌍으로 채우고, 반대쪽은 null로 정리한다 */
+  const applyTarget = (multiplier: number, targetIdNext: string | null, targetQtyNext: number | null) => {
     applyBatch.mutate({
-      multiplier: nextMultiplier,
-      mouldId: mouldId && !custom ? mouldId : null,
-      mouldQty: mouldId && !custom && qtyNum != null ? qtyNum : null,
+      multiplier,
+      mouldId: scalingMode === "BASE_WEIGHT" ? null : targetIdNext,
+      mouldQty: scalingMode === "BASE_WEIGHT" ? null : targetQtyNext,
+      baseWeightId: scalingMode === "BASE_WEIGHT" ? targetIdNext : null,
+      baseWeightQty: scalingMode === "BASE_WEIGHT" ? targetQtyNext : null,
     });
+  };
+
+  const commitMultiplier = (nextMultiplier: number) => {
+    const custom = targetId ? isCustomMultiplier(nextMultiplier, suggested) : false;
+    const qty = scalingMode === "BASE_WEIGHT" ? baseWeightQtyNum : qtyNum;
+    applyTarget(nextMultiplier, targetId && !custom ? targetId : null, targetId && !custom ? qty : null);
   };
 
   const handleMouldChange = (id: string) => {
     setMouldId(id);
     if (!id) {
       const current = Number(multiplierStr) || Number(row.multiplier);
-      applyBatch.mutate({ multiplier: current, mouldId: null, mouldQty: null });
+      applyTarget(current, null, null);
       return;
     }
     const mould = mouldList.find((m) => m.id === id) ?? null;
@@ -666,7 +776,7 @@ function FormulaVersionRow({
     if (nextSuggested != null) {
       const rounded = Math.round(nextSuggested * 100) / 100;
       setMultiplierStr(String(rounded));
-      applyBatch.mutate({ multiplier: rounded, mouldId: id, mouldQty: qtyNum });
+      applyTarget(rounded, id, qtyNum);
     }
   };
 
@@ -678,7 +788,35 @@ function FormulaVersionRow({
     if (nextSuggested != null) {
       const rounded = Math.round(nextSuggested * 100) / 100;
       setMultiplierStr(String(rounded));
-      applyBatch.mutate({ multiplier: rounded, mouldId, mouldQty: q });
+      applyTarget(rounded, mouldId, q);
+    }
+  };
+
+  const handleBaseWeightChange = (id: string) => {
+    setBaseWeightId(id);
+    if (!id) {
+      const current = Number(multiplierStr) || Number(row.multiplier);
+      applyTarget(current, null, null);
+      return;
+    }
+    const bw = baseWeightList.find((b) => b.id === id) ?? null;
+    const nextSuggested = suggestedMultiplierFromBaseWeight(bw, baseWeightQtyNum, baseTotalGrams);
+    if (nextSuggested != null) {
+      const rounded = Math.round(nextSuggested * 100) / 100;
+      setMultiplierStr(String(rounded));
+      applyTarget(rounded, id, baseWeightQtyNum);
+    }
+  };
+
+  const handleBaseWeightQtyChange = (qtyStr: string) => {
+    setBaseWeightQty(qtyStr);
+    if (!baseWeightId) return;
+    const q = qtyStr.trim() ? Number(qtyStr) : null;
+    const nextSuggested = suggestedMultiplierFromBaseWeight(selectedBaseWeight, q, baseTotalGrams);
+    if (nextSuggested != null) {
+      const rounded = Math.round(nextSuggested * 100) / 100;
+      setMultiplierStr(String(rounded));
+      applyTarget(rounded, baseWeightId, q);
     }
   };
 
@@ -697,27 +835,56 @@ function FormulaVersionRow({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5">
-            <span className="label-caps text-[10px] text-muted-foreground">MOULD</span>
-            <MouldSelect
-              className={`${selectClass} w-auto text-xs`}
-              value={mouldId}
-              onChange={handleMouldChange}
-            />
-          </label>
-          {mouldId && (
-            <label className="flex items-center gap-1.5">
-              <span className="label-caps text-[10px] text-muted-foreground">QTY</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="1"
-                min="1"
-                className={`${inputClass} w-16 text-center`}
-                value={mouldQty}
-                onChange={(e) => handleMouldQtyChange(e.target.value)}
-              />
-            </label>
+          {scalingMode === "BASE_WEIGHT" ? (
+            <>
+              <label className="flex items-center gap-1.5">
+                <span className="label-caps text-[10px] text-muted-foreground">BASE WEIGHT</span>
+                <BaseWeightSelect
+                  className={`${selectClass} w-auto text-xs`}
+                  value={baseWeightId}
+                  onChange={handleBaseWeightChange}
+                />
+              </label>
+              {baseWeightId && (
+                <label className="flex items-center gap-1.5">
+                  <span className="label-caps text-[10px] text-muted-foreground">QTY</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="1"
+                    min="1"
+                    className={`${inputClass} w-16 text-center`}
+                    value={baseWeightQty}
+                    onChange={(e) => handleBaseWeightQtyChange(e.target.value)}
+                  />
+                </label>
+              )}
+            </>
+          ) : (
+            <>
+              <label className="flex items-center gap-1.5">
+                <span className="label-caps text-[10px] text-muted-foreground">MOULD</span>
+                <MouldSelect
+                  className={`${selectClass} w-auto text-xs`}
+                  value={mouldId}
+                  onChange={handleMouldChange}
+                />
+              </label>
+              {mouldId && (
+                <label className="flex items-center gap-1.5">
+                  <span className="label-caps text-[10px] text-muted-foreground">QTY</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="1"
+                    min="1"
+                    className={`${inputClass} w-16 text-center`}
+                    value={mouldQty}
+                    onChange={(e) => handleMouldQtyChange(e.target.value)}
+                  />
+                </label>
+              )}
+            </>
           )}
           <label className="flex items-center gap-2">
             <span className="label-caps text-xs text-muted-foreground">×</span>
@@ -760,15 +927,25 @@ function FormulaVersionRow({
           </button>
         </div>
       </div>
-      {mouldId && (
-        <p className="label-caps text-[10px] text-muted-foreground">
-          {selectedMould?.reference_weight_g == null
-            ? "이 몰드엔 기준 반죽량이 없어 자동 계산이 안 됩니다 — SETTINGS에서 등록해 주세요"
-            : isCustomMultiplier(Number(multiplierStr) || null, suggested)
-              ? "CUSTOM — 배수를 직접 수정해서 몰드 기준값과 달라졌습니다"
-              : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams)}g`}
-        </p>
-      )}
+      {scalingMode === "BASE_WEIGHT"
+        ? baseWeightId && (
+            <p className="label-caps text-[10px] text-muted-foreground">
+              {selectedBaseWeight == null
+                ? "선택한 기준중량을 찾을 수 없습니다"
+                : isCustomMultiplier(Number(multiplierStr) || null, suggested)
+                  ? "CUSTOM — 배수를 직접 수정해서 기준중량과 달라졌습니다"
+                  : `✓ BASE WEIGHT 기준 — ${fmtNumber(selectedBaseWeight.weight_g)}g × ${baseWeightQtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams)}g`}
+            </p>
+          )
+        : mouldId && (
+            <p className="label-caps text-[10px] text-muted-foreground">
+              {selectedMould?.reference_weight_g == null
+                ? "이 몰드엔 기준 반죽량이 없어 자동 계산이 안 됩니다 — SETTINGS에서 등록해 주세요"
+                : isCustomMultiplier(Number(multiplierStr) || null, suggested)
+                  ? "CUSTOM — 배수를 직접 수정해서 몰드 기준값과 달라졌습니다"
+                  : `✓ MOULD 기준 — ${fmtNumber(selectedMould.reference_weight_g)}g × ${qtyNum ?? 0}개 ÷ BASE ${fmtNumber(baseTotalGrams)}g`}
+            </p>
+          )}
       {applyBatch.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
           {(applyBatch.error as Error).message}

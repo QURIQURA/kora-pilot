@@ -166,10 +166,13 @@ export function buildMultiplierSnapshot(
   }));
 }
 
-/* ── PRODUCTION: 몰드 기준 배수 자동 계산 ──────────────────────────
- * 몰드의 "기준 반죽량(g)"(실측값)과 개수, 그리고 BASE(×1) 레시피의 총 반죽량을 알면
- * 목표 몰드를 몇 개 만들지로부터 필요한 배수를 역산할 수 있다.
- *   배수 = (기준 반죽량 × 개수) ÷ BASE 총 반죽량
+/* ── PRODUCTION: 목표(몰드 또는 기본중량) 기준 배수 자동 계산 ─────────
+ * 목표(몰드의 "기준 반죽량(g)", 또는 기본중량 프리셋의 "기준중량(g)")와 개수,
+ * 그리고 BASE(×1) 레시피의 총 반죽량을 알면 목표를 몇 개 만들지로부터
+ * 필요한 배수를 역산할 수 있다.
+ *   배수 = (기준값 × 개수) ÷ BASE 총 반죽량
+ * 제품군(COMPONENT)의 scaling_mode에 따라 "목표"가 몰드(reference_weight_g)인지
+ * 기본중량 프리셋(weight_g)인지만 다를 뿐, 계산식 자체는 동일하다.
  */
 
 /** BASE(×1) 재료 라인들의 총 무게(g) — %/배수 계산과 동일하게 amount(그램) 합산만 사용한다 */
@@ -179,22 +182,40 @@ export function sumBaseGrams(lines: VersionIngredientRow[]): number {
 
 const MULTIPLIER_MATCH_EPSILON = 0.01;
 
+/** 목표 기준값(g) + 개수 + BASE 총량으로부터 제안 배수를 계산한다. 필요한 값이 없으면 null. */
+export function suggestedMultiplierFromTarget(
+  targetWeightG: number | null | undefined,
+  qty: number | null,
+  baseTotalGrams: number | null,
+): number | null {
+  if (targetWeightG == null) return null;
+  if (qty == null || !(qty > 0)) return null;
+  if (baseTotalGrams == null || !(baseTotalGrams > 0)) return null;
+  return (targetWeightG * qty) / baseTotalGrams;
+}
+
 /** 몰드 + 개수 + BASE 총량으로부터 제안 배수를 계산한다. 필요한 값이 없으면 null. */
 export function suggestedMultiplierFromMould(
   mould: { reference_weight_g: number | null } | null | undefined,
   qty: number | null,
   baseTotalGrams: number | null,
 ): number | null {
-  if (!mould || mould.reference_weight_g == null) return null;
-  if (qty == null || !(qty > 0)) return null;
-  if (baseTotalGrams == null || !(baseTotalGrams > 0)) return null;
-  return (mould.reference_weight_g * qty) / baseTotalGrams;
+  return suggestedMultiplierFromTarget(mould?.reference_weight_g, qty, baseTotalGrams);
+}
+
+/** 기본중량 프리셋 + 개수 + BASE 총량으로부터 제안 배수를 계산한다. 필요한 값이 없으면 null. */
+export function suggestedMultiplierFromBaseWeight(
+  baseWeight: { weight_g: number | null } | null | undefined,
+  qty: number | null,
+  baseTotalGrams: number | null,
+): number | null {
+  return suggestedMultiplierFromTarget(baseWeight?.weight_g, qty, baseTotalGrams);
 }
 
 /**
- * 몰드+개수가 선택된 상태에서, 현재 배수 입력값이 그 조합의 제안 배수와 다르면
- * "CUSTOM"(수동으로 어긋난 값)으로 취급한다. 몰드가 선택되지 않았다면 원래부터
- * 몰드와 무관한 수동 배수이므로 CUSTOM 취급하지 않는다.
+ * 목표(몰드/기본중량)+개수가 선택된 상태에서, 현재 배수 입력값이 그 조합의 제안 배수와
+ * 다르면 "CUSTOM"(수동으로 어긋난 값)으로 취급한다. 목표가 선택되지 않았다면 원래부터
+ * 목표와 무관한 수동 배수이므로 CUSTOM 취급하지 않는다.
  */
 export function isCustomMultiplier(current: number | null, suggested: number | null): boolean {
   if (suggested == null) return false;

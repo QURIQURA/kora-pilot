@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      base_weight_presets: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+          user_id: string
+          weight_g: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+          weight_g: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+          weight_g?: number
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           color: string
@@ -62,6 +92,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          scaling_mode: string
           technique_category_id: string | null
           updated_at: string
           user_id: string
@@ -72,6 +103,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          scaling_mode?: string
           technique_category_id?: string | null
           updated_at?: string
           user_id: string
@@ -82,6 +114,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          scaling_mode?: string
           technique_category_id?: string | null
           updated_at?: string
           user_id?: string
@@ -418,6 +451,7 @@ export type Database = {
           change_reason: string | null
           change_summary: string | null
           created_at: string
+          default_base_weight_id: string | null
           default_mould_id: string | null
           formula_id: string
           id: string
@@ -434,6 +468,7 @@ export type Database = {
           change_reason?: string | null
           change_summary?: string | null
           created_at?: string
+          default_base_weight_id?: string | null
           default_mould_id?: string | null
           formula_id: string
           id?: string
@@ -450,6 +485,7 @@ export type Database = {
           change_reason?: string | null
           change_summary?: string | null
           created_at?: string
+          default_base_weight_id?: string | null
           default_mould_id?: string | null
           formula_id?: string
           id?: string
@@ -461,6 +497,13 @@ export type Database = {
           yield_quantity?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "formula_versions_default_base_weight_id_fkey"
+            columns: ["default_base_weight_id"]
+            isOneToOne: false
+            referencedRelation: "base_weight_presets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "formula_versions_default_mould_id_fkey"
             columns: ["default_mould_id"]
@@ -1558,6 +1601,8 @@ export type Database = {
       work_session_formula_versions: {
         Row: {
           added_at: string
+          base_weight_id: string | null
+          base_weight_qty: number | null
           formula_version_id: string
           id: string
           mould_id: string | null
@@ -1570,6 +1615,8 @@ export type Database = {
         }
         Insert: {
           added_at?: string
+          base_weight_id?: string | null
+          base_weight_qty?: number | null
           formula_version_id: string
           id?: string
           mould_id?: string | null
@@ -1582,6 +1629,8 @@ export type Database = {
         }
         Update: {
           added_at?: string
+          base_weight_id?: string | null
+          base_weight_qty?: number | null
           formula_version_id?: string
           id?: string
           mould_id?: string | null
@@ -1593,6 +1642,13 @@ export type Database = {
           work_session_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "work_session_formula_versions_base_weight_id_fkey"
+            columns: ["base_weight_id"]
+            isOneToOne: false
+            referencedRelation: "base_weight_presets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "work_session_formula_versions_formula_version_id_fkey"
             columns: ["formula_version_id"]

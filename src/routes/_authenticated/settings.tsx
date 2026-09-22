@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { TagManager } from "@/components/pilot/TagManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
+import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManager";
 import { ProcessParameterManager } from "@/components/pilot/ProcessParameterManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
@@ -72,6 +73,9 @@ function SettingsPage() {
       </SettingsSection>
       <SettingsSection title="MOULDS">
         <MouldManager />
+      </SettingsSection>
+      <SettingsSection title="BASE WEIGHTS">
+        <BaseWeightManager />
       </SettingsSection>
       <SettingsSection title="PROCESS CATEGORIES">
         <ProcessCategoryManager />

@@ -25,6 +25,7 @@ import {
   formulaVersionBatchesQuery,
   formulaVersionsQuery,
   mouldsQuery,
+  baseWeightsQuery,
   versionIngredientsQuery,
   componentsQuery,
   techniqueCategoriesQuery,
@@ -60,6 +61,7 @@ import { techniquePath } from "@/lib/technique";
 import { confirmBaseFormula } from "@/lib/technique-actions";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
+import { BaseWeightSelect } from "@/components/pilot/BaseWeightSelect";
 import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import { MethodSelect } from "@/components/pilot/MethodSelect";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
@@ -129,6 +131,7 @@ interface PageDraft {
   methodId: string;
   componentId: string;
   mouldId: string;
+  baseWeightId: string;
   yieldQuantity: string;
   notes: string;
   rows: Record<string, RowDraft>;
@@ -155,6 +158,7 @@ function FormulaDetailPage() {
   const formula = useQuery(formulaQuery(formulaId));
   const versions = useQuery(formulaVersionsQuery(formulaId));
   const moulds = useQuery(mouldsQuery());
+  const baseWeights = useQuery(baseWeightsQuery());
   const components = useQuery(componentsQuery());
   const techniqueCategories = useQuery(techniqueCategoriesQuery());
   const methods = useQuery(methodsQuery());
@@ -228,6 +232,7 @@ function FormulaDetailPage() {
     });
     await queryClient.invalidateQueries({ queryKey: ["formula_version_batches", versionId] });
     await queryClient.invalidateQueries({ queryKey: ["mould_usage"] });
+    await queryClient.invalidateQueries({ queryKey: ["base_weight_usage"] });
     await queryClient.invalidateQueries({ queryKey: ["formulas_by_technique"] });
   };
 
@@ -242,6 +247,7 @@ function FormulaDetailPage() {
       methodId: formula.data.method_id ?? "",
       componentId: formula.data.component_id ?? "",
       mouldId: version.default_mould_id ?? "",
+      baseWeightId: version.default_base_weight_id ?? "",
       yieldQuantity: version.yield_quantity != null ? String(version.yield_quantity) : "",
       notes: version.notes ?? "",
       rows: Object.fromEntries(
@@ -287,6 +293,7 @@ function FormulaDetailPage() {
     if (draft.methodId !== (formula.data.method_id ?? "")) return true;
     if (draft.componentId !== (formula.data.component_id ?? "")) return true;
     if (draft.mouldId !== (version.default_mould_id ?? "")) return true;
+    if (draft.baseWeightId !== (version.default_base_weight_id ?? "")) return true;
     const draftYield = draft.yieldQuantity ? parseNumber(draft.yieldQuantity) : null;
     const currentYield = version.yield_quantity != null ? Number(version.yield_quantity) : null;
     if (draftYield !== currentYield) return true;
@@ -484,6 +491,8 @@ function FormulaDetailPage() {
       const versionPatch: Partial<FormulaVersion> = {};
       if (draft.mouldId !== (version.default_mould_id ?? ""))
         versionPatch.default_mould_id = draft.mouldId || null;
+      if (draft.baseWeightId !== (version.default_base_weight_id ?? ""))
+        versionPatch.default_base_weight_id = draft.baseWeightId || null;
       const draftYield = draft.yieldQuantity ? parseNumber(draft.yieldQuantity) : null;
       const currentYield = version.yield_quantity != null ? Number(version.yield_quantity) : null;
       if (draftYield !== currentYield) versionPatch.yield_quantity = draftYield;
@@ -637,6 +646,12 @@ function FormulaDetailPage() {
   const denominator = basisRow ? basisGrams : totalGrams;
 
   const mould = (moulds.data ?? []).find((m) => m.id === version?.default_mould_id);
+  const baseWeight = (baseWeights.data ?? []).find((b) => b.id === version?.default_base_weight_id);
+  const effectiveComponentId = editing
+    ? (draft?.componentId ?? "")
+    : (formula.data.component_id ?? "");
+  const scalingMode =
+    (components.data ?? []).find((c) => c.id === effectiveComponentId)?.scaling_mode ?? "MOULD";
   const yieldQty = version?.yield_quantity ? Number(version.yield_quantity) : 0;
 
   const techniqueList = techniqueCategories.data ?? [];
@@ -769,15 +784,27 @@ function FormulaDetailPage() {
       {/* YIELD & BATCH — 배치 숫자를 입력하면 바로 아래 INGREDIENTS 표가 반응하는 걸 스크롤 없이
           볼 수 있도록 표 위로 올리고, 상단 SAVE 박스처럼 한 줄 컴팩트 박스로 축소한다 */}
       <div className="flex flex-wrap items-center gap-3 border border-border bg-card px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <span className="label-caps text-[10px] text-muted-foreground">MOULD</span>
-          <MouldSelect
-            className={`${compactSelectClass} w-auto`}
-            value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
-            disabled={fieldsDisabled}
-            onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id ?? "" } : d))}
-          />
-        </div>
+        {scalingMode === "BASE_WEIGHT" ? (
+          <div className="flex items-center gap-1.5">
+            <span className="label-caps text-[10px] text-muted-foreground">BASE WEIGHT</span>
+            <BaseWeightSelect
+              className={`${compactSelectClass} w-auto`}
+              value={editing ? (draft?.baseWeightId ?? "") : (version?.default_base_weight_id ?? "")}
+              disabled={fieldsDisabled}
+              onChange={(id) => setDraft((d) => (d ? { ...d, baseWeightId: id ?? "" } : d))}
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className="label-caps text-[10px] text-muted-foreground">MOULD</span>
+            <MouldSelect
+              className={`${compactSelectClass} w-auto`}
+              value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
+              disabled={fieldsDisabled}
+              onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id ?? "" } : d))}
+            />
+          </div>
+        )}
         <div className="flex items-center gap-1.5">
           <span className="label-caps text-[10px] text-muted-foreground">YIELD</span>
           <input
@@ -810,7 +837,13 @@ function FormulaDetailPage() {
           </span>
         </p>
         <p className="label-caps text-[10px] uppercase text-muted-foreground">
-          {mould ? mould.name : "NO MOULD"}
+          {scalingMode === "BASE_WEIGHT"
+            ? baseWeight
+              ? `${baseWeight.name} · ${fmtNumber(baseWeight.weight_g)}g`
+              : "NO BASE WEIGHT"
+            : mould
+              ? mould.name
+              : "NO MOULD"}
           {yieldQty ? ` ${fmtNumber(yieldQty * batchValue, 2)}개 · ${fmtNumber(totalScaled)}g` : ""}
         </p>
       </div>

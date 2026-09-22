@@ -115,6 +115,17 @@ function ComponentDetailPage() {
             onChange={(id) => update.mutate({ technique_category_id: id || null })}
             emptyLabel="NO TECHNIQUE CATEGORY"
           />
+          <label className="flex items-center gap-1.5">
+            <span className="label-caps text-[10px] text-muted-foreground">계량 기준</span>
+            <select
+              className={selectClass + " w-auto"}
+              value={data.scaling_mode}
+              onChange={(e) => update.mutate({ scaling_mode: e.target.value })}
+            >
+              <option value="MOULD">MOULD (몰드 기준 — 케익 반죽류)</option>
+              <option value="BASE_WEIGHT">BASE WEIGHT (기본중량 기준 — 가나슈/필링/크림 등)</option>
+            </select>
+          </label>
           <button type="button" className={buttonClass} onClick={() => setDuplicating(true)}>
             DUPLICATE COMPONENT
           </button>

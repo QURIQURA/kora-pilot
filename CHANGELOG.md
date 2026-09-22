@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-09-22 — 제품군에 따라 몰드 기준 / 기본중량 기준으로 배수 계산 분리
+
+**무엇이 달라졌나**
+- COMPONENT(제품군) 상세 페이지에 "계량 기준" 설정이 추가됐습니다 — MOULD(몰드 기준) 또는 BASE WEIGHT(기본중량 기준) 중 선택합니다. 케익 반죽류는 MOULD, 가나슈/필링/크림 등은 BASE WEIGHT로 설정하시면 됩니다.
+- SETTINGS에 MOULDS 옆에 새로 "BASE WEIGHTS" 섹션이 생겼습니다 — 몰드가 아닌 제품의 실측 배치 기준중량(g)을 이름 붙여 등록/관리합니다 (예: "가나슈 기본배치 500g").
+- FORMULA 페이지의 YIELD & BATCH 박스가 그 Formula가 속한 제품군의 계량 기준에 따라 MOULD 선택 또는 BASE WEIGHT 선택으로 자동 전환됩니다.
+- PRODUCTION에서 Formula Version을 추가하거나 배수를 조정할 때도 동일하게, 제품군이 BASE WEIGHT 기준이면 MOULD+QTY 대신 BASE WEIGHT+QTY 컨트롤이 뜨고, 배수 = (기준중량 × 개수) ÷ BASE 총 반죽량 공식으로 자동 계산됩니다.
+
+**확인하는 방법**
+1. COMPONENTS에서 가나슈/필링/크림 같은 제품군을 열어 "계량 기준"을 BASE WEIGHT로 바꿉니다.
+2. SETTINGS → BASE WEIGHTS에서 그 제품군에 맞는 기준중량을 하나 등록합니다.
+3. 그 제품군에 속한 Formula를 열면 YIELD & BATCH가 MOULD 대신 BASE WEIGHT 선택으로 바뀌어 있는지 확인합니다.
+4. PRODUCTION에서 그 Formula를 추가할 때도 BASE WEIGHT + QTY로 배수가 자동 계산되는지 확인합니다.
+
 ## 2026-09-22 — PRODUCTION: 배수 표시가 반올림되어 다르게 보이던 문제 수정
 
 **무엇이 달라졌나**
