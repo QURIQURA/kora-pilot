@@ -1360,6 +1360,36 @@ export const workSessionTaskIngredientsQuery = (sessionId: string) =>
     },
   });
 
+/**
+ * WORKFLOW TASK의 선행 TASK 목록 — taskId → 그 TASK가 이어받는 이전 단계 TASK(id+이름) 배열.
+ * 한 TASK가 여러 이전 단계를 합쳐서 다음 단계로 진행할 수 있다(예: Yolk mixture + Meringue →
+ * Fold & Bake). 순서 표시용이던 predecessor_task_id(단일 FK)와 별개로, 다중 선행 관계는 이
+ * 조인 테이블로 관리한다(2026-09-24).
+ */
+export const workSessionTaskPredecessorsQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ["work_session_task_predecessors", sessionId],
+    queryFn: async (): Promise<Record<string, { taskId: string; name: string }[]>> => {
+      const rows = unwrap(
+        await supabase
+          .from("work_session_task_predecessors")
+          .select("task_id, predecessor_task_id, predecessor:work_session_tasks!predecessor_task_id(task_name)")
+          .eq("work_session_id", sessionId),
+      ) as unknown as {
+        task_id: string;
+        predecessor_task_id: string;
+        predecessor: { task_name: string } | null;
+      }[];
+      const map: Record<string, { taskId: string; name: string }[]> = {};
+      for (const row of rows) {
+        (map[row.task_id] ??= []).push({
+          taskId: row.predecessor_task_id,
+          name: row.predecessor?.task_name ?? "—",
+        });
+      }
+      return map;
+    },
+  });
 
 
 /* ── PRODUCTION COST — cost_items / component/product 배정 / SETTINGS (2026-09-23) ── */

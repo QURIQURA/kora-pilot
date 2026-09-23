@@ -53,6 +53,7 @@ export function WorkflowView({
   formulaOptions,
   ingredientsByVersion,
   taskIngredients,
+  taskPredecessors,
   onTasksChanged,
 }: {
   sessionId: string;
@@ -62,12 +63,15 @@ export function WorkflowView({
   ingredientsByVersion?: Record<string, VersionIngredientRow[]>;
   /** taskId → 그 TASK에 묶인 재료 줄(2026-09-23) */
   taskIngredients?: Record<string, { lineId: string; name: string }[]>;
+  /** taskId → 그 TASK가 이어받는 선행 TASK(복수 가능, 2026-09-24) */
+  taskPredecessors?: Record<string, { taskId: string; name: string }[]>;
   onTasksChanged: () => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [taskType, setTaskType] = useState("");
   const [formulaVersionId, setFormulaVersionId] = useState("");
   const [ingredientLineIds, setIngredientLineIds] = useState<string[]>([]);
+  const [predecessorTaskIds, setPredecessorTaskIds] = useState<string[]>([]);
   const [day, setDay] = useState(() => toLocalDateString());
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -86,6 +90,7 @@ export function WorkflowView({
     actualStartTime: string;
     actualEndTime: string;
     ingredientLineIds: string[];
+    predecessorTaskIds: string[];
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -142,10 +147,12 @@ export function WorkflowView({
     return cols;
   }, [formulaOptions]);
 
+  // 계획 시작 또는 실제 시작 중 하나만 있어도 타임라인에 올린다 — 계획 종료 시각을 안 채운
+  // TASK가 통째로 안 보이던 문제 수정(2026-09-24). 실제 위치/폭은 taskBlockPosition()이 계산.
   const scheduledByColumn = useMemo(() => {
     const map = new Map<string, WorkSessionTask[]>();
     for (const t of tasks) {
-      if (!t.planned_start_at || !t.planned_end_at) continue;
+      if (!t.planned_start_at && !t.actual_started_at) continue;
       const key = t.formula_version_id ?? GENERAL_KEY;
       const arr = map.get(key) ?? [];
       arr.push(t);
@@ -238,12 +245,31 @@ export function WorkflowView({
         return;
       }
     }
+    if (predecessorTaskIds.length > 0) {
+      const { error: predecessorError } = await supabase
+        .from("work_session_task_predecessors")
+        .insert(
+          predecessorTaskIds.map((predecessorTaskId) => ({
+            user_id: userId,
+            work_session_id: sessionId,
+            task_id: inserted.id,
+            predecessor_task_id: predecessorTaskId,
+          })),
+        );
+      if (predecessorError) {
+        setSaving(false);
+        setError(`선행 TASK 저장 실패 — ${predecessorError.message}`);
+        await onTasksChanged();
+        return;
+      }
+    }
     setSaving(false);
     setName("");
     setTaskType("");
     setStartTime("");
     setEndTime("");
     setIngredientLineIds([]);
+    setPredecessorTaskIds([]);
     await onTasksChanged();
   }
 
@@ -295,6 +321,7 @@ export function WorkflowView({
       actualStartTime: task.actual_started_at ? formatTime(task.actual_started_at) : "",
       actualEndTime: task.completed_at ? formatTime(task.completed_at) : "",
       ingredientLineIds: (taskIngredients?.[task.id] ?? []).map((l) => l.lineId),
+      predecessorTaskIds: (taskPredecessors?.[task.id] ?? []).map((p) => p.taskId),
     });
   }
 
@@ -376,6 +403,35 @@ export function WorkflowView({
       if (linkError) {
         setEditSaving(false);
         setEditError(`재료 그룹 저장 실패 — ${linkError.message}`);
+        await onTasksChanged();
+        return;
+      }
+    }
+    // 선행 TASK도 재료 그룹과 같은 방식(전체 삭제 후 재삽입)으로 다시 쓴다
+    const { error: clearPredecessorsError } = await supabase
+      .from("work_session_task_predecessors")
+      .delete()
+      .eq("task_id", taskId);
+    if (clearPredecessorsError) {
+      setEditSaving(false);
+      setEditError(`선행 TASK 저장 실패 — ${clearPredecessorsError.message}`);
+      await onTasksChanged();
+      return;
+    }
+    if (editDraft.predecessorTaskIds.length > 0) {
+      const { error: predecessorError } = await supabase
+        .from("work_session_task_predecessors")
+        .insert(
+          editDraft.predecessorTaskIds.map((predecessorTaskId) => ({
+            user_id: userId,
+            work_session_id: sessionId,
+            task_id: taskId,
+            predecessor_task_id: predecessorTaskId,
+          })),
+        );
+      if (predecessorError) {
+        setEditSaving(false);
+        setEditError(`선행 TASK 저장 실패 — ${predecessorError.message}`);
         await onTasksChanged();
         return;
       }
@@ -484,6 +540,34 @@ export function WorkflowView({
                       }}
                     />
                     {line.ingredients.name}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {tasks.length > 0 && (
+          <div className="mt-2 space-y-1 border-t border-dashed border-border pt-2">
+            <div className="text-[10px] tracking-wider text-muted-foreground">
+              선행 TASK(선택, 여러 개 가능 — 예: Yolk mixture + Meringue → 이 TASK)
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {tasks.map((t) => {
+                const checked = predecessorTaskIds.includes(t.id);
+                return (
+                  <label key={t.id} className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        setPredecessorTaskIds((prev) =>
+                          e.target.checked
+                            ? [...prev, t.id]
+                            : prev.filter((id) => id !== t.id),
+                        );
+                      }}
+                    />
+                    {t.task_name}
                   </label>
                 );
               })}
@@ -828,6 +912,37 @@ export function WorkflowView({
                         </div>
                       </div>
                     )}
+                    {tasks.length > 1 && (
+                      <div className="mt-2 space-y-1 border-t border-dashed border-border pt-2">
+                        <div className="text-[10px] tracking-wider text-muted-foreground">
+                          선행 TASK(선택, 여러 개 가능)
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1">
+                          {tasks
+                            .filter((t) => t.id !== task.id)
+                            .map((t) => {
+                              const checked = editDraft.predecessorTaskIds.includes(t.id);
+                              return (
+                                <label key={t.id} className="flex items-center gap-1 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      setEditDraft({
+                                        ...editDraft,
+                                        predecessorTaskIds: e.target.checked
+                                          ? [...editDraft.predecessorTaskIds, t.id]
+                                          : editDraft.predecessorTaskIds.filter((id) => id !== t.id),
+                                      })
+                                    }
+                                  />
+                                  {t.task_name}
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
                     {editError && <div className="mt-2 text-xs text-destructive">{editError}</div>}
                     <div className="mt-2 flex items-center gap-2">
                       <button
@@ -869,6 +984,11 @@ export function WorkflowView({
                     {linkedIngredients.length > 0 && (
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
                         {linkedIngredients.map((l) => l.name).join(" + ")}
+                      </div>
+                    )}
+                    {(taskPredecessors?.[task.id]?.length ?? 0) > 0 && (
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        이전 단계: {taskPredecessors![task.id]!.map((p) => p.name).join(" + ")}
                       </div>
                     )}
                     <div className="mt-1 text-[11px] tracking-wider text-muted-foreground tabular-nums">

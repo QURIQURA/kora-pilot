@@ -2262,6 +2262,55 @@ export type Database = {
           },
         ]
       }
+      work_session_task_predecessors: {
+        Row: {
+          created_at: string
+          id: string
+          predecessor_task_id: string
+          task_id: string
+          user_id: string
+          work_session_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          predecessor_task_id: string
+          task_id: string
+          user_id?: string
+          work_session_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          predecessor_task_id?: string
+          task_id?: string
+          user_id?: string
+          work_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_session_task_predecessors_predecessor_task_id_fkey"
+            columns: ["predecessor_task_id"]
+            isOneToOne: false
+            referencedRelation: "work_session_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_task_predecessors_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "work_session_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_task_predecessors_work_session_id_fkey"
+            columns: ["work_session_id"]
+            isOneToOne: false
+            referencedRelation: "work_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       work_session_tasks: {
         Row: {
           actual_started_at: string | null

@@ -186,20 +186,28 @@ export function computeTimelineRange(tasks: WorkSessionTask[]): TimelineRange {
 
 /**
  * Timeline 위 task block의 top/height(px) — range와 px-per-minute만 있으면 항상 다시 계산 가능.
- * 계획 시작/종료 시각이 둘 다 있어야 블록을 그린다(그래야 길이를 알 수 있다). 실제 시작/완료
- * 시각이 계획보다 이르면 그 실제 시각을 기준으로 위치를 그린다(2026-09-24).
+ *
+ * 시작 시각(계획 또는 실제 중 하나)만 있으면 블록을 그린다 — 계획 종료 시각을 안 채워도(현장에서
+ * 그냥 타임스탬프 버튼만 누르는 경우가 많음) 타임라인에서 사라지지 않아야 한다(2026-09-24: "TASK TYPE
+ * 색이 타임라인에 전혀 안 보인다" 피드백 — 원인은 planned_end_at이 없는 TASK가 통째로 안 그려지던
+ * 버그였다. 이전엔 계획 시작/종료가 둘 다 있어야만 블록을 그렸다).
+ * 종료 시각은 우선순위대로: 실제 완료(completed_at) → 계획 종료(planned_end_at) → 진행 중이면
+ * "지금" → 그마저 없으면 화면 표시용으로만 30분 폭을 임시로 준다(저장하지 않음, 순수 표시용).
  */
 export function taskBlockPosition(
   task: Pick<
     WorkSessionTask,
-    "planned_start_at" | "planned_end_at" | "actual_started_at" | "completed_at"
+    "planned_start_at" | "planned_end_at" | "actual_started_at" | "completed_at" | "status"
   >,
   range: TimelineRange,
   pxPerMinute: number,
 ): { top: number; height: number } | null {
-  if (!task.planned_start_at || !task.planned_end_at) return null;
-  const effectiveStart = effectiveStartAt(task) ?? task.planned_start_at;
-  const effectiveEnd = effectiveEndAt(task) ?? task.planned_end_at;
+  const effectiveStart = effectiveStartAt(task);
+  if (!effectiveStart) return null;
+  const effectiveEnd =
+    effectiveEndAt(task) ??
+    (task.status === "IN_PROGRESS" ? new Date().toISOString() : null) ??
+    new Date(new Date(effectiveStart).getTime() + 30 * 60000).toISOString();
   const startMin = minutesFromDayStart(effectiveStart, range.dayStr);
   const endMin = minutesFromDayStart(effectiveEnd, range.dayStr);
   const top = (startMin - range.startMinute) * pxPerMinute;

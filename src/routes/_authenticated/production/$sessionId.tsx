@@ -32,6 +32,7 @@ import {
   workSessionProgressQuery,
   workSessionQuery,
   workSessionTaskIngredientsQuery,
+  workSessionTaskPredecessorsQuery,
   workSessionTasksQuery,
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
@@ -105,6 +106,7 @@ function WorkSessionPage() {
   const progress = useQuery(workSessionProgressQuery(sessionId));
   const tasks = useQuery(workSessionTasksQuery(sessionId));
   const taskIngredients = useQuery(workSessionTaskIngredientsQuery(sessionId));
+  const taskPredecessors = useQuery(workSessionTaskPredecessorsQuery(sessionId));
 
   const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA" | "WORKFLOW">("WEIGHING");
   const [adding, setAdding] = useState(false);
@@ -132,6 +134,9 @@ function WorkSessionPage() {
     await queryClient.invalidateQueries({ queryKey: ["work_session_tasks", sessionId] });
     await queryClient.invalidateQueries({
       queryKey: ["work_session_task_ingredients", sessionId],
+    });
+    await queryClient.invalidateQueries({
+      queryKey: ["work_session_task_predecessors", sessionId],
     });
   };
 
@@ -354,6 +359,7 @@ function WorkSessionPage() {
             }))}
             ingredientsByVersion={ingredientsByVersion}
             taskIngredients={taskIngredients.data ?? {}}
+            taskPredecessors={taskPredecessors.data ?? {}}
             onTasksChanged={invalidateTasks}
           />
         )}
