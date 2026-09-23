@@ -1342,9 +1342,10 @@ export const workSessionTaskIngredientsQuery = (sessionId: string) =>
         await supabase
           .from("work_session_task_ingredients")
           .select(
-            "task_id, formula_version_ingredient_id, formula_version_ingredients(ingredients(name))",
+            "task_id, formula_version_ingredient_id, formula_version_ingredients(sort_order, ingredients(name))",
           )
-          .eq("work_session_id", sessionId),
+          .eq("work_session_id", sessionId)
+          .order("sort_order", { referencedTable: "formula_version_ingredients" }),
       ) as unknown as {
         task_id: string;
         formula_version_ingredient_id: string;

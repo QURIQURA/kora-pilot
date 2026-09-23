@@ -96,12 +96,16 @@ export function buildWeighingGroups(params: {
   ingredientsByVersion: Record<string, VersionIngredientRow[]>;
   progressByLineId: Record<string, { status: string; note: string | null }>;
 }): WeighingGroup[] {
-  const groups = new Map<string, WeighingGroup & { minCol: number; maxCol: number }>();
+  const groups = new Map<
+    string,
+    WeighingGroup & { minCol: number; maxCol: number; firstSortOrder: number }
+  >();
   const orderedSelections = [...params.selections].sort((a, b) => a.sortOrder - b.sortOrder);
   const columnIndex = new Map<string, number>();
   orderedSelections.forEach((sel, idx) => columnIndex.set(sel.formulaVersionId, idx));
- 
+
   for (const sel of orderedSelections) {
+    // Formula 페이지에서 정해둔 재료 배치 순서(sort_order)를 그대로 따른다 — 이미 정렬된 채로 넘어온다.
     const lines = params.ingredientsByVersion[sel.formulaVersionId] ?? [];
     const colIdx = columnIndex.get(sel.formulaVersionId) ?? 0;
     for (const line of lines) {
@@ -114,11 +118,13 @@ export function buildWeighingGroups(params: {
           cells: [],
           minCol: colIdx,
           maxCol: colIdx,
+          firstSortOrder: line.sort_order,
         };
         groups.set(ingredientId, group);
       } else {
         group.minCol = Math.min(group.minCol, colIdx);
         group.maxCol = Math.max(group.maxCol, colIdx);
+        group.firstSortOrder = Math.min(group.firstSortOrder, line.sort_order);
       }
       const progress = params.progressByLineId[line.id];
       group.cells.push({
@@ -140,7 +146,8 @@ export function buildWeighingGroups(params: {
   return [...groups.values()].sort((a, b) => {
     if (a.minCol !== b.minCol) return a.minCol - b.minCol;
     if (a.maxCol !== b.maxCol) return a.maxCol - b.maxCol;
-    return a.ingredientName.localeCompare(b.ingredientName, "ko");
+    // 같은 Formula 열에 속하면 그 Formula에서 정해둔 재료 배치 순서(sort_order)를 따른다 — 이름순 아님
+    return a.firstSortOrder - b.firstSortOrder;
   });
 }
  
