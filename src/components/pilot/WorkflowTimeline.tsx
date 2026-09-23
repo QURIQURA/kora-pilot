@@ -112,10 +112,28 @@ export function WorkflowView({
     return map;
   }, [tasks]);
 
+  // "시간 미정 TASK"는 계획 시간이 없는(또는 한쪽만 있는) TASK 중에서도, 아직 실제로 시작/완료
+  // 타임스탬프가 찍히지 않은 것만 보여준다 — 실제 타임스탬프가 찍히면(작업이 시작/완료됐다는 뜻)
+  // 더 이상 "미정" 취급하지 않고 목록에서 빠진다(2026-09-24).
   const unscheduled = useMemo(
-    () => tasks.filter((t) => !t.planned_start_at || !t.planned_end_at),
+    () =>
+      tasks.filter(
+        (t) =>
+          (!t.planned_start_at || !t.planned_end_at) && !t.actual_started_at && !t.completed_at,
+      ),
     [tasks],
   );
+
+  // 이미 다른 TASK에 묶인 재료 라인 — 중복 배정 방지용. 지금 수정 중인 TASK 자신의 기존 배정은 제외한다
+  // (그래야 EDIT 화면에서 자기 자신이 이미 골라둔 재료까지 회색으로 막히지 않는다).
+  const ingredientUsedElsewhere = useMemo(() => {
+    const used = new Set<string>();
+    for (const [taskId, links] of Object.entries(taskIngredients ?? {})) {
+      if (taskId === editingTaskId) continue;
+      for (const link of links) used.add(link.lineId);
+    }
+    return used;
+  }, [taskIngredients, editingTaskId]);
 
   // 마운트 시 현재 시각(또는 진행중 Task) 근처로 자동 스크롤
   useEffect(() => {
@@ -379,11 +397,19 @@ export function WorkflowView({
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {(ingredientsByVersion?.[formulaVersionId] ?? []).map((line) => {
                 const checked = ingredientLineIds.includes(line.id);
+                const used = ingredientUsedElsewhere.has(line.id);
                 return (
-                  <label key={line.id} className="flex items-center gap-1 text-xs">
+                  <label
+                    key={line.id}
+                    className={`flex items-center gap-1 text-xs ${
+                      used ? "text-muted-foreground line-through opacity-60" : ""
+                    }`}
+                    title={used ? "이미 다른 TASK에 묶인 재료입니다" : undefined}
+                  >
                     <input
                       type="checkbox"
                       checked={checked}
+                      disabled={used}
                       onChange={(e) => {
                         setIngredientLineIds((prev) =>
                           e.target.checked
@@ -612,11 +638,19 @@ export function WorkflowView({
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
                           {editIngredientOptions.map((line) => {
                             const checked = editDraft.ingredientLineIds.includes(line.id);
+                            const used = ingredientUsedElsewhere.has(line.id);
                             return (
-                              <label key={line.id} className="flex items-center gap-1 text-xs">
+                              <label
+                                key={line.id}
+                                className={`flex items-center gap-1 text-xs ${
+                                  used ? "text-muted-foreground line-through opacity-60" : ""
+                                }`}
+                                title={used ? "이미 다른 TASK에 묶인 재료입니다" : undefined}
+                              >
                                 <input
                                   type="checkbox"
                                   checked={checked}
+                                  disabled={used}
                                   onChange={(e) =>
                                     setEditDraft({
                                       ...editDraft,
