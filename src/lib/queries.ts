@@ -1380,6 +1380,29 @@ export const costItemsQuery = () =>
       ),
   });
 
+export interface CostItemHistoryRow {
+  id: string;
+  previous_cost: number | null;
+  new_cost: number;
+  note: string | null;
+  changed_at: string;
+}
+
+/** COST ITEM 단가 변경 이력 — 언제/얼마로/왜 바뀌었는지(2026-09-24, "나중에 실제 운용 비용이
+ * 나오면 근거와 함께 수정할 수 있도록" 요청으로 추가) */
+export const costItemHistoryQuery = (costItemId: string) =>
+  queryOptions({
+    queryKey: ["cost_item_history", costItemId],
+    queryFn: async (): Promise<CostItemHistoryRow[]> =>
+      unwrap(
+        await supabase
+          .from("cost_item_history")
+          .select("id, previous_cost, new_cost, note, changed_at")
+          .eq("cost_item_id", costItemId)
+          .order("changed_at", { ascending: false }),
+      ),
+  });
+
 /** cost_item별 사용 횟수(component+product 배정 합산) — 삭제 보호용 */
 export const costItemUsageQuery = () =>
   queryOptions({

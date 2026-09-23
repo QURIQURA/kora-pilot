@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-09-24 — COST ITEM 기본값 현실화(CONSUMABLE $8→$2) + 단가 변경 이력 추가
+
+**무엇이 달라졌나**
+- CONSUMABLE 기본 단가를 케익당 $8에서 $2로 낮췄습니다(UTILITY $3, PACKAGING $12는 이미 현재 기준에 맞아 그대로 둠). 케익 1개당 Production Cost가 $17(PACKAGING $12 + UTILITY $3 + CONSUMABLE $2)로 정리됐습니다. 이 값들은 레시피 배치 크기나 컴포넌트 배수와 무관하게 케익 1개당 고정 추산치로 그대로 쓰입니다(계산 구조/단위는 변경하지 않음).
+- SETTINGS → COST ITEMS의 각 항목 옆에 "이력" 버튼이 생겼습니다. 눌러보면 그 항목의 단가가 언제, 얼마에서 얼마로, 어떤 근거로 바뀌었는지가 타임스탬프와 함께 남습니다. 이번에 조정한 세 항목(PACKAGING/UTILITY/CONSUMABLE)의 산정 근거(포함 항목 설명)도 최초 기록으로 남겨뒀습니다. 앞으로 단가를 바꿀 때 "이력" 아래 메모칸에 근거를 적고 저장하면 그 메모도 함께 기록됩니다.
+
+**확인 방법**
+- SETTINGS → COST ITEMS에서 CONSUMABLE이 $2/개당인지 확인, "이력" 버튼을 눌러 PACKAGING/UTILITY/CONSUMABLE 각각의 산정 근거 기록이 보이는지 확인.
+
+---
+
 ## 2026-09-24 — WEIGHING MATRIX 체크 표시 눈에 잘 띄게 + 보조 계량 한 줄 표시
 
 **무엇이 달라졌나**

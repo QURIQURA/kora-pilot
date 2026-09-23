@@ -174,6 +174,44 @@ export type Database = {
           },
         ]
       }
+      cost_item_history: {
+        Row: {
+          changed_at: string
+          cost_item_id: string
+          id: string
+          new_cost: number
+          note: string | null
+          previous_cost: number | null
+          user_id: string
+        }
+        Insert: {
+          changed_at?: string
+          cost_item_id: string
+          id?: string
+          new_cost: number
+          note?: string | null
+          previous_cost?: number | null
+          user_id?: string
+        }
+        Update: {
+          changed_at?: string
+          cost_item_id?: string
+          id?: string
+          new_cost?: number
+          note?: string | null
+          previous_cost?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_item_history_cost_item_id_fkey"
+            columns: ["cost_item_id"]
+            isOneToOne: false
+            referencedRelation: "cost_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cost_items: {
         Row: {
           category: string
