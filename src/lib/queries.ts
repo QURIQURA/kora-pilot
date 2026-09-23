@@ -1610,6 +1610,124 @@ export const costDashboardQuery = () =>
     },
   });
 
+// ---- 냉동 재고관리 (STOCK) ----
+
+export interface StockItemRow {
+  id: string;
+  item_type: "PRODUCT" | "COMPONENT";
+  product_size_id: string | null;
+  component_id: string | null;
+  unit_label: string;
+  quantity: number;
+  notes: string | null;
+  updated_at: string;
+  label: string; // 화면 표시용 이름 (Product면 "이름 · 사이즈", Component면 이름)
+}
+
+export const stockItemsQuery = () =>
+  queryOptions({
+    queryKey: ["stock_items"],
+    queryFn: async (): Promise<StockItemRow[]> => {
+      const rows = unwrap(
+        await supabase
+          .from("stock_items")
+          .select(
+            "*, product_sizes(id, shape, diameter_mm, length_mm, width_mm, height_mm, is_default, products(id, name)), components(id, name)",
+          ),
+      ) as unknown as Array<{
+        id: string;
+        item_type: "PRODUCT" | "COMPONENT";
+        product_size_id: string | null;
+        component_id: string | null;
+        unit_label: string;
+        quantity: number;
+        notes: string | null;
+        updated_at: string;
+        product_sizes: (ProductSize & { products: { id: string; name: string } | null }) | null;
+        components: Component | null;
+      }>;
+      return rows
+        .map((r) => {
+          const label =
+            r.item_type === "PRODUCT" && r.product_sizes
+              ? `${r.product_sizes.products?.name ?? "?"} · ${formatProductSizeLabel(r.product_sizes)}`
+              : (r.components?.name ?? "?");
+          return {
+            id: r.id,
+            item_type: r.item_type,
+            product_size_id: r.product_size_id,
+            component_id: r.component_id,
+            unit_label: r.unit_label,
+            quantity: Number(r.quantity),
+            notes: r.notes,
+            updated_at: r.updated_at,
+            label,
+          };
+        })
+        .sort((a, b) => a.label.localeCompare(b.label));
+    },
+  });
+
+/** 재고 항목 후보 목록 — 아직 stock_item이 없는 Product×Size / Component (신규 항목 등록용 드롭다운) */
+export const stockCandidatesQuery = () =>
+  queryOptions({
+    queryKey: ["stock_candidates"],
+    queryFn: async () => {
+      const [sizesRes, componentsRes, existingRes] = await Promise.all([
+        supabase.from("product_sizes").select("*, products(id, name)"),
+        supabase.from("components").select("*").order("name"),
+        supabase.from("stock_items").select("product_size_id, component_id"),
+      ]);
+      if (sizesRes.error) throw sizesRes.error;
+      if (componentsRes.error) throw componentsRes.error;
+      if (existingRes.error) throw existingRes.error;
+      const usedSizeIds = new Set(
+        (existingRes.data ?? []).map((r) => r.product_size_id).filter(Boolean),
+      );
+      const usedComponentIds = new Set(
+        (existingRes.data ?? []).map((r) => r.component_id).filter(Boolean),
+      );
+      const sizes = (sizesRes.data as unknown as Array<
+        ProductSize & { products: { id: string; name: string } | null }
+      >)
+        .filter((s) => !usedSizeIds.has(s.id))
+        .map((s) => ({
+          id: s.id,
+          label: `${s.products?.name ?? "?"} · ${formatProductSizeLabel(s)}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      const components = (componentsRes.data as Component[])
+        .filter((c) => !usedComponentIds.has(c.id))
+        .map((c) => ({ id: c.id, label: c.name }));
+      return { sizes, components };
+    },
+  });
+
+export interface StockMovementRow {
+  id: string;
+  quantity_delta: number;
+  reason: string;
+  note: string | null;
+  work_session_id: string | null;
+  created_at: string;
+}
+
+export const stockMovementsQuery = (stockItemId: string | null) =>
+  queryOptions({
+    queryKey: ["stock_movements", stockItemId],
+    enabled: Boolean(stockItemId),
+    queryFn: async (): Promise<StockMovementRow[]> => {
+      if (!stockItemId) return [];
+      return unwrap(
+        await supabase
+          .from("stock_movements")
+          .select("id, quantity_delta, reason, note, work_session_id, created_at")
+          .eq("stock_item_id", stockItemId)
+          .order("created_at", { ascending: false }),
+      );
+    },
+  });
+
 /** Multiplier 변경 이력 — append-only, 최신순 */
 export const workSessionMultiplierHistoryQuery = (
   sessionId: string,

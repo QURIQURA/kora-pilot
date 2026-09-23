@@ -1805,6 +1805,108 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_items: {
+        Row: {
+          component_id: string | null
+          created_at: string
+          id: string
+          item_type: string
+          notes: string | null
+          product_size_id: string | null
+          quantity: number
+          unit_label: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          component_id?: string | null
+          created_at?: string
+          id?: string
+          item_type: string
+          notes?: string | null
+          product_size_id?: string | null
+          quantity?: number
+          unit_label?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          component_id?: string | null
+          created_at?: string
+          id?: string
+          item_type?: string
+          notes?: string | null
+          product_size_id?: string | null
+          quantity?: number
+          unit_label?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_items_component_id_fkey"
+            columns: ["component_id"]
+            isOneToOne: false
+            referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_items_product_size_id_fkey"
+            columns: ["product_size_id"]
+            isOneToOne: false
+            referencedRelation: "product_sizes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_movements: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          quantity_delta: number
+          reason: string
+          stock_item_id: string
+          user_id: string
+          work_session_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          quantity_delta: number
+          reason: string
+          stock_item_id: string
+          user_id?: string
+          work_session_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          quantity_delta?: number
+          reason?: string
+          stock_item_id?: string
+          user_id?: string
+          work_session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_work_session_id_fkey"
+            columns: ["work_session_id"]
+            isOneToOne: false
+            referencedRelation: "work_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tags: {
         Row: {
           color: string

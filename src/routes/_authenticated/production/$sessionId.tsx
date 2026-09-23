@@ -56,6 +56,7 @@ import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { BaseWeightSelect } from "@/components/pilot/BaseWeightSelect";
 import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
+import { adjustStock, STOCK_REASON_LABEL, type StockReason } from "@/lib/stock";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import {
@@ -257,6 +258,10 @@ function WorkSessionPage() {
           ))}
         </div>
       </div>
+
+      {data.status === "COMPLETED" && (
+        <StockReflectSection sessionId={sessionId} rows={rows} />
+      )}
 
       <SectionCard title="NOTES">
         <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateSession.mutate({ notes })} />
@@ -1512,5 +1517,117 @@ function FormulaView({
         );
       })}
     </div>
+  );
+}
+
+/** PRODUCTION 세션이 COMPLETED로 바뀌면 나타남 — 이 세션에서 만든 Component들을 냉동 재고/판매전환으로 즉시 반영 가능(선택) */
+function StockReflectSection({
+  sessionId,
+  rows,
+}: {
+  sessionId: string;
+  rows: WorkSessionFormulaVersionRow[];
+}) {
+  const queryClient = useQueryClient();
+  const [reflected, setReflected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<
+    Record<string, { qty: string; reason: StockReason; unit: string }>
+  >({});
+
+  const components = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const r of rows) {
+      const c = r.formula_versions.formulas.components;
+      if (c) map.set(c.id, { id: c.id, name: c.name });
+    }
+    return [...map.values()];
+  }, [rows]);
+
+  const reflect = useMutation({
+    mutationFn: async (componentId: string) => {
+      const draft = drafts[componentId];
+      const qty = Number(draft?.qty ?? "");
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error("수량을 입력하세요");
+      await adjustStock({
+        itemType: "COMPONENT",
+        componentId,
+        quantityDelta: qty,
+        reason: draft?.reason ?? "PRODUCTION_FREEZE",
+        workSessionId: sessionId,
+        unitLabel: draft?.unit || "개",
+      });
+    },
+    onSuccess: async (_r, componentId) => {
+      setReflected((prev) => new Set(prev).add(componentId));
+      await queryClient.invalidateQueries({ queryKey: ["stock_items"] });
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  if (components.length === 0) return null;
+
+  return (
+    <SectionCard title="재고 반영 (선택)">
+      <p className="mb-3 font-mono text-xs uppercase text-muted-foreground">
+        이번 세션에서 만든 COMPONENT를 냉동 재고로 보내거나 바로 판매전환할 수 있습니다. 건너뛰고
+        나중에 INVENTORY 탭에서 수동으로 입력해도 됩니다.
+      </p>
+      <ul className="space-y-3">
+        {components.map((c) => {
+          const draft = drafts[c.id] ?? { qty: "", reason: "PRODUCTION_FREEZE" as StockReason, unit: "개" };
+          const done = reflected.has(c.id);
+          return (
+            <li key={c.id} className="flex flex-wrap items-center gap-2 border-b border-dashed border-border pb-2">
+              <span className="min-w-[160px] text-sm">{c.name}</span>
+              {done ? (
+                <span className="font-mono text-xs text-muted-foreground">반영 완료</span>
+              ) : (
+                <>
+                  <input
+                    className={inputClass + " w-24"}
+                    placeholder="수량"
+                    value={draft.qty}
+                    onChange={(e) =>
+                      setDrafts((d) => ({ ...d, [c.id]: { ...draft, qty: e.target.value } }))
+                    }
+                  />
+                  <input
+                    className={inputClass + " w-20"}
+                    placeholder="단위"
+                    value={draft.unit}
+                    onChange={(e) =>
+                      setDrafts((d) => ({ ...d, [c.id]: { ...draft, unit: e.target.value } }))
+                    }
+                  />
+                  <select
+                    className={selectClass + " w-auto"}
+                    value={draft.reason}
+                    onChange={(e) =>
+                      setDrafts((d) => ({
+                        ...d,
+                        [c.id]: { ...draft, reason: e.target.value as StockReason },
+                      }))
+                    }
+                  >
+                    <option value="PRODUCTION_FREEZE">{STOCK_REASON_LABEL.PRODUCTION_FREEZE}</option>
+                    <option value="PRODUCTION_SALE">{STOCK_REASON_LABEL.PRODUCTION_SALE}</option>
+                  </select>
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={reflect.isPending}
+                    onClick={() => reflect.mutate(c.id)}
+                  >
+                    반영
+                  </button>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p className="mt-2 font-mono text-xs text-destructive">{error}</p>}
+    </SectionCard>
   );
 }
