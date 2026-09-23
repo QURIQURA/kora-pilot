@@ -189,6 +189,22 @@ function FormulaDetailPage() {
   const rows = ingredients.data ?? [];
   const batchPresetsQuery = useQuery(formulaVersionBatchesQuery(versionId));
   const batchPresets = useMemo(() => batchPresetsQuery.data ?? [], [batchPresetsQuery.data]);
+  // 편집 중엔 저장 전 draft 배수/이름을 미리 반영해서 보여준다(BASE ×1 칸이 즉시 미리보기 되는 것과
+  // 동일한 동작) — 그렇지 않으면 배수를 바꿔도 SAVE 전까지 재료량 칸이 안 바뀌어 "적용 안 됨"처럼 보임.
+  const effectiveBatchPresets = useMemo(
+    () =>
+      batchPresets.map((preset) => {
+        const d = draft?.batches[preset.id];
+        if (!d) return preset;
+        const draftMultiplier = parseNumber(d.multiplier);
+        return {
+          ...preset,
+          multiplier: draftMultiplier > 0 ? draftMultiplier : preset.multiplier,
+          label: d.label.trim() || preset.label,
+        };
+      }),
+    [batchPresets, draft],
+  );
   const versionExperiments = useQuery(experimentsByVersionQuery(versionId));
 
   // 버전을 바꾸면 이전 버전의 초안은 버리고, 아래 초기화 effect가 새 버전 데이터로 다시 채운다.
@@ -1029,7 +1045,7 @@ function FormulaDetailPage() {
                         row={row}
                         locked={false}
                         editing={editing}
-                        batchPresets={batchPresets}
+                        batchPresets={effectiveBatchPresets}
                         denominator={denominator}
                         bases={bases}
                         draft={draft?.rows[row.id] ?? null}
