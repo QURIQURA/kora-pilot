@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { computeLineCosts } from "@/lib/cost";
+import { computeLineCosts, costPerGram, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
 import type {
   Category,
   Component,
@@ -10,7 +10,7 @@ import type {
   Product,
   Tag,
 } from "@/lib/pilot";
-import type { ProductSize } from "@/lib/product-size";
+import { formatProductSizeLabel, type ProductSize } from "@/lib/product-size";
 import type {
   WorkSession,
   WorkSessionFormulaVersion,
@@ -1404,6 +1404,180 @@ export const pilotSettingsQuery = () =>
       const { data, error } = await supabase.from("pilot_settings").select("*").maybeSingle();
       if (error) throw error;
       return data;
+    },
+  });
+
+/**
+ * COST 탭 전용 집계 — 모든 Product×Size의 원가/마진/월 예상 원가를 한 번에 계산한다(2026-09-23).
+ * $productId.tsx의 개별 Product 원가 계산과 동일한 규칙(사이즈 지정 행만 Raw Material에 합산,
+ * UTILITY/CONSUMABLE/PACKAGING/OVERHEAD는 케익 1개당 고정 배정)을 전체 Product에 대해 반복한다.
+ * 사이즈가 하나도 없는 Product는 비교 대상에서 제외한다(원가 비교는 사이즈 단위로만 의미가 있음).
+ */
+export interface CostDashboardRow {
+  productId: string;
+  productName: string;
+  sizeId: string;
+  sizeLabel: string;
+  isDefault: boolean;
+  rawCost: number | null;
+  perCakeExtras: number;
+  fullCost: number | null;
+  hasMissingPrice: boolean;
+  sellingPrice: number | null;
+  margin: number | null;
+  marginPct: number | null;
+  monthlyUnitCount: number | null;
+  monthlyCost: number | null;
+}
+
+export const costDashboardQuery = () =>
+  queryOptions({
+    queryKey: ["cost_dashboard"],
+    queryFn: async (): Promise<CostDashboardRow[]> => {
+      const [productsRes, sizesRes, linksRes, costItemsRes, settingsRes] = await Promise.all([
+        supabase.from("products").select("id, name"),
+        supabase.from("product_sizes").select("*"),
+        supabase
+          .from("product_components")
+          .select(
+            "product_id, product_size_id, component_id, ingredient_id, quantity_g, ingredients(purchase_price, purchase_qty, purchase_unit)",
+          ),
+        supabase.from("product_cost_items").select("product_id, quantity, cost_items(unit_cost)"),
+        supabase.from("pilot_settings").select("*").maybeSingle(),
+      ]);
+      if (productsRes.error) throw productsRes.error;
+      if (sizesRes.error) throw sizesRes.error;
+      if (linksRes.error) throw linksRes.error;
+      if (costItemsRes.error) throw costItemsRes.error;
+      if (settingsRes.error) throw settingsRes.error;
+
+      const products = (productsRes.data ?? []) as { id: string; name: string }[];
+      const sizes = (sizesRes.data ?? []) as ProductSize[];
+      const links = (linksRes.data ?? []) as unknown as {
+        product_id: string;
+        product_size_id: string | null;
+        component_id: string | null;
+        ingredient_id: string | null;
+        quantity_g: number | null;
+        ingredients: {
+          purchase_price: number | null;
+          purchase_qty: number | null;
+          purchase_unit: string | null;
+        } | null;
+      }[];
+
+      // COMPONENT 링크의 g당 단가 — componentCostsQuery와 동일한 규칙(CURRENT formula version 기준)
+      const componentIds = [
+        ...new Set(links.map((l) => l.component_id).filter((id): id is string => id != null)),
+      ];
+      const costsByComponent: Record<string, { costPerGram: number | null; hasMissingPrice: boolean }> = {};
+      if (componentIds.length > 0) {
+        const { data: formulaData, error: formulaError } = await supabase
+          .from("formulas")
+          .select(
+            "component_id, formula_versions!inner(status, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
+          )
+          .in("component_id", componentIds)
+          .eq("formula_versions.status", "CURRENT");
+        if (formulaError) throw formulaError;
+        for (const formula of (formulaData ?? []) as unknown as {
+          component_id: string | null;
+          formula_versions: {
+            formula_version_ingredients: {
+              amount: number;
+              unit: string;
+              ingredients: {
+                purchase_price: number | null;
+                purchase_qty: number | null;
+                purchase_unit: string | null;
+              } | null;
+            }[];
+          }[];
+        }[]) {
+          if (!formula.component_id) continue;
+          const version = formula.formula_versions[0];
+          if (!version) continue;
+          const result = computeLineCosts(version.formula_version_ingredients ?? []);
+          costsByComponent[formula.component_id] = {
+            costPerGram: result.costPerGram,
+            hasMissingPrice: result.hasMissingPrice,
+          };
+        }
+      }
+
+      const overheadPerCake = overheadPerUnit(settingsRes.data) ?? 0;
+
+      const costItemsByProduct: Record<string, { quantity: number; cost_items: { unit_cost: number } }[]> = {};
+      for (const row of (costItemsRes.data ?? []) as unknown as {
+        product_id: string;
+        quantity: number;
+        cost_items: { unit_cost: number } | null;
+      }[]) {
+        if (!row.cost_items) continue;
+        (costItemsByProduct[row.product_id] ??= []).push({
+          quantity: row.quantity,
+          cost_items: row.cost_items,
+        });
+      }
+      const perCakeExtrasByProduct: Record<string, number> = {};
+      for (const product of products) {
+        perCakeExtrasByProduct[product.id] =
+          sumCostItemAssignments(costItemsByProduct[product.id] ?? []) + overheadPerCake;
+      }
+
+      // 사이즈별 Raw Material 원가 — 사이즈가 지정된 행만 합산($productId.tsx의 sumCostBySize와 동일 규칙)
+      const rawCostBySize: Record<string, number> = {};
+      const missingPriceBySize: Record<string, boolean> = {};
+      for (const link of links) {
+        if (!link.product_size_id || link.quantity_g == null) continue;
+        const cpg =
+          link.component_id != null
+            ? (costsByComponent[link.component_id]?.costPerGram ?? null)
+            : costPerGram(link.ingredients);
+        if (cpg == null) {
+          missingPriceBySize[link.product_size_id] = true;
+          continue;
+        }
+        rawCostBySize[link.product_size_id] =
+          (rawCostBySize[link.product_size_id] ?? 0) + Number(link.quantity_g) * cpg;
+      }
+
+      const productById = new Map(products.map((p) => [p.id, p]));
+      const rows: CostDashboardRow[] = [];
+      for (const size of sizes) {
+        const product = productById.get(size.product_id);
+        if (!product) continue;
+        const hasRawCost = size.id in rawCostBySize;
+        const rawCost = hasRawCost ? (rawCostBySize[size.id] ?? null) : null;
+        const perCakeExtras = perCakeExtrasByProduct[product.id] ?? 0;
+        const fullCost = rawCost != null ? rawCost + perCakeExtras : null;
+        const sellingPrice = size.selling_price != null ? Number(size.selling_price) : null;
+        const margin = fullCost != null && sellingPrice != null ? sellingPrice - fullCost : null;
+        const marginPct =
+          margin != null && sellingPrice && sellingPrice > 0 ? (margin / sellingPrice) * 100 : null;
+        const monthlyUnitCount = size.monthly_unit_count;
+        const monthlyCost =
+          fullCost != null && monthlyUnitCount != null && monthlyUnitCount > 0
+            ? fullCost * monthlyUnitCount
+            : null;
+        rows.push({
+          productId: product.id,
+          productName: product.name,
+          sizeId: size.id,
+          sizeLabel: formatProductSizeLabel(size),
+          isDefault: size.is_default,
+          rawCost,
+          perCakeExtras,
+          fullCost,
+          hasMissingPrice: missingPriceBySize[size.id] ?? false,
+          sellingPrice,
+          margin,
+          marginPct,
+          monthlyUnitCount,
+          monthlyCost,
+        });
+      }
+      return rows;
     },
   });
 

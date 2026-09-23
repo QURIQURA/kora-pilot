@@ -65,27 +65,73 @@ function ProductionDashboardPage() {
           <ul>
             {rows.map((session) => (
               <li key={session.id} className="border-b border-border last:border-b-0">
-                <Link
-                  to="/production/$sessionId"
-                  params={{ sessionId: session.id }}
-                  className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 hover:bg-secondary"
-                >
-                  <div className="space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 hover:bg-secondary">
+                  <Link
+                    to="/production/$sessionId"
+                    params={{ sessionId: session.id }}
+                    className="flex-1 space-y-1"
+                  >
                     <p className="text-sm">{session.name}</p>
                     <p className="font-mono text-xs text-muted-foreground">
                       CREATED {formatDateTime(session.created_at)}
                     </p>
-                  </div>
+                  </Link>
                   <span className="label-caps border border-foreground px-2 py-0.5 text-[11px]">
                     {STATUS_LABEL[session.status] ?? session.status}
                   </span>
-                </Link>
+                  <WorkSessionDeleteButton sessionId={session.id} sessionName={session.name} />
+                </div>
               </li>
             ))}
           </ul>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 작업 세션 삭제(2026-09-23) — work_session_formula_versions/progress/multiplier_history/tasks는
+ * DB FK가 ON DELETE CASCADE라 함께 삭제된다. experiments.work_session_id는 ON DELETE SET NULL이라
+ * "PROMOTE TO EXPERIMENT"로 만들어진 실험 기록 자체는 남고 이 세션과의 연결만 끊긴다.
+ */
+function WorkSessionDeleteButton({
+  sessionId,
+  sessionName,
+}: {
+  sessionId: string;
+  sessionName: string;
+}) {
+  const queryClient = useQueryClient();
+
+  const remove = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("work_sessions").delete().eq("id", sessionId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
+    },
+  });
+
+  return (
+    <button
+      type="button"
+      className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
+      disabled={remove.isPending}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (
+          confirm(
+            `"${sessionName}" 작업 세션을 삭제할까요? 계량 진행 상태/배수 히스토리도 함께 삭제되며 되돌릴 수 없습니다.`,
+          )
+        )
+          remove.mutate();
+      }}
+    >
+      DELETE
+    </button>
   );
 }
 
