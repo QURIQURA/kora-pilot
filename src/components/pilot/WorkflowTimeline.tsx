@@ -22,7 +22,6 @@ import {
   taskBlockPosition,
   taskTypeColorClass,
   taskTypeColorKey,
-  taskTypeLineColorClass,
   TASK_STATUS_ICON,
   TASK_STATUS_LABEL,
   TASK_TYPE_COLOR_CLASSES,
@@ -595,12 +594,13 @@ export function WorkflowView({
                       {colTasks.map((task) => {
                         const pos = taskBlockPosition(task, range, PX_PER_MINUTE);
                         if (!pos) return null;
-                        // 실제 소요 시간이 짧아도 시작/종료 라벨이 항상 다 보이도록 표시 높이는
-                        // 최소값을 보장한다 — 그 안의 연결선만 실제 길이(짧으면 아주 얇게)를 반영한다
-                        // (2026-09-24: "줄만 보이고 뭔지 안 보인다" 피드백 — 이전엔 높이가 4px로
-                        // 눌려서 이름이 렌더링될 공간이 없었다).
+                        // 실제 소요 시간이 짧아도 안의 텍스트(시작/종료 시각 + 이름)가 다 보이도록
+                        // 표시 높이는 최소값을 보장한다(2026-09-24: 짧은 TASK가 4px로 눌려서 안
+                        // 보였던 문제). 박스 전체가 TASK TYPE 색으로 채워져 planner 앱처럼 그
+                        // 시간대를 차지한 것으로 보인다(2026-09-24, 재요청 — 처음엔 시작/종료 마커+
+                        // 연결선으로 만들었으나 "타임라인에 색이 안 보인다"는 피드백으로 원래 의도인
+                        // 색칠된 박스 형태로 되돌림).
                         const displayHeight = Math.max(pos.height, MIN_BLOCK_DISPLAY_HEIGHT);
-                        const lineHeight = Math.max(displayHeight - MARKER_ROW_HEIGHT * 2, 2);
                         const startLabel = task.actual_started_at
                           ? formatTime(task.actual_started_at)
                           : task.planned_start_at
@@ -613,58 +613,39 @@ export function WorkflowView({
                             : "--:--";
                         const isDone = task.status === "DONE";
                         const isSkipped = task.status === "SKIPPED";
+                        const isInProgress = task.status === "IN_PROGRESS";
+                        const colorClass = taskTypeColorClass(task.task_type, colorOverrides);
                         return (
                           <button
                             key={task.id}
                             type="button"
                             onClick={() => cycleStatus(task)}
-                            className={`absolute right-1 left-1 flex flex-col overflow-hidden text-left ${
-                              isSkipped ? "opacity-60" : ""
-                            }`}
+                            className={`absolute right-1 left-1 flex flex-col justify-between overflow-hidden border px-1.5 py-1 text-left leading-tight ${colorClass} ${
+                              isDone
+                                ? "ring-2 ring-inset ring-foreground"
+                                : isInProgress
+                                  ? "ring-1 ring-inset ring-foreground"
+                                  : ""
+                            } ${isSkipped ? "opacity-50" : ""}`}
                             style={{ top: pos.top, height: displayHeight }}
                             title={task.task_name}
                           >
-                            {/* 시작 박스: 시작 시각 + TASK 이름 + TYPE 배지 */}
-                            <div
-                              className={`flex items-center gap-1 truncate border px-1 text-[10px] leading-tight ${
-                                isDone
-                                  ? "border-foreground bg-foreground text-background"
-                                  : "border-border bg-background text-foreground"
-                              }`}
-                              style={{ height: MARKER_ROW_HEIGHT }}
-                            >
+                            <div className="flex items-baseline gap-1 truncate">
                               <span className="flex-none tabular-nums text-[9px] opacity-70">
                                 {startLabel}
                               </span>
                               <span
-                                className={`truncate font-medium ${isSkipped ? "line-through" : ""}`}
+                                className={`truncate text-[11px] font-medium ${isSkipped ? "line-through" : ""}`}
                               >
                                 {task.task_name}
                               </span>
-                              {task.task_type ? (
-                                <span
-                                  className={`flex-none truncate rounded-sm border px-1 text-[8px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
-                                >
-                                  {task.task_type.toUpperCase()}
-                                </span>
-                              ) : null}
                             </div>
-                            {/* 시작-종료를 잇는 색선 — TASK TYPE 색(사용자 지정 우선) */}
-                            <div className="flex flex-1 justify-center py-0.5">
-                              <div
-                                className={`w-[3px] rounded-full ${
-                                  isSkipped
-                                    ? "bg-border"
-                                    : taskTypeLineColorClass(task.task_type, colorOverrides)
-                                }`}
-                                style={{ height: lineHeight }}
-                              />
-                            </div>
-                            {/* 종료 박스: 종료 시각만 */}
-                            <div
-                              className="flex flex-none items-center px-1 text-[9px] tabular-nums text-muted-foreground"
-                              style={{ height: MARKER_ROW_HEIGHT }}
-                            >
+                            {task.task_type ? (
+                              <span className="truncate text-[9px] tracking-wider opacity-80">
+                                {task.task_type.toUpperCase()}
+                              </span>
+                            ) : null}
+                            <div className="text-right text-[9px] tabular-nums opacity-70">
                               {endLabel}
                             </div>
                           </button>
