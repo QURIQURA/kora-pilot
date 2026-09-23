@@ -66,6 +66,18 @@ export function WorkflowView({
   const [endTime, setEndTime] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    name: string;
+    taskType: string;
+    formulaVersionId: string;
+    day: string;
+    startTime: string;
+    endTime: string;
+    ingredientLineIds: string[];
+  } | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrolled = useRef(false);
 
@@ -202,6 +214,92 @@ export function WorkflowView({
       .delete()
       .eq("id", task.id);
     if (deleteError) setError(`DELETE FAILED — ${deleteError.message}`);
+    await onTasksChanged();
+  }
+
+  function startEditing(task: WorkSessionTask) {
+    setEditingTaskId(task.id);
+    setEditError(null);
+    setEditDraft({
+      name: task.task_name,
+      taskType: task.task_type ?? "",
+      formulaVersionId: task.formula_version_id ?? "",
+      day: task.planned_start_at ? toLocalDateString(new Date(task.planned_start_at)) : day,
+      startTime: task.planned_start_at ? formatTime(task.planned_start_at) : "",
+      endTime: task.planned_end_at ? formatTime(task.planned_end_at) : "",
+      ingredientLineIds: (taskIngredients?.[task.id] ?? []).map((l) => l.lineId),
+    });
+  }
+
+  function cancelEditing() {
+    setEditingTaskId(null);
+    setEditDraft(null);
+    setEditError(null);
+  }
+
+  async function saveEdit(taskId: string) {
+    if (!editDraft) return;
+    const trimmed = editDraft.name.trim();
+    if (!trimmed) {
+      setEditError("TASK NAME IS REQUIRED");
+      return;
+    }
+    if (editDraft.startTime && editDraft.endTime && editDraft.endTime <= editDraft.startTime) {
+      setEditError("END TIME MUST BE AFTER START TIME");
+      return;
+    }
+    setEditSaving(true);
+    setEditError(null);
+    const userId = await currentUserId();
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update({
+        task_name: trimmed,
+        task_type: editDraft.taskType.trim() || null,
+        formula_version_id: editDraft.formulaVersionId || null,
+        planned_start_at: editDraft.startTime
+          ? localDateTimeToISO(editDraft.day, editDraft.startTime)
+          : null,
+        planned_end_at: editDraft.endTime
+          ? localDateTimeToISO(editDraft.day, editDraft.endTime)
+          : null,
+      })
+      .eq("id", taskId);
+    if (updateError) {
+      setEditSaving(false);
+      setEditError(`SAVE FAILED — ${updateError.message}`);
+      return;
+    }
+    // 재료 그룹은 매번 통째로 다시 쓴다(기존 링크 삭제 후 선택된 것만 재삽입) — 부분 diff보다 단순하고 안전
+    const { error: clearError } = await supabase
+      .from("work_session_task_ingredients")
+      .delete()
+      .eq("task_id", taskId);
+    if (clearError) {
+      setEditSaving(false);
+      setEditError(`재료 그룹 저장 실패 — ${clearError.message}`);
+      await onTasksChanged();
+      return;
+    }
+    if (editDraft.ingredientLineIds.length > 0) {
+      const { error: linkError } = await supabase.from("work_session_task_ingredients").insert(
+        editDraft.ingredientLineIds.map((lineId) => ({
+          user_id: userId,
+          work_session_id: sessionId,
+          task_id: taskId,
+          formula_version_ingredient_id: lineId,
+        })),
+      );
+      if (linkError) {
+        setEditSaving(false);
+        setEditError(`재료 그룹 저장 실패 — ${linkError.message}`);
+        await onTasksChanged();
+        return;
+      }
+    }
+    setEditSaving(false);
+    setEditingTaskId(null);
+    setEditDraft(null);
     await onTasksChanged();
   }
 
@@ -446,6 +544,117 @@ export function WorkflowView({
                   ? minutesBetween(task.actual_started_at, task.completed_at)
                   : null;
               const linkedIngredients = taskIngredients?.[task.id] ?? [];
+
+              if (editingTaskId === task.id && editDraft) {
+                const editIngredientOptions = editDraft.formulaVersionId
+                  ? (ingredientsByVersion?.[editDraft.formulaVersionId] ?? [])
+                  : [];
+                return (
+                  <div key={task.id} className="border-b border-border p-3 last:border-b-0">
+                    <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+                      <input
+                        className={`${inputClass} md:w-56`}
+                        placeholder="TASK NAME"
+                        value={editDraft.name}
+                        onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
+                      />
+                      <input
+                        className={`${inputClass} md:w-40`}
+                        placeholder="TYPE"
+                        list="workflow-task-types"
+                        value={editDraft.taskType}
+                        onChange={(e) => setEditDraft({ ...editDraft, taskType: e.target.value })}
+                      />
+                      {formulaOptions.length > 0 && (
+                        <select
+                          className={`${selectClass} md:w-56`}
+                          value={editDraft.formulaVersionId}
+                          onChange={(e) =>
+                            setEditDraft({
+                              ...editDraft,
+                              formulaVersionId: e.target.value,
+                              ingredientLineIds: [],
+                            })
+                          }
+                        >
+                          <option value="">NO FORMULA (GENERAL)</option>
+                          {formulaOptions.map((f) => (
+                            <option key={f.formulaVersionId} value={f.formulaVersionId}>
+                              {f.formulaName}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <input
+                        type="date"
+                        className={`${inputClass} md:w-40`}
+                        value={editDraft.day}
+                        onChange={(e) => setEditDraft({ ...editDraft, day: e.target.value })}
+                      />
+                      <input
+                        type="time"
+                        className={`${inputClass} md:w-32`}
+                        value={editDraft.startTime}
+                        onChange={(e) => setEditDraft({ ...editDraft, startTime: e.target.value })}
+                      />
+                      <input
+                        type="time"
+                        className={`${inputClass} md:w-32`}
+                        value={editDraft.endTime}
+                        onChange={(e) => setEditDraft({ ...editDraft, endTime: e.target.value })}
+                      />
+                    </div>
+                    {editIngredientOptions.length > 0 && (
+                      <div className="mt-2 space-y-1 border-t border-dashed border-border pt-2">
+                        <div className="text-[10px] tracking-wider text-muted-foreground">
+                          이 스텝에 묶을 재료(선택)
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1">
+                          {editIngredientOptions.map((line) => {
+                            const checked = editDraft.ingredientLineIds.includes(line.id);
+                            return (
+                              <label key={line.id} className="flex items-center gap-1 text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) =>
+                                    setEditDraft({
+                                      ...editDraft,
+                                      ingredientLineIds: e.target.checked
+                                        ? [...editDraft.ingredientLineIds, line.id]
+                                        : editDraft.ingredientLineIds.filter((id) => id !== line.id),
+                                    })
+                                  }
+                                />
+                                {line.ingredients.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {editError && <div className="mt-2 text-xs text-destructive">{editError}</div>}
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        className={`${primaryButtonClass} min-h-12`}
+                        disabled={editSaving}
+                        onClick={() => saveEdit(task.id)}
+                      >
+                        {editSaving ? "SAVING..." : "저장"}
+                      </button>
+                      <button
+                        type="button"
+                        className={`${buttonClass} min-h-12`}
+                        onClick={cancelEditing}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={task.id}
@@ -490,6 +699,13 @@ export function WorkflowView({
                     >
                       {TASK_STATUS_ICON[task.status as TaskStatus] ?? "○"}{" "}
                       {TASK_STATUS_LABEL[task.status as TaskStatus] ?? task.status}
+                    </button>
+                    <button
+                      type="button"
+                      className={`${buttonClass} min-h-12`}
+                      onClick={() => startEditing(task)}
+                    >
+                      EDIT
                     </button>
                     <button
                       type="button"

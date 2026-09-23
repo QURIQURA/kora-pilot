@@ -72,6 +72,8 @@ export function taskTypeColorClass(taskType: string | null | undefined): string 
 
 export const DEFAULT_TIMELINE_START_HOUR = 0;
 export const DEFAULT_TIMELINE_END_HOUR = 24;
+/** 타임라인에 한 번에 보여주는 창(window) 길이 — 24시간 전체 대신 시작 시각 기준 4시간만 표시(2026-09-24) */
+export const TIMELINE_WINDOW_HOURS = 4;
 
 /** 두 ISO 타임스탬프 사이의 분(minute) 차이 (end - start) */
 export function minutesBetween(startIso: string, endIso: string): number {
@@ -93,18 +95,25 @@ export interface TimelineRange {
   endMinute: number;
 }
 
-/** Timeline은 항상 00:00~24:00 하루 전체를 보여준다(스펙: "시간은 24시간"). */
+/**
+ * Timeline은 24시간 전체 대신, 시간이 지정된 Task 중 가장 이른 시작 시각을 기준으로
+ * TIMELINE_WINDOW_HOURS(4시간)만 보여준다(2026-09-24, 이전엔 하루 전체라 스크롤이 너무 길다는 피드백).
+ * 시간 미지정 Task는 이 범위 계산에 포함되지 않는다 — 시간을 정하기 전까진 타임라인에 나타나지 않는다.
+ * 시간이 지정된 Task가 하나도 없으면 현재 시각이 속한 시(hour)를 기준으로 삼는다.
+ */
 export function computeTimelineRange(tasks: WorkSessionTask[]): TimelineRange {
   const starts = tasks.map((t) => t.planned_start_at).filter((v): v is string => Boolean(v));
-  const dayStr =
-    starts.length > 0
-      ? toLocalDateString(new Date(starts.reduce((a, b) => (a < b ? a : b))))
-      : toLocalDateString();
+  const earliestIso = starts.length > 0 ? starts.reduce((a, b) => (a < b ? a : b)) : null;
+  const dayStr = earliestIso ? toLocalDateString(new Date(earliestIso)) : toLocalDateString();
+  const anchorMinute = earliestIso
+    ? minutesFromDayStart(earliestIso, dayStr)
+    : minutesFromDayStart(new Date().toISOString(), dayStr);
+  const startMinute = Math.floor(anchorMinute / 60) * 60;
 
   return {
     dayStr,
-    startMinute: DEFAULT_TIMELINE_START_HOUR * 60,
-    endMinute: DEFAULT_TIMELINE_END_HOUR * 60,
+    startMinute,
+    endMinute: startMinute + TIMELINE_WINDOW_HOURS * 60,
   };
 }
 
