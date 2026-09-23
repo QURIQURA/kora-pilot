@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-09-24 — Product 원가 계산이 DRAFT/TESTING 배합도 반영하도록 변경
+
+**무엇이 달라졌나**
+- 지금까지 Product 원가 계산(COMPONENTS 예상원가, SIZES의 FULL PRODUCTION COST, COST 탭)은 COMPONENT의 FORMULA VERSION 상태가 정확히 CURRENT일 때만 반영됐습니다. 그래서 아직 CURRENT로 승격하지 않은 1차 테스트(DRAFT) 배합은 COMPONENT 상세 페이지에는 표시돼도 Product 원가에는 잡히지 않았습니다.
+- 이제 CURRENT가 있으면 그걸 우선 쓰고, CURRENT가 아직 없는 경우에만 버전 번호가 가장 높은 DRAFT/TESTING 배합을 대신 사용합니다(ARCHIVED/SUPERSEDED는 계속 제외). CURRENT가 이미 있는 상태에서 더 최신 DRAFT를 새로 만들어도, CURRENT를 명시적으로 갈아끼우기 전까지는 계속 CURRENT 기준으로 계산됩니다.
+
+**확인 방법**
+- 아직 CURRENT로 승격 안 한 새 COMPONENT의 DRAFT 배합을 Product에 연결해보면, Product COMPONENTS/SIZES/COST 탭의 원가에 그 배합 기준 금액이 잡히는지 확인하세요.
+
+---
+
 ## 2026-09-24 — PRODUCT 상세 화면 구성을 직접 편집 + COMPONENTS/COST 공간 정리
 
 **무엇이 달라졌나**

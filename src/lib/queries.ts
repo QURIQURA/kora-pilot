@@ -143,15 +143,17 @@ export const componentCostsQuery = (componentIds: string[]) =>
       const { data, error } = await supabase
         .from("formulas")
         .select(
-          "component_id, formula_versions!inner(status, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
+          "component_id, formula_versions!inner(status, version_number, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
         )
         .in("component_id", ids)
-        .eq("formula_versions.status", "CURRENT");
+        .in("formula_versions.status", ["CURRENT", "DRAFT", "TESTING"]);
       if (error) throw error;
       const map: Record<string, ComponentCostInfo> = {};
       for (const formula of (data ?? []) as unknown as {
         component_id: string | null;
         formula_versions: {
+          status: string;
+          version_number: number;
           formula_version_ingredients: {
             amount: number;
             unit: string;
@@ -164,7 +166,8 @@ export const componentCostsQuery = (componentIds: string[]) =>
         }[];
       }[]) {
         if (!formula.component_id) continue;
-        const version = formula.formula_versions[0];
+        // CURRENT 우선, 없으면 최신 DRAFT/TESTING (2026-09-24 사용자 확정)
+        const version = pickEffectiveFormulaVersion(formula.formula_versions);
         if (!version) continue;
         const result = computeLineCosts(version.formula_version_ingredients ?? []);
         map[formula.component_id] = {
@@ -431,6 +434,7 @@ export const tagUsageQuery = () =>
 
 /* ── PHASE 3 — MOULDS / FORMULAS ─────────────────────────────── */
 
+import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import type { Formula, FormulaVersion, FormulaVersionBatch, Mould } from "@/lib/formula";
 
 export const mouldsQuery = () =>
@@ -1562,7 +1566,7 @@ export const costDashboardQuery = () =>
         } | null;
       }[];
 
-      // COMPONENT 링크의 g당 단가 — componentCostsQuery와 동일한 규칙(CURRENT formula version 기준)
+      // COMPONENT 링크의 g당 단가 — componentCostsQuery와 동일한 규칙(CURRENT 우선, 없으면 최신 DRAFT/TESTING)
       const componentIds = [
         ...new Set(links.map((l) => l.component_id).filter((id): id is string => id != null)),
       ];
@@ -1571,14 +1575,16 @@ export const costDashboardQuery = () =>
         const { data: formulaData, error: formulaError } = await supabase
           .from("formulas")
           .select(
-            "component_id, formula_versions!inner(status, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
+            "component_id, formula_versions!inner(status, version_number, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
           )
           .in("component_id", componentIds)
-          .eq("formula_versions.status", "CURRENT");
+          .in("formula_versions.status", ["CURRENT", "DRAFT", "TESTING"]);
         if (formulaError) throw formulaError;
         for (const formula of (formulaData ?? []) as unknown as {
           component_id: string | null;
           formula_versions: {
+            status: string;
+            version_number: number;
             formula_version_ingredients: {
               amount: number;
               unit: string;
@@ -1591,7 +1597,7 @@ export const costDashboardQuery = () =>
           }[];
         }[]) {
           if (!formula.component_id) continue;
-          const version = formula.formula_versions[0];
+          const version = pickEffectiveFormulaVersion(formula.formula_versions);
           if (!version) continue;
           const result = computeLineCosts(version.formula_version_ingredients ?? []);
           costsByComponent[formula.component_id] = {
