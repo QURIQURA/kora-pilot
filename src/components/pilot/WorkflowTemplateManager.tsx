@@ -70,9 +70,7 @@ export function WorkflowTemplateManager() {
         연결됩니다.
       </p>
       <div className="space-y-3">
-        {leaves
-          .filter(({ category }) => (grouped.get(category.id)?.length ?? 0) > 0 || addingFor === category.id)
-          .map(({ category }) => (
+        {leaves.map(({ category }) => (
             <div key={category.id} className="border border-border">
               <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-3 py-2">
                 <span className="label-caps text-xs text-muted-foreground">
@@ -145,9 +143,9 @@ export function WorkflowTemplateManager() {
               </ul>
             </div>
           ))}
-        {rows.length === 0 && addingFor === null && (
+        {leaves.length === 0 && (
           <p className="font-mono text-xs uppercase text-muted-foreground">
-            등록된 템플릿 없음 — 위 목록에 안 보이면 TECHNIQUE CATEGORY를 먼저 등록하세요.
+            등록된 TECHNIQUE CATEGORY(제작방법) 없음 — 위의 TECHNIQUE CATEGORIES에서 먼저 등록하세요.
           </p>
         )}
       </div>
