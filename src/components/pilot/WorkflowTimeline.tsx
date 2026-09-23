@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { currentUserId, taskTypeColorsQuery, type VersionIngredientRow } from "@/lib/queries";
 import { localDateTimeToISO, toLocalDateString, formatTime } from "@/lib/datetime";
 import {
+  assignTimelineLanes,
   computeTimelineRange,
   minutesBetween,
   minutesFromDayStart,
@@ -22,6 +23,7 @@ import {
   taskBlockPosition,
   taskTypeColorClass,
   taskTypeColorKey,
+  taskTypeLineColorClass,
   TASK_STATUS_ICON,
   TASK_STATUS_LABEL,
   TASK_TYPE_COLOR_CLASSES,
@@ -37,8 +39,10 @@ const LABEL_WIDTH = 64;
 const COL_WIDTH = 190;
 /** 시작/종료 시각 라벨 한 줄 높이(px) — 실제 소요 시간이 아무리 짧아도 이 두 줄은 항상 보여야 한다 */
 const MARKER_ROW_HEIGHT = 18;
-/** TASK 블록의 최소 표시 높이 — 시작 라벨+연결선+종료 라벨이 겹치지 않고 다 보이는 최소값(2026-09-24) */
+/** TASK당 최소 세로 공간 — 연결선(rail)이 시작~종료 라벨 두 줄과 겹치지 않는 최소값(2026-09-24) */
 const MIN_BLOCK_DISPLAY_HEIGHT = MARKER_ROW_HEIGHT * 2 + 10;
+/** 겹치는 TASK끼리 서로 다른 레인에 그리는 연결선(rail) 너비 — wann-planner TIMELINE 참고(2026-09-24) */
+const RAIL_W = 6;
 
 interface FormulaOption {
   formulaVersionId: string;
@@ -666,6 +670,52 @@ export function WorkflowView({
 
                 {columns.map((col) => {
                   const colTasks = scheduledByColumn.get(col.key) ?? [];
+
+                  // 시작-종료 마커 + 연결선(rail) 디자인(2026-09-24, wann-planner TIMELINE 참고).
+                  // 겹치는 TASK는 서로 다른 레인에 자기만의 rail을 그려서, 긴 TASK 도중 다른 TASK가
+                  // 시작해도 어느 선이 어느 TASK인지 명확히 구분된다(이전 박스-채우기 디자인은 겹치는
+                  // TASK끼리 같은 자리를 그대로 덮어써서 구분이 안 됐다).
+                  const positioned = colTasks
+                    .map((task) => ({ task, pos: taskBlockPosition(task, range, PX_PER_MINUTE) }))
+                    .filter(
+                      (x): x is { task: WorkSessionTask; pos: { top: number; height: number } } =>
+                        x.pos !== null,
+                    );
+                  const { laneOf, laneCount } = assignTimelineLanes(
+                    positioned.map(({ task, pos }) => ({
+                      id: task.id,
+                      top: pos.top,
+                      bottom: pos.top + Math.max(pos.height, MARKER_ROW_HEIGHT),
+                    })),
+                  );
+                  const gutterWidth = Math.max(laneCount, 1) * RAIL_W;
+
+                  type MarkerRow = {
+                    key: string;
+                    top: number;
+                    kind: "start" | "end";
+                    task: WorkSessionTask;
+                  };
+                  const markerRows: MarkerRow[] = [];
+                  const railEndByTask = new Map<string, number>();
+                  for (const { task, pos } of positioned) {
+                    // 실제 소요 시간이 짧아도 시작/종료 라벨 두 줄이 겹치지 않도록 rail의 끝은
+                    // 최소 MARKER_ROW_HEIGHT만큼 아래로 내린다.
+                    const railEnd = pos.top + Math.max(pos.height, MARKER_ROW_HEIGHT);
+                    railEndByTask.set(task.id, railEnd);
+                    markerRows.push({ key: `${task.id}-start`, top: pos.top, kind: "start", task });
+                    markerRows.push({ key: `${task.id}-end`, top: railEnd, kind: "end", task });
+                  }
+                  // 같은 시간대(±MARKER_ROW_HEIGHT)에 몰린 마커끼리는 폭을 나눠서 겹치지 않게 한다.
+                  const bucketOf = (top: number) => Math.round(top / MARKER_ROW_HEIGHT);
+                  const rowsByBucket = new Map<number, MarkerRow[]>();
+                  for (const row of markerRows) {
+                    const b = bucketOf(row.top);
+                    const arr = rowsByBucket.get(b) ?? [];
+                    arr.push(row);
+                    rowsByBucket.set(b, arr);
+                  }
+
                   return (
                     <div
                       key={col.key}
@@ -675,66 +725,85 @@ export function WorkflowView({
                         backgroundImage: `repeating-linear-gradient(to bottom, var(--border) 0, var(--border) 1px, transparent 1px, transparent ${ROW_HEIGHT}px)`,
                       }}
                     >
-                      {colTasks.map((task) => {
-                        const pos = taskBlockPosition(task, range, PX_PER_MINUTE);
-                        if (!pos) return null;
-                        // 실제 소요 시간이 짧아도 안의 텍스트(시작/종료 시각 + 이름)가 다 보이도록
-                        // 표시 높이는 최소값을 보장한다(2026-09-24: 짧은 TASK가 4px로 눌려서 안
-                        // 보였던 문제). 박스 전체가 TASK TYPE 색으로 채워져 planner 앱처럼 그
-                        // 시간대를 차지한 것으로 보인다(2026-09-24, 재요청 — 처음엔 시작/종료 마커+
-                        // 연결선으로 만들었으나 "타임라인에 색이 안 보인다"는 피드백으로 원래 의도인
-                        // 색칠된 박스 형태로 되돌림).
-                        const displayHeight = Math.max(pos.height, MIN_BLOCK_DISPLAY_HEIGHT);
-                        const startLabel = task.actual_started_at
-                          ? formatTime(task.actual_started_at)
-                          : task.planned_start_at
-                            ? formatTime(task.planned_start_at)
-                            : "--:--";
-                        const endLabel = task.completed_at
-                          ? formatTime(task.completed_at)
-                          : task.planned_end_at
-                            ? formatTime(task.planned_end_at)
-                            : "--:--";
-                        const isDone = task.status === "DONE";
-                        const isSkipped = task.status === "SKIPPED";
-                        const isInProgress = task.status === "IN_PROGRESS";
-                        const colorClass = taskTypeColorClass(task.task_type, colorOverrides);
+                      {/* 레인별 연결선(rail) — TASK TYPE 색, 시작~종료 구간을 차지 */}
+                      {positioned.map(({ task, pos }) => {
+                        const lane = laneOf.get(task.id) ?? 0;
+                        const railEnd = railEndByTask.get(task.id) ?? pos.top + pos.height;
                         return (
-                          <button
-                            key={task.id}
-                            type="button"
-                            onClick={() => cycleStatus(task)}
-                            className={`absolute right-1 left-1 flex flex-col justify-between overflow-hidden border px-1.5 py-1 text-left leading-tight ${colorClass} ${
-                              isDone
-                                ? "ring-2 ring-inset ring-foreground"
-                                : isInProgress
-                                  ? "ring-1 ring-inset ring-foreground"
-                                  : ""
-                            } ${isSkipped ? "opacity-50" : ""}`}
-                            style={{ top: pos.top, height: displayHeight }}
-                            title={task.task_name}
-                          >
-                            <div className="flex items-baseline gap-1 truncate">
-                              <span className="flex-none tabular-nums text-[9px] opacity-70">
-                                {startLabel}
-                              </span>
-                              <span
-                                className={`truncate text-[11px] font-medium ${isSkipped ? "line-through" : ""}`}
-                              >
-                                {task.task_name}
-                              </span>
-                            </div>
-                            {task.task_type ? (
-                              <span className="truncate text-[9px] tracking-wider opacity-80">
-                                {task.task_type.toUpperCase()}
-                              </span>
-                            ) : null}
-                            <div className="text-right text-[9px] tabular-nums opacity-70">
-                              {endLabel}
-                            </div>
-                          </button>
+                          <div
+                            key={`rail-${task.id}`}
+                            className={`pointer-events-none absolute opacity-80 ${taskTypeLineColorClass(task.task_type, colorOverrides)} ${
+                              task.status === "SKIPPED" ? "opacity-30" : ""
+                            }`}
+                            style={{ top: pos.top, height: railEnd - pos.top, left: lane * RAIL_W, width: RAIL_W - 2 }}
+                          />
                         );
                       })}
+
+                      {/* 시작/종료 마커 — 같은 시간대에 몰리면 자동으로 폭을 나눠 그린다 */}
+                      {Array.from(rowsByBucket.values()).flatMap((rows) =>
+                        rows.map((row, idx) => {
+                          const n = rows.length;
+                          const { task } = row;
+                          const startLabel = task.actual_started_at
+                            ? formatTime(task.actual_started_at)
+                            : task.planned_start_at
+                              ? formatTime(task.planned_start_at)
+                              : "--:--";
+                          const endLabel = task.completed_at
+                            ? formatTime(task.completed_at)
+                            : task.planned_end_at
+                              ? formatTime(task.planned_end_at)
+                              : "--:--";
+                          const isDone = task.status === "DONE";
+                          const isSkipped = task.status === "SKIPPED";
+                          const isInProgress = task.status === "IN_PROGRESS";
+                          const colorClass = taskTypeColorClass(task.task_type, colorOverrides);
+                          return (
+                            <button
+                              key={row.key}
+                              type="button"
+                              onClick={() => cycleStatus(task)}
+                              className={`absolute flex items-center gap-1 overflow-hidden border px-1 text-left leading-tight ${colorClass} ${
+                                isDone
+                                  ? "ring-2 ring-inset ring-foreground"
+                                  : isInProgress
+                                    ? "ring-1 ring-inset ring-foreground"
+                                    : ""
+                              } ${isSkipped ? "opacity-50" : ""}`}
+                              style={{
+                                top: row.top,
+                                height: MARKER_ROW_HEIGHT,
+                                left: `calc(${gutterWidth}px + ${(idx / n) * 100}%)`,
+                                width: `calc((100% - ${gutterWidth}px) / ${n})`,
+                              }}
+                              title={task.task_name}
+                            >
+                              {row.kind === "start" ? (
+                                <>
+                                  <span className="flex-none tabular-nums text-[9px] opacity-70">
+                                    {startLabel}
+                                  </span>
+                                  <span
+                                    className={`truncate text-[10px] font-medium ${isSkipped ? "line-through" : ""}`}
+                                  >
+                                    {task.task_name}
+                                  </span>
+                                  {task.task_type ? (
+                                    <span className="ml-auto flex-none truncate text-[8px] tracking-wider opacity-80">
+                                      {task.task_type.toUpperCase()}
+                                    </span>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <span className="ml-auto tabular-nums text-[9px] opacity-70">
+                                  종료 {endLabel}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        }),
+                      )}
                     </div>
                   );
                 })}

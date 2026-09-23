@@ -215,6 +215,36 @@ export function taskBlockPosition(
   return { top, height };
 }
 
+/**
+ * 같은 열(품목) 안에서 시간대가 겹치는 TASK들을 서로 다른 "레인"에 배정한다(2026-09-24,
+ * wann-planner TIMELINE의 레일 패턴 참고 — 긴 TASK 도중에 다른 TASK가 시작해도 각자 자기 레인의
+ * 연결선을 가지므로 구분이 명확해진다). 회의실 배정과 같은 그리디 구간 스케줄링: 시작 시각 순으로
+ * 정렬해 각 TASK를 "이미 끝난" 레인 중 가장 먼저 찾은 곳에 배정, 없으면 새 레인을 만든다.
+ */
+export function assignTimelineLanes(
+  items: { id: string; top: number; bottom: number }[],
+): { laneOf: Map<string, number>; laneCount: number } {
+  const sorted = [...items].sort((a, b) => a.top - b.top);
+  const laneEnds: number[] = [];
+  const laneOf = new Map<string, number>();
+  for (const item of sorted) {
+    let placed = false;
+    for (let i = 0; i < laneEnds.length; i++) {
+      if (laneEnds[i]! <= item.top) {
+        laneEnds[i] = item.bottom;
+        laneOf.set(item.id, i);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      laneEnds.push(item.bottom);
+      laneOf.set(item.id, laneEnds.length - 1);
+    }
+  }
+  return { laneOf, laneCount: laneEnds.length };
+}
+
 /** "지금"의 timeline 위 px 위치(세로축 top) — 오늘 날짜(range.dayStr)일 때만 의미 있음 */
 export function nowLineOffset(range: TimelineRange, pxPerMinute: number): number | null {
   const today = toLocalDateString();
