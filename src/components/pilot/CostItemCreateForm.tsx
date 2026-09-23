@@ -5,8 +5,8 @@ import { currentUserId, type CostItemCategory } from "@/lib/queries";
 import { Field, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 const CATEGORY_OPTIONS: { value: CostItemCategory; label: string }[] = [
-  { value: "UTILITY", label: "UTILITY — 배치당 전기/수도/가스 등" },
-  { value: "CONSUMABLE", label: "CONSUMABLE — 배치당 소모품" },
+  { value: "UTILITY", label: "UTILITY — 개당 전기/수도/가스 등" },
+  { value: "CONSUMABLE", label: "CONSUMABLE — 개당 소모품" },
   { value: "PACKAGING", label: "PACKAGING — 개당 상자/스티커 등" },
   { value: "OVERHEAD", label: "OVERHEAD — 월 고정비(참고용 기록)" },
 ];

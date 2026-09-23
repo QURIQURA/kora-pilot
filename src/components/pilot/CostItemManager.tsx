@@ -7,8 +7,8 @@ import { CostItemCreateForm } from "./CostItemCreateForm";
 import { SectionCard, buttonClass, inputClass } from "./ui";
 
 const CATEGORIES: { value: CostItemCategory; label: string }[] = [
-  { value: "UTILITY", label: "UTILITY — 배치당" },
-  { value: "CONSUMABLE", label: "CONSUMABLE — 배치당" },
+  { value: "UTILITY", label: "UTILITY — 개당" },
+  { value: "CONSUMABLE", label: "CONSUMABLE — 개당" },
   { value: "PACKAGING", label: "PACKAGING — 개당" },
   { value: "OVERHEAD", label: "OVERHEAD — 월 고정비" },
 ];

@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-09-23 — SETTINGS의 COST ITEMS 표기 정리 ("배치당" 잔재 제거)
+
+**무엇이 달라졌나**
+- 지난 항목에서 UTILITY/CONSUMABLE 배정 기준을 "배치" → "케익 개수"로 바꿨는데, SETTINGS → COST ITEMS 화면의 섹션 제목("UTILITY — 배치당", "CONSUMABLE — 배치당")과 항목 추가 폼의 안내 문구는 예전 표기가 그대로 남아 있었습니다. 전부 "개당"으로 정리했습니다.
+- 초기 세팅 과정에서 실수로 중복 생성됐던 미사용 COST ITEM 3개(Electricity/Gas/Water, Baking paper 등, Cake box 등 — 전부 UNUSED 상태였던 항목)를 정리했습니다. 실제로 Product에 배정되어 쓰이고 있는 항목(이름에 "(전기/가스/수도)", "(배치당 소모품)" 등으로 남아있던 것)은 그대로 유지했고, 단위 표시만 "batch" → "cake"로 바꿨습니다.
+
+**확인 방법**
+- SETTINGS → COST ITEMS에서 UTILITY/CONSUMABLE 섹션 제목이 "— 개당"으로 보이는지, 미사용 중복 항목이 사라졌는지 확인.
+
+---
+
 ## 2026-09-23 — UTILITY/CONSUMABLE/OVERHEAD 기준을 "배치" → "케익 개수"로 변경
 
 **무엇이 달라졌나**
