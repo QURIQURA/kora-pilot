@@ -1,12 +1,16 @@
 /**
- * WORKFLOW TIMELINE — Work Session의 Task 계획/진행 뷰
+ * WORKFLOW TIMELINE — Work Session의 Task 진행 뷰
  *
  * 절대 규칙 (src/lib/workflow.ts와 동일):
- * - duration은 저장하지 않는다 — planned_start_at / planned_end_at으로만 계산한다.
+ * - "계획(planned_start_at/planned_end_at)" 개념은 폐기했다(2026-09-23) — 타임라인은 오직 실제
+ *   시작/완료 시각(actual_started_at/completed_at)만 쓴다. 아직 시작 전인 TASK는 타임라인이 아니라
+ *   "TASK 순서" 목록(위/아래로 재정렬 가능)에만 보인다.
+ * - duration은 저장하지 않는다 — actual_started_at / completed_at으로만 계산한다.
  * - 대기 시간(gap)은 엔티티가 아니다 — 타임라인의 빈 공간일 뿐이다.
  *
  * 레이아웃: 세로형 24시간 축 — 행(row)=시간(00:00~24:00), 열(column)=품목(Formula/GENERAL).
- * 시간 라벨 열은 스크롤 시에도 고정(sticky)된다.
+ * 시간 라벨 열은 스크롤 시에도 고정(sticky)된다. 여러 품목이 동시에 진행될 때 실제 시간축을
+ * 기준으로 무엇이 돌아가고 있는지 한눈에 보여주는 것이 목적이다.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -16,6 +20,7 @@ import { localDateTimeToISO, toLocalDateString, formatTime } from "@/lib/datetim
 import {
   assignTimelineLanes,
   computeTimelineRange,
+  hasObservationFields,
   minutesBetween,
   minutesFromDayStart,
   nextTaskStatus,
@@ -33,12 +38,13 @@ import {
 } from "@/lib/workflow";
 import { buttonClass, inputClass, primaryButtonClass, selectClass } from "@/components/pilot/ui";
 
-const ROW_HEIGHT = 56; // 1시간당 px
+// 2026-09-23: 텍스트/박스가 안 잘리고 가독성 좋도록 타임라인 가로(COL_WIDTH)·세로(ROW_HEIGHT) 확대.
+const ROW_HEIGHT = 80; // 1시간당 px
 const PX_PER_MINUTE = ROW_HEIGHT / 60;
 const LABEL_WIDTH = 64;
-const COL_WIDTH = 190;
+const COL_WIDTH = 260;
 /** 시작/종료 시각 라벨 한 줄 높이(px) — 실제 소요 시간이 아무리 짧아도 이 두 줄은 항상 보여야 한다 */
-const MARKER_ROW_HEIGHT = 18;
+const MARKER_ROW_HEIGHT = 24;
 /** TASK당 최소 세로 공간 — 연결선(rail)이 시작~종료 라벨 두 줄과 겹치지 않는 최소값(2026-09-24) */
 const MIN_BLOCK_DISPLAY_HEIGHT = MARKER_ROW_HEIGHT * 2 + 10;
 /** 겹치는 TASK끼리 서로 다른 레인에 그리는 연결선(rail) 너비 — wann-planner TIMELINE 참고(2026-09-24) */
@@ -76,9 +82,11 @@ export function WorkflowView({
   const [formulaVersionId, setFormulaVersionId] = useState("");
   const [ingredientLineIds, setIngredientLineIds] = useState<string[]>([]);
   const [predecessorTaskIds, setPredecessorTaskIds] = useState<string[]>([]);
-  const [day, setDay] = useState(() => toLocalDateString());
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  // 관찰값(2026-09-23) — 지금은 BAKE에서만 쓰지만 hasObservationFields()로 대상 TASK TYPE을 넓힐 수 있다.
+  const [obsStatus, setObsStatus] = useState("");
+  const [obsHeightStart, setObsHeightStart] = useState("");
+  const [obsHeightMid, setObsHeightMid] = useState("");
+  const [obsHeightEnd, setObsHeightEnd] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -86,15 +94,16 @@ export function WorkflowView({
     name: string;
     taskType: string;
     formulaVersionId: string;
-    day: string;
-    startTime: string;
-    endTime: string;
     /** 실제 시작/완료 시각 — 타임스탬프 버튼 누르는 걸 깜빡했을 때 수동으로 고칠 수 있게(2026-09-24) */
     actualDay: string;
     actualStartTime: string;
     actualEndTime: string;
     ingredientLineIds: string[];
     predecessorTaskIds: string[];
+    obsStatus: string;
+    obsHeightStart: string;
+    obsHeightMid: string;
+    obsHeightEnd: string;
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -151,12 +160,13 @@ export function WorkflowView({
     return cols;
   }, [formulaOptions]);
 
-  // 계획 시작 또는 실제 시작 중 하나만 있어도 타임라인에 올린다 — 계획 종료 시각을 안 채운
-  // TASK가 통째로 안 보이던 문제 수정(2026-09-24). 실제 위치/폭은 taskBlockPosition()이 계산.
+  // "계획" 개념이 없어졌으므로(2026-09-23) 실제로 시작한(actual_started_at) TASK만 타임라인에
+  // 올린다 — 여러 품목이 동시에 돌아갈 때 실제 시간축 기준으로 무엇이 진행 중인지 보여주는 것이
+  // 이 타임라인의 목적이다.
   const scheduledByColumn = useMemo(() => {
     const map = new Map<string, WorkSessionTask[]>();
     for (const t of tasks) {
-      if (!t.planned_start_at && !t.actual_started_at) continue;
+      if (!t.actual_started_at) continue;
       const key = t.formula_version_id ?? GENERAL_KEY;
       const arr = map.get(key) ?? [];
       arr.push(t);
@@ -165,17 +175,10 @@ export function WorkflowView({
     return map;
   }, [tasks]);
 
-  // "시간 미정 TASK"는 계획 시간이 없는(또는 한쪽만 있는) TASK 중에서도, 아직 실제로 시작/완료
-  // 타임스탬프가 찍히지 않은 것만 보여준다 — 실제 타임스탬프가 찍히면(작업이 시작/완료됐다는 뜻)
-  // 더 이상 "미정" 취급하지 않고 목록에서 빠진다(2026-09-24).
-  const unscheduled = useMemo(
-    () =>
-      tasks.filter(
-        (t) =>
-          (!t.planned_start_at || !t.planned_end_at) && !t.actual_started_at && !t.completed_at,
-      ),
-    [tasks],
-  );
+  // "TASK 순서"는 아직 실제로 시작하지 않은 TASK 목록 — 시간을 미리 정하지 않고도 위/아래로
+  // 순서를 조정해 작업할 순서를 미리 그려볼 수 있다(2026-09-23). sort_order 순으로 표시하며,
+  // 실제로 시작하면(타임스탬프가 찍히면) 이 목록에서 빠지고 타임라인 쪽으로 넘어간다.
+  const unscheduled = useMemo(() => tasks.filter((t) => !t.actual_started_at), [tasks]);
 
   // 이미 다른 TASK에 묶인 재료 라인 — 중복 배정 방지용. 지금 수정 중인 TASK 자신의 기존 배정은 제외한다
   // (그래야 EDIT 화면에서 자기 자신이 이미 골라둔 재료까지 회색으로 막히지 않는다).
@@ -192,22 +195,20 @@ export function WorkflowView({
   useEffect(() => {
     if (autoScrolled.current || !scrollRef.current) return;
     autoScrolled.current = true;
-    const inProgress = tasks.find((t) => t.status === "IN_PROGRESS" && t.planned_start_at);
-    const anchorMinute = inProgress?.planned_start_at
-      ? minutesFromDayStart(inProgress.planned_start_at, range.dayStr)
+    const inProgress = tasks.find((t) => t.status === "IN_PROGRESS" && t.actual_started_at);
+    const anchorMinute = inProgress?.actual_started_at
+      ? minutesFromDayStart(inProgress.actual_started_at, range.dayStr)
       : (nowTop ?? 0) / PX_PER_MINUTE + range.startMinute;
     const top = Math.max(0, (anchorMinute - range.startMinute) * PX_PER_MINUTE - ROW_HEIGHT * 2);
     scrollRef.current.scrollTop = top;
   }, [tasks, range, nowTop]);
 
+  const showObservationFields = hasObservationFields(taskType);
+
   async function addTask() {
     const trimmed = name.trim();
     if (!trimmed) {
       setError("TASK NAME IS REQUIRED");
-      return;
-    }
-    if (startTime && endTime && endTime <= startTime) {
-      setError("END TIME MUST BE AFTER START TIME");
       return;
     }
     setSaving(true);
@@ -222,9 +223,14 @@ export function WorkflowView({
         task_name: trimmed,
         task_type: taskType.trim() || null,
         formula_version_id: formulaVersionId || null,
-        planned_start_at: startTime ? localDateTimeToISO(day, startTime) : null,
-        planned_end_at: endTime ? localDateTimeToISO(day, endTime) : null,
         sort_order: maxSort + 1,
+        observation_status: showObservationFields && obsStatus.trim() ? obsStatus.trim() : null,
+        observation_height_start_mm:
+          showObservationFields && obsHeightStart.trim() ? Number(obsHeightStart) : null,
+        observation_height_mid_mm:
+          showObservationFields && obsHeightMid.trim() ? Number(obsHeightMid) : null,
+        observation_height_end_mm:
+          showObservationFields && obsHeightEnd.trim() ? Number(obsHeightEnd) : null,
       })
       .select("id")
       .single();
@@ -270,10 +276,35 @@ export function WorkflowView({
     setSaving(false);
     setName("");
     setTaskType("");
-    setStartTime("");
-    setEndTime("");
+    setObsStatus("");
+    setObsHeightStart("");
+    setObsHeightMid("");
+    setObsHeightEnd("");
     setIngredientLineIds([]);
     setPredecessorTaskIds([]);
+    await onTasksChanged();
+  }
+
+  /**
+   * "TASK 순서" 목록(아직 실제로 시작하지 않은 TASK) 안에서 위/아래로 순서를 바꾼다(2026-09-23).
+   * sort_order 값을 서로 맞바꿔서 저장 — 실제 시간이 없어도 이 순서가 작업할 순서를 미리 그려보는
+   * 용도로 쓰인다. 목록에 없는 이웃(범위 밖)이면 아무 것도 하지 않는다.
+   */
+  async function moveUnscheduledTask(task: WorkSessionTask, direction: -1 | 1) {
+    const idx = unscheduled.findIndex((t) => t.id === task.id);
+    const neighbor = unscheduled[idx + direction];
+    if (idx < 0 || !neighbor) return;
+    const [{ error: e1 }, { error: e2 }] = await Promise.all([
+      supabase
+        .from("work_session_tasks")
+        .update({ sort_order: neighbor.sort_order })
+        .eq("id", task.id),
+      supabase
+        .from("work_session_tasks")
+        .update({ sort_order: task.sort_order })
+        .eq("id", neighbor.id),
+    ]);
+    if (e1 || e2) setError(`순서 변경 실패 — ${(e1 ?? e2)?.message}`);
     await onTasksChanged();
   }
 
@@ -314,18 +345,19 @@ export function WorkflowView({
       name: task.task_name,
       taskType: task.task_type ?? "",
       formulaVersionId: task.formula_version_id ?? "",
-      day: task.planned_start_at ? toLocalDateString(new Date(task.planned_start_at)) : day,
-      startTime: task.planned_start_at ? formatTime(task.planned_start_at) : "",
-      endTime: task.planned_end_at ? formatTime(task.planned_end_at) : "",
       actualDay: task.actual_started_at
         ? toLocalDateString(new Date(task.actual_started_at))
         : task.completed_at
           ? toLocalDateString(new Date(task.completed_at))
-          : day,
+          : toLocalDateString(),
       actualStartTime: task.actual_started_at ? formatTime(task.actual_started_at) : "",
       actualEndTime: task.completed_at ? formatTime(task.completed_at) : "",
       ingredientLineIds: (taskIngredients?.[task.id] ?? []).map((l) => l.lineId),
       predecessorTaskIds: (taskPredecessors?.[task.id] ?? []).map((p) => p.taskId),
+      obsStatus: task.observation_status ?? "",
+      obsHeightStart: task.observation_height_start_mm != null ? String(task.observation_height_start_mm) : "",
+      obsHeightMid: task.observation_height_mid_mm != null ? String(task.observation_height_mid_mm) : "",
+      obsHeightEnd: task.observation_height_end_mm != null ? String(task.observation_height_end_mm) : "",
     });
   }
 
@@ -340,10 +372,6 @@ export function WorkflowView({
     const trimmed = editDraft.name.trim();
     if (!trimmed) {
       setEditError("TASK NAME IS REQUIRED");
-      return;
-    }
-    if (editDraft.startTime && editDraft.endTime && editDraft.endTime <= editDraft.startTime) {
-      setEditError("END TIME MUST BE AFTER START TIME");
       return;
     }
     if (
@@ -363,12 +391,6 @@ export function WorkflowView({
         task_name: trimmed,
         task_type: editDraft.taskType.trim() || null,
         formula_version_id: editDraft.formulaVersionId || null,
-        planned_start_at: editDraft.startTime
-          ? localDateTimeToISO(editDraft.day, editDraft.startTime)
-          : null,
-        planned_end_at: editDraft.endTime
-          ? localDateTimeToISO(editDraft.day, editDraft.endTime)
-          : null,
         // 타임스탬프 버튼 누르는 걸 깜빡한 경우를 위한 수동 보정(2026-09-24) — 상태 버튼과 별개로
         // 여기서 직접 실제 시작/완료 시각을 쓰거나 비울 수 있다.
         actual_started_at: editDraft.actualStartTime
@@ -377,6 +399,21 @@ export function WorkflowView({
         completed_at: editDraft.actualEndTime
           ? localDateTimeToISO(editDraft.actualDay, editDraft.actualEndTime)
           : null,
+        observation_status: hasObservationFields(editDraft.taskType) && editDraft.obsStatus.trim()
+          ? editDraft.obsStatus.trim()
+          : null,
+        observation_height_start_mm:
+          hasObservationFields(editDraft.taskType) && editDraft.obsHeightStart.trim()
+            ? Number(editDraft.obsHeightStart)
+            : null,
+        observation_height_mid_mm:
+          hasObservationFields(editDraft.taskType) && editDraft.obsHeightMid.trim()
+            ? Number(editDraft.obsHeightMid)
+            : null,
+        observation_height_end_mm:
+          hasObservationFields(editDraft.taskType) && editDraft.obsHeightEnd.trim()
+            ? Number(editDraft.obsHeightEnd)
+            : null,
       })
       .eq("id", taskId);
     if (updateError) {
@@ -487,24 +524,6 @@ export function WorkflowView({
               ))}
             </select>
           )}
-          <input
-            type="date"
-            className={`${inputClass} md:w-40`}
-            value={day}
-            onChange={(e) => setDay(e.target.value)}
-          />
-          <input
-            type="time"
-            className={`${inputClass} md:w-32`}
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-          />
-          <input
-            type="time"
-            className={`${inputClass} md:w-32`}
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-          />
           <button
             type="button"
             className={`${primaryButtonClass} min-h-12`}
@@ -514,6 +533,57 @@ export function WorkflowView({
             {saving ? "ADDING..." : "ADD"}
           </button>
         </div>
+        {showObservationFields && (
+          <div className="mt-2 space-y-2 border-t border-dashed border-border pt-2">
+            <div className="text-[10px] tracking-wider text-muted-foreground">
+              관찰값(선택) — 나중에 데이터로 모아 시각화할 예정
+            </div>
+            <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+              <input
+                className={`${inputClass} md:w-56`}
+                placeholder="상태(예: 고르게 부풀음)"
+                value={obsStatus}
+                onChange={(e) => setObsStatus(e.target.value)}
+              />
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                오븐투입시 높이
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  className={`${inputClass} w-24`}
+                  placeholder="mm"
+                  value={obsHeightStart}
+                  onChange={(e) => setObsHeightStart(e.target.value)}
+                />
+              </label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                중간높이
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  className={`${inputClass} w-24`}
+                  placeholder="mm"
+                  value={obsHeightMid}
+                  onChange={(e) => setObsHeightMid(e.target.value)}
+                />
+              </label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                최종높이
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  className={`${inputClass} w-24`}
+                  placeholder="mm"
+                  value={obsHeightEnd}
+                  onChange={(e) => setObsHeightEnd(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+        )}
         {formulaVersionId && (ingredientsByVersion?.[formulaVersionId]?.length ?? 0) > 0 && (
           <div className="mt-2 space-y-1 border-t border-dashed border-border pt-2">
             <div className="text-[10px] tracking-wider text-muted-foreground">
@@ -747,14 +817,8 @@ export function WorkflowView({
                           const { task } = row;
                           const startLabel = task.actual_started_at
                             ? formatTime(task.actual_started_at)
-                            : task.planned_start_at
-                              ? formatTime(task.planned_start_at)
-                              : "--:--";
-                          const endLabel = task.completed_at
-                            ? formatTime(task.completed_at)
-                            : task.planned_end_at
-                              ? formatTime(task.planned_end_at)
-                              : "--:--";
+                            : "--:--";
+                          const endLabel = task.completed_at ? formatTime(task.completed_at) : "--:--";
                           const isDone = task.status === "DONE";
                           const isSkipped = task.status === "SKIPPED";
                           const isInProgress = task.status === "IN_PROGRESS";
@@ -821,37 +885,55 @@ export function WorkflowView({
           {unscheduled.length > 0 && (
             <div className="border border-border p-3">
               <div className="mb-2 text-xs tracking-wider text-muted-foreground">
-                시간 미정 TASK
+                TASK 순서 (아직 시작 전 — ▲▼로 작업할 순서를 미리 그려보세요)
               </div>
-              <div className="flex flex-wrap gap-2">
-                {unscheduled.map((task) => (
-                  <button
-                    key={task.id}
-                    type="button"
-                    onClick={() => cycleStatus(task)}
-                    className={`${buttonClass} flex items-center gap-1.5 text-xs`}
-                  >
-                    {TASK_STATUS_ICON[task.status as TaskStatus] ?? "○"} {task.task_name}
-                    {task.task_type ? (
-                      <span
-                        className={`rounded-sm border px-1 text-[9px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
+              <ul className="divide-y divide-border border border-border">
+                {unscheduled.map((task, idx) => (
+                  <li key={task.id} className="flex items-center gap-2 px-2 py-1.5">
+                    <div className="flex flex-none flex-col">
+                      <button
+                        type="button"
+                        className="px-1.5 py-0.5 text-xs disabled:opacity-30"
+                        disabled={idx === 0}
+                        onClick={() => moveUnscheduledTask(task, -1)}
                       >
-                        {task.task_type.toUpperCase()}
-                      </span>
-                    ) : null}
-                  </button>
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        className="px-1.5 py-0.5 text-xs disabled:opacity-30"
+                        disabled={idx === unscheduled.length - 1}
+                        onClick={() => moveUnscheduledTask(task, 1)}
+                      >
+                        ▼
+                      </button>
+                    </div>
+                    <span className="w-5 flex-none font-mono text-[10px] text-muted-foreground">
+                      {idx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => cycleStatus(task)}
+                      className={`${buttonClass} flex flex-1 items-center gap-1.5 text-left text-xs`}
+                    >
+                      {TASK_STATUS_ICON[task.status as TaskStatus] ?? "○"} {task.task_name}
+                      {task.task_type ? (
+                        <span
+                          className={`rounded-sm border px-1 text-[9px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
+                        >
+                          {task.task_type.toUpperCase()}
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
 
           {/* ── TASK LIST (상세/삭제) ───────────────────── */}
           <div className="border border-border">
             {tasks.map((task) => {
-              const duration =
-                task.planned_start_at && task.planned_end_at
-                  ? minutesBetween(task.planned_start_at, task.planned_end_at)
-                  : null;
               const actualDuration =
                 task.actual_started_at && task.completed_at
                   ? minutesBetween(task.actual_started_at, task.completed_at)
@@ -898,24 +980,6 @@ export function WorkflowView({
                           ))}
                         </select>
                       )}
-                      <input
-                        type="date"
-                        className={`${inputClass} md:w-40`}
-                        value={editDraft.day}
-                        onChange={(e) => setEditDraft({ ...editDraft, day: e.target.value })}
-                      />
-                      <input
-                        type="time"
-                        className={`${inputClass} md:w-32`}
-                        value={editDraft.startTime}
-                        onChange={(e) => setEditDraft({ ...editDraft, startTime: e.target.value })}
-                      />
-                      <input
-                        type="time"
-                        className={`${inputClass} md:w-32`}
-                        value={editDraft.endTime}
-                        onChange={(e) => setEditDraft({ ...editDraft, endTime: e.target.value })}
-                      />
                     </div>
                     <div className="mt-2 flex flex-col gap-2 border-t border-dashed border-border pt-2 md:flex-row md:flex-wrap md:items-center">
                       <span className="text-[10px] tracking-wider text-muted-foreground">
@@ -944,6 +1008,61 @@ export function WorkflowView({
                         }
                       />
                     </div>
+                    {hasObservationFields(editDraft.taskType) && (
+                      <div className="mt-2 flex flex-col gap-2 border-t border-dashed border-border pt-2 md:flex-row md:flex-wrap md:items-center">
+                        <span className="text-[10px] tracking-wider text-muted-foreground">
+                          관찰값(선택)
+                        </span>
+                        <input
+                          className={`${inputClass} md:w-56`}
+                          placeholder="상태"
+                          value={editDraft.obsStatus}
+                          onChange={(e) => setEditDraft({ ...editDraft, obsStatus: e.target.value })}
+                        />
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                          오븐투입시
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            className={`${inputClass} w-24`}
+                            placeholder="mm"
+                            value={editDraft.obsHeightStart}
+                            onChange={(e) =>
+                              setEditDraft({ ...editDraft, obsHeightStart: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                          중간
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            className={`${inputClass} w-24`}
+                            placeholder="mm"
+                            value={editDraft.obsHeightMid}
+                            onChange={(e) =>
+                              setEditDraft({ ...editDraft, obsHeightMid: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                          최종
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            className={`${inputClass} w-24`}
+                            placeholder="mm"
+                            value={editDraft.obsHeightEnd}
+                            onChange={(e) =>
+                              setEditDraft({ ...editDraft, obsHeightEnd: e.target.value })
+                            }
+                          />
+                        </label>
+                      </div>
+                    )}
                     {editIngredientOptions.length > 0 && (
                       <div className="mt-2 space-y-1 border-t border-dashed border-border pt-2">
                         <div className="text-[10px] tracking-wider text-muted-foreground">
@@ -1060,18 +1179,24 @@ export function WorkflowView({
                         이전 단계: {taskPredecessors![task.id]!.map((p) => p.name).join(" + ")}
                       </div>
                     )}
-                    <div className="mt-1 text-[11px] tracking-wider text-muted-foreground tabular-nums">
-                      계획 {task.planned_start_at ? formatTime(task.planned_start_at) : "--:--"}
-                      {" → "}
-                      {task.planned_end_at ? formatTime(task.planned_end_at) : "--:--"}
-                      {duration !== null ? ` · ${Math.round(duration)} MIN` : ""}
-                    </div>
                     {(task.actual_started_at || task.completed_at) && (
-                      <div className="mt-0.5 text-[11px] tracking-wider text-foreground tabular-nums">
+                      <div className="mt-1 text-[11px] tracking-wider text-foreground tabular-nums">
                         실제 {task.actual_started_at ? formatTime(task.actual_started_at) : "--:--"}
                         {" → "}
                         {task.completed_at ? formatTime(task.completed_at) : "--:--"}
                         {actualDuration !== null ? ` · ${Math.round(actualDuration)} MIN` : ""}
+                      </div>
+                    )}
+                    {(task.observation_status ||
+                      task.observation_height_start_mm != null ||
+                      task.observation_height_mid_mm != null ||
+                      task.observation_height_end_mm != null) && (
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        관찰
+                        {task.observation_status ? ` ${task.observation_status}` : ""}
+                        {" · "}
+                        {task.observation_height_start_mm ?? "-"}mm → {task.observation_height_mid_mm ?? "-"}mm
+                        → {task.observation_height_end_mm ?? "-"}mm
                       </div>
                     )}
                   </div>

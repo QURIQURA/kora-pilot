@@ -2,7 +2,10 @@
  * PRODUCTION WORKFLOW TIMELINE — Work Session Task 도메인 헬퍼
  *
  * 절대 규칙:
- * - duration은 저장하지 않는다 — 항상 planned_end_at - planned_start_at으로 계산한다.
+ * - "계획(planned_start_at/planned_end_at)" 개념은 폐기했다(2026-09-23) — 시간을 미리 정하지
+ *   않아도 TASK를 만들 수 있고, 작업 순서는 sort_order(위/아래 재정렬)로 미리 그려본다.
+ *   타임라인은 오직 실제 시작/완료 시각(actual_started_at/completed_at)만 기준으로 그린다.
+ * - duration은 저장하지 않는다 — 항상 completed_at - actual_started_at으로 계산한다.
  * - Time gap(대기 시간)은 별도 엔티티가 아니다 — 두 Task 사이의 빈 타임라인 공간일 뿐이다.
  * - 자동 scheduling / dependency 엔진은 여기 없다 — predecessor_task_id는 순서 표시용 데이터일 뿐이다.
  */
@@ -42,6 +45,18 @@ export const TASK_TYPE_SUGGESTIONS = [
   "Finish",
   "Pack",
 ];
+
+/**
+ * 관찰값(observation_status/observation_height_*_mm) 입력칸을 보여줄 TASK TYPE 목록(2026-09-23).
+ * 지금은 BAKE 하나뿐이지만, 나중에 다른 TASK TYPE도 관찰값을 기록하고 싶어질 수 있어 Set으로 두고
+ * 여기에 소문자로 추가만 하면 되도록 설계했다 — 필드 자체(상태/시작·중간·종료 높이)는 공통.
+ */
+export const OBSERVATION_TASK_TYPES = new Set(["bake"]);
+
+export function hasObservationFields(taskType: string | null | undefined): boolean {
+  if (!taskType) return false;
+  return OBSERVATION_TASK_TYPES.has(taskType.trim().toLowerCase());
+}
 
 export function nextTaskStatus(current: TaskStatus): TaskStatus {
   const idx = TASK_STATUSES.indexOf(current);
@@ -134,37 +149,28 @@ export interface TimelineRange {
 }
 
 /**
- * TASK의 "실제 표시 시작 시각" — 계획 시작 시각(planned_start_at)과 실제 시작 시각(actual_started_at)
- * 중 더 이른 쪽을 쓴다(2026-09-24: 계획보다 일찍 실제로 시작한 경우, 타임라인이 그 실제 시각을 반영해야
- * 한다는 피드백). 계획만 있으면 계획을, 실제만 있으면 실제를 쓴다.
+ * TASK의 "실제 표시 시작 시각" — "계획" 개념을 없앤 뒤로는 실제 시작 시각(actual_started_at)만
+ * 쓴다(2026-09-23). 아직 시작 전(NOT_STARTED)인 TASK는 시각이 없으므로 타임라인에 올리지 않고,
+ * 대신 "TASK 순서" 목록에서 sort_order로 미리 순서를 그려본다.
  */
 function effectiveStartAt(
-  task: Pick<WorkSessionTask, "planned_start_at" | "actual_started_at">,
+  task: Pick<WorkSessionTask, "actual_started_at">,
 ): string | null {
-  if (task.planned_start_at && task.actual_started_at) {
-    return task.actual_started_at < task.planned_start_at
-      ? task.actual_started_at
-      : task.planned_start_at;
-  }
-  return task.planned_start_at ?? task.actual_started_at ?? null;
+  return task.actual_started_at ?? null;
 }
 
-/** 위와 대칭 — 계획 종료 시각과 실제 완료 시각 중 더 이른 쪽 */
+/** 위와 대칭 — 실제 완료 시각 */
 function effectiveEndAt(
-  task: Pick<WorkSessionTask, "planned_end_at" | "completed_at">,
+  task: Pick<WorkSessionTask, "completed_at">,
 ): string | null {
-  if (task.planned_end_at && task.completed_at) {
-    return task.completed_at < task.planned_end_at ? task.completed_at : task.planned_end_at;
-  }
-  return task.planned_end_at ?? task.completed_at ?? null;
+  return task.completed_at ?? null;
 }
 
 /**
- * Timeline은 24시간 전체 대신, 시간이 지정된 Task 중 가장 이른 시각(계획 시작 또는 실제 시작 중
- * 이른 쪽)을 기준으로 TIMELINE_WINDOW_HOURS(4시간)만 보여준다(2026-09-24, 이전엔 하루 전체라
- * 스크롤이 너무 길다는 피드백; 이후 계획보다 일찍 실제로 시작한 경우도 반영하도록 보강).
- * 계획도 실제 시작도 없는 Task는 이 범위 계산에 포함되지 않는다.
- * 어느 Task에도 시각이 하나도 없으면 현재 시각이 속한 시(hour)를 기준으로 삼는다.
+ * Timeline은 24시간 전체 대신, 실제로 시작한 Task 중 가장 이른 시각을 기준으로
+ * TIMELINE_WINDOW_HOURS(4시간)만 보여준다(2026-09-24, 하루 전체는 스크롤이 너무 길다는 피드백).
+ * 아직 실제로 시작하지 않은 Task는 이 범위 계산에 포함되지 않는다.
+ * 어느 Task도 아직 시작하지 않았으면 현재 시각이 속한 시(hour)를 기준으로 삼는다.
  */
 export function computeTimelineRange(tasks: WorkSessionTask[]): TimelineRange {
   const starts = tasks
@@ -187,18 +193,13 @@ export function computeTimelineRange(tasks: WorkSessionTask[]): TimelineRange {
 /**
  * Timeline 위 task block의 top/height(px) — range와 px-per-minute만 있으면 항상 다시 계산 가능.
  *
- * 시작 시각(계획 또는 실제 중 하나)만 있으면 블록을 그린다 — 계획 종료 시각을 안 채워도(현장에서
- * 그냥 타임스탬프 버튼만 누르는 경우가 많음) 타임라인에서 사라지지 않아야 한다(2026-09-24: "TASK TYPE
- * 색이 타임라인에 전혀 안 보인다" 피드백 — 원인은 planned_end_at이 없는 TASK가 통째로 안 그려지던
- * 버그였다. 이전엔 계획 시작/종료가 둘 다 있어야만 블록을 그렸다).
- * 종료 시각은 우선순위대로: 실제 완료(completed_at) → 계획 종료(planned_end_at) → 진행 중이면
- * "지금" → 그마저 없으면 화면 표시용으로만 30분 폭을 임시로 준다(저장하지 않음, 순수 표시용).
+ * 실제 시작 시각(actual_started_at)이 있어야만 블록을 그린다 — "계획" 개념이 없어졌으므로
+ * 아직 시작 전인 TASK는 타임라인에 아예 올라가지 않고 "TASK 순서" 목록에만 보인다(2026-09-23).
+ * 종료 시각은 우선순위대로: 실제 완료(completed_at) → 진행 중이면 "지금" → 그마저 없으면
+ * 화면 표시용으로만 30분 폭을 임시로 준다(저장하지 않음, 순수 표시용).
  */
 export function taskBlockPosition(
-  task: Pick<
-    WorkSessionTask,
-    "planned_start_at" | "planned_end_at" | "actual_started_at" | "completed_at" | "status"
-  >,
+  task: Pick<WorkSessionTask, "actual_started_at" | "completed_at" | "status">,
   range: TimelineRange,
   pxPerMinute: number,
 ): { top: number; height: number } | null {

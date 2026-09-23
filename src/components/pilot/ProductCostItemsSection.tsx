@@ -13,7 +13,15 @@ import { SectionCard, buttonClass, inputClass, selectClass } from "./ui";
  * 애매하다는 사용자 판단(2026-09-23)에 따라 PACKAGING과 동일하게 Product 단위·개당으로 통일했다.
  * OVERHEAD는 여기서 배정하지 않는다 — SETTINGS의 월 고정비÷월 케익 개수로 모든 Product에 공통 적용.
  */
-export function ProductCostItemsSection({ productId }: { productId: string }) {
+export function ProductCostItemsSection({
+  productId,
+  overheadPerCake = 0,
+}: {
+  productId: string;
+  /** 이 PRODUCTION COST 열의 항목 리스트에는 안 잡히는 OVERHEAD(월 고정비÷월 케익 개수) — 1열
+   * "총원가" 계산식과 맞춰보기 위해 여기 합계에도 함께 표시한다(2026-09-23, 계산 검증 요청). */
+  overheadPerCake?: number;
+}) {
   const queryClient = useQueryClient();
   const linked = useQuery(productCostItemsQuery(productId));
   const allItems = useQuery(costItemsQuery());
@@ -63,10 +71,17 @@ export function ProductCostItemsSection({ productId }: { productId: string }) {
       !rows.some((r) => r.cost_item_id === item.id),
   );
   const total = rows.reduce((sum, r) => sum + r.quantity * r.cost_items.unit_cost, 0);
+  const grandTotal = total + overheadPerCake;
 
   return (
     <SectionCard
       title="PRODUCTION COST 항목 (케익 1개당 — UTILITY / CONSUMABLE / PACKAGING)"
+      subtitle={
+        <>
+          항목 합계 {fmtCurrency(total)} + OVERHEAD {fmtCurrency(overheadPerCake)} = 합계{" "}
+          {fmtCurrency(grandTotal)}
+        </>
+      }
       bodyClassName="max-h-[420px] overflow-y-auto"
       action={
         candidates.length > 0 ? (

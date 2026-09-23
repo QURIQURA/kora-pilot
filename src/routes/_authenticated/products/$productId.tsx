@@ -515,6 +515,10 @@ function ProductDetailPage() {
             = COMPONENTS & ADJUSTMENT {fmtCurrency(totalComponentsCost)} + PRODUCTION COST{" "}
             {fmtCurrency(perCakeExtras)}
           </p>
+          <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+            (PRODUCTION COST = 항목 합계 {fmtCurrency(perCakeExtras - overheadPerCake)} + OVERHEAD{" "}
+            {fmtCurrency(overheadPerCake)} — 3열 하단 합계와 같아야 합니다)
+          </p>
           <p className="mt-2 font-mono text-[10px] text-muted-foreground">
             사이즈 구분 없이 지정된 모든 사용량을 합산한 참고값입니다 — 사이즈별 정확한 금액은 SIZES
             섹션을 확인하세요.
@@ -524,6 +528,7 @@ function ProductDetailPage() {
         {/* 2열 — COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT */}
       <SectionCard
         title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
+        subtitle={<>합계 {fmtCurrency(totalComponentsCost)}</>}
         bodyClassName="max-h-[480px] overflow-y-auto"
         action={
           <div className="flex flex-wrap gap-2">
@@ -737,7 +742,7 @@ function ProductDetailPage() {
       </SectionCard>
 
         {/* 3열 — PRODUCTION COST 항목 */}
-        <ProductCostItemsSection productId={productId} />
+        <ProductCostItemsSection productId={productId} overheadPerCake={overheadPerCake} />
       </div>
           ),
         };

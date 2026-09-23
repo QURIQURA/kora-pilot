@@ -17,12 +17,15 @@ export const primaryButtonClass =
 export function SectionCard({
   title,
   action,
+  subtitle,
   children,
   muted,
   bodyClassName,
 }: {
   title: string;
   action?: ReactNode;
+  /** 헤더 바로 아래, 스크롤되는 본문 밖에 항상 보이는 줄 — 예: 합계 표시(2026-09-23) */
+  subtitle?: ReactNode;
   children?: ReactNode;
   muted?: boolean;
   /** 본문 영역에 추가할 클래스 — 예: 좁은 그리드 칸에서 내용이 길어지면 스크롤되도록 max-h + overflow-y-auto */
@@ -39,6 +42,11 @@ export function SectionCard({
         <h2 className="label-caps text-muted-foreground">{title}</h2>
         {action}
       </header>
+      {subtitle && (
+        <div className="border-b border-dashed border-border bg-muted/30 px-3 py-1.5 font-mono text-xs tabular-nums text-foreground">
+          {subtitle}
+        </div>
+      )}
       <div className={cn("p-3", bodyClassName)}>{children}</div>
     </section>
   );

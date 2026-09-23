@@ -2322,6 +2322,10 @@ export type Database = {
           formula_version_id: string | null
           id: string
           note: string | null
+          observation_height_end_mm: number | null
+          observation_height_mid_mm: number | null
+          observation_height_start_mm: number | null
+          observation_status: string | null
           planned_end_at: string | null
           planned_start_at: string | null
           predecessor_task_id: string | null
@@ -2340,6 +2344,10 @@ export type Database = {
           formula_version_id?: string | null
           id?: string
           note?: string | null
+          observation_height_end_mm?: number | null
+          observation_height_mid_mm?: number | null
+          observation_height_start_mm?: number | null
+          observation_status?: string | null
           planned_end_at?: string | null
           planned_start_at?: string | null
           predecessor_task_id?: string | null
@@ -2358,6 +2366,10 @@ export type Database = {
           formula_version_id?: string | null
           id?: string
           note?: string | null
+          observation_height_end_mm?: number | null
+          observation_height_mid_mm?: number | null
+          observation_height_start_mm?: number | null
+          observation_status?: string | null
           planned_end_at?: string | null
           planned_start_at?: string | null
           predecessor_task_id?: string | null
