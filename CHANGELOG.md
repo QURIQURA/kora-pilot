@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-09-23 — WORK VIEW WEIGHING MATRIX에 열별 총 중량(TOTAL) 행 추가
+
+**무엇이 달라졌나**
+- PRODUCTION 작업 세션의 WEIGHING MATRIX 표 맨 아래에 각 포뮬라 버전(열)별 총 중량을 더한 TOTAL 행을 추가했습니다. g/kg/ml/l로 환산 가능한 재료만 합산하고(개당 세는 재료 등은 제외), g 단위로 표시합니다.
+
+**확인 방법**
+- PRODUCTION 작업 세션 → WEIGHING MATRIX 표 맨 아래에서 TOTAL 행과 열별 합계(g)가 보이는지 확인.
+
+---
+
 ## 2026-09-23 — PRODUCTION 배수 자동계산 안내 문구 단순화
 
 **무엇이 달라졌나**

@@ -35,7 +35,7 @@ import {
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
-import { fmtNumber, versionLabel } from "@/lib/formula";
+import { fmtNumber, toGrams, versionLabel } from "@/lib/formula";
 import type { Mould } from "@/lib/formula";
 import { formatDateTime } from "@/lib/datetime";
 import {
@@ -1042,6 +1042,21 @@ function WeighingView({
       .filter((g): g is (typeof groups)[number] => Boolean(g));
   }, [groups, rowOrder]);
 
+  // 열(포뮬라 버전)별 총 중량(g) — 행 순서/표시 여부와 무관하게 전체 재료 기준으로 합산한다.
+  // g/kg/ml/l로 환산 가능한 재료만 더하고("ea" 등 무게로 못 바꾸는 단위는 제외), 표시는
+  // 항상 g 단위로 통일한다.
+  const totalsByColumn = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const group of groups) {
+      for (const cell of group.cells) {
+        const grams = toGrams(cell.workingAmount, cell.unit);
+        if (grams == null) continue;
+        totals[cell.formulaVersionId] = (totals[cell.formulaVersionId] ?? 0) + grams;
+      }
+    }
+    return totals;
+  }, [groups]);
+
   const colSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const rowSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -1186,6 +1201,22 @@ function WeighingView({
             </tbody>
           </SortableContext>
         </DndContext>
+        <tfoot>
+          <tr>
+            <th className="label-caps sticky left-0 bottom-0 z-10 border-t border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
+              TOTAL
+            </th>
+            {displayColumns.map((col) => (
+              <td
+                key={col.formulaVersionId}
+                className="border-t border-l border-border bg-secondary px-2 py-2 text-left text-sm font-semibold tabular-nums"
+              >
+                {fmtNumber(totalsByColumn[col.formulaVersionId] ?? 0, 1)}g
+              </td>
+            ))}
+            <td className="border-t border-l border-border bg-secondary" />
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
