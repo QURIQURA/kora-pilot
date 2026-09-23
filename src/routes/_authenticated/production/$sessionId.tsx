@@ -1211,7 +1211,7 @@ function WeighingView({
                 key={col.formulaVersionId}
                 className="border-t border-l border-border bg-secondary px-2 py-2 text-left text-sm font-semibold tabular-nums"
               >
-                {fmtNumber(totalsByColumn[col.formulaVersionId] ?? 0, 1)}g
+                {fmtNumber(totalsByColumn[col.formulaVersionId] ?? 0, 0)}g
               </td>
             ))}
             <td className="border-t border-l border-border bg-secondary" />
@@ -1256,7 +1256,7 @@ function MatrixColumnHeader({
         <div>
           <p className="whitespace-nowrap text-xs leading-tight">{formulaName}</p>
           <p className="label-caps whitespace-nowrap text-[11px] text-muted-foreground">
-            ×{fmtNumber(multiplier, 2)}
+            ×{fmtNumber(multiplier, 0)}
           </p>
         </div>
       </div>
@@ -1411,11 +1411,11 @@ function WeighingMatrixCell({
         }}
         title={cell.note ?? undefined}
       >
-        {fmtNumber(cell.workingAmount, 2)}
+        {fmtNumber(cell.workingAmount, 0)}
         {cell.unit}
         {scaledSecondary != null && cell.secondaryUnit && (
           <span className="block text-[10px] font-normal text-muted-foreground">
-            · {fmtNumber(scaledSecondary, 2)}
+            · {fmtNumber(scaledSecondary, 0)}
             {cell.secondaryUnit}
           </span>
         )}
@@ -1477,7 +1477,7 @@ function FormulaView({
               <span className="label-caps text-sm">
                 {row.formula_versions.formulas.name} ·{" "}
                 {versionLabel(row.formula_versions.version_number)}
-                {multiplier !== 1 ? ` · ×${fmtNumber(multiplier, 2)}` : ""}
+                {multiplier !== 1 ? ` · ×${fmtNumber(multiplier, 0)}` : ""}
               </span>
             </div>
             <ul className="divide-y divide-border">
@@ -1489,11 +1489,11 @@ function FormulaView({
                       : line.ingredients.name}
                   </span>
                   <span className="text-base tabular-nums">
-                    {fmtNumber(workingAmount(Number(line.amount), multiplier), 2)}
+                    {fmtNumber(workingAmount(Number(line.amount), multiplier), 0)}
                     {line.unit}
                     {multiplier !== 1 && (
                       <span className="ml-2 font-mono text-xs text-muted-foreground">
-                        (orig {fmtNumber(Number(line.amount), 2)}
+                        (orig {fmtNumber(Number(line.amount), 0)}
                         {line.unit})
                       </span>
                     )}
