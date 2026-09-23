@@ -48,7 +48,6 @@ import {
   sumBaseGrams,
   suggestedMultiplierFromMould,
   suggestedMultiplierFromBaseWeight,
-  WORK_SESSION_PROGRESS_STATUSES,
   workingAmount,
   type WorkSessionProgressStatus,
 } from "@/lib/work-session";
@@ -1363,10 +1362,10 @@ function MatrixBodyRow({
   );
 }
 
-function nextProgressStatus(current: WorkSessionProgressStatus): WorkSessionProgressStatus {
-  const idx = WORK_SESSION_PROGRESS_STATUSES.indexOf(current);
-  const next = WORK_SESSION_PROGRESS_STATUSES[(idx + 1) % WORK_SESSION_PROGRESS_STATUSES.length];
-  return next ?? "NOT_STARTED";
+/** WEIGHING MATRIX 재료 셀은 체크/언체크 2단계만 지원한다(2026-09-24, 4단계 순환이 너무 복잡하다는 피드백).
+ * SHORTAGE/SKIPPED는 과거 데이터에 남아있을 수 있어 표시는 그대로 하되, 이 버튼으로는 만들지 않는다. */
+function toggleProgressStatus(current: WorkSessionProgressStatus): WorkSessionProgressStatus {
+  return current === "DONE" ? "NOT_STARTED" : "DONE";
 }
 
 const STATUS_CELL_TONE: Record<WorkSessionProgressStatus, string> = {
@@ -1436,9 +1435,7 @@ function WeighingMatrixCell({
         type="button"
         className="label-caps flex h-5 w-5 shrink-0 items-center justify-center border border-border text-xs leading-none hover:border-foreground"
         onClick={() => {
-          const next = nextProgressStatus(cell.progressStatus);
-          setProgress.mutate({ status: next });
-          if (next === "SHORTAGE") setEditingNote(true);
+          setProgress.mutate({ status: toggleProgressStatus(cell.progressStatus) });
         }}
         title={PROGRESS_STATUS_LABEL[cell.progressStatus]}
       >

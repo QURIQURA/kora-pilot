@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-09-24 — WEIGHING MATRIX 체크 버튼 단순화 (체크/언체크 2단계)
+
+**무엇이 달라졌나**
+- WORK VIEW → WEIGHING MATRIX에서 각 재료 옆 작은 상태 버튼이 NOT STARTED → DONE → SHORTAGE → SKIPPED 4단계로 순환하며 너무 복잡했던 것을, 이제 체크(DONE)/언체크(NOT STARTED) 2단계로 단순화했습니다. 누르면 체크, 다시 누르면 언체크입니다.
+
+**확인 방법**
+- WEIGHING MATRIX에서 재료 옆 버튼을 눌러 체크(☑) → 다시 눌러 언체크(○)로 바로 돌아오는지 확인.
+
+---
+
 ## 2026-09-24 — WORKFLOW 재료 그룹 중복 선택 방지
 
 **무엇이 달라졌나**
