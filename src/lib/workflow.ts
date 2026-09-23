@@ -48,23 +48,61 @@ export function nextTaskStatus(current: TaskStatus): TaskStatus {
   return TASK_STATUSES[(idx + 1) % TASK_STATUSES.length] ?? "NOT_STARTED";
 }
 
-/** TASK TYPE별 배지 색상 — task 이름과 구분되도록, 같은 type이면 항상 같은 색 */
-const TASK_TYPE_COLOR_CLASSES = [
-  "bg-amber-100 text-amber-900 border-amber-300",
-  "bg-blue-100 text-blue-900 border-blue-300",
-  "bg-emerald-100 text-emerald-900 border-emerald-300",
-  "bg-rose-100 text-rose-900 border-rose-300",
-  "bg-violet-100 text-violet-900 border-violet-300",
-  "bg-cyan-100 text-cyan-900 border-cyan-300",
-  "bg-orange-100 text-orange-900 border-orange-300",
-  "bg-lime-100 text-lime-900 border-lime-300",
+/**
+ * TASK TYPE별 색상 팔레트 — 배지(badge)용 연한 색과 타임라인 연결선(line)용 진한 색이 짝을 이룬다.
+ * 사용자가 TASK TYPE마다 이 팔레트 중 하나를 직접 골라 task_type_colors에 저장할 수 있다(2026-09-23).
+ */
+export const TASK_TYPE_PALETTE: { badge: string; line: string }[] = [
+  { badge: "bg-amber-100 text-amber-900 border-amber-300", line: "bg-amber-400" },
+  { badge: "bg-blue-100 text-blue-900 border-blue-300", line: "bg-blue-400" },
+  { badge: "bg-emerald-100 text-emerald-900 border-emerald-300", line: "bg-emerald-400" },
+  { badge: "bg-rose-100 text-rose-900 border-rose-300", line: "bg-rose-400" },
+  { badge: "bg-violet-100 text-violet-900 border-violet-300", line: "bg-violet-400" },
+  { badge: "bg-cyan-100 text-cyan-900 border-cyan-300", line: "bg-cyan-400" },
+  { badge: "bg-orange-100 text-orange-900 border-orange-300", line: "bg-orange-400" },
+  { badge: "bg-lime-100 text-lime-900 border-lime-300", line: "bg-lime-400" },
 ];
 
-export function taskTypeColorClass(taskType: string | null | undefined): string {
-  if (!taskType) return "bg-muted text-muted-foreground border-border";
+/** 하위 호환/색상 선택 UI용 — 배지 클래스만 뽑아둔 목록 */
+export const TASK_TYPE_COLOR_CLASSES = TASK_TYPE_PALETTE.map((p) => p.badge);
+
+/** TASK TYPE 이름 → color_class 매핑 키(대소문자/양끝 공백 무시) */
+export function taskTypeColorKey(taskType: string): string {
+  return taskType.trim().toLowerCase();
+}
+
+function paletteIndexForType(taskType: string): number {
   let hash = 0;
   for (let i = 0; i < taskType.length; i++) hash = (hash * 31 + taskType.charCodeAt(i)) >>> 0;
-  return TASK_TYPE_COLOR_CLASSES[hash % TASK_TYPE_COLOR_CLASSES.length]!;
+  return hash % TASK_TYPE_PALETTE.length;
+}
+
+/**
+ * TASK TYPE 배지 색상 — overrides에 사용자가 직접 고른 색이 있으면 그걸 쓰고, 없으면 기존처럼
+ * 이름 해시로 항상 같은 기본색을 고정 배정한다(2026-09-23: 사용자 지정 색 기능 추가).
+ */
+export function taskTypeColorClass(
+  taskType: string | null | undefined,
+  overrides?: Record<string, string>,
+): string {
+  if (!taskType) return "bg-muted text-muted-foreground border-border";
+  const override = overrides?.[taskTypeColorKey(taskType)];
+  if (override) return override;
+  return TASK_TYPE_PALETTE[paletteIndexForType(taskType)]!.badge;
+}
+
+/** taskTypeColorClass와 짝을 이루는 진한 색 — 타임라인의 시작-종료 연결선에 쓴다(2026-09-24) */
+export function taskTypeLineColorClass(
+  taskType: string | null | undefined,
+  overrides?: Record<string, string>,
+): string {
+  if (!taskType) return "bg-muted-foreground/40";
+  const override = overrides?.[taskTypeColorKey(taskType)];
+  if (override) {
+    const idx = TASK_TYPE_PALETTE.findIndex((p) => p.badge === override);
+    if (idx >= 0) return TASK_TYPE_PALETTE[idx]!.line;
+  }
+  return TASK_TYPE_PALETTE[paletteIndexForType(taskType)]!.line;
 }
 
 /* ── Timeline 좌표 계산 (compute, don't store) ───────────────────── */

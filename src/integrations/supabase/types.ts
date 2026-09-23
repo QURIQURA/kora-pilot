@@ -1972,6 +1972,33 @@ export type Database = {
         }
         Relationships: []
       }
+      task_type_colors: {
+        Row: {
+          color_class: string
+          created_at: string
+          id: string
+          task_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color_class: string
+          created_at?: string
+          id?: string
+          task_type: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          color_class?: string
+          created_at?: string
+          id?: string
+          task_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       technique_categories: {
         Row: {
           created_at: string

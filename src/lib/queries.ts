@@ -1403,6 +1403,19 @@ export const costItemHistoryQuery = (costItemId: string) =>
       ),
   });
 
+export interface TaskTypeColorRow {
+  task_type: string;
+  color_class: string;
+}
+
+/** 사용자가 TASK TYPE별로 직접 고른 색상 매핑 — 없으면 taskTypeColorClass()가 해시 기반 기본색으로 대체(2026-09-23) */
+export const taskTypeColorsQuery = () =>
+  queryOptions({
+    queryKey: ["task_type_colors"],
+    queryFn: async (): Promise<TaskTypeColorRow[]> =>
+      unwrap(await supabase.from("task_type_colors").select("task_type, color_class")),
+  });
+
 /** cost_item별 사용 횟수(component+product 배정 합산) — 삭제 보호용 */
 export const costItemUsageQuery = () =>
   queryOptions({

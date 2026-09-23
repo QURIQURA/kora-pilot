@@ -9,8 +9,9 @@
  * 시간 라벨 열은 스크롤 시에도 고정(sticky)된다.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, type VersionIngredientRow } from "@/lib/queries";
+import { currentUserId, taskTypeColorsQuery, type VersionIngredientRow } from "@/lib/queries";
 import { localDateTimeToISO, toLocalDateString, formatTime } from "@/lib/datetime";
 import {
   computeTimelineRange,
@@ -20,8 +21,11 @@ import {
   nowLineOffset,
   taskBlockPosition,
   taskTypeColorClass,
+  taskTypeColorKey,
+  taskTypeLineColorClass,
   TASK_STATUS_ICON,
   TASK_STATUS_LABEL,
+  TASK_TYPE_COLOR_CLASSES,
   TASK_TYPE_SUGGESTIONS,
   type TaskStatus,
   type WorkSessionTask,
@@ -32,6 +36,10 @@ const ROW_HEIGHT = 56; // 1시간당 px
 const PX_PER_MINUTE = ROW_HEIGHT / 60;
 const LABEL_WIDTH = 64;
 const COL_WIDTH = 190;
+/** 시작/종료 시각 라벨 한 줄 높이(px) — 실제 소요 시간이 아무리 짧아도 이 두 줄은 항상 보여야 한다 */
+const MARKER_ROW_HEIGHT = 18;
+/** TASK 블록의 최소 표시 높이 — 시작 라벨+연결선+종료 라벨이 겹치지 않고 다 보이는 최소값(2026-09-24) */
+const MIN_BLOCK_DISPLAY_HEIGHT = MARKER_ROW_HEIGHT * 2 + 10;
 
 interface FormulaOption {
   formulaVersionId: string;
@@ -82,8 +90,39 @@ export function WorkflowView({
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [colorSettingsOpen, setColorSettingsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrolled = useRef(false);
+  const queryClient = useQueryClient();
+
+  const taskTypeColors = useQuery(taskTypeColorsQuery());
+  // TASK TYPE 이름(소문자) → 사용자가 고른 color_class. 없으면 taskTypeColorClass()가 해시 기본색을 쓴다.
+  const colorOverrides = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const row of taskTypeColors.data ?? []) map[taskTypeColorKey(row.task_type)] = row.color_class;
+    return map;
+  }, [taskTypeColors.data]);
+
+  const setTaskTypeColor = useMutation({
+    mutationFn: async ({ taskType, colorClass }: { taskType: string; colorClass: string }) => {
+      const userId = await currentUserId();
+      const { error: upsertError } = await supabase
+        .from("task_type_colors")
+        .upsert(
+          { user_id: userId, task_type: taskTypeColorKey(taskType), color_class: colorClass },
+          { onConflict: "user_id,task_type" },
+        );
+      if (upsertError) throw upsertError;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["task_type_colors"] }),
+  });
+
+  // 색상 설정 목록에 보여줄 TASK TYPE — 미리 정의된 제안 + 지금 실제로 쓰이고 있는 커스텀 TYPE 전부
+  const knownTaskTypes = useMemo(() => {
+    const set = new Set<string>(TASK_TYPE_SUGGESTIONS);
+    for (const t of tasks) if (t.task_type) set.add(t.task_type);
+    return Array.from(set);
+  }, [tasks]);
 
   const range = useMemo(() => computeTimelineRange(tasks), [tasks]);
   const nowTop = nowLineOffset(range, PX_PER_MINUTE);
@@ -455,6 +494,46 @@ export function WorkflowView({
         {error && <div className="mt-2 text-xs text-destructive">{error}</div>}
       </div>
 
+      {/* ── TASK TYPE 색상 설정 ─────────────── */}
+      <div className="border border-border p-3">
+        <button
+          type="button"
+          className="text-xs tracking-wider text-muted-foreground hover:text-foreground"
+          onClick={() => setColorSettingsOpen((v) => !v)}
+        >
+          {colorSettingsOpen ? "▾" : "▸"} TASK TYPE 색상 설정
+        </button>
+        {colorSettingsOpen && (
+          <div className="mt-2 space-y-2 border-t border-dashed border-border pt-2">
+            {knownTaskTypes.map((type) => {
+              const current = colorOverrides[taskTypeColorKey(type)] ?? taskTypeColorClass(type);
+              return (
+                <div key={type} className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`w-28 flex-none truncate rounded-sm border px-1.5 py-0.5 text-[10px] tracking-wider ${taskTypeColorClass(type, colorOverrides)}`}
+                  >
+                    {type.toUpperCase()}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {TASK_TYPE_COLOR_CLASSES.map((cls) => (
+                      <button
+                        key={cls}
+                        type="button"
+                        title={cls}
+                        className={`h-5 w-5 rounded-sm border ${cls} ${
+                          current === cls ? "ring-2 ring-foreground ring-offset-1" : ""
+                        }`}
+                        onClick={() => setTaskTypeColor.mutate({ taskType: type, colorClass: cls })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {tasks.length === 0 ? (
         <div className="border border-border p-6 text-center text-xs tracking-wider text-muted-foreground">
           NO TASKS YET
@@ -516,31 +595,78 @@ export function WorkflowView({
                       {colTasks.map((task) => {
                         const pos = taskBlockPosition(task, range, PX_PER_MINUTE);
                         if (!pos) return null;
+                        // 실제 소요 시간이 짧아도 시작/종료 라벨이 항상 다 보이도록 표시 높이는
+                        // 최소값을 보장한다 — 그 안의 연결선만 실제 길이(짧으면 아주 얇게)를 반영한다
+                        // (2026-09-24: "줄만 보이고 뭔지 안 보인다" 피드백 — 이전엔 높이가 4px로
+                        // 눌려서 이름이 렌더링될 공간이 없었다).
+                        const displayHeight = Math.max(pos.height, MIN_BLOCK_DISPLAY_HEIGHT);
+                        const lineHeight = Math.max(displayHeight - MARKER_ROW_HEIGHT * 2, 2);
+                        const startLabel = task.actual_started_at
+                          ? formatTime(task.actual_started_at)
+                          : task.planned_start_at
+                            ? formatTime(task.planned_start_at)
+                            : "--:--";
+                        const endLabel = task.completed_at
+                          ? formatTime(task.completed_at)
+                          : task.planned_end_at
+                            ? formatTime(task.planned_end_at)
+                            : "--:--";
+                        const isDone = task.status === "DONE";
+                        const isSkipped = task.status === "SKIPPED";
                         return (
                           <button
                             key={task.id}
                             type="button"
                             onClick={() => cycleStatus(task)}
-                            className={`absolute right-1 left-1 overflow-hidden border px-1.5 py-0.5 text-left text-[11px] leading-tight ${
-                              task.status === "DONE"
-                                ? "border-foreground bg-foreground text-background"
-                                : task.status === "SKIPPED"
-                                  ? "border-dashed border-border text-muted-foreground line-through"
-                                  : task.status === "IN_PROGRESS"
-                                    ? "border-foreground bg-background text-foreground"
-                                    : "border-dashed border-border bg-background text-foreground"
+                            className={`absolute right-1 left-1 flex flex-col overflow-hidden text-left ${
+                              isSkipped ? "opacity-60" : ""
                             }`}
-                            style={{ top: pos.top, height: pos.height }}
+                            style={{ top: pos.top, height: displayHeight }}
                             title={task.task_name}
                           >
-                            <div className="truncate font-medium">{task.task_name}</div>
-                            {task.task_type ? (
-                              <span
-                                className={`mt-0.5 inline-block truncate rounded-sm border px-1 text-[9px] tracking-wider ${taskTypeColorClass(task.task_type)}`}
-                              >
-                                {task.task_type.toUpperCase()}
+                            {/* 시작 박스: 시작 시각 + TASK 이름 + TYPE 배지 */}
+                            <div
+                              className={`flex items-center gap-1 truncate border px-1 text-[10px] leading-tight ${
+                                isDone
+                                  ? "border-foreground bg-foreground text-background"
+                                  : "border-border bg-background text-foreground"
+                              }`}
+                              style={{ height: MARKER_ROW_HEIGHT }}
+                            >
+                              <span className="flex-none tabular-nums text-[9px] opacity-70">
+                                {startLabel}
                               </span>
-                            ) : null}
+                              <span
+                                className={`truncate font-medium ${isSkipped ? "line-through" : ""}`}
+                              >
+                                {task.task_name}
+                              </span>
+                              {task.task_type ? (
+                                <span
+                                  className={`flex-none truncate rounded-sm border px-1 text-[8px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
+                                >
+                                  {task.task_type.toUpperCase()}
+                                </span>
+                              ) : null}
+                            </div>
+                            {/* 시작-종료를 잇는 색선 — TASK TYPE 색(사용자 지정 우선) */}
+                            <div className="flex flex-1 justify-center py-0.5">
+                              <div
+                                className={`w-[3px] rounded-full ${
+                                  isSkipped
+                                    ? "bg-border"
+                                    : taskTypeLineColorClass(task.task_type, colorOverrides)
+                                }`}
+                                style={{ height: lineHeight }}
+                              />
+                            </div>
+                            {/* 종료 박스: 종료 시각만 */}
+                            <div
+                              className="flex flex-none items-center px-1 text-[9px] tabular-nums text-muted-foreground"
+                              style={{ height: MARKER_ROW_HEIGHT }}
+                            >
+                              {endLabel}
+                            </div>
                           </button>
                         );
                       })}
@@ -574,7 +700,7 @@ export function WorkflowView({
                     {TASK_STATUS_ICON[task.status as TaskStatus] ?? "○"} {task.task_name}
                     {task.task_type ? (
                       <span
-                        className={`rounded-sm border px-1 text-[9px] tracking-wider ${taskTypeColorClass(task.task_type)}`}
+                        className={`rounded-sm border px-1 text-[9px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
                       >
                         {task.task_type.toUpperCase()}
                       </span>
@@ -753,7 +879,7 @@ export function WorkflowView({
                       {task.task_name}
                       {task.task_type ? (
                         <span
-                          className={`ml-2 rounded-sm border px-1.5 py-0.5 text-[10px] tracking-wider ${taskTypeColorClass(task.task_type)}`}
+                          className={`ml-2 rounded-sm border px-1.5 py-0.5 text-[10px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
                         >
                           {task.task_type.toUpperCase()}
                         </span>
