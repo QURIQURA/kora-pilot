@@ -19,11 +19,14 @@ export function SectionCard({
   action,
   children,
   muted,
+  bodyClassName,
 }: {
   title: string;
   action?: ReactNode;
   children?: ReactNode;
   muted?: boolean;
+  /** 본문 영역에 추가할 클래스 — 예: 좁은 그리드 칸에서 내용이 길어지면 스크롤되도록 max-h + overflow-y-auto */
+  bodyClassName?: string;
 }) {
   return (
     <section
@@ -36,7 +39,7 @@ export function SectionCard({
         <h2 className="label-caps text-muted-foreground">{title}</h2>
         {action}
       </header>
-      <div className="p-3">{children}</div>
+      <div className={cn("p-3", bodyClassName)}>{children}</div>
     </section>
   );
 }

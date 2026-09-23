@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-09-24 — PRODUCT COST BREAKDOWN을 3열 그리드로 재구성
+
+**무엇이 달라졌나**
+- 따로 있던 "COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"와 "PRODUCTION COST 항목" 두 섹션을 하나의 3열 그리드로 합쳤습니다. 1열은 총원가 계산식(= COMPONENTS & ADJUSTMENT + PRODUCTION COST, 각각 금액과 함께 표시), 2열은 COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT, 3열은 PRODUCTION COST 항목입니다.
+- 각 칸의 가로 폭이 줄어든 대신, 내용이 길어지면 칸 안에서 스크롤되도록(최대 높이 지정) 했습니다 — 헤더는 그대로 보이고 목록만 스크롤됩니다.
+- 1열의 총원가는 사이즈가 지정된 모든 사용량 행을 합산한 참고값입니다(사이즈별 정확한 금액은 SIZES 섹션에서 확인).
+
+**확인 방법**
+- PRODUCT 상세 페이지에서 COMPONENTS/PRODUCTION COST 자리가 3칸으로 나란히 보이는지, 항목이 많은 COMPONENT를 추가했을 때 그 칸만 스크롤되는지 확인하세요.
+
+---
+
 ## 2026-09-24 — WORKFLOW 타임라인, 겹치는 TASK를 시작/종료 마커+연결선으로 명확히 구분
 
 **무엇이 달라졌나**

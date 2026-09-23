@@ -125,8 +125,7 @@ const DEFAULT_SECTION_ORDER = [
   "TARGET",
   "TAGS",
   "SIZES",
-  "COMPONENTS",
-  "PRODUCTION_COST",
+  "COST_ADJUSTMENT",
   "NOTES",
   "DEVELOPMENT",
 ] as const;
@@ -138,8 +137,11 @@ const SECTION_LABELS: Record<ProductSectionKey, string> = {
   TARGET: "TARGET",
   TAGS: "TAGS",
   SIZES: "SIZES",
-  COMPONENTS: "COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT",
-  PRODUCTION_COST: "PRODUCTION COST 항목",
+  // 2026-09-24: 기존에 따로 있던 COMPONENTS/PRODUCTION_COST 두 섹션을 3열 그리드 한 섹션으로 합침
+  // (총원가 계산식 | COMPONENTS & ADJUSTMENT | PRODUCTION COST). 가로 폭을 줄여 한눈에 보이게 하려는
+  // 목적 — 예전에 저장된 순서에 남아있던 "COMPONENTS"/"PRODUCTION_COST" 키는 resolveSectionOrder()가
+  // 알아서 걸러내고 이 새 키를 뒤에 채워 넣는다.
+  COST_ADJUSTMENT: "COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT / PRODUCTION COST",
   NOTES: "NOTES",
   DEVELOPMENT: "FORMULAS / DEVELOPMENT HISTORY / OBSERVATIONS / KNOWLEDGE",
 };
@@ -235,6 +237,13 @@ function ProductDetailPage() {
     ) ?? 0;
   const productCostItems = useQuery(productCostItemsQuery(productId));
   const perCakeExtras = sumCostItemAssignments(productCostItems.data ?? []) + overheadPerCake;
+
+  // COST BREAKDOWN 1열 "총원가" 계산식용 — 사이즈 지정된 COMPONENTS 사용량 행 전체 합산(2026-09-24).
+  // 사이즈가 여러 개면 이 값은 사이즈 구분 없는 참고용 합계이고, 사이즈별 정확한 원가는 SIZES
+  // 섹션(costTotals)을 봐야 한다.
+  const totalComponentsCost = (links.data ?? [])
+    .filter((r) => r.product_size_id != null)
+    .reduce((sum, r) => sum + (rowCost(r, costsByComponent) ?? 0), 0);
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, product.data?.category_id ?? null);
@@ -445,7 +454,6 @@ function ProductDetailPage() {
               perCakeExtras={perCakeExtras}
             />
           ),
-          PRODUCTION_COST: <ProductCostItemsSection productId={productId} />,
           NOTES: (
             <SectionCard title="NOTES">
               <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateProduct.mutate({ notes })} />
@@ -495,11 +503,30 @@ function ProductDetailPage() {
               <ProductKnowledgeSection productId={productId} />
             </div>
           ),
-          COMPONENTS: (
+          COST_ADJUSTMENT: (
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {/* 1열 — 총원가 계산식(2026-09-24): 2열(COMPONENTS & ADJUSTMENT) + 3열(PRODUCTION COST) */}
+        <div className="border border-border bg-card p-3">
+          <p className="label-caps text-muted-foreground">총원가</p>
+          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-foreground">
+            {fmtCurrency(totalComponentsCost + perCakeExtras)}
+          </p>
+          <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+            = COMPONENTS & ADJUSTMENT {fmtCurrency(totalComponentsCost)} + PRODUCTION COST{" "}
+            {fmtCurrency(perCakeExtras)}
+          </p>
+          <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+            사이즈 구분 없이 지정된 모든 사용량을 합산한 참고값입니다 — 사이즈별 정확한 금액은 SIZES
+            섹션을 확인하세요.
+          </p>
+        </div>
+
+        {/* 2열 — COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT */}
       <SectionCard
         title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
+        bodyClassName="max-h-[480px] overflow-y-auto"
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               className={buttonClass}
@@ -708,6 +735,10 @@ function ProductDetailPage() {
           </>
         )}
       </SectionCard>
+
+        {/* 3열 — PRODUCTION COST 항목 */}
+        <ProductCostItemsSection productId={productId} />
+      </div>
           ),
         };
 

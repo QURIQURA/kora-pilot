@@ -67,6 +67,7 @@ export function ProductCostItemsSection({ productId }: { productId: string }) {
   return (
     <SectionCard
       title="PRODUCTION COST 항목 (케익 1개당 — UTILITY / CONSUMABLE / PACKAGING)"
+      bodyClassName="max-h-[420px] overflow-y-auto"
       action={
         candidates.length > 0 ? (
           <button
