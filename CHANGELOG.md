@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-09-24 — PRODUCT 상세 화면 구성을 직접 편집 + COMPONENTS/COST 공간 정리
+
+**무엇이 달라졌나**
+- PRODUCT 상세 페이지 상단에 "화면 구성 편집" 버튼이 생겼습니다. 켜면 각 섹션(IMAGES/SIZES/COMPONENTS/PRODUCTION COST 등) 옆에 ▲▼ 버튼이 나타나 순서를 직접 바꿀 수 있습니다. 한 번 정하면 모든 PRODUCT 페이지에 공통으로 적용됩니다.
+- 기본 순서에서 SIZES를 COMPONENTS보다 앞으로 옮겼습니다 — 너무 아래에 있다는 피드백을 반영했습니다.
+- COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT: 사이즈별 행마다 반복되던 안내 문구를 섹션 상단에 한 줄로 모으고, 박스 여백을 줄여 표기 내용에 비해 공간을 덜 차지하도록 정리했습니다.
+- SIZES의 "FULL PRODUCTION COST" 줄에서 "(UTILITY/CONSUMABLE/PACKAGING/OVERHEAD 포함)" 설명을 빼고 금액만 보이게 했습니다. 그 설명은 SETTINGS → COST 섹션 상단에 한 번만 적어뒀습니다.
+
+**확인 방법**
+- PRODUCT 상세 페이지 상단의 "화면 구성 편집"을 눌러 섹션 순서를 바꿔보고, SIZES가 COMPONENTS보다 위에 있는지, COMPONENTS 박스가 더 간결해졌는지 확인. SETTINGS → COST에서 FULL PRODUCTION COST 설명 문구 확인.
+
+---
+
 ## 2026-09-24 — WORKFLOW 타임라인에 TASK가 아예 안 보이던 문제 수정
 
 **무엇이 달라졌나**

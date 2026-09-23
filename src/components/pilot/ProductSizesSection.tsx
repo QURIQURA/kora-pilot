@@ -175,9 +175,6 @@ export function ProductSizesSection({
                           {fullCost != null && (
                             <p className="font-mono text-xs text-muted-foreground">
                               FULL PRODUCTION COST {fmtCurrency(fullCost)}
-                              {perCakeExtras
-                                ? ` (UTILITY/CONSUMABLE/PACKAGING/OVERHEAD ${fmtCurrency(perCakeExtras)} 포함)`
-                                : ""}
                             </p>
                           )}
                           {sellingPrice != null && (

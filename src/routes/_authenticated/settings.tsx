@@ -88,6 +88,12 @@ function SettingsPage() {
       </SettingsGroup>
 
       <SettingsGroup label="COST">
+        <p className="mb-3 font-mono text-[11px] text-muted-foreground">
+          PRODUCT 페이지의 "FULL PRODUCTION COST"는 RAW MATERIAL(재료 원가) + 여기 COST
+          ITEMS의 UTILITY/CONSUMABLE/PACKAGING(케익 1개당) + 아래 MONTHLY OVERHEAD(월 고정비÷월
+          예상 케익 개수)를 모두 합한 금액입니다. 각 항목의 산정 근거는 COST ITEMS의 "이력"에서
+          확인/수정하세요.
+        </p>
         <SettingsSection title="COST ITEMS (UTILITY / PACKAGING / CONSUMABLE / OVERHEAD)">
           <CostItemManager />
         </SettingsSection>

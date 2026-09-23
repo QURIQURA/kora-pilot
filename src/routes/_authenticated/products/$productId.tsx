@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -111,6 +111,45 @@ function groupComponentLinks(rows: ProductComponentRow[]): LinkGroup[] {
     });
   }
   return [...byKey.values()];
+}
+
+/**
+ * PRODUCT 상세 화면의 섹션 배치 순서 — 사용자가 직접 위/아래로 재배치할 수 있다(2026-09-24).
+ * pilot_settings.product_page_section_order(전체 PRODUCT 공통, 유저당 1개)에 저장되고, 저장된
+ * 값이 없거나 일부 키가 빠져있으면 이 기본 순서로 보정한다. SIZES를 COMPONENTS보다 앞에 둔 것은
+ * "SIZES가 너무 아래에 있다"는 피드백을 반영한 기본값이다.
+ */
+const DEFAULT_SECTION_ORDER = [
+  "IMAGES",
+  "DESIGN",
+  "TARGET",
+  "TAGS",
+  "SIZES",
+  "COMPONENTS",
+  "PRODUCTION_COST",
+  "NOTES",
+  "DEVELOPMENT",
+] as const;
+type ProductSectionKey = (typeof DEFAULT_SECTION_ORDER)[number];
+
+const SECTION_LABELS: Record<ProductSectionKey, string> = {
+  IMAGES: "IMAGES",
+  DESIGN: "DESIGN",
+  TARGET: "TARGET",
+  TAGS: "TAGS",
+  SIZES: "SIZES",
+  COMPONENTS: "COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT",
+  PRODUCTION_COST: "PRODUCTION COST 항목",
+  NOTES: "NOTES",
+  DEVELOPMENT: "FORMULAS / DEVELOPMENT HISTORY / OBSERVATIONS / KNOWLEDGE",
+};
+
+/** 저장된 순서를 유효한 키만 남기고, 빠진 키는 기본 순서 자리에 채워 넣어 보정한다 */
+function resolveSectionOrder(stored: string[] | null | undefined): ProductSectionKey[] {
+  const valid = new Set<string>(DEFAULT_SECTION_ORDER);
+  const fromStored = (stored ?? []).filter((k): k is ProductSectionKey => valid.has(k));
+  const missing = DEFAULT_SECTION_ORDER.filter((k) => !fromStored.includes(k));
+  return [...fromStored, ...missing];
 }
 
 function sizeLabelFor(sizes: ProductSize[], sizeId: string): string {
@@ -316,6 +355,32 @@ function ProductDetailPage() {
 
   const [adding, setAdding] = useState(false);
   const [addingIngredient, setAddingIngredient] = useState(false);
+  const [editingLayout, setEditingLayout] = useState(false);
+
+  const sectionOrder = resolveSectionOrder(pilotSettings.data?.product_page_section_order);
+  const updateSectionOrder = useMutation({
+    mutationFn: async (order: ProductSectionKey[]) => {
+      const user_id = await currentUserId();
+      const current = pilotSettings.data;
+      const { error } = await supabase.from("pilot_settings").upsert({
+        user_id,
+        monthly_overhead: current?.monthly_overhead ?? 0,
+        monthly_unit_count: current?.monthly_unit_count ?? 0,
+        product_page_section_order: order,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pilot_settings"] }),
+  });
+
+  function moveSection(key: ProductSectionKey, direction: -1 | 1) {
+    const idx = sectionOrder.indexOf(key);
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= sectionOrder.length) return;
+    const next = [...sectionOrder];
+    [next[idx], next[targetIdx]] = [next[targetIdx]!, next[idx]!];
+    updateSectionOrder.mutate(next);
+  }
 
   if (product.isLoading) {
     return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
@@ -343,20 +408,94 @@ function ProductDetailPage() {
             onChange={(id) => updateProduct.mutate({ category_id: id || null })}
             emptyLabel="NO CATEGORY"
           />
+          <button
+            type="button"
+            className={`${buttonClass} text-xs`}
+            onClick={() => setEditingLayout((v) => !v)}
+          >
+            {editingLayout ? "화면 구성 편집 종료" : "화면 구성 편집"}
+          </button>
         </div>
       </div>
 
-      <ProductImagesSection productId={productId} product={data} />
+      {editingLayout && (
+        <p className="border border-dashed border-border p-2 font-mono text-[11px] text-muted-foreground">
+          아래 각 섹션 옆의 ▲▼로 순서를 바꿀 수 있습니다 — 모든 PRODUCT 페이지에 공통으로 적용됩니다.
+        </p>
+      )}
 
-      <ProductDesignSection productId={productId} product={data} />
-
-      <TargetSection
-        target={parseTarget(data.product_target)}
-        onSave={(next) => updateProduct.mutate({ product_target: next })}
-      />
-
-      <TagEditor productId={productId} allTags={tags.data ?? []} linkedTagIds={linkedTagIds} />
-
+      {(() => {
+        const sectionNodes: Record<ProductSectionKey, ReactNode> = {
+          IMAGES: <ProductImagesSection productId={productId} product={data} />,
+          DESIGN: <ProductDesignSection productId={productId} product={data} />,
+          TARGET: (
+            <TargetSection
+              target={parseTarget(data.product_target)}
+              onSave={(next) => updateProduct.mutate({ product_target: next })}
+            />
+          ),
+          TAGS: (
+            <TagEditor productId={productId} allTags={tags.data ?? []} linkedTagIds={linkedTagIds} />
+          ),
+          SIZES: (
+            <ProductSizesSection
+              productId={productId}
+              usageTotals={sumUsageBySize(links.data ?? [])}
+              costTotals={sumCostBySize(links.data ?? [], costsByComponent)}
+              perCakeExtras={perCakeExtras}
+            />
+          ),
+          PRODUCTION_COST: <ProductCostItemsSection productId={productId} />,
+          NOTES: (
+            <SectionCard title="NOTES">
+              <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateProduct.mutate({ notes })} />
+            </SectionCard>
+          ),
+          DEVELOPMENT: (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <ProductFormulasSection productId={productId} />
+              <SectionCard
+                title="DEVELOPMENT HISTORY"
+                action={
+                  <Link to="/experiments" className="label-caps px-2 py-2 text-xs hover:bg-secondary">
+                    VIEW ALL
+                  </Link>
+                }
+              >
+                <ExperimentListItems items={experiments.data ?? []} />
+              </SectionCard>
+              <SectionCard title="OBSERVATIONS">
+                {(observations.data ?? []).length === 0 ? (
+                  <p className="font-mono text-xs uppercase text-muted-foreground">NO OBSERVATIONS YET</p>
+                ) : (
+                  <ul className="divide-y divide-border border border-border">
+                    {(observations.data ?? []).map((obs) => (
+                      <li key={obs.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                        <span className="w-14 font-mono text-xs text-muted-foreground">
+                          {formatTime(obs.created_at)}
+                        </span>
+                        <span className="label-caps bg-foreground px-2 py-0.5 text-[11px] text-background">
+                          {(obs.label || "NOTE").toUpperCase()}
+                        </span>
+                        <span className="min-w-[8rem] flex-1 text-sm">{obs.value}</span>
+                        {obs.experiments && (
+                          <Link
+                            to="/experiments/$experimentId"
+                            params={{ experimentId: obs.experiments.id }}
+                            className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            {experimentLabel(obs.experiments.experiment_number)}
+                          </Link>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SectionCard>
+              <ProductKnowledgeSection productId={productId} />
+            </div>
+          ),
+          COMPONENTS: (
       <SectionCard
         title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
         action={
@@ -384,6 +523,11 @@ function ProductDetailPage() {
           </div>
         }
       >
+        <p className="mb-2 font-mono text-[11px] text-muted-foreground">
+          여기서 지정하는 FORMULA VERSION/사용량은 이 PRODUCT에만 적용됩니다 — 보통은 해당 COMPONENT의
+          Development Entry에서 "이 PRODUCT에만 적용"으로 저장하면 자동으로 반영되고, COMPONENT의 Current
+          Formula 자체는 바뀌지 않습니다.
+        </p>
         {adding && (
           <AddComponentPanel
             productId={productId}
@@ -424,7 +568,7 @@ function ProductDetailPage() {
                   ? (costsByComponent[group.componentId as string]?.hasMissingPrice ?? false)
                   : costPerGram(group.rows[0]?.ingredients) == null;
               return (
-              <li key={group.key} className="space-y-3 px-3 py-4">
+              <li key={group.key} className="space-y-2 px-3 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   {group.kind === "component" ? (
                     <Link
@@ -472,7 +616,7 @@ function ProductDetailPage() {
                   </div>
                 </div>
                 {group.rows.map((link) => (
-                  <div key={link.id} className="space-y-2 border border-border bg-muted/20 p-3">
+                  <div key={link.id} className="space-y-1.5 border border-border bg-muted/20 p-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="label-caps text-xs font-medium text-foreground">
                         {link.product_size_id
@@ -564,62 +708,40 @@ function ProductDetailPage() {
           </>
         )}
       </SectionCard>
+          ),
+        };
 
-      <SectionCard title="NOTES">
-        <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateProduct.mutate({ notes })} />
-      </SectionCard>
-
-      <ProductSizesSection
-        productId={productId}
-        usageTotals={sumUsageBySize(links.data ?? [])}
-        costTotals={sumCostBySize(links.data ?? [], costsByComponent)}
-        perCakeExtras={perCakeExtras}
-      />
-
-      <ProductCostItemsSection productId={productId} />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <ProductFormulasSection productId={productId} />
-        <SectionCard
-          title="DEVELOPMENT HISTORY"
-          action={
-            <Link to="/experiments" className="label-caps px-2 py-2 text-xs hover:bg-secondary">
-              VIEW ALL
-            </Link>
-          }
-        >
-          <ExperimentListItems items={experiments.data ?? []} />
-        </SectionCard>
-        <SectionCard title="OBSERVATIONS">
-          {(observations.data ?? []).length === 0 ? (
-            <p className="font-mono text-xs uppercase text-muted-foreground">NO OBSERVATIONS YET</p>
-          ) : (
-            <ul className="divide-y divide-border border border-border">
-              {(observations.data ?? []).map((obs) => (
-                <li key={obs.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
-                  <span className="w-14 font-mono text-xs text-muted-foreground">
-                    {formatTime(obs.created_at)}
-                  </span>
-                  <span className="label-caps bg-foreground px-2 py-0.5 text-[11px] text-background">
-                    {(obs.label || "NOTE").toUpperCase()}
-                  </span>
-                  <span className="min-w-[8rem] flex-1 text-sm">{obs.value}</span>
-                  {obs.experiments && (
-                    <Link
-                      to="/experiments/$experimentId"
-                      params={{ experimentId: obs.experiments.id }}
-                      className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      {experimentLabel(obs.experiments.experiment_number)}
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </SectionCard>
-        <ProductKnowledgeSection productId={productId} />
-      </div>
+        return sectionOrder.map((key, idx) => (
+          <div key={key}>
+            {editingLayout && (
+              <div className="mb-1 flex items-center justify-between border border-dashed border-border px-2 py-1">
+                <span className="label-caps text-[10px] text-muted-foreground">
+                  {SECTION_LABELS[key]}
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    className="px-2 py-1 text-xs disabled:opacity-30"
+                    disabled={idx === 0}
+                    onClick={() => moveSection(key, -1)}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-1 text-xs disabled:opacity-30"
+                    disabled={idx === sectionOrder.length - 1}
+                    onClick={() => moveSection(key, 1)}
+                  >
+                    ▼
+                  </button>
+                </div>
+              </div>
+            )}
+            {sectionNodes[key]}
+          </div>
+        ));
+      })()}
 
       <div className="pt-2">
         <button
@@ -1188,11 +1310,6 @@ function ComponentUsageEditor({
           / 이 레시피 총량 {fmtNumber(versionTotalGrams)}g
         </span>
       )}
-      <p className="w-full font-mono text-[11px] text-muted-foreground">
-        이 PRODUCT에서만 다른 FORMULA VERSION/사용량을 쓸 때만 지정하세요 — 보통은 해당
-        COMPONENT의 Development Entry에서 "이 PRODUCT에만 적용"으로 저장하면 자동으로
-        여기 반영됩니다. COMPONENT의 Current Formula 자체는 바뀌지 않습니다.
-      </p>
     </div>
   );
 }

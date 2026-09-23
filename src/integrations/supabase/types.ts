@@ -1149,18 +1149,21 @@ export type Database = {
         Row: {
           monthly_overhead: number
           monthly_unit_count: number
+          product_page_section_order: string[] | null
           updated_at: string
           user_id: string
         }
         Insert: {
           monthly_overhead?: number
           monthly_unit_count?: number
+          product_page_section_order?: string[] | null
           updated_at?: string
           user_id?: string
         }
         Update: {
           monthly_overhead?: number
           monthly_unit_count?: number
+          product_page_section_order?: string[] | null
           updated_at?: string
           user_id?: string
         }
