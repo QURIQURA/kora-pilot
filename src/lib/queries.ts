@@ -1330,6 +1330,35 @@ export const workSessionTasksQuery = (sessionId: string) =>
       ),
   });
 
+/**
+ * WORKFLOW TASK(스텝)에 묶인 재료 줄 이름 — taskId → 그 스텝에 속한 재료명 배열(2026-09-23).
+ * 예: "MERINGUE" 스텝 → ["흰자(Egg white)", "백설탕(Caster sugar)"].
+ */
+export const workSessionTaskIngredientsQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ["work_session_task_ingredients", sessionId],
+    queryFn: async (): Promise<Record<string, { lineId: string; name: string }[]>> => {
+      const rows = unwrap(
+        await supabase
+          .from("work_session_task_ingredients")
+          .select(
+            "task_id, formula_version_ingredient_id, formula_version_ingredients(ingredients(name))",
+          )
+          .eq("work_session_id", sessionId),
+      ) as unknown as {
+        task_id: string;
+        formula_version_ingredient_id: string;
+        formula_version_ingredients: { ingredients: { name: string } | null } | null;
+      }[];
+      const map: Record<string, { lineId: string; name: string }[]> = {};
+      for (const row of rows) {
+        const name = row.formula_version_ingredients?.ingredients?.name ?? "—";
+        (map[row.task_id] ??= []).push({ lineId: row.formula_version_ingredient_id, name });
+      }
+      return map;
+    },
+  });
+
 
 
 /* ── PRODUCTION COST — cost_items / component/product 배정 / SETTINGS (2026-09-23) ── */

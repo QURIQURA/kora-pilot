@@ -2046,8 +2046,58 @@ export type Database = {
           },
         ]
       }
+      work_session_task_ingredients: {
+        Row: {
+          created_at: string
+          formula_version_ingredient_id: string
+          id: string
+          task_id: string
+          user_id: string
+          work_session_id: string
+        }
+        Insert: {
+          created_at?: string
+          formula_version_ingredient_id: string
+          id?: string
+          task_id: string
+          user_id?: string
+          work_session_id: string
+        }
+        Update: {
+          created_at?: string
+          formula_version_ingredient_id?: string
+          id?: string
+          task_id?: string
+          user_id?: string
+          work_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_session_task_ingredients_formula_version_ingredient_i_fkey"
+            columns: ["formula_version_ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "formula_version_ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_task_ingredients_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "work_session_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_task_ingredients_work_session_id_fkey"
+            columns: ["work_session_id"]
+            isOneToOne: false
+            referencedRelation: "work_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       work_session_tasks: {
         Row: {
+          actual_started_at: string | null
           completed_at: string | null
           created_at: string
           formula_version_id: string | null
@@ -2065,6 +2115,7 @@ export type Database = {
           work_session_id: string
         }
         Insert: {
+          actual_started_at?: string | null
           completed_at?: string | null
           created_at?: string
           formula_version_id?: string | null
@@ -2082,6 +2133,7 @@ export type Database = {
           work_session_id: string
         }
         Update: {
+          actual_started_at?: string | null
           completed_at?: string | null
           created_at?: string
           formula_version_id?: string | null

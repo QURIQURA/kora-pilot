@@ -31,6 +31,7 @@ import {
   workSessionMultiplierHistoryQuery,
   workSessionProgressQuery,
   workSessionQuery,
+  workSessionTaskIngredientsQuery,
   workSessionTasksQuery,
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
@@ -103,6 +104,7 @@ function WorkSessionPage() {
   const ingredients = useQuery(versionIngredientsBulkQuery(versionIds));
   const progress = useQuery(workSessionProgressQuery(sessionId));
   const tasks = useQuery(workSessionTasksQuery(sessionId));
+  const taskIngredients = useQuery(workSessionTaskIngredientsQuery(sessionId));
 
   const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA" | "WORKFLOW">("WEIGHING");
   const [adding, setAdding] = useState(false);
@@ -128,6 +130,9 @@ function WorkSessionPage() {
   };
   const invalidateTasks = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_session_tasks", sessionId] });
+    await queryClient.invalidateQueries({
+      queryKey: ["work_session_task_ingredients", sessionId],
+    });
   };
 
   const updateSession = useMutation({
@@ -343,6 +348,8 @@ function WorkSessionPage() {
               formulaVersionId: s.formulaVersionId,
               formulaName: s.formulaName,
             }))}
+            ingredientsByVersion={ingredientsByVersion}
+            taskIngredients={taskIngredients.data ?? {}}
             onTasksChanged={invalidateTasks}
           />
         )}

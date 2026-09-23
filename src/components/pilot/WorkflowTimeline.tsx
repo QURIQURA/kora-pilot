@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId } from "@/lib/queries";
+import { currentUserId, type VersionIngredientRow } from "@/lib/queries";
 import { localDateTimeToISO, toLocalDateString, formatTime } from "@/lib/datetime";
 import {
   computeTimelineRange,
@@ -44,16 +44,23 @@ export function WorkflowView({
   sessionId,
   tasks,
   formulaOptions,
+  ingredientsByVersion,
+  taskIngredients,
   onTasksChanged,
 }: {
   sessionId: string;
   tasks: WorkSessionTask[];
   formulaOptions: FormulaOption[];
+  /** formula_version_id → 그 배합의 재료 줄 목록(2026-09-23) — TASK를 특정 재료 그룹으로 묶을 때 선택지로 씀 */
+  ingredientsByVersion?: Record<string, VersionIngredientRow[]>;
+  /** taskId → 그 TASK에 묶인 재료 줄(2026-09-23) */
+  taskIngredients?: Record<string, { lineId: string; name: string }[]>;
   onTasksChanged: () => void | Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [taskType, setTaskType] = useState("");
   const [formulaVersionId, setFormulaVersionId] = useState("");
+  const [ingredientLineIds, setIngredientLineIds] = useState<string[]>([]);
   const [day, setDay] = useState(() => toLocalDateString());
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -124,36 +131,66 @@ export function WorkflowView({
     setError(null);
     const userId = await currentUserId();
     const maxSort = tasks.reduce((acc, t) => Math.max(acc, t.sort_order), 0);
-    const { error: insertError } = await supabase.from("work_session_tasks").insert({
-      work_session_id: sessionId,
-      user_id: userId,
-      task_name: trimmed,
-      task_type: taskType.trim() || null,
-      formula_version_id: formulaVersionId || null,
-      planned_start_at: startTime ? localDateTimeToISO(day, startTime) : null,
-      planned_end_at: endTime ? localDateTimeToISO(day, endTime) : null,
-      sort_order: maxSort + 1,
-    });
-    setSaving(false);
-    if (insertError) {
-      setError(`ADD FAILED — ${insertError.message}`);
+    const { data: inserted, error: insertError } = await supabase
+      .from("work_session_tasks")
+      .insert({
+        work_session_id: sessionId,
+        user_id: userId,
+        task_name: trimmed,
+        task_type: taskType.trim() || null,
+        formula_version_id: formulaVersionId || null,
+        planned_start_at: startTime ? localDateTimeToISO(day, startTime) : null,
+        planned_end_at: endTime ? localDateTimeToISO(day, endTime) : null,
+        sort_order: maxSort + 1,
+      })
+      .select("id")
+      .single();
+    if (insertError || !inserted) {
+      setSaving(false);
+      setError(`ADD FAILED — ${insertError?.message ?? "unknown error"}`);
       return;
     }
+    if (ingredientLineIds.length > 0) {
+      const { error: linkError } = await supabase.from("work_session_task_ingredients").insert(
+        ingredientLineIds.map((lineId) => ({
+          user_id: userId,
+          work_session_id: sessionId,
+          task_id: inserted.id,
+          formula_version_ingredient_id: lineId,
+        })),
+      );
+      if (linkError) {
+        setSaving(false);
+        setError(`재료 그룹 저장 실패 — ${linkError.message}`);
+        await onTasksChanged();
+        return;
+      }
+    }
+    setSaving(false);
     setName("");
     setTaskType("");
     setStartTime("");
     setEndTime("");
+    setIngredientLineIds([]);
     await onTasksChanged();
   }
 
   async function cycleStatus(task: WorkSessionTask) {
     const next = nextTaskStatus(task.status as TaskStatus);
+    const patch: { status: TaskStatus; completed_at: string | null; actual_started_at?: string | null } = {
+      status: next,
+      completed_at: next === "DONE" ? new Date().toISOString() : null,
+    };
+    // 실제 시작 시각은 IN_PROGRESS로 처음 넘어갈 때 한 번만 자동 기록하고, 완전히 한 바퀴 돌아
+    // NOT_STARTED로 돌아오면 초기화한다(재시작). completed_at과 동일한 "매 전환마다 재계산" 규칙.
+    if (next === "IN_PROGRESS") {
+      patch.actual_started_at = task.actual_started_at ?? new Date().toISOString();
+    } else if (next === "NOT_STARTED") {
+      patch.actual_started_at = null;
+    }
     const { error: updateError } = await supabase
       .from("work_session_tasks")
-      .update({
-        status: next,
-        completed_at: next === "DONE" ? new Date().toISOString() : null,
-      })
+      .update(patch)
       .eq("id", task.id);
     if (updateError) setError(`UPDATE FAILED — ${updateError.message}`);
     await onTasksChanged();
@@ -196,7 +233,10 @@ export function WorkflowView({
             <select
               className={`${selectClass} md:w-56`}
               value={formulaVersionId}
-              onChange={(e) => setFormulaVersionId(e.target.value)}
+              onChange={(e) => {
+                setFormulaVersionId(e.target.value);
+                setIngredientLineIds([]);
+              }}
             >
               <option value="">NO FORMULA (GENERAL)</option>
               {formulaOptions.map((f) => (
@@ -233,6 +273,34 @@ export function WorkflowView({
             {saving ? "ADDING..." : "ADD"}
           </button>
         </div>
+        {formulaVersionId && (ingredientsByVersion?.[formulaVersionId]?.length ?? 0) > 0 && (
+          <div className="mt-2 space-y-1 border-t border-dashed border-border pt-2">
+            <div className="text-[10px] tracking-wider text-muted-foreground">
+              이 스텝에 묶을 재료(선택, 예: 흰자+설탕 → MERINGUE)
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {(ingredientsByVersion?.[formulaVersionId] ?? []).map((line) => {
+                const checked = ingredientLineIds.includes(line.id);
+                return (
+                  <label key={line.id} className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        setIngredientLineIds((prev) =>
+                          e.target.checked
+                            ? [...prev, line.id]
+                            : prev.filter((id) => id !== line.id),
+                        );
+                      }}
+                    />
+                    {line.ingredients.name}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {error && <div className="mt-2 text-xs text-destructive">{error}</div>}
       </div>
 
@@ -373,6 +441,11 @@ export function WorkflowView({
                 task.planned_start_at && task.planned_end_at
                   ? minutesBetween(task.planned_start_at, task.planned_end_at)
                   : null;
+              const actualDuration =
+                task.actual_started_at && task.completed_at
+                  ? minutesBetween(task.actual_started_at, task.completed_at)
+                  : null;
+              const linkedIngredients = taskIngredients?.[task.id] ?? [];
               return (
                 <div
                   key={task.id}
@@ -389,12 +462,25 @@ export function WorkflowView({
                         </span>
                       ) : null}
                     </div>
+                    {linkedIngredients.length > 0 && (
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        {linkedIngredients.map((l) => l.name).join(" + ")}
+                      </div>
+                    )}
                     <div className="mt-1 text-[11px] tracking-wider text-muted-foreground tabular-nums">
-                      {task.planned_start_at ? formatTime(task.planned_start_at) : "--:--"}
+                      계획 {task.planned_start_at ? formatTime(task.planned_start_at) : "--:--"}
                       {" → "}
                       {task.planned_end_at ? formatTime(task.planned_end_at) : "--:--"}
                       {duration !== null ? ` · ${Math.round(duration)} MIN` : ""}
                     </div>
+                    {(task.actual_started_at || task.completed_at) && (
+                      <div className="mt-0.5 text-[11px] tracking-wider text-foreground tabular-nums">
+                        실제 {task.actual_started_at ? formatTime(task.actual_started_at) : "--:--"}
+                        {" → "}
+                        {task.completed_at ? formatTime(task.completed_at) : "--:--"}
+                        {actualDuration !== null ? ` · ${Math.round(actualDuration)} MIN` : ""}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
