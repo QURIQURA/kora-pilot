@@ -96,13 +96,42 @@ export interface TimelineRange {
 }
 
 /**
- * Timeline은 24시간 전체 대신, 시간이 지정된 Task 중 가장 이른 시작 시각을 기준으로
- * TIMELINE_WINDOW_HOURS(4시간)만 보여준다(2026-09-24, 이전엔 하루 전체라 스크롤이 너무 길다는 피드백).
- * 시간 미지정 Task는 이 범위 계산에 포함되지 않는다 — 시간을 정하기 전까진 타임라인에 나타나지 않는다.
- * 시간이 지정된 Task가 하나도 없으면 현재 시각이 속한 시(hour)를 기준으로 삼는다.
+ * TASK의 "실제 표시 시작 시각" — 계획 시작 시각(planned_start_at)과 실제 시작 시각(actual_started_at)
+ * 중 더 이른 쪽을 쓴다(2026-09-24: 계획보다 일찍 실제로 시작한 경우, 타임라인이 그 실제 시각을 반영해야
+ * 한다는 피드백). 계획만 있으면 계획을, 실제만 있으면 실제를 쓴다.
+ */
+function effectiveStartAt(
+  task: Pick<WorkSessionTask, "planned_start_at" | "actual_started_at">,
+): string | null {
+  if (task.planned_start_at && task.actual_started_at) {
+    return task.actual_started_at < task.planned_start_at
+      ? task.actual_started_at
+      : task.planned_start_at;
+  }
+  return task.planned_start_at ?? task.actual_started_at ?? null;
+}
+
+/** 위와 대칭 — 계획 종료 시각과 실제 완료 시각 중 더 이른 쪽 */
+function effectiveEndAt(
+  task: Pick<WorkSessionTask, "planned_end_at" | "completed_at">,
+): string | null {
+  if (task.planned_end_at && task.completed_at) {
+    return task.completed_at < task.planned_end_at ? task.completed_at : task.planned_end_at;
+  }
+  return task.planned_end_at ?? task.completed_at ?? null;
+}
+
+/**
+ * Timeline은 24시간 전체 대신, 시간이 지정된 Task 중 가장 이른 시각(계획 시작 또는 실제 시작 중
+ * 이른 쪽)을 기준으로 TIMELINE_WINDOW_HOURS(4시간)만 보여준다(2026-09-24, 이전엔 하루 전체라
+ * 스크롤이 너무 길다는 피드백; 이후 계획보다 일찍 실제로 시작한 경우도 반영하도록 보강).
+ * 계획도 실제 시작도 없는 Task는 이 범위 계산에 포함되지 않는다.
+ * 어느 Task에도 시각이 하나도 없으면 현재 시각이 속한 시(hour)를 기준으로 삼는다.
  */
 export function computeTimelineRange(tasks: WorkSessionTask[]): TimelineRange {
-  const starts = tasks.map((t) => t.planned_start_at).filter((v): v is string => Boolean(v));
+  const starts = tasks
+    .map((t) => effectiveStartAt(t))
+    .filter((v): v is string => Boolean(v));
   const earliestIso = starts.length > 0 ? starts.reduce((a, b) => (a < b ? a : b)) : null;
   const dayStr = earliestIso ? toLocalDateString(new Date(earliestIso)) : toLocalDateString();
   const anchorMinute = earliestIso
@@ -117,15 +146,24 @@ export function computeTimelineRange(tasks: WorkSessionTask[]): TimelineRange {
   };
 }
 
-/** Timeline 위 task block의 top/height(px) — range와 px-per-minute만 있으면 항상 다시 계산 가능 */
+/**
+ * Timeline 위 task block의 top/height(px) — range와 px-per-minute만 있으면 항상 다시 계산 가능.
+ * 계획 시작/종료 시각이 둘 다 있어야 블록을 그린다(그래야 길이를 알 수 있다). 실제 시작/완료
+ * 시각이 계획보다 이르면 그 실제 시각을 기준으로 위치를 그린다(2026-09-24).
+ */
 export function taskBlockPosition(
-  task: Pick<WorkSessionTask, "planned_start_at" | "planned_end_at">,
+  task: Pick<
+    WorkSessionTask,
+    "planned_start_at" | "planned_end_at" | "actual_started_at" | "completed_at"
+  >,
   range: TimelineRange,
   pxPerMinute: number,
 ): { top: number; height: number } | null {
   if (!task.planned_start_at || !task.planned_end_at) return null;
-  const startMin = minutesFromDayStart(task.planned_start_at, range.dayStr);
-  const endMin = minutesFromDayStart(task.planned_end_at, range.dayStr);
+  const effectiveStart = effectiveStartAt(task) ?? task.planned_start_at;
+  const effectiveEnd = effectiveEndAt(task) ?? task.planned_end_at;
+  const startMin = minutesFromDayStart(effectiveStart, range.dayStr);
+  const endMin = minutesFromDayStart(effectiveEnd, range.dayStr);
   const top = (startMin - range.startMinute) * pxPerMinute;
   const height = Math.max((endMin - startMin) * pxPerMinute, 4);
   return { top, height };

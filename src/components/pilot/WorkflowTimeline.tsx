@@ -74,6 +74,10 @@ export function WorkflowView({
     day: string;
     startTime: string;
     endTime: string;
+    /** 실제 시작/완료 시각 — 타임스탬프 버튼 누르는 걸 깜빡했을 때 수동으로 고칠 수 있게(2026-09-24) */
+    actualDay: string;
+    actualStartTime: string;
+    actualEndTime: string;
     ingredientLineIds: string[];
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
@@ -245,6 +249,13 @@ export function WorkflowView({
       day: task.planned_start_at ? toLocalDateString(new Date(task.planned_start_at)) : day,
       startTime: task.planned_start_at ? formatTime(task.planned_start_at) : "",
       endTime: task.planned_end_at ? formatTime(task.planned_end_at) : "",
+      actualDay: task.actual_started_at
+        ? toLocalDateString(new Date(task.actual_started_at))
+        : task.completed_at
+          ? toLocalDateString(new Date(task.completed_at))
+          : day,
+      actualStartTime: task.actual_started_at ? formatTime(task.actual_started_at) : "",
+      actualEndTime: task.completed_at ? formatTime(task.completed_at) : "",
       ingredientLineIds: (taskIngredients?.[task.id] ?? []).map((l) => l.lineId),
     });
   }
@@ -266,6 +277,14 @@ export function WorkflowView({
       setEditError("END TIME MUST BE AFTER START TIME");
       return;
     }
+    if (
+      editDraft.actualStartTime &&
+      editDraft.actualEndTime &&
+      editDraft.actualEndTime <= editDraft.actualStartTime
+    ) {
+      setEditError("실제 완료 시각은 실제 시작 시각보다 뒤여야 합니다");
+      return;
+    }
     setEditSaving(true);
     setEditError(null);
     const userId = await currentUserId();
@@ -280,6 +299,14 @@ export function WorkflowView({
           : null,
         planned_end_at: editDraft.endTime
           ? localDateTimeToISO(editDraft.day, editDraft.endTime)
+          : null,
+        // 타임스탬프 버튼 누르는 걸 깜빡한 경우를 위한 수동 보정(2026-09-24) — 상태 버튼과 별개로
+        // 여기서 직접 실제 시작/완료 시각을 쓰거나 비울 수 있다.
+        actual_started_at: editDraft.actualStartTime
+          ? localDateTimeToISO(editDraft.actualDay, editDraft.actualStartTime)
+          : null,
+        completed_at: editDraft.actualEndTime
+          ? localDateTimeToISO(editDraft.actualDay, editDraft.actualEndTime)
           : null,
       })
       .eq("id", taskId);
@@ -628,6 +655,33 @@ export function WorkflowView({
                         className={`${inputClass} md:w-32`}
                         value={editDraft.endTime}
                         onChange={(e) => setEditDraft({ ...editDraft, endTime: e.target.value })}
+                      />
+                    </div>
+                    <div className="mt-2 flex flex-col gap-2 border-t border-dashed border-border pt-2 md:flex-row md:flex-wrap md:items-center">
+                      <span className="text-[10px] tracking-wider text-muted-foreground">
+                        실제 시작/완료 (타임스탬프 버튼 깜빡했을 때 직접 수정)
+                      </span>
+                      <input
+                        type="date"
+                        className={`${inputClass} md:w-40`}
+                        value={editDraft.actualDay}
+                        onChange={(e) => setEditDraft({ ...editDraft, actualDay: e.target.value })}
+                      />
+                      <input
+                        type="time"
+                        className={`${inputClass} md:w-32`}
+                        value={editDraft.actualStartTime}
+                        onChange={(e) =>
+                          setEditDraft({ ...editDraft, actualStartTime: e.target.value })
+                        }
+                      />
+                      <input
+                        type="time"
+                        className={`${inputClass} md:w-32`}
+                        value={editDraft.actualEndTime}
+                        onChange={(e) =>
+                          setEditDraft({ ...editDraft, actualEndTime: e.target.value })
+                        }
                       />
                     </div>
                     {editIngredientOptions.length > 0 && (
