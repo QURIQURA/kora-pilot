@@ -9,6 +9,7 @@ import {
   componentUsageQuery,
   experimentsByComponentQuery,
   techniqueCategoriesQuery,
+  workflowTemplatesByTechniqueQuery,
 } from "@/lib/queries";
 import { techniquePath } from "@/lib/technique";
 import { formatDateTime } from "@/lib/datetime";
@@ -52,6 +53,9 @@ function ComponentDetailPage() {
 
   const techniqueCategoryList = techniqueCategories.data ?? [];
   const path = techniquePath(techniqueCategoryList, component.data?.technique_category_id ?? null);
+  const templatesForTechnique = useQuery(
+    workflowTemplatesByTechniqueQuery(component.data?.technique_category_id ?? null),
+  );
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -132,6 +136,42 @@ function ComponentDetailPage() {
       </div>
 
       <CurrentFormulaPanel componentId={componentId} componentName={data.name} />
+
+      <SectionCard title="DEFAULT WORKFLOW">
+        <p className="mb-2 font-mono text-[11px] text-muted-foreground">
+          이 Component를 PRODUCTION 세션에 추가할 때 자동으로 깔아줄 기본 WORKFLOW TEMPLATE입니다.
+          제작방법(위 TECHNIQUE)에 등록된 템플릿 중에서 고르세요. "자동 적용"을 켜면 세션에 추가하는
+          즉시 TASK가 생성되고, 꺼두면 지금처럼 WORKFLOW 탭에서 수동으로 "템플릿 불러오기"를 씁니다.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            className={selectClass + " w-auto"}
+            value={data.default_workflow_template_id ?? ""}
+            disabled={!data.technique_category_id}
+            onChange={(e) => update.mutate({ default_workflow_template_id: e.target.value || null })}
+          >
+            <option value="">
+              {data.technique_category_id ? "기본 템플릿 없음" : "먼저 TECHNIQUE를 지정하세요"}
+            </option>
+            {(templatesForTechnique.data ?? []).map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={data.auto_apply_default_workflow}
+              disabled={!data.default_workflow_template_id}
+              onChange={(e) => update.mutate({ auto_apply_default_workflow: e.target.checked })}
+            />
+            <span className="label-caps text-[11px] text-muted-foreground">
+              세션에 추가 시 자동 적용
+            </span>
+          </label>
+        </div>
+      </SectionCard>
 
       <SectionCard title="DESCRIPTION">
         <TextArea

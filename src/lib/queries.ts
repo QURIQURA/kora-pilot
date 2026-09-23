@@ -486,7 +486,14 @@ export const baseWeightUsageQuery = () =>
   });
 
 export interface FormulaListRow extends Formula {
-  components: { id: string; name: string; scaling_mode: string } | null;
+  components: {
+    id: string;
+    name: string;
+    scaling_mode: string;
+    /** 이 Component를 세션에 추가할 때 자동으로 깔아줄 기본 WORKFLOW TEMPLATE(2026-09-24) */
+    default_workflow_template_id: string | null;
+    auto_apply_default_workflow: boolean;
+  } | null;
   formula_versions: {
     id: string;
     version_number: number;
@@ -502,7 +509,7 @@ export const formulasQuery = () =>
         await supabase
           .from("formulas")
           .select(
-            "*, components(id, name, scaling_mode), formula_versions(id, version_number, status)",
+            "*, components(id, name, scaling_mode, default_workflow_template_id, auto_apply_default_workflow), formula_versions(id, version_number, status)",
           )
           .order("updated_at", { ascending: false }),
       ) as unknown as FormulaListRow[],
@@ -1286,7 +1293,13 @@ export interface WorkSessionFormulaVersionRow extends WorkSessionFormulaVersion 
       id: string;
       name: string;
       component_id: string | null;
-      components: { id: string; name: string; scaling_mode: string } | null;
+      components: {
+        id: string;
+        name: string;
+        scaling_mode: string;
+        default_workflow_template_id: string | null;
+        auto_apply_default_workflow: boolean;
+      } | null;
     };
   };
 }
@@ -1300,7 +1313,7 @@ export const workSessionFormulaVersionsQuery = (sessionId: string) =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "*, formula_versions(id, version_number, status, default_mould_id, default_base_weight_id, formulas(id, name, component_id, components(id, name, scaling_mode)))",
+            "*, formula_versions(id, version_number, status, default_mould_id, default_base_weight_id, formulas(id, name, component_id, components(id, name, scaling_mode, default_workflow_template_id, auto_apply_default_workflow)))",
           )
           .eq("work_session_id", sessionId)
           .order("sort_order"),

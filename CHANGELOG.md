@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-09-24 — PRODUCTION WORKFLOW 병렬 진행 + LOCKED/READY/ACTIVE/DONE + ACTIVE NOW + 포커스 모드
+
+실제 주방에서는 여러 Component(예: 시폰 반죽/사과 인서트/크림)가 동시에 진행됩니다. 이번 업데이트는
+"Workflow = 공정 순서/의존관계 정의", "Production = 실제 작업을 시간축에 기록"으로 역할을 분리하고,
+Production이 하나의 TASK만 진행할 수 있다는 제약을 없앴습니다.
+
+**무엇이 달라졌나**
+- **TASK 상태가 4단계로 세분화**됩니다(DB에 새로 저장하는 값은 아니고, 선행 TASK가 끝났는지로 화면에서 자동 계산합니다): LOCKED(선행 대기 중) / READY(지금 시작 가능) / ACTIVE(진행 중) / DONE(완료). TASK 순서 목록과 TASK LIST 양쪽에 이 상태가 표시됩니다.
+- **START / COMPLETE 버튼 분리**: 기존의 한 버튼으로 상태를 돌려가며 바꾸던 방식 대신, READY면 [START], ACTIVE면 [COMPLETE] 버튼만 뜹니다. COMPLETE를 누르면 그 Component의 다음 TASK가 READY로 바뀔 뿐, 자동으로 시작되지는 않습니다 — 다른 작업을 먼저 하다가 나중에 눌러도 됩니다.
+- **ACTIVE NOW 패널**: WORKFLOW 탭 맨 위에 지금 진행 중인 모든 TASK(여러 Component 동시에)를 한눈에 보여줍니다. 경과 시간이 실시간으로 올라가고, 바로 COMPLETE 처리할 수 있습니다.
+- **포커스 모드**: 타임라인의 각 품목(Component) 헤더에 "포커스" 버튼이 생겼습니다 — 누르면 그 Component의 지금 할 일 하나에만 집중하는 화면(TASK n/전체, 큰 START/COMPLETE & NEXT 버튼)이 뜹니다.
+- **Component 기본 WORKFLOW 자동 적용**: Component 상세 페이지에 "DEFAULT WORKFLOW" 섹션이 추가됐습니다. 그 Component의 제작방법(TECHNIQUE)에 등록된 템플릿 중 기본값을 지정하고 "자동 적용"을 켜두면, PRODUCTION 세션에 그 Component(Formula Version)를 추가하는 즉시 TASK가 자동으로 깔립니다. 꺼두면 기존처럼 WORKFLOW 탭에서 수동으로 "템플릿 불러오기"를 쓰면 됩니다 — 이때도 이제 어느 품목(열)에 넣을지 직접 고를 수 있습니다(이전엔 항상 GENERAL로 들어갔습니다).
+- **TASK 체크리스트**: TASK 하나를 지나치게 잘게 쪼개지 않고("계량→섞기→..."을 각각 TASK로 만들지 않고), 그 안에 체크리스트(예: 재료 계량 / 섞기 / 질감 확인)를 둘 수 있습니다. SETTINGS의 WORKFLOW TEMPLATES와 PRODUCTION의 ADD/EDIT TASK 양쪽에서 한 줄에 하나씩 입력하면 됩니다.
+- **타이머 TASK**: TASK TYPE을 WAIT 또는 TIMER로 하면 타이머 길이(분)를 지정할 수 있고, 진행 중일 때 남은 시간이 표시됩니다(다 됐다고 자동으로 완료 처리되지는 않습니다 — 완료는 항상 직접 누릅니다).
+- **BAKE 관찰값에 온도 추가**: 기존 상태/높이(오븐투입시·중간·최종) 관찰값에 온도(°C) 입력칸이 추가됐습니다.
+
+**기존 기능/데이터는 그대로**
+- "계획(planned_start_at 등)" 폐지, 타임라인이 실제 시작/완료 시각만 쓰는 원칙, sort_order 기반 TASK 순서, 다중 선행 TASK, 재료 그룹핑, TASK TYPE 색상 설정 — 전부 그대로입니다.
+- 열(품목)은 이미 있던 formula_version_id 기준 분리를 그대로 씁니다 — 새 테이블을 만들지 않았습니다.
+- DB 변경은 컬럼 추가뿐입니다(모두 nullable/기본값 있음): components(default_workflow_template_id, auto_apply_default_workflow), workflow_template_tasks(checklist_items, is_optional, timer_minutes), work_session_tasks(checklist_items, is_optional, timer_minutes, observation_temperature_c). 기존 데이터/기능에 영향 없습니다.
+
+**확인 방법**
+- PRODUCTION 세션에서 Formula Version을 2개 이상 추가하고 각각 START를 눌러보면, 여러 품목이 동시에 ACTIVE NOW에 뜨는지 확인하세요.
+- Component 상세 → DEFAULT WORKFLOW에서 템플릿+자동 적용을 켠 뒤, 새 세션에 그 Component를 추가하면 TASK가 자동으로 생기는지 확인하세요.
+
+---
+
 ## 2026-09-23 — 제작방법(TECHNIQUE) 기준 WORKFLOW 템플릿
 
 **무엇이 달라졌나**

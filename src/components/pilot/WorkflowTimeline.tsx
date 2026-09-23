@@ -23,26 +23,30 @@ import {
   type VersionIngredientRow,
 } from "@/lib/queries";
 import { leafTechniques } from "@/lib/technique";
-import { localDateTimeToISO, toLocalDateString, formatTime } from "@/lib/datetime";
+import { localDateTimeToISO, toLocalDateString, formatTime, formatDuration } from "@/lib/datetime";
 import {
   assignTimelineLanes,
+  computeTaskPhase,
   computeTimelineRange,
   hasObservationFields,
+  hasTimerField,
   minutesBetween,
   minutesFromDayStart,
-  nextTaskStatus,
   nowLineOffset,
+  parseChecklistLines,
   taskBlockPosition,
   taskTypeColorClass,
   taskTypeColorKey,
   taskTypeLineColorClass,
-  TASK_STATUS_ICON,
-  TASK_STATUS_LABEL,
+  TASK_PHASE_ICON,
+  TASK_PHASE_LABEL,
   TASK_TYPE_COLOR_CLASSES,
   TASK_TYPE_SUGGESTIONS,
-  type TaskStatus,
+  type ChecklistItem,
+  type TaskPhase,
   type WorkSessionTask,
 } from "@/lib/workflow";
+import { applyWorkflowTemplate } from "@/lib/workflow-template";
 import { buttonClass, inputClass, primaryButtonClass, selectClass } from "@/components/pilot/ui";
 
 // 2026-09-23: 텍스트/박스가 안 잘리고 가독성 좋도록 타임라인 가로(COL_WIDTH)·세로(ROW_HEIGHT) 확대.
@@ -94,6 +98,9 @@ export function WorkflowView({
   const [obsHeightStart, setObsHeightStart] = useState("");
   const [obsHeightMid, setObsHeightMid] = useState("");
   const [obsHeightEnd, setObsHeightEnd] = useState("");
+  const [obsTemperature, setObsTemperature] = useState("");
+  const [timerMinutes, setTimerMinutes] = useState("");
+  const [checklistText, setChecklistText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -111,10 +118,15 @@ export function WorkflowView({
     obsHeightStart: string;
     obsHeightMid: string;
     obsHeightEnd: string;
+    obsTemperature: string;
+    timerMinutes: string;
+    checklistText: string;
   } | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [colorSettingsOpen, setColorSettingsOpen] = useState(false);
+  // 포커스 모드(2026-09-24) — 한 품목(Component)의 "지금 할 일"에만 집중하는 간단 화면.
+  const [focusColumnKey, setFocusColumnKey] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrolled = useRef(false);
   const queryClient = useQueryClient();
@@ -126,81 +138,35 @@ export function WorkflowView({
   const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
   const [templateTechniqueId, setTemplateTechniqueId] = useState("");
   const [templateId, setTemplateId] = useState("");
+  const [templateTargetColumn, setTemplateTargetColumn] = useState("");
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [templateError, setTemplateError] = useState<string | null>(null);
   const techniques = useQuery(techniqueCategoriesQuery());
   const templatesForTechnique = useQuery(workflowTemplatesByTechniqueQuery(templateTechniqueId || null));
 
+  /** 수동 "템플릿 불러오기" — Component 자동 적용과 같은 로직(src/lib/workflow-template.ts)을 쓴다.
+   * 어느 열(품목)에 TASK를 배정할지 사용자가 직접 고른다(2026-09-24, 이전엔 항상 GENERAL로 들어갔음). */
   async function applyTemplate() {
     if (!templateId) return;
     setApplyingTemplate(true);
     setTemplateError(null);
     const userId = await currentUserId();
-    const { data: templateTasks, error: e1 } = await supabase
-      .from("workflow_template_tasks")
-      .select("*")
-      .eq("template_id", templateId)
-      .order("sort_order");
-    if (e1 || !templateTasks) {
-      setApplyingTemplate(false);
-      setTemplateError(`템플릿 TASK 조회 실패 — ${e1?.message ?? "unknown error"}`);
-      return;
-    }
-    if (templateTasks.length === 0) {
-      setApplyingTemplate(false);
-      setTemplateError("이 템플릿에 TASK가 없습니다 — SETTINGS에서 먼저 TASK를 등록하세요.");
-      return;
-    }
-    const { data: predRows, error: e2 } = await supabase
-      .from("workflow_template_task_predecessors")
-      .select("task_id, predecessor_task_id")
-      .eq("template_id", templateId);
-    if (e2) {
-      setApplyingTemplate(false);
-      setTemplateError(`템플릿 선행관계 조회 실패 — ${e2.message}`);
-      return;
-    }
-    const maxSort = tasks.reduce((acc, t) => Math.max(acc, t.sort_order), 0);
-    const { data: insertedRows, error: e3 } = await supabase
-      .from("work_session_tasks")
-      .insert(
-        templateTasks.map((t, idx) => ({
-          work_session_id: sessionId,
-          user_id: userId,
-          task_name: t.task_name,
-          task_type: t.task_type,
-          sort_order: maxSort + 1 + idx,
-        })),
-      )
-      .select("id");
-    if (e3 || !insertedRows) {
-      setApplyingTemplate(false);
-      setTemplateError(`TASK 생성 실패 — ${e3?.message ?? "unknown error"}`);
-      return;
-    }
-    const idMap = new Map<string, string>();
-    templateTasks.forEach((t, idx) => idMap.set(t.id, insertedRows[idx]!.id));
-    const predInserts = (predRows ?? [])
-      .filter((r) => idMap.has(r.task_id) && idMap.has(r.predecessor_task_id))
-      .map((r) => ({
-        user_id: userId,
-        work_session_id: sessionId,
-        task_id: idMap.get(r.task_id)!,
-        predecessor_task_id: idMap.get(r.predecessor_task_id)!,
-      }));
-    if (predInserts.length > 0) {
-      const { error: e4 } = await supabase.from("work_session_task_predecessors").insert(predInserts);
-      if (e4) {
-        setApplyingTemplate(false);
-        setTemplateError(`선행관계 생성 실패 — ${e4.message}`);
-        await onTasksChanged();
-        return;
-      }
-    }
+    const { error: applyError } = await applyWorkflowTemplate({
+      templateId,
+      sessionId,
+      userId,
+      formulaVersionId: templateTargetColumn || null,
+    });
     setApplyingTemplate(false);
+    if (applyError) {
+      setTemplateError(applyError);
+      await onTasksChanged();
+      return;
+    }
     setTemplatePanelOpen(false);
     setTemplateTechniqueId("");
     setTemplateId("");
+    setTemplateTargetColumn("");
     await onTasksChanged();
   }
   // TASK TYPE 이름(소문자) → 사용자가 고른 color_class. 없으면 taskTypeColorClass()가 해시 기본색을 쓴다.
@@ -270,6 +236,85 @@ export function WorkflowView({
   // 실제로 시작하면(타임스탬프가 찍히면) 이 목록에서 빠지고 타임라인 쪽으로 넘어간다.
   const unscheduled = useMemo(() => tasks.filter((t) => !t.actual_started_at), [tasks]);
 
+  // id → task — LOCKED/READY 판정에 선행 TASK의 현재 status가 필요하다(2026-09-24).
+  const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const predecessorIdsOf = (taskId: string) => (taskPredecessors?.[taskId] ?? []).map((p) => p.taskId);
+  const phaseOf = (task: WorkSessionTask): TaskPhase =>
+    computeTaskPhase(task, predecessorIdsOf(task.id), tasksById);
+
+  // ACTIVE NOW/타이머용 1초 tick — 진행 중(IN_PROGRESS) TASK가 하나라도 있을 때만 돈다.
+  const [now, setNow] = useState(() => new Date());
+  const anyActive = tasks.some((t) => t.status === "IN_PROGRESS");
+  useEffect(() => {
+    if (!anyActive) return;
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, [anyActive]);
+
+  const activeNow = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.status === "IN_PROGRESS" && t.actual_started_at)
+        .sort((a, b) => (a.actual_started_at! < b.actual_started_at! ? -1 : 1)),
+    [tasks],
+  );
+
+  function columnLabelOf(formulaVersionId: string | null): string {
+    if (!formulaVersionId) return "GENERAL";
+    return formulaOptions.find((f) => f.formulaVersionId === formulaVersionId)?.formulaName ?? "GENERAL";
+  }
+
+  /** READY → START: 실제 시작 시각 기록, IN_PROGRESS로 전환 */
+  async function startTask(task: WorkSessionTask) {
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update({ status: "IN_PROGRESS", actual_started_at: new Date().toISOString() })
+      .eq("id", task.id);
+    if (updateError) setError(`START FAILED — ${updateError.message}`);
+    await onTasksChanged();
+  }
+
+  /** ACTIVE → COMPLETE: 실제 완료 시각 기록, DONE으로 전환. 다음 TASK는 자동으로 READY "로 보이게"
+   * 될 뿐(계산값), 자동 START는 하지 않는다 — 사용자가 직접 다음 TASK를 눌러야 한다. */
+  async function completeTask(task: WorkSessionTask) {
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update({ status: "DONE", completed_at: new Date().toISOString() })
+      .eq("id", task.id);
+    if (updateError) setError(`COMPLETE FAILED — ${updateError.message}`);
+    await onTasksChanged();
+  }
+
+  async function skipTask(task: WorkSessionTask) {
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update({ status: "SKIPPED", actual_started_at: task.actual_started_at, completed_at: null })
+      .eq("id", task.id);
+    if (updateError) setError(`SKIP FAILED — ${updateError.message}`);
+    await onTasksChanged();
+  }
+
+  /** DONE/SKIPPED를 되돌려 다시 NOT_STARTED(LOCKED/READY)로 — 잘못 눌렀을 때 되돌리기용 */
+  async function resetTask(task: WorkSessionTask) {
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update({ status: "NOT_STARTED", actual_started_at: null, completed_at: null })
+      .eq("id", task.id);
+    if (updateError) setError(`UNDO FAILED — ${updateError.message}`);
+    await onTasksChanged();
+  }
+
+  async function toggleChecklistItem(task: WorkSessionTask, index: number) {
+    const items = (task.checklist_items as unknown as ChecklistItem[] | null) ?? [];
+    const next = items.map((item, i) => (i === index ? { ...item, done: !item.done } : item));
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update({ checklist_items: next as never })
+      .eq("id", task.id);
+    if (updateError) setError(`체크리스트 저장 실패 — ${updateError.message}`);
+    await onTasksChanged();
+  }
+
   // 이미 다른 TASK에 묶인 재료 라인 — 중복 배정 방지용. 지금 수정 중인 TASK 자신의 기존 배정은 제외한다
   // (그래야 EDIT 화면에서 자기 자신이 이미 골라둔 재료까지 회색으로 막히지 않는다).
   const ingredientUsedElsewhere = useMemo(() => {
@@ -294,6 +339,7 @@ export function WorkflowView({
   }, [tasks, range, nowTop]);
 
   const showObservationFields = hasObservationFields(taskType);
+  const showTimerField = hasTimerField(taskType);
 
   async function addTask() {
     const trimmed = name.trim();
@@ -321,6 +367,13 @@ export function WorkflowView({
           showObservationFields && obsHeightMid.trim() ? Number(obsHeightMid) : null,
         observation_height_end_mm:
           showObservationFields && obsHeightEnd.trim() ? Number(obsHeightEnd) : null,
+        observation_temperature_c:
+          showObservationFields && obsTemperature.trim() ? Number(obsTemperature) : null,
+        timer_minutes: showTimerField && timerMinutes.trim() ? Number(timerMinutes) : null,
+        checklist_items:
+          parseChecklistLines(checklistText).length > 0
+            ? parseChecklistLines(checklistText).map((label) => ({ label, done: false }))
+            : null,
       })
       .select("id")
       .single();
@@ -370,6 +423,9 @@ export function WorkflowView({
     setObsHeightStart("");
     setObsHeightMid("");
     setObsHeightEnd("");
+    setObsTemperature("");
+    setTimerMinutes("");
+    setChecklistText("");
     setIngredientLineIds([]);
     setPredecessorTaskIds([]);
     await onTasksChanged();
@@ -398,26 +454,6 @@ export function WorkflowView({
     await onTasksChanged();
   }
 
-  async function cycleStatus(task: WorkSessionTask) {
-    const next = nextTaskStatus(task.status as TaskStatus);
-    const patch: { status: TaskStatus; completed_at: string | null; actual_started_at?: string | null } = {
-      status: next,
-      completed_at: next === "DONE" ? new Date().toISOString() : null,
-    };
-    // 실제 시작 시각은 IN_PROGRESS로 처음 넘어갈 때 한 번만 자동 기록하고, 완전히 한 바퀴 돌아
-    // NOT_STARTED로 돌아오면 초기화한다(재시작). completed_at과 동일한 "매 전환마다 재계산" 규칙.
-    if (next === "IN_PROGRESS") {
-      patch.actual_started_at = task.actual_started_at ?? new Date().toISOString();
-    } else if (next === "NOT_STARTED") {
-      patch.actual_started_at = null;
-    }
-    const { error: updateError } = await supabase
-      .from("work_session_tasks")
-      .update(patch)
-      .eq("id", task.id);
-    if (updateError) setError(`UPDATE FAILED — ${updateError.message}`);
-    await onTasksChanged();
-  }
 
   async function removeTask(task: WorkSessionTask) {
     const { error: deleteError } = await supabase
@@ -448,6 +484,11 @@ export function WorkflowView({
       obsHeightStart: task.observation_height_start_mm != null ? String(task.observation_height_start_mm) : "",
       obsHeightMid: task.observation_height_mid_mm != null ? String(task.observation_height_mid_mm) : "",
       obsHeightEnd: task.observation_height_end_mm != null ? String(task.observation_height_end_mm) : "",
+      obsTemperature: task.observation_temperature_c != null ? String(task.observation_temperature_c) : "",
+      timerMinutes: task.timer_minutes != null ? String(task.timer_minutes) : "",
+      checklistText: ((task.checklist_items as unknown as ChecklistItem[] | null) ?? [])
+        .map((item) => item.label)
+        .join("\n"),
     });
   }
 
@@ -475,6 +516,11 @@ export function WorkflowView({
     setEditSaving(true);
     setEditError(null);
     const userId = await currentUserId();
+    const originalTask = tasks.find((t) => t.id === taskId);
+    const previousChecklist =
+      (originalTask?.checklist_items as unknown as ChecklistItem[] | null) ?? [];
+    const previousDoneByLabel = new Map(previousChecklist.map((item) => [item.label, item.done]));
+    const nextChecklistLabels = parseChecklistLines(editDraft.checklistText);
     const { error: updateError } = await supabase
       .from("work_session_tasks")
       .update({
@@ -503,6 +549,21 @@ export function WorkflowView({
         observation_height_end_mm:
           hasObservationFields(editDraft.taskType) && editDraft.obsHeightEnd.trim()
             ? Number(editDraft.obsHeightEnd)
+            : null,
+        observation_temperature_c:
+          hasObservationFields(editDraft.taskType) && editDraft.obsTemperature.trim()
+            ? Number(editDraft.obsTemperature)
+            : null,
+        timer_minutes:
+          hasTimerField(editDraft.taskType) && editDraft.timerMinutes.trim()
+            ? Number(editDraft.timerMinutes)
+            : null,
+        checklist_items:
+          nextChecklistLabels.length > 0
+            ? (nextChecklistLabels.map((label) => ({
+                label,
+                done: previousDoneByLabel.get(label) ?? false,
+              })) as never)
             : null,
       })
       .eq("id", taskId);
@@ -575,6 +636,56 @@ export function WorkflowView({
 
   return (
     <div className="space-y-6">
+      {/* ── ACTIVE NOW — 지금 여러 품목에서 동시에 진행 중인 TASK 전부(2026-09-24) ────── */}
+      {activeNow.length > 0 && (
+        <div className="border-2 border-foreground p-3">
+          <div className="mb-2 text-xs font-medium tracking-wider text-foreground">
+            ACTIVE NOW ({activeNow.length})
+          </div>
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {activeNow.map((task) => {
+              const elapsedSec = task.actual_started_at
+                ? (now.getTime() - new Date(task.actual_started_at).getTime()) / 1000
+                : 0;
+              const timerMin = task.timer_minutes;
+              const remainSec = timerMin != null ? timerMin * 60 - elapsedSec : null;
+              return (
+                <li key={task.id} className="border border-border p-2">
+                  <div className="label-caps text-[10px] text-muted-foreground">
+                    {columnLabelOf(task.formula_version_id)}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-sm text-foreground">
+                    {task.task_name}
+                    {task.task_type ? (
+                      <span
+                        className={`rounded-sm border px-1 text-[9px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
+                      >
+                        {task.task_type.toUpperCase()}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                      시작 {task.actual_started_at ? formatTime(task.actual_started_at) : "--:--"} · 경과{" "}
+                      {timerMin != null && remainSec !== null && remainSec > 0
+                        ? `남은 ${formatDuration(remainSec)}`
+                        : formatDuration(elapsedSec)}
+                    </span>
+                    <button
+                      type="button"
+                      className={`${primaryButtonClass} px-3 py-1 text-xs`}
+                      onClick={() => completeTask(task)}
+                    >
+                      COMPLETE
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       {/* ── 템플릿 불러오기 ─────────────────────────────── */}
       <div className="border border-border p-3">
         <button
@@ -614,6 +725,20 @@ export function WorkflowView({
                 </option>
               ))}
             </select>
+            {formulaOptions.length > 0 && (
+              <select
+                className={`${selectClass} md:w-56`}
+                value={templateTargetColumn}
+                onChange={(e) => setTemplateTargetColumn(e.target.value)}
+              >
+                <option value="">적용할 품목: GENERAL</option>
+                {formulaOptions.map((f) => (
+                  <option key={f.formulaVersionId} value={f.formulaVersionId}>
+                    적용할 품목: {f.formulaName}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               className={`${primaryButtonClass} min-h-12`}
@@ -728,9 +853,47 @@ export function WorkflowView({
                   onChange={(e) => setObsHeightEnd(e.target.value)}
                 />
               </label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                온도
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="1"
+                  className={`${inputClass} w-24`}
+                  placeholder="°C"
+                  value={obsTemperature}
+                  onChange={(e) => setObsTemperature(e.target.value)}
+                />
+              </label>
             </div>
           </div>
         )}
+        {showTimerField && (
+          <div className="mt-2 flex items-center gap-2 border-t border-dashed border-border pt-2">
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              타이머 길이
+              <input
+                type="number"
+                min="1"
+                className={`${inputClass} w-24`}
+                placeholder="분"
+                value={timerMinutes}
+                onChange={(e) => setTimerMinutes(e.target.value)}
+              />
+            </label>
+          </div>
+        )}
+        <div className="mt-2 border-t border-dashed border-border pt-2">
+          <div className="mb-1 text-[10px] tracking-wider text-muted-foreground">
+            체크리스트(선택, 한 줄에 하나 — 실제 작업 중 체크만 하는 세부 항목)
+          </div>
+          <textarea
+            className={`${inputClass} min-h-[52px] text-xs`}
+            placeholder={"예: 재료 계량\n섞기\n질감 확인"}
+            value={checklistText}
+            onChange={(e) => setChecklistText(e.target.value)}
+          />
+        </div>
         {formulaVersionId && (ingredientsByVersion?.[formulaVersionId]?.length ?? 0) > 0 && (
           <div className="mt-2 space-y-1 border-t border-dashed border-border pt-2">
             <div className="text-[10px] tracking-wider text-muted-foreground">
@@ -859,11 +1022,19 @@ export function WorkflowView({
                 {columns.map((col) => (
                   <div
                     key={col.key}
-                    className="flex h-8 flex-none items-center truncate border-r border-b border-border bg-background px-2 text-[11px] tracking-wider text-foreground"
+                    className="flex h-8 flex-none items-center justify-between gap-1 truncate border-r border-b border-border bg-background px-2 text-[11px] tracking-wider text-foreground"
                     style={{ width: COL_WIDTH }}
-                    title={col.label}
                   >
-                    {col.label}
+                    <span className="truncate" title={col.label}>
+                      {col.label}
+                    </span>
+                    <button
+                      type="button"
+                      className="label-caps flex-none px-1 text-[9px] text-muted-foreground hover:text-foreground"
+                      onClick={() => setFocusColumnKey(col.key)}
+                    >
+                      포커스
+                    </button>
                   </div>
                 ))}
               </div>
@@ -974,7 +1145,17 @@ export function WorkflowView({
                             <button
                               key={row.key}
                               type="button"
-                              onClick={() => cycleStatus(task)}
+                              title={
+                                isInProgress
+                                  ? "클릭하면 COMPLETE 처리됩니다"
+                                  : isDone || isSkipped
+                                    ? "클릭하면 되돌립니다(NOT_STARTED)"
+                                    : task.task_name
+                              }
+                              onClick={() => {
+                                if (isInProgress) completeTask(task);
+                                else if (isDone || isSkipped) resetTask(task);
+                              }}
                               className={`absolute flex items-center gap-1 overflow-hidden border px-1 text-left leading-tight ${colorClass} ${
                                 isDone
                                   ? "ring-2 ring-inset ring-foreground"
@@ -988,7 +1169,6 @@ export function WorkflowView({
                                 left: `calc(${gutterWidth}px + ${(idx / n) * 100}%)`,
                                 width: `calc((100% - ${gutterWidth}px) / ${n})`,
                               }}
-                              title={task.task_name}
                             >
                               {row.kind === "start" ? (
                                 <>
@@ -1058,20 +1238,54 @@ export function WorkflowView({
                     <span className="w-5 flex-none font-mono text-[10px] text-muted-foreground">
                       {idx + 1}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => cycleStatus(task)}
-                      className={`${buttonClass} flex flex-1 items-center gap-1.5 text-left text-xs`}
-                    >
-                      {TASK_STATUS_ICON[task.status as TaskStatus] ?? "○"} {task.task_name}
-                      {task.task_type ? (
-                        <span
-                          className={`rounded-sm border px-1 text-[9px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
-                        >
-                          {task.task_type.toUpperCase()}
-                        </span>
-                      ) : null}
-                    </button>
+                    {(() => {
+                      const phase = phaseOf(task);
+                      const predNames = (taskPredecessors?.[task.id] ?? [])
+                        .filter((p) => tasksById.get(p.taskId)?.status !== "DONE" && tasksById.get(p.taskId)?.status !== "SKIPPED")
+                        .map((p) => p.name);
+                      return (
+                        <div className="flex flex-1 items-center gap-1.5 text-xs">
+                          <span
+                            className={`flex-1 truncate text-left ${phase === "LOCKED" ? "text-muted-foreground" : ""}`}
+                            title={
+                              phase === "LOCKED" ? `선행 대기: ${predNames.join(" + ")}` : undefined
+                            }
+                          >
+                            {TASK_PHASE_ICON[phase]} {task.task_name}
+                            {task.task_type ? (
+                              <span
+                                className={`ml-1.5 rounded-sm border px-1 text-[9px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
+                              >
+                                {task.task_type.toUpperCase()}
+                              </span>
+                            ) : null}
+                            {phase === "LOCKED" && predNames.length > 0 && (
+                              <span className="ml-1.5 text-[10px] text-muted-foreground">
+                                (선행 대기: {predNames.join(" + ")})
+                              </span>
+                            )}
+                          </span>
+                          {phase === "READY" && (
+                            <>
+                              <button
+                                type="button"
+                                className={`${primaryButtonClass} px-3 py-1 text-xs`}
+                                onClick={() => startTask(task)}
+                              >
+                                {hasTimerField(task.task_type) ? "START TIMER" : "START"}
+                              </button>
+                              <button
+                                type="button"
+                                className={`${buttonClass} px-2 py-1 text-xs`}
+                                onClick={() => skipTask(task)}
+                              >
+                                SKIP
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </li>
                 ))}
               </ul>
@@ -1208,8 +1422,51 @@ export function WorkflowView({
                             }
                           />
                         </label>
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                          온도
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="1"
+                            className={`${inputClass} w-24`}
+                            placeholder="°C"
+                            value={editDraft.obsTemperature}
+                            onChange={(e) =>
+                              setEditDraft({ ...editDraft, obsTemperature: e.target.value })
+                            }
+                          />
+                        </label>
                       </div>
                     )}
+                    {hasTimerField(editDraft.taskType) && (
+                      <div className="mt-2 flex items-center gap-2 border-t border-dashed border-border pt-2">
+                        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                          타이머 길이
+                          <input
+                            type="number"
+                            min="1"
+                            className={`${inputClass} w-24`}
+                            placeholder="분"
+                            value={editDraft.timerMinutes}
+                            onChange={(e) =>
+                              setEditDraft({ ...editDraft, timerMinutes: e.target.value })
+                            }
+                          />
+                        </label>
+                      </div>
+                    )}
+                    <div className="mt-2 border-t border-dashed border-border pt-2">
+                      <div className="mb-1 text-[10px] tracking-wider text-muted-foreground">
+                        체크리스트(선택, 한 줄에 하나)
+                      </div>
+                      <textarea
+                        className={`${inputClass} min-h-[52px] text-xs`}
+                        value={editDraft.checklistText}
+                        onChange={(e) =>
+                          setEditDraft({ ...editDraft, checklistText: e.target.value })
+                        }
+                      />
+                    </div>
                     {editIngredientOptions.length > 0 && (
                       <div className="mt-2 space-y-1 border-t border-dashed border-border pt-2">
                         <div className="text-[10px] tracking-wider text-muted-foreground">
@@ -1337,25 +1594,103 @@ export function WorkflowView({
                     {(task.observation_status ||
                       task.observation_height_start_mm != null ||
                       task.observation_height_mid_mm != null ||
-                      task.observation_height_end_mm != null) && (
+                      task.observation_height_end_mm != null ||
+                      task.observation_temperature_c != null) && (
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
                         관찰
                         {task.observation_status ? ` ${task.observation_status}` : ""}
                         {" · "}
                         {task.observation_height_start_mm ?? "-"}mm → {task.observation_height_mid_mm ?? "-"}mm
                         → {task.observation_height_end_mm ?? "-"}mm
+                        {task.observation_temperature_c != null ? ` · ${task.observation_temperature_c}°C` : ""}
+                      </div>
+                    )}
+                    {task.checklist_items != null && (task.checklist_items as unknown as ChecklistItem[]).length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                        {(task.checklist_items as unknown as ChecklistItem[]).map((item, idx) => (
+                          <label key={idx} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={item.done}
+                              onChange={() => toggleChecklistItem(task, idx)}
+                            />
+                            <span className={item.done ? "line-through" : ""}>{item.label}</span>
+                          </label>
+                        ))}
                       </div>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className={`${buttonClass} min-h-12`}
-                      onClick={() => cycleStatus(task)}
-                    >
-                      {TASK_STATUS_ICON[task.status as TaskStatus] ?? "○"}{" "}
-                      {TASK_STATUS_LABEL[task.status as TaskStatus] ?? task.status}
-                    </button>
+                    {(() => {
+                      const phase = phaseOf(task);
+                      if (phase === "LOCKED") {
+                        return (
+                          <span className="label-caps px-2 text-xs text-muted-foreground">
+                            {TASK_PHASE_ICON.LOCKED} {TASK_PHASE_LABEL.LOCKED}
+                          </span>
+                        );
+                      }
+                      if (phase === "READY") {
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              className={`${primaryButtonClass} min-h-12`}
+                              onClick={() => startTask(task)}
+                            >
+                              {hasTimerField(task.task_type) ? "START TIMER" : "▶ START"}
+                            </button>
+                            <button
+                              type="button"
+                              className={`${buttonClass} min-h-12`}
+                              onClick={() => skipTask(task)}
+                            >
+                              SKIP
+                            </button>
+                          </>
+                        );
+                      }
+                      if (phase === "ACTIVE") {
+                        const elapsedSec = task.actual_started_at
+                          ? (now.getTime() - new Date(task.actual_started_at).getTime()) / 1000
+                          : 0;
+                        const timerMin = task.timer_minutes;
+                        const remainSec = timerMin != null ? timerMin * 60 - elapsedSec : null;
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs tabular-nums text-foreground">
+                              {timerMin != null
+                                ? remainSec !== null && remainSec > 0
+                                  ? `남은 ${formatDuration(remainSec)}`
+                                  : `+${formatDuration(Math.abs(remainSec ?? 0))}`
+                                : formatDuration(elapsedSec)}
+                            </span>
+                            <button
+                              type="button"
+                              className={`${primaryButtonClass} min-h-12`}
+                              onClick={() => completeTask(task)}
+                            >
+                              ■ COMPLETE
+                            </button>
+                          </div>
+                        );
+                      }
+                      // DONE / SKIPPED
+                      return (
+                        <>
+                          <span className="label-caps px-2 text-xs text-foreground">
+                            {TASK_PHASE_ICON[phase]} {TASK_PHASE_LABEL[phase]}
+                          </span>
+                          <button
+                            type="button"
+                            className={`${buttonClass} min-h-12`}
+                            onClick={() => resetTask(task)}
+                          >
+                            되돌리기
+                          </button>
+                        </>
+                      );
+                    })()}
                     <button
                       type="button"
                       className={`${buttonClass} min-h-12`}
@@ -1377,6 +1712,105 @@ export function WorkflowView({
           </div>
         </>
       )}
+
+      {focusColumnKey &&
+        (() => {
+          const colTasks = tasks
+            .filter((t) => (t.formula_version_id ?? GENERAL_KEY) === focusColumnKey)
+            .sort((a, b) => a.sort_order - b.sort_order);
+          const doneCount = colTasks.filter(
+            (t) => t.status === "DONE" || t.status === "SKIPPED",
+          ).length;
+          const current = colTasks.find((t) => t.status !== "DONE" && t.status !== "SKIPPED");
+          const label = columnLabelOf(focusColumnKey === GENERAL_KEY ? null : focusColumnKey);
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 p-4">
+              <div className="w-full max-w-md border-2 border-foreground bg-background p-6 text-center">
+                <button
+                  type="button"
+                  className="mb-4 ml-auto block text-xs tracking-wider text-muted-foreground hover:text-foreground"
+                  onClick={() => setFocusColumnKey(null)}
+                >
+                  ✕ 닫기
+                </button>
+                <div className="label-caps text-xs text-muted-foreground">{label}</div>
+                {!current ? (
+                  <p className="mt-6 text-sm text-muted-foreground">모든 TASK가 끝났습니다 🎉</p>
+                ) : (
+                  <>
+                    <div className="mt-1 font-mono text-[11px] text-muted-foreground">
+                      TASK {doneCount + 1} / {colTasks.length}
+                    </div>
+                    <div className="mt-3 text-2xl font-medium uppercase text-foreground">
+                      {current.task_name}
+                    </div>
+                    {current.task_type && (
+                      <span
+                        className={`mt-2 inline-block rounded-sm border px-2 py-0.5 text-[10px] tracking-wider ${taskTypeColorClass(current.task_type, colorOverrides)}`}
+                      >
+                        {current.task_type.toUpperCase()}
+                      </span>
+                    )}
+                    {(() => {
+                      const phase = phaseOf(current);
+                      if (phase === "LOCKED") {
+                        const predNames = (taskPredecessors?.[current.id] ?? [])
+                          .filter(
+                            (p) =>
+                              tasksById.get(p.taskId)?.status !== "DONE" &&
+                              tasksById.get(p.taskId)?.status !== "SKIPPED",
+                          )
+                          .map((p) => p.name);
+                        return (
+                          <p className="mt-6 text-xs text-muted-foreground">
+                            {TASK_PHASE_ICON.LOCKED} 선행 대기: {predNames.join(" + ")}
+                          </p>
+                        );
+                      }
+                      if (phase === "READY") {
+                        return (
+                          <button
+                            type="button"
+                            className={`${primaryButtonClass} mt-6 min-h-14 w-full text-base`}
+                            onClick={() => startTask(current)}
+                          >
+                            {hasTimerField(current.task_type) ? "START TIMER" : "START"}
+                          </button>
+                        );
+                      }
+                      if (phase === "ACTIVE") {
+                        const elapsedSec = current.actual_started_at
+                          ? (now.getTime() - new Date(current.actual_started_at).getTime()) / 1000
+                          : 0;
+                        return (
+                          <>
+                            <div className="mt-4 font-mono text-3xl tabular-nums text-foreground">
+                              {formatDuration(elapsedSec)}
+                            </div>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              시작 {formatTime(current.actual_started_at!)}
+                            </p>
+                            <button
+                              type="button"
+                              className={`${primaryButtonClass} mt-6 min-h-14 w-full text-base`}
+                              onClick={() => completeTask(current)}
+                            >
+                              COMPLETE &amp; NEXT
+                            </button>
+                          </>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </>
+                )}
+                <p className="mt-6 text-[10px] text-muted-foreground">
+                  COMPLETE는 이 품목의 다음 TASK를 READY로만 바꿉니다 — 자동으로 START하지 않아요.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
     </div>
   );
 }

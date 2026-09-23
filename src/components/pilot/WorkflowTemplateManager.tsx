@@ -11,7 +11,7 @@ import {
   type WorkflowTemplateTask,
 } from "@/lib/queries";
 import { leafTechniques, techniquePathLabel } from "@/lib/technique";
-import { TASK_TYPE_SUGGESTIONS } from "@/lib/workflow";
+import { hasTimerField, parseChecklistLines, TASK_TYPE_SUGGESTIONS } from "@/lib/workflow";
 import { SectionCard, buttonClass, inputClass } from "./ui";
 
 /**
@@ -160,6 +160,9 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
   const [name, setName] = useState("");
   const [taskType, setTaskType] = useState("");
   const [predecessorTaskIds, setPredecessorTaskIds] = useState<string[]>([]);
+  const [isOptional, setIsOptional] = useState(false);
+  const [timerMinutes, setTimerMinutes] = useState("");
+  const [checklistText, setChecklistText] = useState("");
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["workflow_template_tasks", templateId] });
@@ -174,6 +177,7 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
       if (!trimmed) return;
       const user_id = await currentUserId();
       const maxSort = (tasks.data ?? []).reduce((acc, t) => Math.max(acc, t.sort_order), 0);
+      const checklistItems = parseChecklistLines(checklistText);
       const { data: inserted, error } = await supabase
         .from("workflow_template_tasks")
         .insert({
@@ -182,6 +186,9 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
           task_name: trimmed,
           task_type: taskType.trim() || null,
           sort_order: maxSort + 1,
+          is_optional: isOptional,
+          timer_minutes: timerMinutes.trim() ? Number(timerMinutes) : null,
+          checklist_items: checklistItems.length > 0 ? checklistItems : null,
         })
         .select("id")
         .single();
@@ -202,6 +209,9 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
       setName("");
       setTaskType("");
       setPredecessorTaskIds([]);
+      setIsOptional(false);
+      setTimerMinutes("");
+      setChecklistText("");
       await invalidate();
     },
   });
@@ -237,6 +247,8 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
     onSuccess: invalidate,
   });
 
+  const showTimer = hasTimerField(taskType);
+
   return (
     <div className="space-y-2">
       <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
@@ -258,6 +270,20 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
             <option key={t} value={t} />
           ))}
         </datalist>
+        {showTimer && (
+          <input
+            type="number"
+            min="1"
+            className={`${inputClass} md:w-28`}
+            placeholder="타이머(분)"
+            value={timerMinutes}
+            onChange={(e) => setTimerMinutes(e.target.value)}
+          />
+        )}
+        <label className="flex items-center gap-1 text-xs">
+          <input type="checkbox" checked={isOptional} onChange={(e) => setIsOptional(e.target.checked)} />
+          선택(생략 가능)
+        </label>
         <button
           type="button"
           className={`${buttonClass} text-xs`}
@@ -267,6 +293,12 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
           + TASK 추가
         </button>
       </div>
+      <textarea
+        className={`${inputClass} min-h-[52px] text-xs`}
+        placeholder="체크리스트(선택, 한 줄에 하나) — 예: 재료 계량&#10;섞기&#10;질감 확인"
+        value={checklistText}
+        onChange={(e) => setChecklistText(e.target.value)}
+      />
       {rows.length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-dashed border-border pt-2">
           <span className="text-[10px] tracking-wider text-muted-foreground">
@@ -323,6 +355,16 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
                       {task.task_type.toUpperCase()}
                     </span>
                   ) : null}
+                  {task.is_optional && (
+                    <span className="ml-1 rounded-sm border px-1 text-[9px] tracking-wider text-muted-foreground">
+                      선택
+                    </span>
+                  )}
+                  {task.timer_minutes != null && (
+                    <span className="ml-1 rounded-sm border px-1 text-[9px] tracking-wider text-muted-foreground">
+                      {task.timer_minutes}분
+                    </span>
+                  )}
                 </div>
                 {(predMap[task.id]?.length ?? 0) > 0 && (
                   <div className="text-[11px] text-muted-foreground">
@@ -330,6 +372,11 @@ function TemplateTaskEditor({ templateId }: { templateId: string }) {
                     {predMap[task.id]!.map((pid) => rows.find((r) => r.id === pid)?.task_name ?? "?").join(
                       " + ",
                     )}
+                  </div>
+                )}
+                {task.checklist_items && task.checklist_items.length > 0 && (
+                  <div className="text-[11px] text-muted-foreground">
+                    체크리스트: {task.checklist_items.join(" · ")}
                   </div>
                 )}
               </div>

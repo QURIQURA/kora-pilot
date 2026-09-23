@@ -58,6 +58,80 @@ export function hasObservationFields(taskType: string | null | undefined): boole
   return OBSERVATION_TASK_TYPES.has(taskType.trim().toLowerCase());
 }
 
+/**
+ * TIMER/WAIT류 TASK TYPE 목록(2026-09-24) — hasObservationFields와 같은 패턴: 지금은
+ * WAIT/TIMER만 있지만 나중에 CHILL/FREEZE 등도 타이머로 다루고 싶어지면 여기에 추가만 하면 된다.
+ * 이 TYPE의 TASK는 timer_minutes(기본 길이)를 갖고, ACTIVE 상태일 때 카운트다운/경과시간을 함께
+ * 보여준다 — 단, 시간이 다 됐다고 자동으로 COMPLETE 처리하지는 않는다(실제 완료는 항상 사용자가
+ * 직접 누른다).
+ */
+export const TIMER_TASK_TYPES = new Set(["wait", "timer"]);
+
+export function hasTimerField(taskType: string | null | undefined): boolean {
+  if (!taskType) return false;
+  return TIMER_TASK_TYPES.has(taskType.trim().toLowerCase());
+}
+
+/** work_session_tasks.checklist_items / workflow_template_tasks가 만드는 체크리스트 항목 하나 */
+export interface ChecklistItem {
+  label: string;
+  done: boolean;
+}
+
+/** 자유 텍스트(한 줄에 하나)를 체크리스트 항목 배열로 변환 — 빈 줄은 버린다 */
+export function parseChecklistLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/**
+ * TASK 진행 단계 — "계획을 없애고 실제 시작/완료만 기록"하는 기존 원칙은 그대로 두고, 여기에
+ * "선행 TASK가 다 끝났는가"만 추가로 계산한다(2026-09-24, DB에 새 상태값을 저장하지 않고 항상
+ * 다시 계산 가능하게 설계 — status/predecessor 데이터만 있으면 된다).
+ *
+ * - LOCKED: 아직 시작 전(NOT_STARTED)인데 선행 TASK 중 끝나지 않은 게 있다 — 지금은 시작 불가.
+ * - READY: 아직 시작 전(NOT_STARTED)이고 선행 TASK가 전부 DONE(또는 선행이 없음) — 지금 시작 가능.
+ * - ACTIVE: IN_PROGRESS — 사용자가 START를 눌러 지금 진행 중.
+ * - DONE: 완료(DONE)로 처리됨.
+ * - SKIPPED: 건너뜀 처리됨.
+ */
+export type TaskPhase = "LOCKED" | "READY" | "ACTIVE" | "DONE" | "SKIPPED";
+
+export const TASK_PHASE_LABEL: Record<TaskPhase, string> = {
+  LOCKED: "LOCKED",
+  READY: "READY",
+  ACTIVE: "ACTIVE",
+  DONE: "DONE",
+  SKIPPED: "SKIPPED",
+};
+
+export const TASK_PHASE_ICON: Record<TaskPhase, string> = {
+  LOCKED: "◌",
+  READY: "○",
+  ACTIVE: "●",
+  DONE: "✓",
+  SKIPPED: "⊘",
+};
+
+export function computeTaskPhase(
+  task: Pick<WorkSessionTask, "status">,
+  predecessorTaskIds: string[],
+  tasksById: Map<string, Pick<WorkSessionTask, "status">>,
+): TaskPhase {
+  if (task.status === "DONE") return "DONE";
+  if (task.status === "SKIPPED") return "SKIPPED";
+  if (task.status === "IN_PROGRESS") return "ACTIVE";
+  // NOT_STARTED — 선행 TASK가 전부 DONE(또는 SKIPPED로 건너뜀)이어야 READY, 아니면 LOCKED.
+  const blocked = predecessorTaskIds.some((id) => {
+    const pred = tasksById.get(id);
+    if (!pred) return false; // 참조가 깨졌으면(삭제됨 등) 막지 않는다
+    return pred.status !== "DONE" && pred.status !== "SKIPPED";
+  });
+  return blocked ? "LOCKED" : "READY";
+}
+
 export function nextTaskStatus(current: TaskStatus): TaskStatus {
   const idx = TASK_STATUSES.indexOf(current);
   return TASK_STATUSES[(idx + 1) % TASK_STATUSES.length] ?? "NOT_STARTED";

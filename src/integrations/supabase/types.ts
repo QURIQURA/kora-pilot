@@ -129,7 +129,9 @@ export type Database = {
       }
       components: {
         Row: {
+          auto_apply_default_workflow: boolean
           created_at: string
+          default_workflow_template_id: string | null
           description: string | null
           id: string
           name: string
@@ -141,7 +143,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          auto_apply_default_workflow?: boolean
           created_at?: string
+          default_workflow_template_id?: string | null
           description?: string | null
           id?: string
           name: string
@@ -153,7 +157,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          auto_apply_default_workflow?: boolean
           created_at?: string
+          default_workflow_template_id?: string | null
           description?: string | null
           id?: string
           name?: string
@@ -165,6 +171,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "components_default_workflow_template_id_fkey"
+            columns: ["default_workflow_template_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_templates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "components_technique_category_id_fkey"
             columns: ["technique_category_id"]
@@ -2327,15 +2340,18 @@ export type Database = {
       work_session_tasks: {
         Row: {
           actual_started_at: string | null
+          checklist_items: Json | null
           completed_at: string | null
           created_at: string
           formula_version_id: string | null
           id: string
+          is_optional: boolean
           note: string | null
           observation_height_end_mm: number | null
           observation_height_mid_mm: number | null
           observation_height_start_mm: number | null
           observation_status: string | null
+          observation_temperature_c: number | null
           planned_end_at: string | null
           planned_start_at: string | null
           predecessor_task_id: string | null
@@ -2343,21 +2359,25 @@ export type Database = {
           status: string
           task_name: string
           task_type: string | null
+          timer_minutes: number | null
           updated_at: string
           user_id: string
           work_session_id: string
         }
         Insert: {
           actual_started_at?: string | null
+          checklist_items?: Json | null
           completed_at?: string | null
           created_at?: string
           formula_version_id?: string | null
           id?: string
+          is_optional?: boolean
           note?: string | null
           observation_height_end_mm?: number | null
           observation_height_mid_mm?: number | null
           observation_height_start_mm?: number | null
           observation_status?: string | null
+          observation_temperature_c?: number | null
           planned_end_at?: string | null
           planned_start_at?: string | null
           predecessor_task_id?: string | null
@@ -2365,21 +2385,25 @@ export type Database = {
           status?: string
           task_name: string
           task_type?: string | null
+          timer_minutes?: number | null
           updated_at?: string
           user_id: string
           work_session_id: string
         }
         Update: {
           actual_started_at?: string | null
+          checklist_items?: Json | null
           completed_at?: string | null
           created_at?: string
           formula_version_id?: string | null
           id?: string
+          is_optional?: boolean
           note?: string | null
           observation_height_end_mm?: number | null
           observation_height_mid_mm?: number | null
           observation_height_start_mm?: number | null
           observation_status?: string | null
+          observation_temperature_c?: number | null
           planned_end_at?: string | null
           planned_start_at?: string | null
           predecessor_task_id?: string | null
@@ -2387,6 +2411,7 @@ export type Database = {
           status?: string
           task_name?: string
           task_type?: string | null
+          timer_minutes?: number | null
           updated_at?: string
           user_id?: string
           work_session_id?: string
@@ -2499,30 +2524,39 @@ export type Database = {
       }
       workflow_template_tasks: {
         Row: {
+          checklist_items: string[] | null
           created_at: string
           id: string
+          is_optional: boolean
           sort_order: number
           task_name: string
           task_type: string | null
           template_id: string
+          timer_minutes: number | null
           user_id: string
         }
         Insert: {
+          checklist_items?: string[] | null
           created_at?: string
           id?: string
+          is_optional?: boolean
           sort_order?: number
           task_name: string
           task_type?: string | null
           template_id: string
+          timer_minutes?: number | null
           user_id?: string
         }
         Update: {
+          checklist_items?: string[] | null
           created_at?: string
           id?: string
+          is_optional?: boolean
           sort_order?: number
           task_name?: string
           task_type?: string | null
           template_id?: string
+          timer_minutes?: number | null
           user_id?: string
         }
         Relationships: [

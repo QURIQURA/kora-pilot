@@ -47,6 +47,7 @@ import {
 import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
 import { adjustStock, STOCK_REASON_LABEL, type StockReason } from "@/lib/stock";
+import { applyWorkflowTemplate } from "@/lib/workflow-template";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import {
@@ -278,6 +279,7 @@ function WorkSessionPage() {
               onDone={async () => {
                 setAdding(false);
                 await invalidateSelections();
+                await invalidateTasks();
               }}
             />
           )}
@@ -448,6 +450,22 @@ function AddFormulaVersionForm({
         sort_order: nextSort,
       });
       if (error) throw error;
+      // Component에 기본 WORKFLOW TEMPLATE이 등록돼 있고 "자동 적용"이 켜져 있으면, 이 Formula
+      // Version(=열/품목)에 바로 TASK를 깔아준다(2026-09-24) — 매번 수동으로 템플릿 불러오기를
+      // 반복하지 않도록.
+      const comp = formula?.components;
+      if (comp?.auto_apply_default_workflow && comp.default_workflow_template_id) {
+        const { error: templateError } = await applyWorkflowTemplate({
+          templateId: comp.default_workflow_template_id,
+          sessionId,
+          userId: user_id,
+          formulaVersionId: versionId,
+        });
+        if (templateError) {
+          // 선택 자체는 이미 성공했으니 템플릿 적용 실패는 조용히 콘솔에만 남기고 흐름을 막지 않는다.
+          console.error("기본 워크플로 자동 적용 실패:", templateError);
+        }
+      }
     },
     onSuccess: onDone,
   });
