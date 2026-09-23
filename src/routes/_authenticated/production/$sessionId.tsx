@@ -1368,9 +1368,11 @@ function toggleProgressStatus(current: WorkSessionProgressStatus): WorkSessionPr
   return current === "DONE" ? "NOT_STARTED" : "DONE";
 }
 
+// DONE은 배경 음영 + 굵은 가로선으로 NOT_STARTED와 눈에 띄게 구분되도록(2026-09-24, 시력이
+// 안 좋아 체크 여부가 잘 안 보인다는 피드백 — 회색 텍스트만으로는 구분이 약했다).
 const STATUS_CELL_TONE: Record<WorkSessionProgressStatus, string> = {
   NOT_STARTED: "",
-  DONE: "text-muted-foreground",
+  DONE: "bg-muted text-muted-foreground line-through decoration-2",
   SHORTAGE: "bg-destructive/10",
   SKIPPED: "text-muted-foreground line-through decoration-1",
 };
@@ -1425,7 +1427,7 @@ function WeighingMatrixCell({
         {fmtNumber(cell.workingAmount, 0)}
         {cell.unit}
         {scaledSecondary != null && cell.secondaryUnit && (
-          <span className="block text-[10px] font-normal text-muted-foreground">
+          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
             · {fmtNumber(scaledSecondary, 0)}
             {cell.secondaryUnit}
           </span>
