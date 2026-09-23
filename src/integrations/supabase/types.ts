@@ -1677,6 +1677,7 @@ export type Database = {
           product_target: Json
           status: Database["public"]["Enums"]["product_status"]
           target_customer_notes: string | null
+          technique_category_id: string | null
           updated_at: string
           user_id: string
         }
@@ -1697,6 +1698,7 @@ export type Database = {
           product_target?: Json
           status?: Database["public"]["Enums"]["product_status"]
           target_customer_notes?: string | null
+          technique_category_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1717,6 +1719,7 @@ export type Database = {
           product_target?: Json
           status?: Database["public"]["Enums"]["product_status"]
           target_customer_notes?: string | null
+          technique_category_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1726,6 +1729,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_technique_category_id_fkey"
+            columns: ["technique_category_id"]
+            isOneToOne: false
+            referencedRelation: "technique_categories"
             referencedColumns: ["id"]
           },
         ]
@@ -2440,6 +2450,128 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      workflow_template_task_predecessors: {
+        Row: {
+          id: string
+          predecessor_task_id: string
+          task_id: string
+          template_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          predecessor_task_id: string
+          task_id: string
+          template_id: string
+          user_id?: string
+        }
+        Update: {
+          id?: string
+          predecessor_task_id?: string
+          task_id?: string
+          template_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_template_task_predecessors_predecessor_task_id_fkey"
+            columns: ["predecessor_task_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_template_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_template_task_predecessors_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_template_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_template_task_predecessors_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_template_tasks: {
+        Row: {
+          created_at: string
+          id: string
+          sort_order: number
+          task_name: string
+          task_type: string | null
+          template_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          sort_order?: number
+          task_name: string
+          task_type?: string | null
+          template_id: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          sort_order?: number
+          task_name?: string
+          task_type?: string | null
+          template_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_template_tasks_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workflow_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_templates: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          technique_category_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          technique_category_id: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          technique_category_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_templates_technique_category_id_fkey"
+            columns: ["technique_category_id"]
+            isOneToOne: false
+            referencedRelation: "technique_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

@@ -8,6 +8,7 @@ import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManage
 import { ProcessParameterManager } from "@/components/pilot/ProcessParameterManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
+import { WorkflowTemplateManager } from "@/components/pilot/WorkflowTemplateManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
 import { SensoryAttributeManager } from "@/components/pilot/SensoryAttributeManager";
 import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
@@ -126,6 +127,9 @@ function SettingsPage() {
         </SettingsSection>
         <SettingsSection title="METHODS">
           <MethodManager />
+        </SettingsSection>
+        <SettingsSection title="WORKFLOW TEMPLATES">
+          <WorkflowTemplateManager />
         </SettingsSection>
       </SettingsGroup>
 

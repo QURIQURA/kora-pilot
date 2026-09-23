@@ -15,7 +15,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, taskTypeColorsQuery, type VersionIngredientRow } from "@/lib/queries";
+import {
+  currentUserId,
+  taskTypeColorsQuery,
+  techniqueCategoriesQuery,
+  workflowTemplatesByTechniqueQuery,
+  type VersionIngredientRow,
+} from "@/lib/queries";
+import { leafTechniques } from "@/lib/technique";
 import { localDateTimeToISO, toLocalDateString, formatTime } from "@/lib/datetime";
 import {
   assignTimelineLanes,
@@ -113,6 +120,89 @@ export function WorkflowView({
   const queryClient = useQueryClient();
 
   const taskTypeColors = useQuery(taskTypeColorsQuery());
+
+  // 제작방법(TECHNIQUE CATEGORY) 기준 WORKFLOW 템플릿 불러오기(2026-09-23) — 매번 같은 TASK를
+  // 손으로 다시 입력하지 않도록, SETTINGS에서 미리 등록해둔 템플릿을 골라 한 번에 깔아준다.
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
+  const [templateTechniqueId, setTemplateTechniqueId] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const techniques = useQuery(techniqueCategoriesQuery());
+  const templatesForTechnique = useQuery(workflowTemplatesByTechniqueQuery(templateTechniqueId || null));
+
+  async function applyTemplate() {
+    if (!templateId) return;
+    setApplyingTemplate(true);
+    setTemplateError(null);
+    const userId = await currentUserId();
+    const { data: templateTasks, error: e1 } = await supabase
+      .from("workflow_template_tasks")
+      .select("*")
+      .eq("template_id", templateId)
+      .order("sort_order");
+    if (e1 || !templateTasks) {
+      setApplyingTemplate(false);
+      setTemplateError(`템플릿 TASK 조회 실패 — ${e1?.message ?? "unknown error"}`);
+      return;
+    }
+    if (templateTasks.length === 0) {
+      setApplyingTemplate(false);
+      setTemplateError("이 템플릿에 TASK가 없습니다 — SETTINGS에서 먼저 TASK를 등록하세요.");
+      return;
+    }
+    const { data: predRows, error: e2 } = await supabase
+      .from("workflow_template_task_predecessors")
+      .select("task_id, predecessor_task_id")
+      .eq("template_id", templateId);
+    if (e2) {
+      setApplyingTemplate(false);
+      setTemplateError(`템플릿 선행관계 조회 실패 — ${e2.message}`);
+      return;
+    }
+    const maxSort = tasks.reduce((acc, t) => Math.max(acc, t.sort_order), 0);
+    const { data: insertedRows, error: e3 } = await supabase
+      .from("work_session_tasks")
+      .insert(
+        templateTasks.map((t, idx) => ({
+          work_session_id: sessionId,
+          user_id: userId,
+          task_name: t.task_name,
+          task_type: t.task_type,
+          sort_order: maxSort + 1 + idx,
+        })),
+      )
+      .select("id");
+    if (e3 || !insertedRows) {
+      setApplyingTemplate(false);
+      setTemplateError(`TASK 생성 실패 — ${e3?.message ?? "unknown error"}`);
+      return;
+    }
+    const idMap = new Map<string, string>();
+    templateTasks.forEach((t, idx) => idMap.set(t.id, insertedRows[idx]!.id));
+    const predInserts = (predRows ?? [])
+      .filter((r) => idMap.has(r.task_id) && idMap.has(r.predecessor_task_id))
+      .map((r) => ({
+        user_id: userId,
+        work_session_id: sessionId,
+        task_id: idMap.get(r.task_id)!,
+        predecessor_task_id: idMap.get(r.predecessor_task_id)!,
+      }));
+    if (predInserts.length > 0) {
+      const { error: e4 } = await supabase.from("work_session_task_predecessors").insert(predInserts);
+      if (e4) {
+        setApplyingTemplate(false);
+        setTemplateError(`선행관계 생성 실패 — ${e4.message}`);
+        await onTasksChanged();
+        return;
+      }
+    }
+    setApplyingTemplate(false);
+    setTemplatePanelOpen(false);
+    setTemplateTechniqueId("");
+    setTemplateId("");
+    await onTasksChanged();
+  }
   // TASK TYPE 이름(소문자) → 사용자가 고른 color_class. 없으면 taskTypeColorClass()가 해시 기본색을 쓴다.
   const colorOverrides = useMemo(() => {
     const map: Record<string, string> = {};
@@ -485,6 +575,63 @@ export function WorkflowView({
 
   return (
     <div className="space-y-6">
+      {/* ── 템플릿 불러오기 ─────────────────────────────── */}
+      <div className="border border-border p-3">
+        <button
+          type="button"
+          className="text-xs tracking-wider text-muted-foreground hover:text-foreground"
+          onClick={() => setTemplatePanelOpen((v) => !v)}
+        >
+          {templatePanelOpen ? "▾" : "▸"} 템플릿 불러오기 (제작방법별 표준 TASK 순서)
+        </button>
+        {templatePanelOpen && (
+          <div className="mt-2 flex flex-col gap-2 border-t border-dashed border-border pt-2 md:flex-row md:flex-wrap md:items-center">
+            <select
+              className={`${selectClass} md:w-56`}
+              value={templateTechniqueId}
+              onChange={(e) => {
+                setTemplateTechniqueId(e.target.value);
+                setTemplateId("");
+              }}
+            >
+              <option value="">제작방법 선택…</option>
+              {leafTechniques(techniques.data ?? []).map(({ category }) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className={`${selectClass} md:w-56`}
+              value={templateId}
+              disabled={!templateTechniqueId}
+              onChange={(e) => setTemplateId(e.target.value)}
+            >
+              <option value="">템플릿 선택…</option>
+              {(templatesForTechnique.data ?? []).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className={`${primaryButtonClass} min-h-12`}
+              disabled={!templateId || applyingTemplate}
+              onClick={applyTemplate}
+            >
+              {applyingTemplate ? "적용 중..." : "이 템플릿 적용"}
+            </button>
+            {templateTechniqueId && (templatesForTechnique.data ?? []).length === 0 && (
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                이 제작방법에 등록된 템플릿이 없습니다 — SETTINGS→WORKFLOW TEMPLATES에서 만드세요.
+              </p>
+            )}
+            {templateError && <p className="text-xs text-destructive">{templateError}</p>}
+          </div>
+        )}
+      </div>
+
       {/* ── ADD TASK ─────────────────────────────── */}
       <div className="border border-border p-3">
         <div className="mb-2 text-xs tracking-wider text-muted-foreground">+ ADD TASK</div>

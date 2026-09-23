@@ -417,6 +417,12 @@ function ProductDetailPage() {
             onChange={(id) => updateProduct.mutate({ category_id: id || null })}
             emptyLabel="NO CATEGORY"
           />
+          <TechniqueSelect
+            className={selectClass + " w-auto"}
+            value={data.technique_category_id ?? ""}
+            onChange={(id) => updateProduct.mutate({ technique_category_id: id || null })}
+            emptyLabel="제작방법 미지정"
+          />
           <button
             type="button"
             className={`${buttonClass} text-xs`}

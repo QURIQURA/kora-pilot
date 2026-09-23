@@ -1821,3 +1821,71 @@ export const workSessionMultiplierHistoryQuery = (
       );
     },
   });
+
+/* ── WORKFLOW TEMPLATES (2026-09-23) — 제작방법(technique_category)별 표준 TASK 순서 ─── */
+
+export type WorkflowTemplate = import("@/integrations/supabase/types").Tables<"workflow_templates">;
+export type WorkflowTemplateTask =
+  import("@/integrations/supabase/types").Tables<"workflow_template_tasks">;
+
+/** 전체 템플릿 목록 (SETTINGS 관리 화면용) */
+export const workflowTemplatesQuery = () =>
+  queryOptions({
+    queryKey: ["workflow_templates"],
+    queryFn: async (): Promise<WorkflowTemplate[]> =>
+      unwrap(await supabase.from("workflow_templates").select("*").order("name")),
+  });
+
+/** 특정 제작방법(TECHNIQUE CATEGORY)에 속한 템플릿만 — PRODUCTION에서 "템플릿 불러오기"용 */
+export const workflowTemplatesByTechniqueQuery = (techniqueCategoryId: string | null) =>
+  queryOptions({
+    queryKey: ["workflow_templates_by_technique", techniqueCategoryId],
+    enabled: Boolean(techniqueCategoryId),
+    queryFn: async (): Promise<WorkflowTemplate[]> => {
+      if (!techniqueCategoryId) return [];
+      return unwrap(
+        await supabase
+          .from("workflow_templates")
+          .select("*")
+          .eq("technique_category_id", techniqueCategoryId)
+          .order("name"),
+      );
+    },
+  });
+
+export const workflowTemplateTasksQuery = (templateId: string | null) =>
+  queryOptions({
+    queryKey: ["workflow_template_tasks", templateId],
+    enabled: Boolean(templateId),
+    queryFn: async (): Promise<WorkflowTemplateTask[]> => {
+      if (!templateId) return [];
+      return unwrap(
+        await supabase
+          .from("workflow_template_tasks")
+          .select("*")
+          .eq("template_id", templateId)
+          .order("sort_order"),
+      );
+    },
+  });
+
+/** templateId → { taskId → [predecessor taskId, ...] } */
+export const workflowTemplateTaskPredecessorsQuery = (templateId: string | null) =>
+  queryOptions({
+    queryKey: ["workflow_template_task_predecessors", templateId],
+    enabled: Boolean(templateId),
+    queryFn: async (): Promise<Record<string, string[]>> => {
+      if (!templateId) return {};
+      const rows = unwrap(
+        await supabase
+          .from("workflow_template_task_predecessors")
+          .select("task_id, predecessor_task_id")
+          .eq("template_id", templateId),
+      );
+      const map: Record<string, string[]> = {};
+      for (const row of rows) {
+        (map[row.task_id] ??= []).push(row.predecessor_task_id);
+      }
+      return map;
+    },
+  });
