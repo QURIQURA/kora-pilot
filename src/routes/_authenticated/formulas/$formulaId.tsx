@@ -969,7 +969,7 @@ function FormulaDetailPage() {
                           <input
                             className="min-h-[36px] w-28 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
                             placeholder="이름 (예: 8인치 시폰몰드)"
-                            value={draft?.batches[preset.id]?.label ?? ""}
+                            value={draft?.batches[preset.id]?.label ?? preset.label ?? ""}
                             onChange={(e) => patchBatchDraft(preset.id, { label: e.target.value })}
                           />
                           <div className="flex items-center gap-1">
@@ -979,7 +979,7 @@ function FormulaDetailPage() {
                               inputMode="decimal"
                               step="0.1"
                               className="min-h-[36px] w-16 border border-input bg-background px-1 py-1 font-mono text-xs outline-none focus:border-foreground"
-                              value={draft?.batches[preset.id]?.multiplier ?? ""}
+                              value={draft?.batches[preset.id]?.multiplier ?? String(preset.multiplier)}
                               onChange={(e) =>
                                 patchBatchDraft(preset.id, { multiplier: e.target.value })
                               }
