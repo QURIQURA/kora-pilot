@@ -399,20 +399,12 @@ function ProductDetailPage() {
           <p className="font-mono text-xs uppercase text-muted-foreground">NO COMPONENTS LINKED</p>
         ) : (
           <>
-            {(() => {
-              const noSizeRows = (links.data ?? []).filter((r) => !r.product_size_id);
-              const costs = noSizeRows.map((r) => rowCost(r, costsByComponent));
-              if (!costs.some((c) => c != null)) return null;
-              const total = costs.reduce((sum: number, c) => sum + (c ?? 0), 0);
-              return (
-                <p className="mb-2 font-mono text-xs uppercase text-muted-foreground">
-                  전체(사이즈 미지정) 예상 원가 합계: {fmtCurrency(total)}
-                </p>
-              );
-            })()}
           <ul className="divide-y divide-border border border-border">
             {groupComponentLinks(links.data ?? []).map((group) => {
-              const groupCosts = group.rows.map((r) => rowCost(r, costsByComponent));
+              // 예상원가 합계는 사이즈가 지정된 행만 합산한다 — 사이즈 미지정 행은 어느 사이즈의
+              // 원가에도 속하지 않아 합산에 넣으면 SIZES 섹션의 사이즈별 원가와 안 맞게 된다.
+              const sizedRows = group.rows.filter((r) => r.product_size_id != null);
+              const groupCosts = sizedRows.map((r) => rowCost(r, costsByComponent));
               const groupTotal = groupCosts.some((c) => c != null)
                 ? groupCosts.reduce((sum: number, c) => sum + (c ?? 0), 0)
                 : null;
@@ -491,6 +483,13 @@ function ProductDetailPage() {
                       onSave={(patch) => updateUsage.mutate({ linkId: link.id, patch })}
                     />
                     {(() => {
+                      if (link.product_size_id == null) {
+                        return (
+                          <p className="font-mono text-[11px] text-destructive">
+                            ⚠ 사이즈 미지정 — 원가 계산에서 제외됩니다. 사이즈를 지정하세요.
+                          </p>
+                        );
+                      }
                       const cost = rowCost(link, costsByComponent);
                       if (link.quantity_g == null) return null;
                       return (

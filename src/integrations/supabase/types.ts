@@ -1528,8 +1528,10 @@ export type Database = {
           id: string
           is_default: boolean
           length_mm: number | null
+          monthly_unit_count: number | null
           notes: string | null
           product_id: string
+          selling_price: number | null
           shape: string
           updated_at: string
           user_id: string
@@ -1542,8 +1544,10 @@ export type Database = {
           id?: string
           is_default?: boolean
           length_mm?: number | null
+          monthly_unit_count?: number | null
           notes?: string | null
           product_id: string
+          selling_price?: number | null
           shape: string
           updated_at?: string
           user_id: string
@@ -1556,8 +1560,10 @@ export type Database = {
           id?: string
           is_default?: boolean
           length_mm?: number | null
+          monthly_unit_count?: number | null
           notes?: string | null
           product_id?: string
+          selling_price?: number | null
           shape?: string
           updated_at?: string
           user_id?: string

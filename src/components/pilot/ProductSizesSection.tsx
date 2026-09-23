@@ -149,6 +149,18 @@ export function ProductSizesSection({
                         costTotal != null ? `RAW MATERIAL ${fmtCurrency(costTotal)}` : null;
                       const extra = [usageLabel, costLabel].filter(Boolean).join(" · ");
                       const fullCost = costTotal != null ? costTotal + (perCakeExtras ?? 0) : null;
+                      const monthlyCount = size.monthly_unit_count;
+                      const monthlyCost =
+                        fullCost != null && monthlyCount != null && monthlyCount > 0
+                          ? fullCost * monthlyCount
+                          : null;
+                      const sellingPrice = size.selling_price;
+                      const margin =
+                        fullCost != null && sellingPrice != null ? sellingPrice - fullCost : null;
+                      const marginPct =
+                        margin != null && sellingPrice && sellingPrice > 0
+                          ? (margin / sellingPrice) * 100
+                          : null;
                       return (
                         <>
                           {calc ? (
@@ -166,6 +178,20 @@ export function ProductSizesSection({
                               {perCakeExtras
                                 ? ` (UTILITY/CONSUMABLE/PACKAGING/OVERHEAD ${fmtCurrency(perCakeExtras)} 포함)`
                                 : ""}
+                            </p>
+                          )}
+                          {sellingPrice != null && (
+                            <p className="font-mono text-xs text-muted-foreground">
+                              판매가 {fmtCurrency(sellingPrice)}
+                              {margin != null
+                                ? ` · 마진 ${fmtCurrency(margin)}${marginPct != null ? ` (${marginPct.toFixed(0)}%)` : ""}`
+                                : ""}
+                            </p>
+                          )}
+                          {monthlyCount != null && (
+                            <p className="font-mono text-xs text-muted-foreground">
+                              월 예상 생산 {monthlyCount}개
+                              {monthlyCost != null ? ` · 월 예상 원가 ${fmtCurrency(monthlyCost)}` : ""}
                             </p>
                           )}
                         </>
@@ -244,6 +270,12 @@ function ProductSizeForm({
   );
   const [isDefault, setIsDefault] = useState(existing?.is_default ?? false);
   const [notes, setNotes] = useState(existing?.notes ?? "");
+  const [monthlyUnitCount, setMonthlyUnitCount] = useState(
+    existing?.monthly_unit_count != null ? String(existing.monthly_unit_count) : "",
+  );
+  const [sellingPrice, setSellingPrice] = useState(
+    existing?.selling_price != null ? String(existing.selling_price) : "",
+  );
 
   const save = useMutation({
     mutationFn: async () => {
@@ -258,6 +290,8 @@ function ProductSizeForm({
         height_mm: toMm(heightCm),
         is_default: isDefault,
         notes: notes.trim() || null,
+        monthly_unit_count: monthlyUnitCount.trim() ? Number(monthlyUnitCount) : null,
+        selling_price: sellingPrice.trim() ? Number(sellingPrice) : null,
       };
 
       if (existing) {
@@ -389,6 +423,35 @@ function ProductSizeForm({
           </div>
         </div>
       )}
+
+      <div className="flex flex-wrap gap-2">
+        <div className="min-w-[10rem] flex-1">
+          <Field label="월 예상 생산개수 (OPTIONAL)">
+            <input
+              type="number"
+              inputMode="numeric"
+              step="1"
+              min="0"
+              className={inputClass}
+              value={monthlyUnitCount}
+              onChange={(e) => setMonthlyUnitCount(e.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="min-w-[10rem] flex-1">
+          <Field label="판매가 (AUD, OPTIONAL)">
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              className={inputClass}
+              value={sellingPrice}
+              onChange={(e) => setSellingPrice(e.target.value)}
+            />
+          </Field>
+        </div>
+      </div>
 
       <label className="flex items-center gap-2 text-sm">
         <input
