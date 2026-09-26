@@ -538,20 +538,26 @@ export const formulaVersionsQuery = (formulaId: string | null) =>
     },
   });
 
+/** 배수 프리셋 열에 몰드를 연결한 경우 — 그 몰드의 기준중량까지 같이 가져와서
+ * 배수를 "몰드 ×개수" 기준으로 자동 계산할 수 있게 한다(2026-09-24). */
+export interface FormulaVersionBatchRow extends FormulaVersionBatch {
+  moulds: { id: string; name: string; shape_size: string | null; reference_weight_g: number | null } | null;
+}
+
 /** Formula Version마다 저장된, 이름 붙인 배수 프리셋 (예: ×2 → "8인치 시폰몰드") */
 export const formulaVersionBatchesQuery = (versionId: string | null) =>
   queryOptions({
     queryKey: ["formula_version_batches", versionId],
     enabled: Boolean(versionId),
-    queryFn: async (): Promise<FormulaVersionBatch[]> => {
+    queryFn: async (): Promise<FormulaVersionBatchRow[]> => {
       if (!versionId) return [];
       return unwrap(
         await supabase
           .from("formula_version_batches")
-          .select("*")
+          .select("*, moulds(id, name, shape_size, reference_weight_g)")
           .eq("formula_version_id", versionId)
           .order("sort_order", { ascending: true }),
-      );
+      ) as unknown as FormulaVersionBatchRow[];
     },
   });
 

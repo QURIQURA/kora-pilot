@@ -313,6 +313,27 @@ export function scaledAmount(
   return { scaled: linear, linear, nonLinear: false };
 }
 
+/** 배수 열에 몰드를 연결했을 때 개수를 실제 배수로 환산한다(2026-09-24).
+ * 같은 몰드면 개수를 그대로 배수로 쓰고(비율=1), 다른 몰드면 두 몰드 모두 기준중량이
+ * 등록되어 있을 때만 비율(target÷base)을 곱한다 — 둘 중 하나라도 기준중량이 없으면
+ * 정확한 환산이 불가능하므로 "동일 비율(1)"로 처리하고 mismatch=true를 반환해
+ * 화면에서 "⚠ 기준중량 없음" 경고를 보여줄 수 있게 한다. */
+export function mouldBatchMultiplier(
+  mouldCount: number,
+  targetMould: { id: string; reference_weight_g: number | null } | null,
+  baseMould: { id: string; reference_weight_g: number | null } | null,
+): { multiplier: number; mismatch: boolean } {
+  if (!targetMould) return { multiplier: mouldCount, mismatch: false };
+  if (!baseMould || targetMould.id === baseMould.id) {
+    return { multiplier: mouldCount, mismatch: false };
+  }
+  if (!targetMould.reference_weight_g || !baseMould.reference_weight_g) {
+    return { multiplier: mouldCount, mismatch: true };
+  }
+  const ratio = targetMould.reference_weight_g / baseMould.reference_weight_g;
+  return { multiplier: mouldCount * ratio, mismatch: false };
+}
+
 /** 행의 배수 적용 중량(그램) */
 export function rowScaledGrams(row: VersionIngredientRow, n: number): ScaledAmount {
   const ing = row.ingredients;

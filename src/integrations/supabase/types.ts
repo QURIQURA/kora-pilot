@@ -478,6 +478,8 @@ export type Database = {
           formula_version_id: string
           id: string
           label: string | null
+          mould_count: number | null
+          mould_id: string | null
           multiplier: number
           sort_order: number
           updated_at: string
@@ -488,6 +490,8 @@ export type Database = {
           formula_version_id: string
           id?: string
           label?: string | null
+          mould_count?: number | null
+          mould_id?: string | null
           multiplier?: number
           sort_order?: number
           updated_at?: string
@@ -498,6 +502,8 @@ export type Database = {
           formula_version_id?: string
           id?: string
           label?: string | null
+          mould_count?: number | null
+          mould_id?: string | null
           multiplier?: number
           sort_order?: number
           updated_at?: string
@@ -509,6 +515,13 @@ export type Database = {
             columns: ["formula_version_id"]
             isOneToOne: false
             referencedRelation: "formula_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formula_version_batches_mould_id_fkey"
+            columns: ["mould_id"]
+            isOneToOne: false
+            referencedRelation: "moulds"
             referencedColumns: ["id"]
           },
         ]

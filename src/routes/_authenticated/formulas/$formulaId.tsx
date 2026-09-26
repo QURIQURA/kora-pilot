@@ -47,6 +47,7 @@ import {
   computeBases,
   functionalRowCalc,
   gelatinConvert,
+  mouldBatchMultiplier,
   parseBasisOverrides,
   rowScaledGrams,
   scaledAmount,
@@ -121,6 +122,9 @@ interface RowDraft {
 interface BatchDraft {
   label: string;
   multiplier: string;
+  /** 몰드 연결 모드일 때만 사용 — 비어있으면 배수 직접입력 모드(2026-09-24) */
+  mouldId: string;
+  mouldCount: string;
 }
 
 interface PageDraft {
@@ -167,6 +171,12 @@ function FormulaDetailPage() {
   const [batch, setBatch] = useState("1");
   const [basisId, setBasisId] = useState(""); // baker's % 기준 재료
   const [adding, setAdding] = useState(false);
+  // "+ ADD BATCH" 1단계 추가 폼 — 몰드+개수를 바로 입력해서 배수 열을 만든다(2026-09-24)
+  const [addingBatch, setAddingBatch] = useState(false);
+  const [newBatchMouldId, setNewBatchMouldId] = useState("");
+  const [newBatchCount, setNewBatchCount] = useState("1");
+  const [newBatchManualMultiplier, setNewBatchManualMultiplier] = useState("2");
+  const [newBatchLabel, setNewBatchLabel] = useState("");
   const [creatingVersion, setCreatingVersion] = useState(false);
   const [creatingExperiment, setCreatingExperiment] = useState(false);
 
@@ -189,22 +199,32 @@ function FormulaDetailPage() {
   const rows = ingredients.data ?? [];
   const batchPresetsQuery = useQuery(formulaVersionBatchesQuery(versionId));
   const batchPresets = useMemo(() => batchPresetsQuery.data ?? [], [batchPresetsQuery.data]);
-  // 편집 중엔 저장 전 draft 배수/이름을 미리 반영해서 보여준다(BASE ×1 칸이 즉시 미리보기 되는 것과
-  // 동일한 동작) — 그렇지 않으면 배수를 바꿔도 SAVE 전까지 재료량 칸이 안 바뀌어 "적용 안 됨"처럼 보임.
-  const effectiveBatchPresets = useMemo(
-    () =>
-      batchPresets.map((preset) => {
-        const d = draft?.batches[preset.id];
-        if (!d) return preset;
-        const draftMultiplier = parseNumber(d.multiplier);
-        return {
-          ...preset,
-          multiplier: draftMultiplier > 0 ? draftMultiplier : preset.multiplier,
-          label: d.label.trim() || preset.label,
-        };
-      }),
-    [batchPresets, draft],
-  );
+  // 편집 중엔 저장 전 draft 배수/이름/몰드를 미리 반영해서 보여준다(BASE ×1 칸이 즉시 미리보기 되는
+  // 것과 동일한 동작) — 그렇지 않으면 바꿔도 SAVE 전까지 재료량 칸이 안 바뀌어 "적용 안 됨"처럼 보임.
+  // 몰드가 연결된 열은 "몰드 개수"를 배수로 자동 환산한다(mouldBatchMultiplier, 2026-09-24).
+  const effectiveBatchPresets = useMemo(() => {
+    const baseMould = (moulds.data ?? []).find((m) => m.id === (version?.default_mould_id ?? "")) ?? null;
+    return batchPresets.map((preset) => {
+      const d = draft?.batches[preset.id];
+      if (!d) return { ...preset, mismatch: false };
+      const label = d.label.trim() || preset.label;
+      if (d.mouldId) {
+        const targetMould = (moulds.data ?? []).find((m) => m.id === d.mouldId) ?? null;
+        const count = parseNumber(d.mouldCount) || 1;
+        const { multiplier, mismatch } = mouldBatchMultiplier(count, targetMould, baseMould);
+        return { ...preset, multiplier, label, mould_id: d.mouldId, mould_count: count, mismatch };
+      }
+      const draftMultiplier = parseNumber(d.multiplier);
+      return {
+        ...preset,
+        multiplier: draftMultiplier > 0 ? draftMultiplier : preset.multiplier,
+        label,
+        mould_id: null,
+        mould_count: null,
+        mismatch: false,
+      };
+    });
+  }, [batchPresets, draft, moulds.data, version?.default_mould_id]);
   const versionExperiments = useQuery(experimentsByVersionQuery(versionId));
 
   // 버전을 바꾸면 이전 버전의 초안은 버리고, 아래 초기화 effect가 새 버전 데이터로 다시 채운다.
@@ -280,7 +300,12 @@ function FormulaDetailPage() {
       batches: Object.fromEntries(
         batchPresets.map((preset) => [
           preset.id,
-          { label: preset.label ?? "", multiplier: String(preset.multiplier) },
+          {
+            label: preset.label ?? "",
+            multiplier: String(preset.multiplier),
+            mouldId: preset.mould_id ?? "",
+            mouldCount: preset.mould_count != null ? String(preset.mould_count) : "1",
+          },
         ]),
       ),
     };
@@ -327,8 +352,14 @@ function FormulaDetailPage() {
     for (const preset of batchPresets) {
       const d = draft.batches[preset.id];
       if (!d) continue;
-      const nextMultiplier = parseNumber(d.multiplier) || Number(preset.multiplier);
-      if (nextMultiplier !== Number(preset.multiplier)) return true;
+      if (d.mouldId !== (preset.mould_id ?? "")) return true;
+      if (d.mouldId) {
+        const nextCount = parseNumber(d.mouldCount) || 1;
+        if (nextCount !== Number(preset.mould_count ?? 1)) return true;
+      } else {
+        const nextMultiplier = parseNumber(d.multiplier) || Number(preset.multiplier);
+        if (nextMultiplier !== Number(preset.multiplier)) return true;
+      }
       if ((d.label.trim() || null) !== (preset.label ?? null)) return true;
     }
     return false;
@@ -351,7 +382,7 @@ function FormulaDetailPage() {
   const patchBatchDraft = (batchId: string, patch: Partial<BatchDraft>) => {
     setDraft((d) => {
       if (!d) return d;
-      const current = d.batches[batchId] ?? { label: "", multiplier: "1" };
+      const current = d.batches[batchId] ?? { label: "", multiplier: "1", mouldId: "", mouldCount: "1" };
       return { ...d, batches: { ...d.batches, [batchId]: { ...current, ...patch } } };
     });
   };
@@ -432,14 +463,21 @@ function FormulaDetailPage() {
   };
 
   const addBatchPreset = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (input: {
+      mouldId: string | null;
+      mouldCount: number;
+      multiplier: number;
+      label: string | null;
+    }) => {
       if (!versionId) return;
       const user_id = await currentUserId();
       const { error } = await supabase.from("formula_version_batches").insert({
         user_id,
         formula_version_id: versionId,
-        multiplier: 2,
-        label: null,
+        multiplier: input.multiplier,
+        mould_id: input.mouldId,
+        mould_count: input.mouldId ? input.mouldCount : null,
+        label: input.label,
         sort_order: batchPresets.length,
       });
       if (error) throw error;
@@ -548,13 +586,26 @@ function FormulaDetailPage() {
         }
       }
 
-      // 배수 프리셋 (이름/배수)
+      // 배수 프리셋 (이름/배수/몰드)
+      const baseMouldForSave =
+        (moulds.data ?? []).find((m) => m.id === (version.default_mould_id ?? "")) ?? null;
       for (const preset of batchPresets) {
         const d = draft.batches[preset.id];
         if (!d) continue;
         const patch: Partial<FormulaVersionBatch> = {};
-        const nextMultiplier = parseNumber(d.multiplier) || Number(preset.multiplier);
-        if (nextMultiplier !== Number(preset.multiplier)) patch.multiplier = nextMultiplier;
+        const nextMouldId = d.mouldId || null;
+        if (nextMouldId !== (preset.mould_id ?? null)) patch.mould_id = nextMouldId;
+        if (nextMouldId) {
+          const nextCount = parseNumber(d.mouldCount) || 1;
+          if (nextCount !== Number(preset.mould_count ?? 1)) patch.mould_count = nextCount;
+          const targetMould = (moulds.data ?? []).find((m) => m.id === nextMouldId) ?? null;
+          const { multiplier } = mouldBatchMultiplier(nextCount, targetMould, baseMouldForSave);
+          if (multiplier !== Number(preset.multiplier)) patch.multiplier = multiplier;
+        } else {
+          const nextMultiplier = parseNumber(d.multiplier) || Number(preset.multiplier);
+          if (nextMultiplier !== Number(preset.multiplier)) patch.multiplier = nextMultiplier;
+          if (preset.mould_count != null) patch.mould_count = null;
+        }
         const nextLabel = d.label.trim() || null;
         if (nextLabel !== (preset.label ?? null)) patch.label = nextLabel;
         if (Object.keys(patch).length > 0) {
@@ -944,7 +995,13 @@ function FormulaDetailPage() {
               <button
                 type="button"
                 className="label-caps px-2 py-2 text-xs hover:bg-secondary"
-                onClick={() => addBatchPreset.mutate()}
+                onClick={() => {
+                  setNewBatchMouldId(scalingMode === "MOULD" ? (version?.default_mould_id ?? "") : "");
+                  setNewBatchCount("1");
+                  setNewBatchManualMultiplier("2");
+                  setNewBatchLabel("");
+                  setAddingBatch(true);
+                }}
               >
                 + ADD BATCH
               </button>
@@ -975,52 +1032,120 @@ function FormulaDetailPage() {
                   <th className="label-caps border-r border-border bg-secondary/40 px-2 py-2 text-xs text-muted-foreground">
                     BASE ×1
                   </th>
-                  {batchPresets.map((preset) => (
-                    <th
-                      key={preset.id}
-                      className="label-caps border-r border-dashed border-border px-2 py-2 text-xs text-muted-foreground"
-                    >
-                      {editing ? (
-                        <div className="flex flex-col gap-1 normal-case">
-                          <input
-                            className="min-h-[36px] w-28 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
-                            placeholder="이름 (예: 8인치 시폰몰드)"
-                            value={draft?.batches[preset.id]?.label ?? preset.label ?? ""}
-                            onChange={(e) => patchBatchDraft(preset.id, { label: e.target.value })}
-                          />
-                          <div className="flex items-center gap-1">
-                            <span>×</span>
+                  {batchPresets.map((preset) => {
+                    const d = draft?.batches[preset.id];
+                    const usingMould = Boolean(d ? d.mouldId : preset.mould_id);
+                    const eff = effectiveBatchPresets.find((p) => p.id === preset.id) ?? {
+                      ...preset,
+                      mismatch: false,
+                    };
+                    return (
+                      <th
+                        key={preset.id}
+                        className="label-caps border-r border-dashed border-border px-2 py-2 text-xs text-muted-foreground"
+                      >
+                        {editing ? (
+                          <div className="flex flex-col gap-1 normal-case">
                             <input
-                              type="number"
-                              inputMode="decimal"
-                              step="0.1"
-                              className="min-h-[36px] w-16 border border-input bg-background px-1 py-1 font-mono text-xs outline-none focus:border-foreground"
-                              value={draft?.batches[preset.id]?.multiplier ?? String(preset.multiplier)}
-                              onChange={(e) =>
-                                patchBatchDraft(preset.id, { multiplier: e.target.value })
-                              }
+                              className="min-h-[36px] w-28 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
+                              placeholder="이름 (예: 8인치 시폰몰드)"
+                              value={d?.label ?? preset.label ?? ""}
+                              onChange={(e) => patchBatchDraft(preset.id, { label: e.target.value })}
                             />
+                            {usingMould ? (
+                              <>
+                                <MouldSelect
+                                  className="min-h-[36px] w-28 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
+                                  value={d?.mouldId ?? preset.mould_id ?? ""}
+                                  onChange={(id) => patchBatchDraft(preset.id, { mouldId: id })}
+                                />
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="1"
+                                    min="0"
+                                    className="min-h-[36px] w-14 border border-input bg-background px-1 py-1 font-mono text-xs outline-none focus:border-foreground"
+                                    value={d?.mouldCount ?? String(preset.mould_count ?? 1)}
+                                    onChange={(e) =>
+                                      patchBatchDraft(preset.id, { mouldCount: e.target.value })
+                                    }
+                                  />
+                                  <span className="text-[10px]">개</span>
+                                </div>
+                                <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                                  = ×{fmtNumber(Number(eff.multiplier), 2)}
+                                  {eff.mismatch && (
+                                    <span className="ml-1" title="기준중량 미등록 — 개수를 그대로 배수로 사용">
+                                      ⚠
+                                    </span>
+                                  )}
+                                </p>
+                                <button
+                                  type="button"
+                                  className="label-caps min-h-[22px] w-full border border-dashed border-input px-1 py-0.5 text-[9px] hover:bg-secondary"
+                                  onClick={() => patchBatchDraft(preset.id, { mouldId: "" })}
+                                >
+                                  배수 직접입력으로
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-1">
+                                  <span>×</span>
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.1"
+                                    className="min-h-[36px] w-16 border border-input bg-background px-1 py-1 font-mono text-xs outline-none focus:border-foreground"
+                                    value={d?.multiplier ?? String(preset.multiplier)}
+                                    onChange={(e) =>
+                                      patchBatchDraft(preset.id, { multiplier: e.target.value })
+                                    }
+                                  />
+                                </div>
+                                {scalingMode === "MOULD" && (
+                                  <button
+                                    type="button"
+                                    className="label-caps min-h-[22px] w-full border border-dashed border-input px-1 py-0.5 text-[9px] hover:bg-secondary"
+                                    onClick={() =>
+                                      patchBatchDraft(preset.id, {
+                                        mouldId: version?.default_mould_id ?? moulds.data?.[0]?.id ?? "",
+                                      })
+                                    }
+                                  >
+                                    몰드 기준으로
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              className="label-caps min-h-[32px] w-full border border-input px-1 py-1 text-[10px] hover:bg-secondary active:bg-secondary"
+                              onClick={() => {
+                                if (removeBatchPreset.isPending) return;
+                                removeBatchPreset.mutate(preset.id);
+                              }}
+                              disabled={removeBatchPreset.isPending}
+                            >
+                              ✕ 열 삭제
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            className="label-caps min-h-[32px] w-full border border-input px-1 py-1 text-[10px] hover:bg-secondary active:bg-secondary"
-                            onClick={() => {
-                              if (removeBatchPreset.isPending) return;
-                              removeBatchPreset.mutate(preset.id);
-                            }}
-                            disabled={removeBatchPreset.isPending}
-                          >
-                            ✕ 열 삭제
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          ×{fmtNumber(Number(preset.multiplier), 2)}
-                          {preset.label ? ` · ${preset.label}` : ""}
-                        </>
-                      )}
-                    </th>
-                  ))}
+                        ) : preset.mould_id ? (
+                          <>
+                            {(moulds.data ?? []).find((m) => m.id === preset.mould_id)?.name ?? "몰드"} ×
+                            {fmtNumber(Number(preset.mould_count ?? 1), 0)}개
+                            {preset.label ? ` · ${preset.label}` : ""}
+                          </>
+                        ) : (
+                          <>
+                            ×{fmtNumber(Number(preset.multiplier), 2)}
+                            {preset.label ? ` · ${preset.label}` : ""}
+                          </>
+                        )}
+                      </th>
+                    );
+                  })}
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground">UNIT</th>
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground">
                     %  / RATE
@@ -1159,6 +1284,149 @@ function FormulaDetailPage() {
                   setAdding(false);
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {addingBatch && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+          <div className="w-full max-w-md border border-border bg-background">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <span className="label-caps">ADD BATCH</span>
+              <button
+                type="button"
+                className="label-caps px-2 py-2"
+                onClick={() => setAddingBatch(false)}
+              >
+                CLOSE
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              <input
+                className={inputClass}
+                placeholder="이름 (예: 8인치 시폰몰드)"
+                value={newBatchLabel}
+                onChange={(e) => setNewBatchLabel(e.target.value)}
+              />
+              {scalingMode === "MOULD" ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">
+                      MOULD
+                    </span>
+                    <MouldSelect
+                      className={`${selectClass} flex-1`}
+                      value={newBatchMouldId}
+                      onChange={setNewBatchMouldId}
+                      emptyLabel="배수 직접입력"
+                    />
+                  </div>
+                  {newBatchMouldId ? (
+                    (() => {
+                      const baseMould =
+                        (moulds.data ?? []).find((m) => m.id === (version?.default_mould_id ?? "")) ??
+                        null;
+                      const targetMould =
+                        (moulds.data ?? []).find((m) => m.id === newBatchMouldId) ?? null;
+                      const count = parseNumber(newBatchCount) || 1;
+                      const { multiplier, mismatch } = mouldBatchMultiplier(count, targetMould, baseMould);
+                      return (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">
+                              개수
+                            </span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              step="1"
+                              min="0"
+                              className={`${inputClass} w-24`}
+                              value={newBatchCount}
+                              onChange={(e) => setNewBatchCount(e.target.value)}
+                            />
+                            <span className="font-mono text-xs text-muted-foreground">
+                              = ×{fmtNumber(multiplier, 2)}
+                            </span>
+                          </div>
+                          {mismatch && (
+                            <p className="font-mono text-[10px] text-muted-foreground">
+                              ⚠ 두 몰드의 기준중량이 등록되어 있지 않아 정확한 환산이 불가능해서 개수를
+                              그대로 배수로 씁니다 — MOULDS 설정에서 기준중량(g)을 등록하면 자동
+                              환산됩니다.
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">
+                        배수
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        className={`${inputClass} w-24`}
+                        value={newBatchManualMultiplier}
+                        onChange={(e) => setNewBatchManualMultiplier(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">배수</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    className={`${inputClass} w-24`}
+                    value={newBatchManualMultiplier}
+                    onChange={(e) => setNewBatchManualMultiplier(e.target.value)}
+                  />
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  className={buttonClass}
+                  onClick={() => setAddingBatch(false)}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  className={primaryButtonClass}
+                  disabled={addBatchPreset.isPending}
+                  onClick={() => {
+                    const label = newBatchLabel.trim() || null;
+                    if (scalingMode === "MOULD" && newBatchMouldId) {
+                      const baseMould =
+                        (moulds.data ?? []).find((m) => m.id === (version?.default_mould_id ?? "")) ??
+                        null;
+                      const targetMould =
+                        (moulds.data ?? []).find((m) => m.id === newBatchMouldId) ?? null;
+                      const count = parseNumber(newBatchCount) || 1;
+                      const { multiplier } = mouldBatchMultiplier(count, targetMould, baseMould);
+                      addBatchPreset.mutate(
+                        { mouldId: newBatchMouldId, mouldCount: count, multiplier, label },
+                        { onSuccess: () => setAddingBatch(false) },
+                      );
+                    } else {
+                      const multiplier = parseNumber(newBatchManualMultiplier) || 2;
+                      addBatchPreset.mutate(
+                        { mouldId: null, mouldCount: 1, multiplier, label },
+                        { onSuccess: () => setAddingBatch(false) },
+                      );
+                    }
+                  }}
+                >
+                  {addBatchPreset.isPending ? "추가 중…" : "추가"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
