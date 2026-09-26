@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   PointerSensor,
@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { supabase } from "@/integrations/supabase/client";
 import { versionIngredientsQuery, type VersionIngredientRow } from "@/lib/queries";
 import { fmtNumber, toGrams, versionLabel } from "@/lib/formula";
 import { ingredientDisplayName } from "@/lib/pilot";
@@ -59,10 +60,11 @@ interface SheetRow {
 
 /** VersionHistory(Formula 상세 페이지)와 CurrentFormulaPanel(Component 페이지)이 함께 쓰는
  * "버전 비교 엑셀 시트" — 이 Formula의 모든 버전을 열로 나란히 두고 재료별로 뭐가
- * 달라졌는지/추가됐는지/삭제됐는지 한눈에 보여준다. 읽기 전용(재료 값 수정은 항상 Formula
- * 상세 페이지에서) — 다만 실제 엑셀처럼 행/열을 드래그로 재배치하거나 크기를 조절하는 것은
- * 이 화면 자체의 "보기 편의" 기능이라 지원한다. 순서/크기는 이 화면 세션 안에서만 유지되고
- * 저장되지 않는다(재료 자체의 process 순서는 Formula 페이지의 드래그 재정렬이 소스).
+ * 달라졌는지/추가됐는지/삭제됐는지 한눈에 보여준다. 재료 값 수정은 항상 Formula 상세
+ * 페이지에서 하지만, 행 드래그 재정렬은 여기서도 바로 저장된다(2026-09-26) — 화면에
+ * 보이는 모든 버전에 동일한 상대 순서로 반영(각 버전에 실제로 존재하는 재료만 그 버전
+ * 안에서 순서를 맞춤). 열(버전) 순서/열·행 크기는 순수 "보기 편의"라 이 화면 세션
+ * 안에서만 유지되고 저장되지 않는다.
  */
 export function VersionComparisonSheet({
   versions,
@@ -138,9 +140,48 @@ export function VersionComparisonSheet({
   }, [baseVersions, versionIngredientQueries]);
 
   const sheetLoading = versionIngredientQueries.some((q) => q.isLoading);
+  const queryClient = useQueryClient();
 
-  // 실제 엑셀처럼 열(버전)과 행(재료) 순서를 드래그로 바꿀 수 있다. 이 화면을 다시 열면
-  // 초기화되는 세션 전용 상태 — DB에는 아무것도 쓰지 않는다.
+  // 행(재료) 드래그 재정렬은 실제 저장된다(2026-09-26) — 화면에 보이는 모든 버전에
+  // 새 순서를 적용하되, 각 버전에 실제로 존재하는 재료만으로 그 버전 자신의 sort_order를
+  // 다시 매긴다(0부터 연속). Formula 페이지의 reorderRows와 동일한 저장 규칙.
+  const persistRowOrder = useMutation({
+    mutationFn: async (orderedIngredientIds: string[]) => {
+      const rowById = new Map(baseRows.map((r) => [r.id, r]));
+      const updates: { id: string; index: number }[] = [];
+      baseVersions.forEach((v) => {
+        let index = 0;
+        for (const ingId of orderedIngredientIds) {
+          const cell = rowById.get(ingId)?.byVersion.get(v.id);
+          if (!cell) continue;
+          if (cell.sort_order !== index) updates.push({ id: cell.id, index });
+          index += 1;
+        }
+      });
+      await Promise.all(
+        updates.map(({ id, index }) =>
+          supabase
+            .from("formula_version_ingredients")
+            .update({ sort_order: index })
+            .eq("id", id)
+            .then(({ error }) => {
+              if (error) throw error;
+            }),
+        ),
+      );
+    },
+    onSuccess: () => {
+      baseVersions.forEach((v) =>
+        queryClient.invalidateQueries({ queryKey: ["formula_version_ingredients", v.id] }),
+      );
+    },
+    onError: (error) => {
+      console.error("재료 순서 저장 실패", error);
+    },
+  });
+
+  // 실제 엑셀처럼 열(버전)과 행(재료) 순서를 드래그로 바꿀 수 있다. 열 순서/크기는 이 화면을
+  // 다시 열면 초기화되는 세션 전용 상태(DB에 쓰지 않음) — 행 순서만 위 persistRowOrder로 저장.
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [rowOrder, setRowOrder] = useState<string[]>([]);
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
@@ -198,7 +239,9 @@ export function VersionComparisonSheet({
       const oldIndex = prev.indexOf(String(active.id));
       const newIndex = prev.indexOf(String(over.id));
       if (oldIndex === -1 || newIndex === -1) return prev;
-      return arrayMove(prev, oldIndex, newIndex);
+      const next = arrayMove(prev, oldIndex, newIndex);
+      persistRowOrder.mutate(next);
+      return next;
     });
   };
 
