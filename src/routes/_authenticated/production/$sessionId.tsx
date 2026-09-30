@@ -151,6 +151,15 @@ function WorkSessionPage() {
     updateSession.mutate(patch);
   };
 
+  /** START WORK를 깜빡 안 눌러도, WORKFLOW에서 TASK 하나라도 시작시각이 기록되면 그 시각으로
+   * 세션을 자동으로 IN_PROGRESS 전환한다(2026-09-30) — PLANNED 상태일 때만 동작, 이미
+   * 시작/일시정지/완료/취소된 세션은 건드리지 않는다. */
+  const ensureSessionStartedAt = (iso: string) => {
+    if (session.data?.status === "PLANNED") {
+      updateSession.mutate({ status: "IN_PROGRESS", started_at: iso });
+    }
+  };
+
   const removeFormulaVersion = useMutation({
     mutationFn: async (row: WorkSessionFormulaVersionRow) => {
       // 이 formula version에 속한 ingredient line들의 checklist 기록도 함께 정리한다
@@ -170,6 +179,15 @@ function WorkSessionPage() {
           .in("formula_version_ingredient_id", lineIds);
         if (progressError) throw progressError;
       }
+      // 이 formula version으로 자동 적용됐던 TASK LIST(work_session_tasks)도 함께 지운다 —
+      // work_session_task_ingredients/predecessors는 FK ON DELETE CASCADE라 같이 정리된다.
+      const { error: tasksError } = await supabase
+        .from("work_session_tasks")
+        .delete()
+        .eq("work_session_id", sessionId)
+        .eq("formula_version_id", row.formula_version_id);
+      if (tasksError) throw tasksError;
+
       const { error } = await supabase
         .from("work_session_formula_versions")
         .delete()
@@ -179,6 +197,7 @@ function WorkSessionPage() {
     onSuccess: async () => {
       await invalidateSelections();
       await invalidateProgress();
+      await invalidateTasks();
     },
   });
 
@@ -253,10 +272,6 @@ function WorkSessionPage() {
           ))}
         </div>
       </div>
-
-      {data.status === "COMPLETED" && (
-        <StockReflectSection sessionId={sessionId} rows={rows} />
-      )}
 
       <SectionCard
         title="SELECTED FORMULA VERSIONS"
@@ -346,6 +361,7 @@ function WorkSessionPage() {
           taskIngredients={taskIngredients.data ?? {}}
           taskPredecessors={taskPredecessors.data ?? {}}
           onTasksChanged={invalidateTasks}
+          onTaskStarted={ensureSessionStartedAt}
         />
       </SectionCard>
 
@@ -353,6 +369,10 @@ function WorkSessionPage() {
         <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateSession.mutate({ notes })} />
       </SectionCard>
 
+      {/* 재고 반영은 작업이 끝난 뒤 하는 일이므로 시퀀스상 맨 마지막(NOTES 다음)에 둔다(2026-09-30). */}
+      {data.status === "COMPLETED" && (
+        <StockReflectSection sessionId={sessionId} rows={rows} />
+      )}
     </div>
   );
 }

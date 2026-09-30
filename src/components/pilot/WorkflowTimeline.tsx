@@ -73,6 +73,7 @@ export function WorkflowView({
   taskIngredients,
   taskPredecessors,
   onTasksChanged,
+  onTaskStarted,
 }: {
   sessionId: string;
   tasks: WorkSessionTask[];
@@ -84,6 +85,10 @@ export function WorkflowView({
   /** taskId → 그 TASK가 이어받는 선행 TASK(복수 가능, 2026-09-24) */
   taskPredecessors?: Record<string, { taskId: string; name: string }[]>;
   onTasksChanged: () => void | Promise<void>;
+  /** WORK SESSION이 아직 PLANNED(START WORK 누르기 전)인데 TASK에 시작시각이 기록되면 그 시각으로
+   * 세션도 자동 IN_PROGRESS 전환하도록 부모에 알린다(2026-09-30) — "START WORK 누르는 걸 깜빡해도
+   * TASK 시작시간이 기록되는 순간 세션도 같이 시작된 걸로 쳐달라"는 요청. */
+  onTaskStarted?: (iso: string) => void | Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
   // 포커스 모드(2026-09-24) — 한 품목(Component)의 "지금 할 일"에만 집중하는 간단 화면.
@@ -112,12 +117,22 @@ export function WorkflowView({
     return ticks;
   }, [range]);
 
-  // 열(품목) = 선택된 Formula Version들 + Formula 없는 Task를 위한 GENERAL 열
+  // 열(품목) = 선택된 Formula Version들 + Formula 없는 Task를 위한 GENERAL 열 + (2026-09-30) 이미
+  // SELECTED FORMULA VERSIONS에서 REMOVE된 뒤에도 TASK 자체는 남아있는 경우(예전 데이터, REMOVE 시
+  // TASK까지 함께 지우게 고치기 전에 생긴 것들)를 위한 안전장치 — TASK LIST에는 항상 보이는데
+  // 타임라인 그리드에서만 조용히 사라지는 걸 막는다.
   const columns = useMemo(() => {
     const cols = formulaOptions.map((f) => ({ key: f.formulaVersionId, label: f.formulaName }));
+    const knownKeys = new Set(cols.map((c) => c.key));
+    for (const t of tasks) {
+      if (t.formula_version_id && !knownKeys.has(t.formula_version_id)) {
+        knownKeys.add(t.formula_version_id);
+        cols.push({ key: t.formula_version_id, label: "(제거된 배합)" });
+      }
+    }
     cols.push({ key: GENERAL_KEY, label: "GENERAL" });
     return cols;
-  }, [formulaOptions]);
+  }, [formulaOptions, tasks]);
 
   // 타임라인 위 세로 드래그로 시간 이동(2026-09-30) — rail을 마우스로 눌러 위/아래로 끌면
   // 시작시각(있으면 완료시각도 같은 만큼)이 5분 단위로 바뀐다. 진행 중인 드래그 값은 dragPreview에만
@@ -152,6 +167,7 @@ export function WorkflowView({
       .eq("id", taskId);
     if (updateError) setError(`시간 이동 실패 — ${updateError.message}`);
     await onTasksChanged();
+    await onTaskStarted?.(new Date(startMs).toISOString());
   }
 
   useEffect(() => {
@@ -246,12 +262,14 @@ export function WorkflowView({
 
   /** READY → START: 실제 시작 시각 기록, IN_PROGRESS로 전환 */
   async function startTask(task: WorkSessionTask) {
+    const startedAt = new Date().toISOString();
     const { error: updateError } = await supabase
       .from("work_session_tasks")
-      .update({ status: "IN_PROGRESS", actual_started_at: new Date().toISOString() })
+      .update({ status: "IN_PROGRESS", actual_started_at: startedAt })
       .eq("id", task.id);
     if (updateError) setError(`START FAILED — ${updateError.message}`);
     await onTasksChanged();
+    await onTaskStarted?.(startedAt);
   }
 
   /** ACTIVE → COMPLETE: 실제 완료 시각 기록, DONE으로 전환. 다음 TASK는 자동으로 READY "로 보이게"
@@ -303,6 +321,7 @@ export function WorkflowView({
       .eq("id", task.id);
     if (updateError) setError(`시작시간 저장 실패 — ${updateError.message}`);
     await onTasksChanged();
+    if (iso) await onTaskStarted?.(iso);
   }
 
   async function setTaskEnd(task: WorkSessionTask, timeValue: string) {
