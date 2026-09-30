@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { componentObservationsQuery, type ComponentObservationRow } from "@/lib/queries";
 import { toLocalDateString } from "@/lib/datetime";
 import { versionLabel } from "@/lib/formula";
@@ -45,16 +46,22 @@ export function ComponentObservationsSection({ componentId }: { componentId: str
                     {versionLabel(row.formula_versions.version_number)}
                   </span>
                 )}
-                <span className="label-caps text-[10px] text-muted-foreground">
-                  {row.task_name}
-                  {row.work_sessions?.name ? ` · ${row.work_sessions.name}` : ""}
-                </span>
+                <span className="label-caps text-[10px] text-muted-foreground">{row.task_name}</span>
                 <span className="min-w-[10rem] flex-1 text-sm">
                   {row.observation_status ? `${row.observation_status} · ` : ""}
                   {row.observation_height_start_mm ?? "-"}mm → {row.observation_height_mid_mm ?? "-"}mm →{" "}
                   {row.observation_height_end_mm ?? "-"}mm
                   {row.observation_temperature_c != null ? ` · ${row.observation_temperature_c}°C` : ""}
                 </span>
+                {row.work_sessions && (
+                  <Link
+                    to="/production/$sessionId"
+                    params={{ sessionId: row.work_sessions.id }}
+                    className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {row.work_sessions.name || "작업 보기"} →
+                  </Link>
+                )}
               </li>
             );
           })}
