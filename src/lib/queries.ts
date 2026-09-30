@@ -471,6 +471,7 @@ export interface FormulaListRow extends Formula {
     id: string;
     version_number: number;
     status: FormulaVersion["status"];
+    default_mould_id: string | null;
   }[];
 }
 
@@ -482,7 +483,7 @@ export const formulasQuery = () =>
         await supabase
           .from("formulas")
           .select(
-            "*, components(id, name, scaling_mode, default_workflow_template_id, auto_apply_default_workflow), formula_versions(id, version_number, status)",
+            "*, components(id, name, scaling_mode, default_workflow_template_id, auto_apply_default_workflow), formula_versions(id, version_number, status, default_mould_id)",
           )
           .order("updated_at", { ascending: false }),
       ) as unknown as FormulaListRow[],

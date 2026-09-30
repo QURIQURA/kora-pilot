@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import {
   currentUserId,
   formulasQuery,
+  mouldsQuery,
   versionIngredientsBulkQuery,
   workSessionFormulaVersionsQuery,
   workSessionMultiplierHistoryQuery,
@@ -34,7 +35,9 @@ import {
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
-import { fmtNumber, toGrams, versionLabel } from "@/lib/formula";
+import { fmtNumber, toGrams, versionLabel, type Mould } from "@/lib/formula";
+import { mouldBatchMultiplier } from "@/lib/formula-calc";
+import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { formatDateTime } from "@/lib/datetime";
 import {
   buildMultiplierSnapshot,
@@ -99,7 +102,7 @@ function WorkSessionPage() {
   const taskIngredients = useQuery(workSessionTaskIngredientsQuery(sessionId));
   const taskPredecessors = useQuery(workSessionTaskPredecessorsQuery(sessionId));
 
-  const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA" | "WORKFLOW">("WEIGHING");
+  const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA">("WEIGHING");
   const [adding, setAdding] = useState(false);
   const [promotingVersionId, setPromotingVersionId] = useState<string | null>(null);
 
@@ -197,7 +200,7 @@ function WorkSessionPage() {
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((r) => ({
           formulaVersionId: r.formula_version_id,
-          formulaName: r.formula_versions.formulas.name,
+          formulaName: r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name,
           multiplier: Number(r.multiplier),
           sortOrder: r.sort_order,
         })),
@@ -257,10 +260,6 @@ function WorkSessionPage() {
       {data.status === "COMPLETED" && (
         <StockReflectSection sessionId={sessionId} rows={rows} />
       )}
-
-      <SectionCard title="NOTES">
-        <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateSession.mutate({ notes })} />
-      </SectionCard>
 
       <SectionCard
         title="SELECTED FORMULA VERSIONS"
@@ -322,13 +321,6 @@ function WorkSessionPage() {
             >
               FORMULA VIEW
             </button>
-            <button
-              type="button"
-              className={viewMode === "WORKFLOW" ? primaryButtonClass : buttonClass}
-              onClick={() => setViewMode("WORKFLOW")}
-            >
-              WORKFLOW
-            </button>
           </div>
         }
       >
@@ -339,22 +331,30 @@ function WorkSessionPage() {
             columns={orderedSelections}
             onProgressChanged={invalidateProgress}
           />
-        ) : viewMode === "FORMULA" ? (
-          <FormulaView rows={rows} ingredientsByVersion={ingredientsByVersion} />
         ) : (
-          <WorkflowView
-            sessionId={sessionId}
-            tasks={tasks.data ?? []}
-            formulaOptions={orderedSelections.map((s) => ({
-              formulaVersionId: s.formulaVersionId,
-              formulaName: s.formulaName,
-            }))}
-            ingredientsByVersion={ingredientsByVersion}
-            taskIngredients={taskIngredients.data ?? {}}
-            taskPredecessors={taskPredecessors.data ?? {}}
-            onTasksChanged={invalidateTasks}
-          />
+          <FormulaView rows={rows} ingredientsByVersion={ingredientsByVersion} />
         )}
+      </SectionCard>
+
+      {/* 2026-09-30: WORKFLOW은 WORK VIEW 탭에서 분리해서 아래 별도 박스로 뺐다 — 계량표/포뮬라뷰와
+          성격이 달라(공정 타임라인) 탭 전환으로 숨겨두기보다 항상 보이는 게 낫다는 사용자 피드백. */}
+      <SectionCard title="WORKFLOW">
+        <WorkflowView
+          sessionId={sessionId}
+          tasks={tasks.data ?? []}
+          formulaOptions={orderedSelections.map((s) => ({
+            formulaVersionId: s.formulaVersionId,
+            formulaName: s.formulaName,
+          }))}
+          ingredientsByVersion={ingredientsByVersion}
+          taskIngredients={taskIngredients.data ?? {}}
+          taskPredecessors={taskPredecessors.data ?? {}}
+          onTasksChanged={invalidateTasks}
+        />
+      </SectionCard>
+
+      <SectionCard title="NOTES">
+        <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateSession.mutate({ notes })} />
       </SectionCard>
 
       {promotingRow && (
@@ -420,16 +420,34 @@ function AddFormulaVersionForm({
 }) {
   const formulas = useQuery(formulasQuery());
   const formulaList = formulas.data ?? [];
+  const moulds = useQuery(mouldsQuery());
   const [formulaId, setFormulaId] = useState("");
   const [versionId, setVersionId] = useState("");
-  // 2026-09-24: 몰드/기본중량 기준 자동 배수 역산 기능은 제거했다 — 저울이 소수점을 못 재는데
-  // 계산 결과가 소수점으로 나와 혼란만 컸다("8인치 케익 4개 만들 때 배수 자동화하려던 건데 왜
-  // 소수점까지 계산하는지 모르겠다"는 피드백). 이제 "만들 개수"를 그대로 배수로 쓴다.
-  const [multiplier, setMultiplier] = useState("1");
+  // 2026-09-30: 몰드+개수 기준 자동 배수 계산을 되살렸다(FORMULA 페이지의 mouldBatchMultiplier()와
+  // 동일 로직) — "6인치 3개"처럼 실제 만들 몰드/개수를 입력하면 배수가 자동 계산된다. 같은 몰드면
+  // 개수 그대로가 배수, 다른 몰드면 기준중량 비율로 환산(기준중량 미등록이면 개수를 그대로 쓰고
+  // ⚠ 표시). BASE_WEIGHT 방식 Component는 몰드 개념이 없어 기존처럼 배수 직접입력만 가능하다.
+  const [mouldId, setMouldId] = useState("");
+  const [mouldCount, setMouldCount] = useState("1");
+  const [manualMultiplier, setManualMultiplier] = useState("1");
+  const [useManual, setUseManual] = useState(false);
 
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
   const versionOptions = [...(formula?.formula_versions ?? [])].sort(
     (a, b) => b.version_number - a.version_number,
+  );
+  const selectedVersion = versionOptions.find((v) => v.id === versionId) ?? null;
+  useEffect(() => {
+    setMouldId(selectedVersion?.default_mould_id ?? "");
+  }, [selectedVersion?.id]);
+  const scalingMode = formula?.components?.scaling_mode ?? null;
+  const usingMould = scalingMode === "MOULD" && !useManual;
+  const baseMould = moulds.data?.find((m) => m.id === selectedVersion?.default_mould_id) ?? null;
+  const targetMould = moulds.data?.find((m) => m.id === mouldId) ?? null;
+  const { multiplier: computedMultiplier, mismatch } = mouldBatchMultiplier(
+    Number(mouldCount) || 1,
+    targetMould,
+    baseMould,
   );
 
   const add = useMutation({
@@ -438,13 +456,14 @@ function AddFormulaVersionForm({
       if (existingIds.includes(versionId))
         throw new Error("이미 이 Work Session에 추가된 버전입니다");
       const user_id = await currentUserId();
+      const finalMultiplier = usingMould ? computedMultiplier : Number(manualMultiplier) || 1;
       const { error } = await supabase.from("work_session_formula_versions").insert({
         user_id,
         work_session_id: sessionId,
         formula_version_id: versionId,
-        multiplier: Number(multiplier) || 1,
-        mould_id: null,
-        mould_qty: null,
+        multiplier: finalMultiplier,
+        mould_id: usingMould ? mouldId || null : null,
+        mould_qty: usingMould ? Number(mouldCount) || null : null,
         base_weight_id: null,
         base_weight_qty: null,
         sort_order: nextSort,
@@ -478,7 +497,7 @@ function AddFormulaVersionForm({
         add.mutate();
       }}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="FORMULA">
           <select
             className={selectClass}
@@ -492,8 +511,7 @@ function AddFormulaVersionForm({
             <option value="">SELECT FORMULA…</option>
             {formulaList.map((f) => (
               <option key={f.id} value={f.id}>
-                {f.name}
-                {f.components?.name ? ` — ${f.components.name}` : ""}
+                {f.components?.name ?? f.name}
               </option>
             ))}
           </select>
@@ -514,18 +532,60 @@ function AddFormulaVersionForm({
             ))}
           </select>
         </Field>
-        <Field label="개수(배수) ×N">
-          <input
-            type="number"
-            inputMode="numeric"
-            step="1"
-            min="1"
-            className={inputClass}
-            value={multiplier}
-            onChange={(e) => setMultiplier(e.target.value)}
-          />
-        </Field>
       </div>
+      <Field label={usingMould ? "몰드 + 개수" : "배수 ×N"}>
+        {usingMould ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <MouldSelect className={selectClass + " w-auto"} value={mouldId} onChange={setMouldId} emptyLabel="몰드 미지정" />
+            <span className="label-caps text-xs text-muted-foreground">×</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              step="1"
+              min="1"
+              className={`${inputClass} w-20 text-center`}
+              value={mouldCount}
+              onChange={(e) => setMouldCount(e.target.value)}
+            />
+            <span className="font-mono text-xs text-muted-foreground">
+              = ×{fmtNumber(computedMultiplier, Number.isInteger(computedMultiplier) ? 0 : 2)}
+            </span>
+            {mismatch && (
+              <span className="label-caps text-xs text-destructive">⚠ 기준중량 없음</span>
+            )}
+            {scalingMode === "MOULD" && (
+              <button
+                type="button"
+                className="label-caps text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setUseManual(true)}
+              >
+                배수 직접입력으로
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              step="1"
+              min="1"
+              className={`${inputClass} w-24`}
+              value={manualMultiplier}
+              onChange={(e) => setManualMultiplier(e.target.value)}
+            />
+            {scalingMode === "MOULD" && (
+              <button
+                type="button"
+                className="label-caps text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setUseManual(false)}
+              >
+                몰드 기준으로
+              </button>
+            )}
+          </div>
+        )}
+      </Field>
       {add.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
           {(add.error as Error).message}
@@ -562,18 +622,48 @@ function FormulaVersionRow({
     ...workSessionMultiplierHistoryQuery(sessionId, row.formula_version_id),
     enabled: showHistory,
   });
-  // 2026-09-24: 몰드/기본중량 기준 자동 배수 역산 기능 제거 — "만들 개수"를 그대로 배수로 쓴다.
-  const [multiplierStr, setMultiplierStr] = useState(String(Number(row.multiplier)));
-  useEffect(() => {
-    setMultiplierStr(String(Number(row.multiplier)));
-  }, [row.id, row.multiplier]);
+  const moulds = useQuery(mouldsQuery());
 
-  const applyMultiplier = useMutation({
-    mutationFn: async (nextMultiplier: number) => {
+  const formula = row.formula_versions.formulas;
+  const scalingMode = formula.components?.scaling_mode ?? null;
+
+  // 2026-09-30: 몰드+개수 기준 자동 배수 계산 복원(FORMULA 페이지와 동일 mouldBatchMultiplier()).
+  // 예전(2026-09-24)에 저장된 행은 mould_id/mould_qty가 null일 수 있어, 이 경우 기본 몰드 +
+  // 기존 배수를 그대로 개수로 간주해 자연스럽게 이어받는다.
+  const [mouldId, setMouldId] = useState(
+    row.mould_id ?? row.formula_versions.default_mould_id ?? "",
+  );
+  const [mouldCount, setMouldCount] = useState(
+    row.mould_qty != null ? String(row.mould_qty) : String(Number(row.multiplier)),
+  );
+  const [manualMultiplier, setManualMultiplier] = useState(String(Number(row.multiplier)));
+  const [useManual, setUseManual] = useState(scalingMode !== "MOULD");
+  useEffect(() => {
+    setMouldId(row.mould_id ?? row.formula_versions.default_mould_id ?? "");
+    setMouldCount(row.mould_qty != null ? String(row.mould_qty) : String(Number(row.multiplier)));
+    setManualMultiplier(String(Number(row.multiplier)));
+  }, [row.id, row.multiplier, row.mould_id, row.mould_qty]);
+
+  const usingMould = scalingMode === "MOULD" && !useManual;
+  const baseMould = moulds.data?.find((m) => m.id === row.formula_versions.default_mould_id) ?? null;
+  const targetMould = moulds.data?.find((m) => m.id === mouldId) ?? null;
+  const { multiplier: computedMultiplier, mismatch } = mouldBatchMultiplier(
+    Number(mouldCount) || 1,
+    targetMould,
+    baseMould,
+  );
+
+  const applyBatch = useMutation({
+    mutationFn: async (next: { multiplier: number; mouldId: string | null; mouldQty: number | null }) => {
       const previous = Number(row.multiplier);
-      if (nextMultiplier === previous) return;
+      if (
+        next.multiplier === previous &&
+        next.mouldId === (row.mould_id ?? null) &&
+        next.mouldQty === (row.mould_qty ?? null)
+      )
+        return;
       const user_id = await currentUserId();
-      const snapshot = buildMultiplierSnapshot(lines, nextMultiplier);
+      const snapshot = buildMultiplierSnapshot(lines, next.multiplier);
       const { error: historyError } = await supabase
         .from("work_session_multiplier_history")
         .insert({
@@ -581,13 +671,13 @@ function FormulaVersionRow({
           work_session_id: sessionId,
           formula_version_id: row.formula_version_id,
           previous_multiplier: previous,
-          applied_multiplier: nextMultiplier,
+          applied_multiplier: next.multiplier,
           resulting_working_quantity_snapshot: snapshot,
         });
       if (historyError) throw historyError;
       const { error: updateError } = await supabase
         .from("work_session_formula_versions")
-        .update({ multiplier: nextMultiplier })
+        .update({ multiplier: next.multiplier, mould_id: next.mouldId, mould_qty: next.mouldQty })
         .eq("id", row.id);
       if (updateError) throw updateError;
     },
@@ -601,37 +691,84 @@ function FormulaVersionRow({
     },
   });
 
-  const formula = row.formula_versions.formulas;
-
   return (
     <li className="space-y-2 px-3 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm">
-            {formula.name}
-            {formula.components?.name ? ` — ${formula.components.name}` : ""}
-          </p>
+          <p className="text-sm">{formula.components?.name ?? formula.name}</p>
           <p className="font-mono text-xs text-muted-foreground">
             {versionLabel(row.formula_versions.version_number)} · {row.formula_versions.status}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2">
-            <span className="label-caps text-xs text-muted-foreground">개수(배수) ×</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              step="1"
-              min="1"
-              className={`${inputClass} w-24 text-center`}
-              value={multiplierStr}
-              onChange={(e) => setMultiplierStr(e.target.value)}
-              onBlur={(e) => {
-                const next = Number(e.target.value);
-                if (Number.isFinite(next) && next > 0) applyMultiplier.mutate(next);
-              }}
-            />
-          </label>
+          {usingMould ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <MouldSelect
+                className={selectClass + " w-auto"}
+                value={mouldId}
+                onChange={(id) => {
+                  setMouldId(id);
+                  const count = Number(mouldCount) || 1;
+                  const target = moulds.data?.find((m) => m.id === id) ?? null;
+                  const { multiplier } = mouldBatchMultiplier(count, target, baseMould);
+                  applyBatch.mutate({ multiplier, mouldId: id || null, mouldQty: count });
+                }}
+                emptyLabel="몰드 미지정"
+              />
+              <span className="label-caps text-xs text-muted-foreground">×</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                step="1"
+                min="1"
+                className={`${inputClass} w-16 text-center`}
+                value={mouldCount}
+                onChange={(e) => setMouldCount(e.target.value)}
+                onBlur={(e) => {
+                  const count = Number(e.target.value) || 1;
+                  applyBatch.mutate({ multiplier: computedMultiplier, mouldId: mouldId || null, mouldQty: count });
+                }}
+              />
+              <span className="font-mono text-xs text-muted-foreground">
+                = ×{fmtNumber(computedMultiplier, Number.isInteger(computedMultiplier) ? 0 : 2)}
+              </span>
+              {mismatch && <span className="label-caps text-xs text-destructive">⚠ 기준중량 없음</span>}
+              <button
+                type="button"
+                className="label-caps text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setUseManual(true)}
+              >
+                배수 직접입력으로
+              </button>
+            </div>
+          ) : (
+            <label className="flex items-center gap-2">
+              <span className="label-caps text-xs text-muted-foreground">개수(배수) ×</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                step="1"
+                min="1"
+                className={`${inputClass} w-24 text-center`}
+                value={manualMultiplier}
+                onChange={(e) => setManualMultiplier(e.target.value)}
+                onBlur={(e) => {
+                  const next = Number(e.target.value);
+                  if (Number.isFinite(next) && next > 0)
+                    applyBatch.mutate({ multiplier: next, mouldId: null, mouldQty: null });
+                }}
+              />
+              {scalingMode === "MOULD" && (
+                <button
+                  type="button"
+                  className="label-caps text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setUseManual(false)}
+                >
+                  몰드 기준으로
+                </button>
+              )}
+            </label>
+          )}
           <button
             type="button"
             className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
@@ -657,9 +794,9 @@ function FormulaVersionRow({
           </button>
         </div>
       </div>
-      {applyMultiplier.isError && (
+      {applyBatch.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
-          {(applyMultiplier.error as Error).message}
+          {(applyBatch.error as Error).message}
         </p>
       )}
       {showHistory && (
