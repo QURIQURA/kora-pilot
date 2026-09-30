@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,15 +12,12 @@ import {
   experimentsByProductQuery,
   formulasByComponentQuery,
   ingredientsQuery,
-  knowledgeEntriesByProductQuery,
   observationsByProductQuery,
   pilotSettingsQuery,
   productComponentsQuery,
   productCostItemsQuery,
   productQuery,
   productSizesQuery,
-  productTagsQuery,
-  tagsQuery,
   versionIngredientsQuery,
   type ComponentCostInfo,
   type ProductComponentRow,
@@ -28,13 +25,7 @@ import {
 import { costPerGram, fmtCurrency, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
 import { ProductCostItemsSection } from "@/components/pilot/ProductCostItemsSection";
 import { fmtNumber, toGrams } from "@/lib/formula";
-import { KnowledgeCreateForm, KnowledgeList } from "@/components/pilot/KnowledgeSection";
-import {
-  categoryPath,
-  DEFAULT_TARGET_KEYS,
-  parseTarget,
-  type TargetAttribute,
-} from "@/lib/pilot";
+import { categoryPath } from "@/lib/pilot";
 import { formatProductSizeLabel, type ProductSize } from "@/lib/product-size";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { experimentLabel } from "@/lib/experiment";
@@ -118,12 +109,12 @@ function groupComponentLinks(rows: ProductComponentRow[]): LinkGroup[] {
  * pilot_settings.product_page_section_order(전체 PRODUCT 공통, 유저당 1개)에 저장되고, 저장된
  * 값이 없거나 일부 키가 빠져있으면 이 기본 순서로 보정한다. SIZES를 COMPONENTS보다 앞에 둔 것은
  * "SIZES가 너무 아래에 있다"는 피드백을 반영한 기본값이다.
+ * 2026-09-30: 제품 라인을 단순화하면서 TARGET(질감/당도 등)과 TAGS 섹션은 화면에서 제거했다 —
+ * resolveSectionOrder()가 이전에 저장된 순서에 남아있던 두 키는 알아서 걸러낸다.
  */
 const DEFAULT_SECTION_ORDER = [
   "IMAGES",
   "DESIGN",
-  "TARGET",
-  "TAGS",
   "SIZES",
   "COST_ADJUSTMENT",
   "NOTES",
@@ -134,16 +125,12 @@ type ProductSectionKey = (typeof DEFAULT_SECTION_ORDER)[number];
 const SECTION_LABELS: Record<ProductSectionKey, string> = {
   IMAGES: "IMAGES",
   DESIGN: "DESIGN",
-  TARGET: "TARGET",
-  TAGS: "TAGS",
   SIZES: "SIZES",
-  // 2026-09-24: 기존에 따로 있던 COMPONENTS/PRODUCTION_COST 두 섹션을 3열 그리드 한 섹션으로 합침
-  // (총원가 계산식 | COMPONENTS & ADJUSTMENT | PRODUCTION COST). 가로 폭을 줄여 한눈에 보이게 하려는
-  // 목적 — 예전에 저장된 순서에 남아있던 "COMPONENTS"/"PRODUCTION_COST" 키는 resolveSectionOrder()가
-  // 알아서 걸러내고 이 새 키를 뒤에 채워 넣는다.
-  COST_ADJUSTMENT: "COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT / PRODUCTION COST",
+  // 2026-09-24: 기존에 따로 있던 COMPONENTS/PRODUCTION_COST 두 섹션을 그리드 한 섹션으로 합침
+  // (총원가 계산식 | COMPONENTS & ADJUSTMENT | PRODUCTION COST).
+  COST_ADJUSTMENT: "총원가 / COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT / PRODUCTION COST",
   NOTES: "NOTES",
-  DEVELOPMENT: "FORMULAS / DEVELOPMENT HISTORY / OBSERVATIONS / KNOWLEDGE",
+  DEVELOPMENT: "FORMULAS / DEVELOPMENT HISTORY / OBSERVATIONS",
 };
 
 /** 저장된 순서를 유효한 키만 남기고, 빠진 키는 기본 순서 자리에 채워 넣어 보정한다 */
@@ -211,8 +198,6 @@ function ProductDetailPage() {
   const categories = useQuery(categoriesQuery());
   const links = useQuery(productComponentsQuery(productId));
   const sizes = useQuery(productSizesQuery(productId));
-  const tags = useQuery(tagsQuery());
-  const productTags = useQuery(productTagsQuery(productId));
   const experiments = useQuery(experimentsByProductQuery(productId));
   const observations = useQuery(observationsByProductQuery(productId));
   const componentIds = [
@@ -399,7 +384,6 @@ function ProductDetailPage() {
   }
 
   const data = product.data;
-  const linkedTagIds = (productTags.data ?? []).map((t) => t.tag_id);
 
   return (
     <div className="space-y-4">
@@ -434,7 +418,7 @@ function ProductDetailPage() {
       </div>
 
       {editingLayout && (
-        <p className="border border-dashed border-border p-2 font-mono text-[11px] text-muted-foreground">
+        <p className="border border-dashed border-border p-2 font-mono text-xs text-muted-foreground">
           아래 각 섹션 옆의 ▲▼로 순서를 바꿀 수 있습니다 — 모든 PRODUCT 페이지에 공통으로 적용됩니다.
         </p>
       )}
@@ -443,15 +427,6 @@ function ProductDetailPage() {
         const sectionNodes: Record<ProductSectionKey, ReactNode> = {
           IMAGES: <ProductImagesSection productId={productId} product={data} />,
           DESIGN: <ProductDesignSection productId={productId} product={data} />,
-          TARGET: (
-            <TargetSection
-              target={parseTarget(data.product_target)}
-              onSave={(next) => updateProduct.mutate({ product_target: next })}
-            />
-          ),
-          TAGS: (
-            <TagEditor productId={productId} allTags={tags.data ?? []} linkedTagIds={linkedTagIds} />
-          ),
           SIZES: (
             <ProductSizesSection
               productId={productId}
@@ -488,7 +463,7 @@ function ProductDetailPage() {
                         <span className="w-14 font-mono text-xs text-muted-foreground">
                           {formatTime(obs.created_at)}
                         </span>
-                        <span className="label-caps bg-foreground px-2 py-0.5 text-[11px] text-background">
+                        <span className="label-caps bg-foreground px-2 py-0.5 text-xs text-background">
                           {(obs.label || "NOTE").toUpperCase()}
                         </span>
                         <span className="min-w-[8rem] flex-1 text-sm">{obs.value}</span>
@@ -506,32 +481,36 @@ function ProductDetailPage() {
                   </ul>
                 )}
               </SectionCard>
-              <ProductKnowledgeSection productId={productId} />
             </div>
           ),
           COST_ADJUSTMENT: (
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        {/* 1열 — 총원가 계산식(2026-09-24): 2열(COMPONENTS & ADJUSTMENT) + 3열(PRODUCTION COST) */}
-        <div className="border border-border bg-card p-3">
-          <p className="label-caps text-muted-foreground">총원가</p>
-          <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-foreground">
-            {fmtCurrency(totalComponentsCost + perCakeExtras)}
-          </p>
-          <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-            = COMPONENTS & ADJUSTMENT {fmtCurrency(totalComponentsCost)} + PRODUCTION COST{" "}
-            {fmtCurrency(perCakeExtras)}
-          </p>
-          <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-            (PRODUCTION COST = 항목 합계 {fmtCurrency(perCakeExtras - overheadPerCake)} + OVERHEAD{" "}
-            {fmtCurrency(overheadPerCake)} — 3열 하단 합계와 같아야 합니다)
-          </p>
-          <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-            사이즈 구분 없이 지정된 모든 사용량을 합산한 참고값입니다 — 사이즈별 정확한 금액은 SIZES
-            섹션을 확인하세요.
-          </p>
+      <div className="space-y-3">
+        {/* 총원가 — 2026-09-30: 2/3열 위에 좁게 끼어있던 걸 상단 풀와이드 배너로 올림(가독성 개선) */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-border bg-card p-4">
+          <div>
+            <p className="label-caps text-muted-foreground">총원가</p>
+            <p className="mt-1 font-mono text-3xl font-semibold tabular-nums text-foreground">
+              {fmtCurrency(totalComponentsCost + perCakeExtras)}
+            </p>
+          </div>
+          <div className="flex-1 min-w-[18rem] space-y-1 font-mono text-xs text-muted-foreground">
+            <p>
+              = COMPONENTS & ADJUSTMENT {fmtCurrency(totalComponentsCost)} + PRODUCTION COST{" "}
+              {fmtCurrency(perCakeExtras)}
+            </p>
+            <p>
+              (PRODUCTION COST = 항목 합계 {fmtCurrency(perCakeExtras - overheadPerCake)} + OVERHEAD{" "}
+              {fmtCurrency(overheadPerCake)} — 아래 PRODUCTION COST 합계와 같아야 합니다)
+            </p>
+            <p>
+              사이즈 구분 없이 지정된 모든 사용량을 합산한 참고값입니다 — 사이즈별 정확한 금액은 SIZES
+              섹션을 확인하세요.
+            </p>
+          </div>
         </div>
 
-        {/* 2열 — COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT */}
+        {/* 아래 2단 — COMPONENTS(더 넓게) + PRODUCTION COST */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3fr_2fr]">
       <SectionCard
         title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
         subtitle={<>합계 {fmtCurrency(totalComponentsCost)}</>}
@@ -561,7 +540,7 @@ function ProductDetailPage() {
           </div>
         }
       >
-        <p className="mb-2 font-mono text-[11px] text-muted-foreground">
+        <p className="mb-2 font-mono text-xs text-muted-foreground">
           여기서 지정하는 FORMULA VERSION/사용량은 이 PRODUCT에만 적용됩니다 — 보통은 해당 COMPONENT의
           Development Entry에서 "이 PRODUCT에만 적용"으로 저장하면 자동으로 반영되고, COMPONENT의 Current
           Formula 자체는 바뀌지 않습니다.
@@ -625,12 +604,12 @@ function ProductDetailPage() {
                       >
                         {group.name}
                       </Link>
-                      <span className="label-caps text-[10px] text-muted-foreground">재료 직접 링크</span>
+                      <span className="label-caps text-xs text-muted-foreground">재료 직접 링크</span>
                     </span>
                   )}
                   <div className="flex items-center gap-3">
                     {groupTotal != null && (
-                      <span className="label-caps font-mono text-lg font-semibold text-foreground tabular-nums">
+                      <span className="label-caps font-mono text-base font-semibold text-foreground tabular-nums">
                         예상원가 {fmtCurrency(groupTotal)}
                         {groupHasMissingPrice ? "*" : ""}
                       </span>
@@ -675,7 +654,7 @@ function ProductDetailPage() {
                         {group.rows.length > 1 && (
                           <button
                             type="button"
-                            className="label-caps px-1 text-[10px] text-muted-foreground hover:text-foreground"
+                            className="label-caps px-1 text-xs text-muted-foreground hover:text-foreground"
                             onClick={() => removeUsageRow.mutate(link.id)}
                           >
                             이 사이즈 행 제거
@@ -690,7 +669,7 @@ function ProductDetailPage() {
                     {(() => {
                       if (link.product_size_id == null) {
                         return (
-                          <p className="font-mono text-[11px] text-destructive">
+                          <p className="font-mono text-xs text-destructive">
                             ⚠ 사이즈 미지정 — 원가 계산에서 제외됩니다. 사이즈를 지정하세요.
                           </p>
                         );
@@ -698,7 +677,7 @@ function ProductDetailPage() {
                       const cost = rowCost(link, costsByComponent);
                       if (link.quantity_g == null || cost != null) return null;
                       return (
-                        <p className="font-mono text-[11px] text-muted-foreground">
+                        <p className="font-mono text-xs text-muted-foreground">
                           {link.component_id != null
                             ? "원가 정보 없음 — COMPONENT에 CURRENT FORMULA/재료 구입가를 확인하세요"
                             : "원가 정보 없음 — 이 재료에 구입가를 확인하세요"}
@@ -747,8 +726,9 @@ function ProductDetailPage() {
         )}
       </SectionCard>
 
-        {/* 3열 — PRODUCTION COST 항목 */}
+        {/* PRODUCTION COST 항목 */}
         <ProductCostItemsSection productId={productId} overheadPerCake={overheadPerCake} />
+        </div>
       </div>
           ),
         };
@@ -757,7 +737,7 @@ function ProductDetailPage() {
           <div key={key}>
             {editingLayout && (
               <div className="mb-1 flex items-center justify-between border border-dashed border-border px-2 py-1">
-                <span className="label-caps text-[10px] text-muted-foreground">
+                <span className="label-caps text-xs text-muted-foreground">
                   {SECTION_LABELS[key]}
                 </span>
                 <div className="flex gap-1">
@@ -831,181 +811,6 @@ function NotesEditor({ value, onSave }: { value: string; onSave: (value: string)
       }}
       placeholder="NOTES"
     />
-  );
-}
-
-function TargetSection({
-  target,
-  onSave,
-}: {
-  target: TargetAttribute[];
-  onSave: (next: TargetAttribute[]) => void;
-}) {
-  const rows = useMemo(() => {
-    const existing = new Map(target.map((t) => [t.key, t]));
-    const base = DEFAULT_TARGET_KEYS.map(
-      (key) => existing.get(key) ?? { key, value: "", note: "" },
-    );
-    const custom = target.filter((t) => !DEFAULT_TARGET_KEYS.includes(t.key as never));
-    return [...base, ...custom];
-  }, [target]);
-
-  const [newKey, setNewKey] = useState("");
-
-  const commit = (key: string, patch: Partial<TargetAttribute>) => {
-    const next = rows.map((row) => (row.key === key ? { ...row, ...patch } : row));
-    onSave(next.filter((row) => row.value || row.note));
-  };
-
-  return (
-    <SectionCard
-      title="PRODUCT TARGET"
-      action={
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const key = newKey.trim().toUpperCase();
-            if (!key || rows.some((r) => r.key === key)) return;
-            onSave([...rows.filter((r) => r.value || r.note), { key, value: "", note: "" }]);
-            setNewKey("");
-          }}
-        >
-          <input
-            className="min-h-[36px] w-32 border border-input bg-background px-2 font-mono text-xs uppercase outline-none focus:border-foreground"
-            placeholder="ATTRIBUTE"
-            value={newKey}
-            onChange={(e) => setNewKey(e.target.value)}
-          />
-          <button type="submit" className="label-caps px-2 text-xs">
-            + ADD
-          </button>
-        </form>
-      }
-    >
-      <ul className="divide-y divide-border border border-border">
-        {rows.map((row) => (
-          <li
-            key={row.key}
-            className="grid grid-cols-1 gap-2 px-3 py-2 md:grid-cols-12 md:items-center"
-          >
-            <span className="label-caps col-span-3 text-xs text-muted-foreground">{row.key}</span>
-            <input
-              className="col-span-4 min-h-[40px] border border-input bg-background px-2 text-sm outline-none focus:border-foreground"
-              defaultValue={row.value}
-              placeholder="VALUE"
-              onBlur={(e) => {
-                if (e.target.value !== row.value) commit(row.key, { value: e.target.value });
-              }}
-            />
-            <input
-              className="col-span-5 min-h-[40px] border border-input bg-background px-2 text-sm outline-none focus:border-foreground"
-              defaultValue={row.note ?? ""}
-              placeholder="NOTE"
-              onBlur={(e) => {
-                if (e.target.value !== (row.note ?? "")) commit(row.key, { note: e.target.value });
-              }}
-            />
-          </li>
-        ))}
-      </ul>
-    </SectionCard>
-  );
-}
-
-function TagEditor({
-  productId,
-  allTags,
-  linkedTagIds,
-}: {
-  productId: string;
-  allTags: { id: string; name: string }[];
-  linkedTagIds: string[];
-}) {
-  const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-
-  const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["product_tags", productId] });
-    await queryClient.invalidateQueries({ queryKey: ["tags"] });
-    await queryClient.invalidateQueries({ queryKey: ["products"] });
-  };
-
-  const addTag = useMutation({
-    mutationFn: async (raw: string) => {
-      const userId = await currentUserId();
-      const label = raw.trim().toUpperCase();
-      let tag = allTags.find((t) => t.name === label);
-      if (!tag) {
-        const { data, error } = await supabase
-          .from("tags")
-          .insert({ user_id: userId, name: label })
-          .select("id, name")
-          .single();
-        if (error) throw error;
-        tag = data;
-      }
-      const { error: linkError } = await supabase
-        .from("product_tags")
-        .insert({ user_id: userId, product_id: productId, tag_id: tag.id });
-      if (linkError && linkError.code !== "23505") throw linkError;
-    },
-    onSuccess: invalidate,
-  });
-
-  const removeTag = useMutation({
-    mutationFn: async (tagId: string) => {
-      const { error } = await supabase
-        .from("product_tags")
-        .delete()
-        .eq("product_id", productId)
-        .eq("tag_id", tagId);
-      if (error) throw error;
-    },
-    onSuccess: invalidate,
-  });
-
-  const linked = allTags.filter((t) => linkedTagIds.includes(t.id));
-
-  return (
-    <SectionCard title="TAGS">
-      <div className="flex flex-wrap items-center gap-2">
-        {linked.map((tag) => (
-          <span
-            key={tag.id}
-            className="label-caps inline-flex items-center gap-2 border border-foreground bg-foreground px-2 py-1 text-[11px] text-background"
-          >
-            {tag.name}
-            <button type="button" onClick={() => removeTag.mutate(tag.id)}>
-              ×
-            </button>
-          </span>
-        ))}
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (name.trim()) {
-              addTag.mutate(name);
-              setName("");
-            }
-          }}
-        >
-          <input
-            list="pilot-tags"
-            className="min-h-[36px] w-40 border border-input bg-background px-2 font-mono text-xs uppercase outline-none focus:border-foreground"
-            placeholder="+ TAG"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <datalist id="pilot-tags">
-            {allTags.map((t) => (
-              <option key={t.id} value={t.name} />
-            ))}
-          </datalist>
-        </form>
-      </div>
-    </SectionCard>
   );
 }
 
@@ -1353,34 +1158,5 @@ function ComponentUsageEditor({
         </span>
       )}
     </div>
-  );
-}
-
-function ProductKnowledgeSection({ productId }: { productId: string }) {
-  const entries = useQuery(knowledgeEntriesByProductQuery(productId));
-  const [adding, setAdding] = useState(false);
-
-  return (
-    <SectionCard
-      title="KNOWLEDGE"
-      action={
-        <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
-          {adding ? "CLOSE" : "+ ADD KNOWLEDGE"}
-        </button>
-      }
-    >
-      {adding && (
-        <KnowledgeCreateForm
-          initialLinks={{ product_id: productId }}
-          lockProductId={productId}
-          onDone={() => setAdding(false)}
-        />
-      )}
-      <KnowledgeList
-        entries={entries.data ?? []}
-        emptyMessage="NO KNOWLEDGE LINKED TO THIS PRODUCT"
-        lockProductId={productId}
-      />
-    </SectionCard>
   );
 }

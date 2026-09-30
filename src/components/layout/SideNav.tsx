@@ -9,7 +9,6 @@ const TOP_ITEMS = [
   { label: "R&D DASHBOARD", to: "/experiments" },
   { label: "PRODUCTION", to: "/production" },
   { label: "INVENTORY", to: "/inventory" },
-  { label: "KNOWLEDGE", to: "/knowledge" },
   { label: "INGREDIENTS", to: "/ingredients" },
   { label: "REFERENCES", to: "/references" },
 ] as const;

@@ -134,7 +134,7 @@ export function ProductCostItemsSection({
                 {fmtCurrency(row.cost_items.unit_cost)}
                 {row.cost_items.unit_label ? ` / ${row.cost_items.unit_label}` : ""}
               </span>
-              <span className="label-caps text-[10px] text-muted-foreground">×</span>
+              <span className="label-caps text-xs text-muted-foreground">×</span>
               <input
                 type="number"
                 inputMode="decimal"

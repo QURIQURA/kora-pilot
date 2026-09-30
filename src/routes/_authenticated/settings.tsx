@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
-import { TagManager } from "@/components/pilot/TagManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManager";
@@ -82,9 +81,6 @@ function SettingsPage() {
       <SettingsGroup label="PRODUCT TAXONOMY">
         <SettingsSection title="CATEGORIES" defaultOpen>
           <CategoryManager />
-        </SettingsSection>
-        <SettingsSection title="TAGS">
-          <TagManager />
         </SettingsSection>
       </SettingsGroup>
 

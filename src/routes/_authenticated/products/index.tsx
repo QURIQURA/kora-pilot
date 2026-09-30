@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ProductCreateModal } from "@/components/pilot/ProductCreateModal";
-import { categoriesQuery, productsQuery, tagsQuery } from "@/lib/queries";
+import { categoriesQuery, productsQuery } from "@/lib/queries";
 import {
   categoryPath,
   categoryPathLabel,
@@ -36,11 +36,9 @@ export const Route = createFileRoute("/_authenticated/products/")({
 function ProductsPage() {
   const products = useQuery(productsQuery());
   const categories = useQuery(categoriesQuery());
-  const tags = useQuery(tagsQuery());
   const queryClient = useQueryClient();
 
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
   const [creating, setCreating] = useState(false);
 
   const categoryList = categories.data ?? [];
@@ -63,17 +61,12 @@ function ProductsPage() {
       const ids = categoryWithDescendants(categoryList, categoryFilter);
       list = list.filter((p) => p.category_id && ids.includes(p.category_id));
     }
-    if (tagFilter) {
-      list = list.filter((p) =>
-        (p.product_tags ?? []).some((t) => t.tag_id === tagFilter)
-      );
-    }
     list.sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
     return list;
-  }, [products.data, categoryList, categoryFilter, tagFilter]);
+  }, [products.data, categoryList, categoryFilter]);
 
   return (
     <div className="space-y-4">
@@ -90,10 +83,10 @@ function ProductsPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 border border-border bg-card p-4 sm:grid-cols-2">
+      <div className="border border-border bg-card p-4">
         <Field label="CATEGORY">
           <select
-            className={selectClass}
+            className={selectClass + " max-w-xs"}
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
           >
@@ -101,20 +94,6 @@ function ProductsPage() {
             {flattenCategories(categoryList).map(({ category, depth }) => (
               <option key={category.id} value={category.id}>
                 {`${"— ".repeat(depth)}${category.name}`}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="TAG">
-          <select
-            className={selectClass}
-            value={tagFilter}
-            onChange={(e) => setTagFilter(e.target.value)}
-          >
-            <option value="">ALL</option>
-            {(tags.data ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
               </option>
             ))}
           </select>

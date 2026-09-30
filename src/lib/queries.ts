@@ -8,7 +8,6 @@ import type {
   Ingredient,
   IngredientFunction,
   Product,
-  Tag,
 } from "@/lib/pilot";
 import { formatProductSizeLabel, type ProductSize } from "@/lib/product-size";
 import type {
@@ -36,16 +35,8 @@ export const categoriesQuery = () =>
       ),
   });
 
-export const tagsQuery = () =>
-  queryOptions({
-    queryKey: ["tags"],
-    queryFn: async (): Promise<Tag[]> =>
-      unwrap(await supabase.from("tags").select("*").order("name")),
-  });
-
 export interface ProductListRow extends Product {
   product_components: { count: number }[];
-  product_tags: { tag_id: string }[];
 }
 
 export const productsQuery = () =>
@@ -55,7 +46,7 @@ export const productsQuery = () =>
       unwrap(
         await supabase
           .from("products")
-          .select("*, product_components(count), product_tags(tag_id)")
+          .select("*, product_components(count)")
           .order("updated_at", { ascending: false }),
       ) as unknown as ProductListRow[],
   });
@@ -65,13 +56,6 @@ export const productQuery = (id: string) =>
     queryKey: ["products", id],
     queryFn: async (): Promise<Product> =>
       unwrap(await supabase.from("products").select("*").eq("id", id).single()),
-  });
-
-export const productTagsQuery = (productId: string) =>
-  queryOptions({
-    queryKey: ["product_tags", productId],
-    queryFn: async (): Promise<{ tag_id: string }[]> =>
-      unwrap(await supabase.from("product_tags").select("tag_id").eq("product_id", productId)),
   });
 
 export const productSizesQuery = (productId: string) =>
@@ -417,17 +401,6 @@ export const componentTechniqueCategoryUsageQuery = () =>
         if (row.technique_category_id)
           map[row.technique_category_id] = (map[row.technique_category_id] ?? 0) + 1;
       }
-      return map;
-    },
-  });
-
-export const tagUsageQuery = () =>
-  queryOptions({
-    queryKey: ["tag_usage"],
-    queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(await supabase.from("product_tags").select("tag_id"));
-      const map: Record<string, number> = {};
-      for (const row of rows) map[row.tag_id] = (map[row.tag_id] ?? 0) + 1;
       return map;
     },
   });

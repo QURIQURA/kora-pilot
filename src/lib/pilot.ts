@@ -4,7 +4,6 @@
 import type { Tables } from "@/integrations/supabase/types";
 
 export type Category = Tables<"categories">;
-export type Tag = Tables<"tags">;
 export type Product = Tables<"products">;
 export type Component = Tables<"components">;
 export type Ingredient = Tables<"ingredients">;
@@ -19,39 +18,6 @@ export const PRODUCT_STATUSES = [
 ] as const;
 
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
-
-export const DEFAULT_TARGET_KEYS = [
-  "TEXTURE",
-  "SWEETNESS",
-  "ACIDITY",
-  "RICHNESS",
-  "STABILITY",
-  "VISUAL",
-  "SHELF LIFE",
-] as const;
-
-export interface TargetAttribute {
-  [key: string]: string | undefined;
-  key: string;
-  value: string;
-  note?: string;
-}
-
-export function parseTarget(raw: unknown): TargetAttribute[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const record = item as Record<string, unknown>;
-    if (typeof record["key"] !== "string") return [];
-    return [
-      {
-        key: record["key"],
-        value: typeof record["value"] === "string" ? record["value"] : "",
-        note: typeof record["note"] === "string" ? record["note"] : "",
-      },
-    ];
-  });
-}
 
 /** 카테고리 id -> 루트부터의 경로 배열 */
 export function categoryPath(

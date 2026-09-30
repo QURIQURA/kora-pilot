@@ -1646,45 +1646,6 @@ export type Database = {
           },
         ]
       }
-      product_tags: {
-        Row: {
-          created_at: string
-          id: string
-          product_id: string
-          tag_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          product_id: string
-          tag_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          product_id?: string
-          tag_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_tags_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_tags_tag_id_fkey"
-            columns: ["tag_id"]
-            isOneToOne: false
-            referencedRelation: "tags"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       products: {
         Row: {
           allergy_notes: string | null
@@ -1983,33 +1944,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      tags: {
-        Row: {
-          color: string
-          created_at: string
-          id: string
-          name: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          color?: string
-          created_at?: string
-          id?: string
-          name: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          color?: string
-          created_at?: string
-          id?: string
-          name?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       task_type_colors: {
         Row: {
