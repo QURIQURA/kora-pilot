@@ -1,15 +1,12 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { ProductCreateModal } from "@/components/pilot/ProductCreateModal";
 import { ComponentCreateModal } from "@/components/pilot/ComponentCreateModal";
-import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { buttonClass } from "@/components/pilot/ui";
 import type { WidgetDef } from "./types";
 
-type CreateTarget = "product" | "component" | "experiment" | null;
+type CreateTarget = "product" | "component" | null;
 
 function QuickCreateWidget() {
-  const navigate = useNavigate();
   const [open, setOpen] = useState<CreateTarget>(null);
 
   return (
@@ -29,13 +26,6 @@ function QuickCreateWidget() {
         >
           + COMPONENT
         </button>
-        <button
-          type="button"
-          className={buttonClass}
-          onClick={() => setOpen("experiment")}
-        >
-          + EXPERIMENT
-        </button>
       </div>
 
       {open === "product" && (
@@ -43,18 +33,6 @@ function QuickCreateWidget() {
       )}
       {open === "component" && (
         <ComponentCreateModal onClose={() => setOpen(null)} />
-      )}
-      {open === "experiment" && (
-        <ExperimentCreateModal
-          onCancel={() => setOpen(null)}
-          onCreated={(id) => {
-            setOpen(null);
-            void navigate({
-              to: "/experiments/$experimentId",
-              params: { experimentId: id },
-            });
-          }}
-        />
       )}
     </div>
   );

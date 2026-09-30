@@ -6,7 +6,6 @@ const TOP_ITEMS = [
   { label: "PRODUCTS", to: "/products" },
   { label: "COMPONENTS", to: "/components" },
   { label: "COST", to: "/cost" },
-  { label: "R&D DASHBOARD", to: "/experiments" },
   { label: "PRODUCTION", to: "/production" },
   { label: "INVENTORY", to: "/inventory" },
   { label: "INGREDIENTS", to: "/ingredients" },

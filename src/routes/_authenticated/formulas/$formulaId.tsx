@@ -20,7 +20,6 @@ import { GripVertical } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
-  experimentsByVersionQuery,
   formulaQuery,
   formulaVersionBatchesQuery,
   formulaVersionsQuery,
@@ -65,8 +64,6 @@ import { BaseWeightSelect } from "@/components/pilot/BaseWeightSelect";
 import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import { MethodSelect } from "@/components/pilot/MethodSelect";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
-import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
-import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import { BasisPanel } from "@/components/pilot/formula/BasisPanel";
 import { RangeBar } from "@/components/pilot/RangeBar";
 import { CompositionPanel } from "@/components/pilot/formula/CompositionPanel";
@@ -178,7 +175,6 @@ function FormulaDetailPage() {
   const [newBatchManualMultiplier, setNewBatchManualMultiplier] = useState("2");
   const [newBatchLabel, setNewBatchLabel] = useState("");
   const [creatingVersion, setCreatingVersion] = useState(false);
-  const [creatingExperiment, setCreatingExperiment] = useState(false);
 
   // UNLOCK→EDIT 2단계를 없애고, 페이지를 열자마자 바로 수정할 수 있게 한다 — draft가 로드되면
   // 곧 "편집 중"인 것이므로 별도의 editing 상태를 두지 않고 draft 존재 여부로 파생한다.
@@ -225,7 +221,6 @@ function FormulaDetailPage() {
       };
     });
   }, [batchPresets, draft, moulds.data, version?.default_mould_id]);
-  const versionExperiments = useQuery(experimentsByVersionQuery(versionId));
 
   // 버전을 바꾸면 이전 버전의 초안은 버리고, 아래 초기화 effect가 새 버전 데이터로 다시 채운다.
   useEffect(() => {
@@ -1232,22 +1227,6 @@ function FormulaDetailPage() {
         />
       </SectionCard>
 
-      {/* DEVELOPMENT HISTORY — 이 배합(버전)에 대해 기록된 Development Entry들 */}
-      <SectionCard
-        title="DEVELOPMENT HISTORY"
-        action={
-          <button
-            type="button"
-            className="label-caps px-2 py-2 text-xs hover:bg-secondary"
-            onClick={() => setCreatingExperiment(true)}
-            disabled={!versionId}
-          >
-            + START DEVELOPMENT
-          </button>
-        }
-      >
-        <ExperimentListItems items={versionExperiments.data ?? []} />
-      </SectionCard>
 
       {/* HISTORY */}
       <VersionHistory formulaId={formulaId} versions={versionList} onOpen={(id) => setVersionId(id)} />
@@ -1441,25 +1420,6 @@ function FormulaDetailPage() {
         />
       )}
 
-      {creatingExperiment && versionId && (
-        <ExperimentCreateModal
-          preset={{
-            formulaId,
-            formulaVersionId: versionId,
-            componentId: formula.data.component_id,
-            mouldId: version?.default_mould_id ?? null,
-            batch: batchValue,
-          }}
-          onCancel={() => setCreatingExperiment(false)}
-          onCreated={(id) => {
-            setCreatingExperiment(false);
-            void navigate({
-              to: "/experiments/$experimentId",
-              params: { experimentId: id },
-            });
-          }}
-        />
-      )}
     </div>
   );
 }

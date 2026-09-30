@@ -12,7 +12,7 @@ import {
 } from "@/lib/queries";
 import { leafTechniques, techniquePathLabel } from "@/lib/technique";
 import { hasTimerField, parseChecklistLines, TASK_TYPE_SUGGESTIONS } from "@/lib/workflow";
-import { SectionCard, buttonClass, inputClass } from "./ui";
+import { SectionCard, buttonClass, inputClass, primaryButtonClass } from "./ui";
 
 /**
  * SETTINGS — WORKFLOW TEMPLATES 관리(2026-09-23).
@@ -227,6 +227,70 @@ export function TemplateTaskEditor({ templateId }: { templateId: string }) {
   const rows = tasks.data ?? [];
   const predMap = predecessors.data ?? {};
 
+  // TASK별 EDIT(2026-09-30) — 등록해둔 TASK의 이름/TYPE/타이머/선택여부/체크리스트/선행TASK를
+  // 나중에 고칠 방법이 없었다는 피드백으로 추가. ADD 폼과 같은 필드를 그대로 재사용한다.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState("");
+  const [editTimer, setEditTimer] = useState("");
+  const [editOptional, setEditOptional] = useState(false);
+  const [editChecklist, setEditChecklist] = useState("");
+  const [editPredecessorIds, setEditPredecessorIds] = useState<string[]>([]);
+
+  function startEdit(task: WorkflowTemplateTask) {
+    setEditingId(task.id);
+    setEditName(task.task_name);
+    setEditType(task.task_type ?? "");
+    setEditTimer(task.timer_minutes != null ? String(task.timer_minutes) : "");
+    setEditOptional(task.is_optional);
+    setEditChecklist((task.checklist_items ?? []).join("\n"));
+    setEditPredecessorIds(predMap[task.id] ?? []);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  const saveEdit = useMutation({
+    mutationFn: async (taskId: string) => {
+      const trimmed = editName.trim();
+      if (!trimmed) return;
+      const user_id = await currentUserId();
+      const checklistItems = parseChecklistLines(editChecklist);
+      const { error } = await supabase
+        .from("workflow_template_tasks")
+        .update({
+          task_name: trimmed,
+          task_type: editType.trim() || null,
+          is_optional: editOptional,
+          timer_minutes: editTimer.trim() ? Number(editTimer) : null,
+          checklist_items: checklistItems.length > 0 ? checklistItems : null,
+        })
+        .eq("id", taskId);
+      if (error) throw error;
+      const { error: clearErr } = await supabase
+        .from("workflow_template_task_predecessors")
+        .delete()
+        .eq("task_id", taskId);
+      if (clearErr) throw clearErr;
+      if (editPredecessorIds.length > 0) {
+        const { error: predErr } = await supabase.from("workflow_template_task_predecessors").insert(
+          editPredecessorIds.map((predecessor_task_id) => ({
+            user_id,
+            template_id: templateId,
+            task_id: taskId,
+            predecessor_task_id,
+          })),
+        );
+        if (predErr) throw predErr;
+      }
+    },
+    onSuccess: async () => {
+      setEditingId(null);
+      await invalidate();
+    },
+  });
+
   const moveTask = useMutation({
     mutationFn: async ({ task, direction }: { task: WorkflowTemplateTask; direction: -1 | 1 }) => {
       const idx = rows.findIndex((t) => t.id === task.id);
@@ -347,46 +411,138 @@ export function TemplateTaskEditor({ templateId }: { templateId: string }) {
                   ▼
                 </button>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm">
-                  {task.task_name}
-                  {task.task_type ? (
-                    <span className="ml-2 rounded-sm border px-1 text-[9px] tracking-wider text-muted-foreground">
-                      {task.task_type.toUpperCase()}
-                    </span>
-                  ) : null}
-                  {task.is_optional && (
-                    <span className="ml-1 rounded-sm border px-1 text-[9px] tracking-wider text-muted-foreground">
-                      선택
-                    </span>
+              {editingId === task.id ? (
+                <div className="min-w-0 flex-1 space-y-2 py-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      className={`${inputClass} !w-40`}
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="TASK NAME"
+                    />
+                    <input
+                      className={`${inputClass} !w-28`}
+                      placeholder="TYPE"
+                      list="workflow-template-task-types"
+                      value={editType}
+                      onChange={(e) => setEditType(e.target.value)}
+                    />
+                    {hasTimerField(editType) && (
+                      <input
+                        type="number"
+                        min="1"
+                        className={`${inputClass} !w-20`}
+                        placeholder="타이머(분)"
+                        value={editTimer}
+                        onChange={(e) => setEditTimer(e.target.value)}
+                      />
+                    )}
+                    <label className="flex items-center gap-1 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={editOptional}
+                        onChange={(e) => setEditOptional(e.target.checked)}
+                      />
+                      선택(생략 가능)
+                    </label>
+                  </div>
+                  <textarea
+                    className={`${inputClass} min-h-[44px] text-xs`}
+                    placeholder="체크리스트(선택, 한 줄에 하나)"
+                    value={editChecklist}
+                    onChange={(e) => setEditChecklist(e.target.value)}
+                  />
+                  {rows.length > 1 && (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      <span className="text-[10px] tracking-wider text-muted-foreground">선행 TASK</span>
+                      {rows
+                        .filter((t) => t.id !== task.id)
+                        .map((t) => {
+                          const checked = editPredecessorIds.includes(t.id);
+                          return (
+                            <label key={t.id} className="flex items-center gap-1 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  setEditPredecessorIds((prev) =>
+                                    e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id),
+                                  );
+                                }}
+                              />
+                              {t.task_name}
+                            </label>
+                          );
+                        })}
+                    </div>
                   )}
-                  {task.timer_minutes != null && (
-                    <span className="ml-1 rounded-sm border px-1 text-[9px] tracking-wider text-muted-foreground">
-                      {task.timer_minutes}분
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className={`${primaryButtonClass} px-3 text-xs`}
+                      disabled={saveEdit.isPending}
+                      onClick={() => saveEdit.mutate(task.id)}
+                    >
+                      저장
+                    </button>
+                    <button type="button" className={`${buttonClass} px-3 text-xs`} onClick={cancelEdit}>
+                      취소
+                    </button>
+                  </div>
                 </div>
-                {(predMap[task.id]?.length ?? 0) > 0 && (
-                  <div className="text-[11px] text-muted-foreground">
-                    이전 단계:{" "}
-                    {predMap[task.id]!.map((pid) => rows.find((r) => r.id === pid)?.task_name ?? "?").join(
-                      " + ",
+              ) : (
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm">
+                    {task.task_name}
+                    {task.task_type ? (
+                      <span className="ml-2 rounded-sm border px-1 text-[9px] tracking-wider text-muted-foreground">
+                        {task.task_type.toUpperCase()}
+                      </span>
+                    ) : null}
+                    {task.is_optional && (
+                      <span className="ml-1 rounded-sm border px-1 text-[9px] tracking-wider text-muted-foreground">
+                        선택
+                      </span>
+                    )}
+                    {task.timer_minutes != null && (
+                      <span className="ml-1 rounded-sm border px-1 text-[9px] tracking-wider text-muted-foreground">
+                        {task.timer_minutes}분
+                      </span>
                     )}
                   </div>
-                )}
-                {task.checklist_items && task.checklist_items.length > 0 && (
-                  <div className="text-[11px] text-muted-foreground">
-                    체크리스트: {task.checklist_items.join(" · ")}
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className={`${buttonClass} px-2 text-xs`}
-                onClick={() => removeTask.mutate(task.id)}
-              >
-                DELETE
-              </button>
+                  {(predMap[task.id]?.length ?? 0) > 0 && (
+                    <div className="text-[11px] text-muted-foreground">
+                      이전 단계:{" "}
+                      {predMap[task.id]!.map((pid) => rows.find((r) => r.id === pid)?.task_name ?? "?").join(
+                        " + ",
+                      )}
+                    </div>
+                  )}
+                  {task.checklist_items && task.checklist_items.length > 0 && (
+                    <div className="text-[11px] text-muted-foreground">
+                      체크리스트: {task.checklist_items.join(" · ")}
+                    </div>
+                  )}
+                </div>
+              )}
+              {editingId !== task.id && (
+                <>
+                  <button
+                    type="button"
+                    className={`${buttonClass} px-2 text-xs`}
+                    onClick={() => startEdit(task)}
+                  >
+                    EDIT
+                  </button>
+                  <button
+                    type="button"
+                    className={`${buttonClass} px-2 text-xs`}
+                    onClick={() => removeTask.mutate(task.id)}
+                  >
+                    DELETE
+                  </button>
+                </>
+              )}
             </li>
           ))}
         </ul>

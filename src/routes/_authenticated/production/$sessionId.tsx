@@ -47,7 +47,6 @@ import {
   workingAmount,
   type WorkSessionProgressStatus,
 } from "@/lib/work-session";
-import { ExperimentCreateModal } from "@/components/pilot/ExperimentCreateForm";
 import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
 import { adjustStock, STOCK_REASON_LABEL, type StockReason } from "@/lib/stock";
 import { applyWorkflowTemplate } from "@/lib/workflow-template";
@@ -104,7 +103,6 @@ function WorkSessionPage() {
 
   const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA">("WEIGHING");
   const [adding, setAdding] = useState(false);
-  const [promotingVersionId, setPromotingVersionId] = useState<string | null>(null);
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -227,7 +225,6 @@ function WorkSessionPage() {
   }
 
   const data = session.data;
-  const promotingRow = rows.find((r) => r.formula_version_id === promotingVersionId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -295,7 +292,6 @@ function WorkSessionPage() {
                   sessionId={sessionId}
                   lines={ingredientsByVersion[row.formula_version_id] ?? []}
                   onRemove={() => removeFormulaVersion.mutate(row)}
-                  onPromote={() => setPromotingVersionId(row.formula_version_id)}
                 />
               ))}
             </ul>
@@ -357,20 +353,6 @@ function WorkSessionPage() {
         <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateSession.mutate({ notes })} />
       </SectionCard>
 
-      {promotingRow && (
-        <ExperimentCreateModal
-          preset={{
-            formulaId: promotingRow.formula_versions.formulas.id,
-            formulaVersionId: promotingRow.formula_version_id,
-            componentId: promotingRow.formula_versions.formulas.component_id ?? null,
-            mouldId: promotingRow.formula_versions.default_mould_id ?? null,
-            batch: Number(promotingRow.multiplier),
-            workSessionId: sessionId,
-          }}
-          onCancel={() => setPromotingVersionId(null)}
-          onCreated={() => setPromotingVersionId(null)}
-        />
-      )}
     </div>
   );
 }
@@ -536,7 +518,7 @@ function AddFormulaVersionForm({
       <Field label={usingMould ? "몰드 + 개수" : "배수 ×N"}>
         {usingMould ? (
           <div className="flex flex-wrap items-center gap-2">
-            <MouldSelect className={selectClass + " w-auto"} value={mouldId} onChange={setMouldId} emptyLabel="몰드 미지정" />
+            <MouldSelect className={`${selectClass} !w-40`} value={mouldId} onChange={setMouldId} emptyLabel="몰드 미지정" />
             <span className="label-caps text-xs text-muted-foreground">×</span>
             <input
               type="number"
@@ -608,13 +590,11 @@ function FormulaVersionRow({
   sessionId,
   lines,
   onRemove,
-  onPromote,
 }: {
   row: WorkSessionFormulaVersionRow;
   sessionId: string;
   lines: VersionIngredientRow[];
   onRemove: () => void;
-  onPromote: () => void;
 }) {
   const queryClient = useQueryClient();
   const [showHistory, setShowHistory] = useState(false);
@@ -700,11 +680,11 @@ function FormulaVersionRow({
             {versionLabel(row.formula_versions.version_number)} · {row.formula_versions.status}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           {usingMould ? (
             <div className="flex flex-wrap items-center gap-2">
               <MouldSelect
-                className={selectClass + " w-auto"}
+                className={`${selectClass} !w-36`}
                 value={mouldId}
                 onChange={(id) => {
                   setMouldId(id);
@@ -769,29 +749,24 @@ function FormulaVersionRow({
               )}
             </label>
           )}
-          <button
-            type="button"
-            className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setShowHistory((v) => !v)}
-          >
-            {showHistory ? "HIDE HISTORY" : "HISTORY"}
-          </button>
-          <button
-            type="button"
-            className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            onClick={onPromote}
-          >
-            PROMOTE TO EXPERIMENT
-          </button>
-          <button
-            type="button"
-            className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              if (confirm(`REMOVE "${formula.name}" FROM THIS WORK SESSION?`)) onRemove();
-            }}
-          >
-            REMOVE
-          </button>
+          <div className="flex items-center gap-1 border-l border-border pl-3">
+            <button
+              type="button"
+              className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowHistory((v) => !v)}
+            >
+              {showHistory ? "HIDE HISTORY" : "HISTORY"}
+            </button>
+            <button
+              type="button"
+              className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (confirm(`REMOVE "${formula.name}" FROM THIS WORK SESSION?`)) onRemove();
+              }}
+            >
+              REMOVE
+            </button>
+          </div>
         </div>
       </div>
       {applyBatch.isError && (

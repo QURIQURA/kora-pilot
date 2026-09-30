@@ -3,13 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
-import { ProcessCategoryManager } from "@/components/pilot/ProcessCategoryManager";
-import { ProcessParameterManager } from "@/components/pilot/ProcessParameterManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
 import { WorkflowTemplateManager } from "@/components/pilot/WorkflowTemplateManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
-import { SensoryAttributeManager } from "@/components/pilot/SensoryAttributeManager";
 import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
 import { AromaTagManager } from "@/components/pilot/AromaTagManager";
 import { CostItemManager } from "@/components/pilot/CostItemManager";
@@ -108,15 +105,6 @@ function SettingsPage() {
         </SettingsSection>
       </SettingsGroup>
 
-      <SettingsGroup label="PROCESS">
-        <SettingsSection title="PROCESS CATEGORIES">
-          <ProcessCategoryManager />
-        </SettingsSection>
-        <SettingsSection title="PROCESS PARAMETERS">
-          <ProcessParameterManager />
-        </SettingsSection>
-      </SettingsGroup>
-
       <SettingsGroup label="TECHNIQUE">
         <SettingsSection title="TECHNIQUE CATEGORIES">
           <TechniqueCategoryManager />
@@ -129,12 +117,9 @@ function SettingsPage() {
         </SettingsSection>
       </SettingsGroup>
 
-      <SettingsGroup label="INGREDIENT / SENSORY">
+      <SettingsGroup label="INGREDIENT">
         <SettingsSection title="INGREDIENT FUNCTIONS">
           <IngredientFunctionManager />
-        </SettingsSection>
-        <SettingsSection title="SENSORY ATTRIBUTES">
-          <SensoryAttributeManager />
         </SettingsSection>
         <SettingsSection title="FLAVOUR FAMILIES">
           <FlavourFamilyManager />

@@ -19,11 +19,8 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
   taskTypeColorsQuery,
-  techniqueCategoriesQuery,
-  workflowTemplatesByTechniqueQuery,
   type VersionIngredientRow,
 } from "@/lib/queries";
-import { leafTechniques } from "@/lib/technique";
 import { localDateTimeToISO, toLocalDateString, formatTime, formatDuration } from "@/lib/datetime";
 import {
   assignTimelineLanes,
@@ -47,8 +44,7 @@ import {
   type TaskPhase,
   type WorkSessionTask,
 } from "@/lib/workflow";
-import { applyWorkflowTemplate } from "@/lib/workflow-template";
-import { buttonClass, inputClass, primaryButtonClass, selectClass } from "@/components/pilot/ui";
+import { buttonClass, inputClass, primaryButtonClass } from "@/components/pilot/ui";
 
 // 2026-09-23: 텍스트/박스가 안 잘리고 가독성 좋도록 타임라인 가로(COL_WIDTH)·세로(ROW_HEIGHT) 확대.
 const ROW_HEIGHT = 80; // 1시간당 px
@@ -97,42 +93,6 @@ export function WorkflowView({
 
   const taskTypeColors = useQuery(taskTypeColorsQuery());
 
-  // 제작방법(TECHNIQUE CATEGORY) 기준 WORKFLOW 템플릿 불러오기(2026-09-23) — 매번 같은 TASK를
-  // 손으로 다시 입력하지 않도록, SETTINGS에서 미리 등록해둔 템플릿을 골라 한 번에 깔아준다.
-  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
-  const [templateTechniqueId, setTemplateTechniqueId] = useState("");
-  const [templateId, setTemplateId] = useState("");
-  const [templateTargetColumn, setTemplateTargetColumn] = useState("");
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [templateError, setTemplateError] = useState<string | null>(null);
-  const techniques = useQuery(techniqueCategoriesQuery());
-  const templatesForTechnique = useQuery(workflowTemplatesByTechniqueQuery(templateTechniqueId || null));
-
-  /** 수동 "템플릿 불러오기" — Component 자동 적용과 같은 로직(src/lib/workflow-template.ts)을 쓴다.
-   * 어느 열(품목)에 TASK를 배정할지 사용자가 직접 고른다(2026-09-24, 이전엔 항상 GENERAL로 들어갔음). */
-  async function applyTemplate() {
-    if (!templateId) return;
-    setApplyingTemplate(true);
-    setTemplateError(null);
-    const userId = await currentUserId();
-    const { error: applyError } = await applyWorkflowTemplate({
-      templateId,
-      sessionId,
-      userId,
-      formulaVersionId: templateTargetColumn || null,
-    });
-    setApplyingTemplate(false);
-    if (applyError) {
-      setTemplateError(applyError);
-      await onTasksChanged();
-      return;
-    }
-    setTemplatePanelOpen(false);
-    setTemplateTechniqueId("");
-    setTemplateId("");
-    setTemplateTargetColumn("");
-    await onTasksChanged();
-  }
   // TASK TYPE 이름(소문자) → 사용자가 고른 color_class. 없으면 taskTypeColorClass()가 해시 기본색을 쓴다.
   const colorOverrides = useMemo(() => {
     const map: Record<string, string> = {};
@@ -159,12 +119,94 @@ export function WorkflowView({
     return cols;
   }, [formulaOptions]);
 
+  // 타임라인 위 세로 드래그로 시간 이동(2026-09-30) — rail을 마우스로 눌러 위/아래로 끌면
+  // 시작시각(있으면 완료시각도 같은 만큼)이 5분 단위로 바뀐다. 진행 중인 드래그 값은 dragPreview에만
+  // 두고, 마우스를 떼는 순간 DB에 커밋한다 — 실시간 미리보기를 위해 displayTasks에 얹어서 쓴다.
+  const dragSessionRef = useRef<{
+    taskId: string;
+    startClientY: number;
+    originalStartMs: number;
+    originalEndMs: number | null;
+  } | null>(null);
+  const [dragPreview, setDragPreview] = useState<{
+    taskId: string;
+    startedAtMs: number;
+    completedAtMs: number | null;
+  } | null>(null);
+
+  function beginDrag(task: WorkSessionTask, clientY: number) {
+    if (!task.actual_started_at) return;
+    const originalStartMs = new Date(task.actual_started_at).getTime();
+    const originalEndMs = task.completed_at ? new Date(task.completed_at).getTime() : null;
+    dragSessionRef.current = { taskId: task.id, startClientY: clientY, originalStartMs, originalEndMs };
+    setDragPreview({ taskId: task.id, startedAtMs: originalStartMs, completedAtMs: originalEndMs });
+  }
+
+  async function commitDrag(taskId: string, startMs: number, endMs: number | null) {
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update({
+        actual_started_at: new Date(startMs).toISOString(),
+        completed_at: endMs != null ? new Date(endMs).toISOString() : null,
+      })
+      .eq("id", taskId);
+    if (updateError) setError(`시간 이동 실패 — ${updateError.message}`);
+    await onTasksChanged();
+  }
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const session = dragSessionRef.current;
+      if (!session) return;
+      const deltaMinutes = (e.clientY - session.startClientY) / PX_PER_MINUTE;
+      const snapped = Math.round(deltaMinutes / 5) * 5;
+      setDragPreview({
+        taskId: session.taskId,
+        startedAtMs: session.originalStartMs + snapped * 60000,
+        completedAtMs: session.originalEndMs != null ? session.originalEndMs + snapped * 60000 : null,
+      });
+    }
+    function onUp() {
+      const session = dragSessionRef.current;
+      if (!session) return;
+      dragSessionRef.current = null;
+      setDragPreview((preview) => {
+        if (preview && preview.taskId === session.taskId) {
+          void commitDrag(session.taskId, preview.startedAtMs, preview.completedAtMs);
+        }
+        return null;
+      });
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 드래그 중인 TASK는 미리보기 시각을 얹어서 타임라인 계산에 사용 — 실제 저장은 마우스를 뗄 때만.
+  const displayTasks = useMemo(() => {
+    if (!dragPreview) return tasks;
+    return tasks.map((t) =>
+      t.id === dragPreview.taskId
+        ? {
+            ...t,
+            actual_started_at: new Date(dragPreview.startedAtMs).toISOString(),
+            completed_at:
+              dragPreview.completedAtMs != null ? new Date(dragPreview.completedAtMs).toISOString() : null,
+          }
+        : t,
+    );
+  }, [tasks, dragPreview]);
+
   // "계획" 개념이 없어졌으므로(2026-09-23) 실제로 시작한(actual_started_at) TASK만 타임라인에
   // 올린다 — 여러 품목이 동시에 돌아갈 때 실제 시간축 기준으로 무엇이 진행 중인지 보여주는 것이
   // 이 타임라인의 목적이다.
   const scheduledByColumn = useMemo(() => {
     const map = new Map<string, WorkSessionTask[]>();
-    for (const t of tasks) {
+    for (const t of displayTasks) {
       if (!t.actual_started_at) continue;
       const key = t.formula_version_id ?? GENERAL_KEY;
       const arr = map.get(key) ?? [];
@@ -172,7 +214,7 @@ export function WorkflowView({
       map.set(key, arr);
     }
     return map;
-  }, [tasks]);
+  }, [displayTasks]);
 
   // id → task — LOCKED/READY 판정에 선행 TASK의 현재 status가 필요하다(2026-09-24).
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
@@ -244,9 +286,17 @@ export function WorkflowView({
 
   /** 시작/완료 시각을 직접 설정·수정 — "계획" 개념을 다시 만들지 않고, 같은 컬럼(actual_started_at/
    * completed_at)에 미리(작업 전이라도) 값을 넣을 수 있게 열어준다(2026-09-30). 값을 넣는 순간부터
-   * 그 TASK는 타임라인에 나타난다 — 별도의 "TASK 순서" 상자 없이 시간표가 곧 순서가 된다. */
-  async function setTaskStart(task: WorkSessionTask, value: string) {
-    const iso = value ? localDateTimeToISO(value.slice(0, 10), value.slice(11, 16)) : null;
+   * 그 TASK는 타임라인에 나타난다 — 별도의 "TASK 순서" 상자 없이 시간표가 곧 순서가 된다.
+   * 날짜는 화면에 안 보이고 시간만 입력받는다(2026-09-30) — 날짜까지 매번 입력/표시하는 게
+   * 번거롭다는 피드백. 날짜는 기존 값의 날짜(없으면 오늘)를 그대로 쓴다. */
+  function taskDayFor(task: WorkSessionTask): string {
+    if (task.actual_started_at) return toLocalDateString(new Date(task.actual_started_at));
+    if (task.completed_at) return toLocalDateString(new Date(task.completed_at));
+    return toLocalDateString();
+  }
+
+  async function setTaskStart(task: WorkSessionTask, timeValue: string) {
+    const iso = timeValue ? localDateTimeToISO(taskDayFor(task), timeValue) : null;
     const { error: updateError } = await supabase
       .from("work_session_tasks")
       .update({ actual_started_at: iso })
@@ -255,8 +305,8 @@ export function WorkflowView({
     await onTasksChanged();
   }
 
-  async function setTaskEnd(task: WorkSessionTask, value: string) {
-    const iso = value ? localDateTimeToISO(value.slice(0, 10), value.slice(11, 16)) : null;
+  async function setTaskEnd(task: WorkSessionTask, timeValue: string) {
+    const iso = timeValue ? localDateTimeToISO(taskDayFor(task), timeValue) : null;
     const { error: updateError } = await supabase
       .from("work_session_tasks")
       .update({ completed_at: iso })
@@ -265,11 +315,30 @@ export function WorkflowView({
     await onTasksChanged();
   }
 
-  function toDatetimeLocalValue(iso: string | null): string {
+  function toTimeValue(iso: string | null): string {
     if (!iso) return "";
     const d = new Date(iso);
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  /** 관찰값(observation_*) 저장 — COMPONENT의 OBSERVATION 섹션이 이 값을 모아서 보여준다. */
+  async function setObservationField(
+    task: WorkSessionTask,
+    patch: Partial<
+      Pick<
+        WorkSessionTask,
+        | "observation_status"
+        | "observation_height_start_mm"
+        | "observation_height_mid_mm"
+        | "observation_height_end_mm"
+        | "observation_temperature_c"
+      >
+    >,
+  ) {
+    const { error: updateError } = await supabase.from("work_session_tasks").update(patch).eq("id", task.id);
+    if (updateError) setError(`관찰값 저장 실패 — ${updateError.message}`);
+    await onTasksChanged();
   }
 
   async function toggleChecklistItem(task: WorkSessionTask, index: number) {
@@ -364,77 +433,6 @@ export function WorkflowView({
           </ul>
         </div>
       )}
-
-      {/* ── 템플릿 불러오기 ─────────────────────────────── */}
-      <div className="border border-border p-3">
-        <button
-          type="button"
-          className="text-xs tracking-wider text-muted-foreground hover:text-foreground"
-          onClick={() => setTemplatePanelOpen((v) => !v)}
-        >
-          {templatePanelOpen ? "▾" : "▸"} 템플릿 불러오기 (제작방법별 표준 TASK 순서)
-        </button>
-        {templatePanelOpen && (
-          <div className="mt-2 flex flex-col gap-2 border-t border-dashed border-border pt-2 md:flex-row md:flex-wrap md:items-center">
-            <select
-              className={`${selectClass} md:w-56`}
-              value={templateTechniqueId}
-              onChange={(e) => {
-                setTemplateTechniqueId(e.target.value);
-                setTemplateId("");
-              }}
-            >
-              <option value="">제작방법 선택…</option>
-              {leafTechniques(techniques.data ?? []).map(({ category }) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className={`${selectClass} md:w-56`}
-              value={templateId}
-              disabled={!templateTechniqueId}
-              onChange={(e) => setTemplateId(e.target.value)}
-            >
-              <option value="">템플릿 선택…</option>
-              {(templatesForTechnique.data ?? []).map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            {formulaOptions.length > 0 && (
-              <select
-                className={`${selectClass} md:w-56`}
-                value={templateTargetColumn}
-                onChange={(e) => setTemplateTargetColumn(e.target.value)}
-              >
-                <option value="">적용할 품목: GENERAL</option>
-                {formulaOptions.map((f) => (
-                  <option key={f.formulaVersionId} value={f.formulaVersionId}>
-                    적용할 품목: {f.formulaName}
-                  </option>
-                ))}
-              </select>
-            )}
-            <button
-              type="button"
-              className={`${primaryButtonClass} min-h-12`}
-              disabled={!templateId || applyingTemplate}
-              onClick={applyTemplate}
-            >
-              {applyingTemplate ? "적용 중..." : "이 템플릿 적용"}
-            </button>
-            {templateTechniqueId && (templatesForTechnique.data ?? []).length === 0 && (
-              <p className="font-mono text-xs uppercase text-muted-foreground">
-                이 제작방법에 등록된 템플릿이 없습니다 — SETTINGS→WORKFLOW TEMPLATES에서 만드세요.
-              </p>
-            )}
-            {templateError && <p className="text-xs text-destructive">{templateError}</p>}
-          </div>
-        )}
-      </div>
 
 
 
@@ -550,17 +548,29 @@ export function WorkflowView({
                         backgroundImage: `repeating-linear-gradient(to bottom, var(--border) 0, var(--border) 1px, transparent 1px, transparent ${ROW_HEIGHT}px)`,
                       }}
                     >
-                      {/* 레인별 연결선(rail) — TASK TYPE 색, 시작~종료 구간을 차지 */}
+                      {/* 레인별 연결선(rail) — TASK TYPE 색, 시작~종료 구간을 차지. 세로로 눌러
+                          드래그하면 시작(+완료)시각이 5분 단위로 이동한다(2026-09-30). */}
                       {positioned.map(({ task, pos }) => {
                         const lane = laneOf.get(task.id) ?? 0;
                         const railEnd = railEndByTask.get(task.id) ?? pos.top + pos.height;
+                        const isDragging = dragPreview?.taskId === task.id;
                         return (
                           <div
                             key={`rail-${task.id}`}
-                            className={`pointer-events-none absolute opacity-80 ${taskTypeLineColorClass(task.task_type, colorOverrides)} ${
+                            title="드래그해서 시간 이동"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              beginDrag(task, e.clientY);
+                            }}
+                            className={`absolute cursor-ns-resize opacity-80 hover:opacity-100 ${taskTypeLineColorClass(task.task_type, colorOverrides)} ${
                               task.status === "SKIPPED" ? "opacity-30" : ""
-                            }`}
-                            style={{ top: pos.top, height: railEnd - pos.top, left: lane * RAIL_W, width: RAIL_W - 2 }}
+                            } ${isDragging ? "ring-2 ring-foreground" : ""}`}
+                            style={{
+                              top: pos.top,
+                              height: railEnd - pos.top,
+                              left: lane * RAIL_W,
+                              width: RAIL_W + 8,
+                            }}
                           />
                         );
                       })}
@@ -685,34 +695,80 @@ export function WorkflowView({
                     )}
                     <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] tracking-wider text-foreground">
                       <input
-                        type="datetime-local"
-                        className="h-6 border border-border bg-background px-1 text-[11px] tabular-nums"
-                        defaultValue={toDatetimeLocalValue(task.actual_started_at)}
+                        type="time"
+                        className="h-6 w-20 border border-border bg-background px-1 text-[11px] tabular-nums"
+                        defaultValue={toTimeValue(task.actual_started_at)}
                         onBlur={(e) => setTaskStart(task, e.target.value)}
                       />
                       <span className="text-muted-foreground">→</span>
                       <input
-                        type="datetime-local"
-                        className="h-6 border border-border bg-background px-1 text-[11px] tabular-nums"
-                        defaultValue={toDatetimeLocalValue(task.completed_at)}
+                        type="time"
+                        className="h-6 w-20 border border-border bg-background px-1 text-[11px] tabular-nums"
+                        defaultValue={toTimeValue(task.completed_at)}
                         onBlur={(e) => setTaskEnd(task, e.target.value)}
                       />
                       {actualDuration !== null ? (
                         <span className="text-muted-foreground">· {Math.round(actualDuration)} MIN</span>
                       ) : null}
                     </div>
-                    {(task.observation_status ||
-                      task.observation_height_start_mm != null ||
-                      task.observation_height_mid_mm != null ||
-                      task.observation_height_end_mm != null ||
-                      task.observation_temperature_c != null) && (
-                      <div className="mt-0.5 text-[11px] text-muted-foreground">
-                        관찰
-                        {task.observation_status ? ` ${task.observation_status}` : ""}
-                        {" · "}
-                        {task.observation_height_start_mm ?? "-"}mm → {task.observation_height_mid_mm ?? "-"}mm
-                        → {task.observation_height_end_mm ?? "-"}mm
-                        {task.observation_temperature_c != null ? ` · ${task.observation_temperature_c}°C` : ""}
+                    {hasObservationFields(task.task_type) && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] tracking-wider text-foreground">
+                        <span className="text-muted-foreground">관찰</span>
+                        <input
+                          type="text"
+                          placeholder="상태"
+                          className="h-6 w-16 border border-border bg-background px-1 text-[11px]"
+                          defaultValue={task.observation_status ?? ""}
+                          onBlur={(e) =>
+                            setObservationField(task, { observation_status: e.target.value.trim() || null })
+                          }
+                        />
+                        <input
+                          type="number"
+                          placeholder="시작mm"
+                          className="h-6 w-14 border border-border bg-background px-1 text-[11px] tabular-nums"
+                          defaultValue={task.observation_height_start_mm ?? ""}
+                          onBlur={(e) =>
+                            setObservationField(task, {
+                              observation_height_start_mm: e.target.value.trim() ? Number(e.target.value) : null,
+                            })
+                          }
+                        />
+                        <span className="text-muted-foreground">→</span>
+                        <input
+                          type="number"
+                          placeholder="중간mm"
+                          className="h-6 w-14 border border-border bg-background px-1 text-[11px] tabular-nums"
+                          defaultValue={task.observation_height_mid_mm ?? ""}
+                          onBlur={(e) =>
+                            setObservationField(task, {
+                              observation_height_mid_mm: e.target.value.trim() ? Number(e.target.value) : null,
+                            })
+                          }
+                        />
+                        <span className="text-muted-foreground">→</span>
+                        <input
+                          type="number"
+                          placeholder="끝mm"
+                          className="h-6 w-14 border border-border bg-background px-1 text-[11px] tabular-nums"
+                          defaultValue={task.observation_height_end_mm ?? ""}
+                          onBlur={(e) =>
+                            setObservationField(task, {
+                              observation_height_end_mm: e.target.value.trim() ? Number(e.target.value) : null,
+                            })
+                          }
+                        />
+                        <input
+                          type="number"
+                          placeholder="°C"
+                          className="h-6 w-14 border border-border bg-background px-1 text-[11px] tabular-nums"
+                          defaultValue={task.observation_temperature_c ?? ""}
+                          onBlur={(e) =>
+                            setObservationField(task, {
+                              observation_temperature_c: e.target.value.trim() ? Number(e.target.value) : null,
+                            })
+                          }
+                        />
                       </div>
                     )}
                     {task.checklist_items != null && (task.checklist_items as unknown as ChecklistItem[]).length > 0 && (

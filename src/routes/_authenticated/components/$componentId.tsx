@@ -8,7 +8,6 @@ import {
   componentQuery,
   componentUsageQuery,
   currentUserId,
-  experimentsByComponentQuery,
   taskTypeColorsQuery,
   techniqueCategoriesQuery,
   workflowTemplatesByTechniqueQuery,
@@ -25,8 +24,8 @@ import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { CurrentFormulaPanel } from "@/components/pilot/CurrentFormulaPanel";
 import { DuplicateComponentModal } from "@/components/pilot/DuplicateComponentModal";
 import { ComponentTagsSection } from "@/components/pilot/ComponentTagsSection";
-import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import { TemplateTaskEditor } from "@/components/pilot/WorkflowTemplateManager";
+import { ComponentObservationsSection } from "@/components/pilot/ComponentObservationsSection";
 import {
   SectionCard,
   buttonClass,
@@ -57,7 +56,6 @@ function ComponentDetailPage() {
   const component = useQuery(componentQuery(componentId));
   const techniqueCategories = useQuery(techniqueCategoriesQuery());
   const usage = useQuery(componentUsageQuery(componentId));
-  const experiments = useQuery(experimentsByComponentQuery(componentId));
   const [duplicating, setDuplicating] = useState(false);
 
   const techniqueCategoryList = techniqueCategories.data ?? [];
@@ -224,9 +222,7 @@ function ComponentDetailPage() {
         <TextArea value={data.notes ?? ""} onSave={(notes) => update.mutate({ notes })} />
       </SectionCard>
 
-      <SectionCard title="DEVELOPMENT HISTORY">
-        <ExperimentListItems items={experiments.data ?? []} />
-      </SectionCard>
+      <ComponentObservationsSection componentId={componentId} />
 
       <ComponentTagsSection componentId={componentId} />
 

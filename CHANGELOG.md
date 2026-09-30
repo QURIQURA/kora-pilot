@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-09-30 — R&D 기능 완전 삭제 + PRODUCTION↔COMPONENT 관찰(OBSERVATION) 연동 + WORKFLOW 4차 정리
+
+### R&D 기능 완전 삭제
+
+R&D DASHBOARD, FORMULA/COMPONENT/PRODUCT 페이지의 "실험 만들기(Save Development)", PRODUCTION의
+"PROMOTE TO EXPERIMENT", 음성 로그(PROCESS TIMELINE), SENSORY EVALUATION을 전부 삭제했습니다.
+관련 DB 테이블(experiments/observations/experiment_sensory_scores/sensory_attributes/
+process_events/process_event_parameters/process_parameter_definitions/process_categories)도
+모두 DROP되어 기존 실험 기록 6건을 포함해 복구할 수 없습니다(사용자 확인 후 진행).
+SETTINGS의 PROCESS CATEGORIES/PROCESS PARAMETERS/SENSORY ATTRIBUTES 섹션도 함께 사라졌습니다.
+포뮬라 버전을 CURRENT로 승격하는 기능 자체는 그대로 남아 있습니다(직접 편집 + CURRENT 지정).
+
+### PRODUCTION → COMPONENT 관찰(OBSERVATION) 연동 (R&D 대체)
+
+"지난 생산은 어땠는지" 비교하던 R&D의 역할을 대체합니다. PRODUCTION의 TASK LIST에서 BAKE류
+TASK에 관찰값(상태/반죽 높이 시작·중간·끝mm/온도)을 입력할 수 있고, 그 기록이 해당 포뮬라가
+속한 COMPONENT 상세 페이지의 새 "OBSERVATION" 섹션에 날짜순으로 모여서, **어느 포뮬라
+버전(V2 등)으로 만들었는지**와 함께 보입니다.
+
+확인 방법:
+1. PRODUCTION에서 세션 열고 BAKE 종류 TASK의 TASK LIST에서 "관찰" 입력칸에 값 입력
+2. 그 세션에 쓰인 포뮬라의 COMPONENT 상세 페이지로 이동 → OBSERVATION 섹션에 날짜 · 버전 ·
+   방금 입력한 값이 같이 뜨는지 확인
+3. 여러 날짜의 기록을 나란히 비교
+
+### WORKFLOW 4차 정리
+
+- PRODUCTION WORKFLOW의 "템플릿 불러오기" 패널 삭제 (COMPONENT의 DEFAULT WORKFLOW가 항상
+  자동 적용되므로 중복).
+- 타임라인에서 TASK의 색상 "레일(막대)"을 위아래로 드래그하면 시작/완료 시각이 5분 단위로
+  이동합니다(실시간 미리보기 후 마우스를 떼면 저장).
+- TASK LIST의 시작/완료 입력칸을 날짜 없이 시간만 입력하도록 변경.
+- COMPONENT 페이지의 DEFAULT WORKFLOW에 있는 각 TASK를 이름/TYPE/타이머/선택여부/체크리스트/
+  선행 TASK까지 나중에 고칠 수 있는 EDIT 기능 추가 (지금까지는 추가/삭제/순서변경만 가능했음).
+
+### 기타
+
+- PRODUCTION "SELECTED FORMULA VERSIONS"의 몰드 선택 상자가 화면 전체 너비로 늘어나 있던
+  버그 수정 — 가로 사이즈를 좁혀서 개수·배수·버튼까지 한 줄에 보이도록 정리.
+
 ## 2026-09-30 — 짧은 숫자 입력칸이 실제로 좁아지지 않던 버그 수정 (전체 화면)
 
 - 어제 입력칸 기본 크기를 줄이면서(44px→32px) 발견된 문제: `실사용량`/수량처럼 좁게 만들려고

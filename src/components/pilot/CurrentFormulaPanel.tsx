@@ -13,7 +13,6 @@ import { currentVersion } from "./FormulaSummary";
 import { fmtNumber, versionLabel } from "@/lib/formula";
 import { computeLineCosts, fmtCurrency } from "@/lib/cost";
 import { formatDateTime } from "@/lib/datetime";
-import { ExperimentCreateModal } from "./ExperimentCreateForm";
 import { VersionComparisonSheet } from "./VersionComparisonSheet";
 import { SectionCard, StatusBadge, buttonClass, primaryButtonClass } from "./ui";
 
@@ -39,7 +38,6 @@ export function CurrentFormulaPanel({
   const totalGrams = cost.totalGrams;
 
   const [showBaseLibrary, setShowBaseLibrary] = useState(false);
-  const [creatingDevelopment, setCreatingDevelopment] = useState(false);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["formulas_by_component", componentId] });
@@ -263,31 +261,7 @@ export function CurrentFormulaPanel({
         {(formula.formula_versions ?? []).length > 0 && (
           <VersionComparisonSheet versions={formula.formula_versions} />
         )}
-
-        <button
-          type="button"
-          className={primaryButtonClass}
-          disabled={!version}
-          onClick={() => setCreatingDevelopment(true)}
-        >
-          + START DEVELOPMENT
-        </button>
       </div>
-
-      {creatingDevelopment && version && (
-        <ExperimentCreateModal
-          preset={{
-            formulaId: formula.id,
-            formulaVersionId: version.id,
-            componentId,
-          }}
-          onCancel={() => setCreatingDevelopment(false)}
-          onCreated={(id) => {
-            setCreatingDevelopment(false);
-            void navigate({ to: "/experiments/$experimentId", params: { experimentId: id } });
-          }}
-        />
-      )}
     </SectionCard>
   );
 }

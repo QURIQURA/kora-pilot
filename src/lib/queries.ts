@@ -624,266 +624,6 @@ export const formulasByIngredientQuery = (ingredientId: string) =>
       ) as unknown as FormulaUsageRow[],
   });
 
-/* ── PHASE 4A — EXPERIMENTS / OBSERVATIONS ───────────────────── */
-
-import type { Experiment, Observation } from "@/lib/experiment";
-
-export interface ExperimentRow extends Experiment {
-  products: { id: string; name: string } | null;
-  components: { id: string; name: string } | null;
-  formula_versions: {
-    id: string;
-    version_number: number;
-    formula_id: string;
-    default_mould_id: string | null;
-    formulas: { id: string; name: string } | null;
-  } | null;
-}
-
-const EXPERIMENT_SELECT =
-  "*, products(id, name), components(id, name), formula_versions(id, version_number, formula_id, default_mould_id, formulas(id, name))";
-
-/** COMPONENT DETAIL — 이 구성요소로 진행된 실험 목록 */
-export const experimentsByComponentQuery = (componentId: string) =>
-  queryOptions({
-    queryKey: ["experiments_by_component", componentId],
-    queryFn: async (): Promise<ExperimentRow[]> =>
-      unwrap(
-        await supabase
-          .from("experiments")
-          .select(EXPERIMENT_SELECT)
-          .eq("component_id", componentId)
-          .order("date", { ascending: false })
-          .order("experiment_number", { ascending: false }),
-      ) as unknown as ExperimentRow[],
-  });
-
-export const experimentsQuery = () =>
-  queryOptions({
-    queryKey: ["experiments"],
-    queryFn: async (): Promise<ExperimentRow[]> =>
-      unwrap(
-        await supabase
-          .from("experiments")
-          .select(EXPERIMENT_SELECT)
-          .order("date", { ascending: false })
-          .order("experiment_number", { ascending: false }),
-      ) as unknown as ExperimentRow[],
-  });
-
-export const experimentQuery = (id: string) =>
-  queryOptions({
-    queryKey: ["experiments", id],
-    queryFn: async (): Promise<ExperimentRow> =>
-      unwrap(
-        await supabase.from("experiments").select(EXPERIMENT_SELECT).eq("id", id).single(),
-      ) as unknown as ExperimentRow,
-  });
-
-/** 특정 formula version을 참조하는 실험 (EDIT 잠금 해제 경고/RELATED EXPERIMENTS) */
-export const experimentsByVersionQuery = (formulaVersionId: string | null) =>
-  queryOptions({
-    queryKey: ["experiments_by_version", formulaVersionId],
-    enabled: Boolean(formulaVersionId),
-    queryFn: async (): Promise<Experiment[]> => {
-      if (!formulaVersionId) return [];
-      return unwrap(
-        await supabase
-          .from("experiments")
-          .select("*")
-          .eq("formula_version_id", formulaVersionId)
-          .order("experiment_number", { ascending: false }),
-      );
-    },
-  });
-
-export const experimentsByProductQuery = (productId: string) =>
-  queryOptions({
-    queryKey: ["experiments_by_product", productId],
-    queryFn: async (): Promise<Experiment[]> =>
-      unwrap(
-        await supabase
-          .from("experiments")
-          .select("*")
-          .eq("product_id", productId)
-          .order("experiment_number", { ascending: false }),
-      ),
-  });
-
-/** DASHBOARD 위젯 — PLANNED/RUNNING 실험 */
-export const activeExperimentsQuery = () =>
-  queryOptions({
-    queryKey: ["active_experiments"],
-    queryFn: async (): Promise<ExperimentRow[]> =>
-      unwrap(
-        await supabase
-          .from("experiments")
-          .select(EXPERIMENT_SELECT)
-          .in("status", ["PLANNED", "RUNNING"])
-          .order("updated_at", { ascending: false })
-          .limit(6),
-      ) as unknown as ExperimentRow[],
-  });
-
-export const experimentObservationsQuery = (experimentId: string) =>
-  queryOptions({
-    queryKey: ["observations", experimentId],
-    queryFn: async (): Promise<Observation[]> =>
-      unwrap(
-        await supabase
-          .from("observations")
-          .select("*")
-          .eq("experiment_id", experimentId)
-          .order("created_at", { ascending: true }),
-      ),
-  });
-
-export interface RecentObservationRow extends Observation {
-  experiments: { id: string; experiment_number: number | null } | null;
-}
-
-/** DASHBOARD 위젯 — 최근 관찰 */
-export const recentObservationsQuery = () =>
-  queryOptions({
-    queryKey: ["recent_observations"],
-    queryFn: async (): Promise<RecentObservationRow[]> =>
-      unwrap(
-        await supabase
-          .from("observations")
-          .select("*, experiments(id, experiment_number)")
-          .order("created_at", { ascending: false })
-          .limit(8),
-      ) as unknown as RecentObservationRow[],
-  });
-
-export interface ProductObservationRow extends Observation {
-  experiments: { id: string; experiment_number: number | null } | null;
-}
-
-/** PRODUCT DETAIL — 이 제품에 속한 모든 실험의 관찰 기록 (읽기 전용, 최신순) */
-export const observationsByProductQuery = (productId: string) =>
-  queryOptions({
-    queryKey: ["observations_by_product", productId],
-    queryFn: async (): Promise<ProductObservationRow[]> =>
-      unwrap(
-        await supabase
-          .from("observations")
-          .select("*, experiments!inner(id, experiment_number, product_id)")
-          .eq("experiments.product_id", productId)
-          .order("created_at", { ascending: false }),
-      ) as unknown as ProductObservationRow[],
-  });
-
-/* ── PHASE 4B — PROCESS TIMELINE ─────────────────────────────── */
-
-import type { ProcessCategory, ProcessEvent } from "@/lib/process";
-
-export const processCategoriesQuery = () =>
-  queryOptions({
-    queryKey: ["process_categories"],
-    queryFn: async (): Promise<ProcessCategory[]> =>
-      unwrap(
-        await supabase
-          .from("process_categories")
-          .select("*")
-          .order("sort_order", { ascending: true })
-          .order("name", { ascending: true }),
-      ),
-  });
-
-/** 프로세스 카테고리별 사용 횟수 (process_events.category_id) */
-export const processCategoryUsageQuery = () =>
-  queryOptions({
-    queryKey: ["process_category_usage"],
-    queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(await supabase.from("process_events").select("category_id"));
-      const map: Record<string, number> = {};
-      for (const row of rows) {
-        if (row.category_id) map[row.category_id] = (map[row.category_id] ?? 0) + 1;
-      }
-      return map;
-    },
-  });
-
-export interface ProcessEventRow extends ProcessEvent {
-  process_categories: ProcessCategory | null;
-}
-
-export const processEventsQuery = (experimentId: string) =>
-  queryOptions({
-    queryKey: ["process_events", experimentId],
-    queryFn: async (): Promise<ProcessEventRow[]> =>
-      unwrap(
-        await supabase
-          .from("process_events")
-          .select("*, process_categories(*)")
-          .eq("experiment_id", experimentId)
-          .order("started_at", { ascending: true }),
-      ) as unknown as ProcessEventRow[],
-  });
-
-export interface RecentProcessEventRow extends ProcessEvent {
-  process_categories: Pick<ProcessCategory, "id" | "name" | "color"> | null;
-  experiments: { id: string; experiment_number: number | null } | null;
-}
-
-/** DASHBOARD 위젯 — 최근 공정 이벤트 */
-export const recentProcessEventsQuery = () =>
-  queryOptions({
-    queryKey: ["recent_process_events"],
-    queryFn: async (): Promise<RecentProcessEventRow[]> =>
-      unwrap(
-        await supabase
-          .from("process_events")
-          .select("*, process_categories(id, name, color), experiments(id, experiment_number)")
-          .order("created_at", { ascending: false })
-          .limit(8),
-      ) as unknown as RecentProcessEventRow[],
-  });
-
-/* ── PROCESS PARAMETERS — 마스터 데이터 + 링크 테이블 (사용자 확정, 2026-08-31) ── */
-
-import type { ProcessEventParameter, ProcessParameterDefinition } from "@/lib/process-parameters";
-
-export const processParameterDefinitionsQuery = () =>
-  queryOptions({
-    queryKey: ["process_parameter_definitions"],
-    queryFn: async (): Promise<ProcessParameterDefinition[]> =>
-      unwrap(
-        await supabase
-          .from("process_parameter_definitions")
-          .select("*")
-          .order("sort_order", { ascending: true })
-          .order("label", { ascending: true }),
-      ),
-  });
-
-/** definition별 사용 횟수 (process_event_parameters.definition_id) — usage-protected delete용 */
-export const processParameterDefinitionUsageQuery = () =>
-  queryOptions({
-    queryKey: ["process_parameter_definition_usage"],
-    queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(await supabase.from("process_event_parameters").select("definition_id"));
-      const map: Record<string, number> = {};
-      for (const row of rows) {
-        map[row.definition_id] = (map[row.definition_id] ?? 0) + 1;
-      }
-      return map;
-    },
-  });
-
-export const processEventParametersQuery = (processEventId: string) =>
-  queryOptions({
-    queryKey: ["process_event_parameters", processEventId],
-    queryFn: async (): Promise<ProcessEventParameter[]> =>
-      unwrap(
-        await supabase
-          .from("process_event_parameters")
-          .select("*")
-          .eq("process_event_id", processEventId),
-      ),
-  });
-
 /* ── PHASE 9 — TECHNIQUE CATEGORIES / CALIBRATION ─────────────── */
 
 import type { TechniqueCategory } from "@/lib/technique";
@@ -1160,88 +900,6 @@ export const referenceEntriesByTechniqueQuery = (techniqueId: string | null) =>
           .order("updated_at", { ascending: false }),
       );
     },
-  });
-
-/* ── P0 — SENSORY / YIELD / EXPERIMENT BASELINE (사용자 확정, 2026-08-30) ── */
-
-import type { SensoryAttribute, SensoryScore } from "@/lib/sensory";
-
-export const sensoryAttributesQuery = () =>
-  queryOptions({
-    queryKey: ["sensory_attributes"],
-    queryFn: async (): Promise<SensoryAttribute[]> =>
-      unwrap(
-        await supabase
-          .from("sensory_attributes")
-          .select("*")
-          .order("category", { ascending: true })
-          .order("sort_order", { ascending: true })
-          .order("name", { ascending: true }),
-      ),
-  });
-
-/** attribute별 사용 횟수 (experiment_sensory_scores.attribute_id) — usage-protected delete용 */
-export const sensoryAttributeUsageQuery = () =>
-  queryOptions({
-    queryKey: ["sensory_attribute_usage"],
-    queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(await supabase.from("experiment_sensory_scores").select("attribute_id"));
-      const map: Record<string, number> = {};
-      for (const row of rows) {
-        if (row.attribute_id) map[row.attribute_id] = (map[row.attribute_id] ?? 0) + 1;
-      }
-      return map;
-    },
-  });
-
-/** EXPERIMENT DETAIL — 이 실험의 sensory 점수 (attribute 정보 포함) */
-export interface ExperimentSensoryScoreRow extends SensoryScore {
-  sensory_attributes: SensoryAttribute | null;
-}
-
-export const experimentSensoryScoresQuery = (experimentId: string) =>
-  queryOptions({
-    queryKey: ["experiment_sensory_scores", experimentId],
-    queryFn: async (): Promise<ExperimentSensoryScoreRow[]> =>
-      unwrap(
-        await supabase
-          .from("experiment_sensory_scores")
-          .select("*, sensory_attributes(*)")
-          .eq("experiment_id", experimentId),
-      ) as unknown as ExperimentSensoryScoreRow[],
-  });
-
-/**
- * BASELINE EXPERIMENT 선택지. excludeId가 있으면 자기 자신은 목록에서 뺀다
- * (EXPERIMENT DETAIL에서 사용). 신규 생성 화면에서는 excludeId=null로 호출한다 — 아직 자기 id가 없음.
- */
-export const experimentsForBaselineQuery = (excludeId: string | null) =>
-  queryOptions({
-    queryKey: ["experiments_for_baseline", excludeId],
-    queryFn: async (): Promise<Pick<Experiment, "id" | "experiment_number" | "date">[]> => {
-      let query = supabase
-        .from("experiments")
-        .select("id, experiment_number, date")
-        .order("experiment_number", { ascending: false });
-      if (excludeId) query = query.neq("id", excludeId);
-      return unwrap(await query);
-    },
-  });
-
-/** 이 EXPERIMENT를 baseline으로 참조하는 다른 EXPERIMENT들 (VARIANT) — 반대 방향 조회 */
-export const experimentVariantsQuery = (experimentId: string) =>
-  queryOptions({
-    queryKey: ["experiment_variants", experimentId],
-    queryFn: async (): Promise<
-      Pick<Experiment, "id" | "experiment_number" | "date" | "status">[]
-    > =>
-      unwrap(
-        await supabase
-          .from("experiments")
-          .select("id, experiment_number, date, status")
-          .eq("baseline_experiment_id", experimentId)
-          .order("experiment_number", { ascending: false }),
-      ),
   });
 
 /* ── PRODUCTION / WEIGHING DASHBOARD — WORK SESSION ──────────────── */
@@ -1881,4 +1539,42 @@ export const workflowTemplateTaskPredecessorsQuery = (templateId: string | null)
       }
       return map;
     },
+  });
+
+/* ── COMPONENT OBSERVATION (2026-09-30) — RND 삭제 후, PRODUCTION TASK LIST에서 기록한
+ * 관찰값(work_session_tasks.observation_*)을 COMPONENT 단위로 모아 보여준다. 이 COMPONENT의
+ * FORMULA로 진행된 모든 PRODUCTION 세션의 TASK 중 관찰값이 하나라도 있는 것만 대상. */
+export interface ComponentObservationRow {
+  id: string;
+  task_name: string;
+  task_type: string | null;
+  actual_started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  observation_status: string | null;
+  observation_height_start_mm: number | null;
+  observation_height_mid_mm: number | null;
+  observation_height_end_mm: number | null;
+  observation_temperature_c: number | null;
+  formula_versions: {
+    id: string;
+    version_number: number;
+    formulas: { id: string; component_id: string | null } | null;
+  } | null;
+  work_sessions: { id: string; name: string } | null;
+}
+
+export const componentObservationsQuery = (componentId: string) =>
+  queryOptions({
+    queryKey: ["component_observations", componentId],
+    queryFn: async (): Promise<ComponentObservationRow[]> =>
+      unwrap(
+        await supabase
+          .from("work_session_tasks")
+          .select(
+            "id, task_name, task_type, actual_started_at, completed_at, created_at, observation_status, observation_height_start_mm, observation_height_mid_mm, observation_height_end_mm, observation_temperature_c, formula_versions!inner(id, version_number, formulas!inner(id, component_id)), work_sessions(id, name)",
+          )
+          .eq("formula_versions.formulas.component_id", componentId)
+          .order("actual_started_at", { ascending: false }),
+      ) as unknown as ComponentObservationRow[],
   });

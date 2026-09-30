@@ -92,8 +92,7 @@ function ProductionDashboardPage() {
 
 /**
  * 작업 세션 삭제(2026-09-23) — work_session_formula_versions/progress/multiplier_history/tasks는
- * DB FK가 ON DELETE CASCADE라 함께 삭제된다. experiments.work_session_id는 ON DELETE SET NULL이라
- * "PROMOTE TO EXPERIMENT"로 만들어진 실험 기록 자체는 남고 이 세션과의 연결만 끊긴다.
+ * DB FK가 ON DELETE CASCADE라 함께 삭제된다.
  */
 function WorkSessionDeleteButton({
   sessionId,

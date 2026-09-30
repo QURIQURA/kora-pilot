@@ -9,10 +9,8 @@ import {
   componentCostsQuery,
   componentsQuery,
   currentUserId,
-  experimentsByProductQuery,
   formulasByComponentQuery,
   ingredientsQuery,
-  observationsByProductQuery,
   pilotSettingsQuery,
   productComponentsQuery,
   productCostItemsQuery,
@@ -28,14 +26,12 @@ import { fmtNumber, toGrams } from "@/lib/formula";
 import { categoryPath } from "@/lib/pilot";
 import { formatProductSizeLabel, type ProductSize } from "@/lib/product-size";
 import type { TablesUpdate } from "@/integrations/supabase/types";
-import { experimentLabel } from "@/lib/experiment";
-import { formatDateTime, formatTime } from "@/lib/datetime";
+import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
 import { ProductSizesSection } from "@/components/pilot/ProductSizesSection";
 import { ProductDesignSection } from "@/components/pilot/ProductDesignSection";
 import { ProductImagesSection } from "@/components/pilot/ProductImagesSection";
-import { ExperimentListItems } from "@/components/pilot/ExperimentList";
 import {
   Field,
   SectionCard,
@@ -198,8 +194,6 @@ function ProductDetailPage() {
   const categories = useQuery(categoriesQuery());
   const links = useQuery(productComponentsQuery(productId));
   const sizes = useQuery(productSizesQuery(productId));
-  const experiments = useQuery(experimentsByProductQuery(productId));
-  const observations = useQuery(observationsByProductQuery(productId));
   const componentIds = [
     ...new Set((links.data ?? []).map((l) => l.component_id).filter((id): id is string => id != null)),
   ];
@@ -441,46 +435,8 @@ function ProductDetailPage() {
             </SectionCard>
           ),
           DEVELOPMENT: (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4">
               <ProductFormulasSection productId={productId} />
-              <SectionCard
-                title="DEVELOPMENT HISTORY"
-                action={
-                  <Link to="/experiments" className="label-caps px-2 py-2 text-xs hover:bg-secondary">
-                    VIEW ALL
-                  </Link>
-                }
-              >
-                <ExperimentListItems items={experiments.data ?? []} />
-              </SectionCard>
-              <SectionCard title="OBSERVATIONS">
-                {(observations.data ?? []).length === 0 ? (
-                  <p className="font-mono text-xs uppercase text-muted-foreground">NO OBSERVATIONS YET</p>
-                ) : (
-                  <ul className="divide-y divide-border border border-border">
-                    {(observations.data ?? []).map((obs) => (
-                      <li key={obs.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
-                        <span className="w-14 font-mono text-xs text-muted-foreground">
-                          {formatTime(obs.created_at)}
-                        </span>
-                        <span className="label-caps bg-foreground px-2 py-0.5 text-xs text-background">
-                          {(obs.label || "NOTE").toUpperCase()}
-                        </span>
-                        <span className="min-w-[8rem] flex-1 text-sm">{obs.value}</span>
-                        {obs.experiments && (
-                          <Link
-                            to="/experiments/$experimentId"
-                            params={{ experimentId: obs.experiments.id }}
-                            className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                          >
-                            {experimentLabel(obs.experiments.experiment_number)}
-                          </Link>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </SectionCard>
             </div>
           ),
           COST_ADJUSTMENT: (
