@@ -14,7 +14,6 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedCostRouteImport } from './routes/_authenticated/cost'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
-import { Route as AuthenticatedKnowledgeRouteImport } from './routes/_authenticated/knowledge'
 import { Route as AuthenticatedReferencesRouteImport } from './routes/_authenticated/references'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedComponentsIndexRouteImport } from './routes/_authenticated/components/index'
@@ -53,11 +52,6 @@ const AuthenticatedCostRoute = AuthenticatedCostRouteImport.update({
 const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedKnowledgeRoute = AuthenticatedKnowledgeRouteImport.update({
-  id: '/knowledge',
-  path: '/knowledge',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedReferencesRoute = AuthenticatedReferencesRouteImport.update({
@@ -154,7 +148,6 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/cost': typeof AuthenticatedCostRoute
   '/inventory': typeof AuthenticatedInventoryRoute
-  '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/components/$componentId': typeof AuthenticatedComponentsComponentIdRoute
@@ -175,7 +168,6 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/cost': typeof AuthenticatedCostRoute
   '/inventory': typeof AuthenticatedInventoryRoute
-  '/knowledge': typeof AuthenticatedKnowledgeRoute
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
@@ -199,7 +191,6 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/cost': typeof AuthenticatedCostRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
-  '/_authenticated/knowledge': typeof AuthenticatedKnowledgeRoute
   '/_authenticated/references': typeof AuthenticatedReferencesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
@@ -224,7 +215,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cost'
     | '/inventory'
-    | '/knowledge'
     | '/references'
     | '/settings'
     | '/components/$componentId'
@@ -245,7 +235,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cost'
     | '/inventory'
-    | '/knowledge'
     | '/references'
     | '/settings'
     | '/'
@@ -268,7 +257,6 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/cost'
     | '/_authenticated/inventory'
-    | '/_authenticated/knowledge'
     | '/_authenticated/references'
     | '/_authenticated/settings'
     | '/_authenticated/'
@@ -327,13 +315,6 @@ declare module '@tanstack/react-router' {
       path: '/inventory'
       fullPath: '/inventory'
       preLoaderRoute: typeof AuthenticatedInventoryRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/knowledge': {
-      id: '/_authenticated/knowledge'
-      path: '/knowledge'
-      fullPath: '/knowledge'
-      preLoaderRoute: typeof AuthenticatedKnowledgeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/references': {
@@ -447,7 +428,6 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCostRoute: typeof AuthenticatedCostRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
-  AuthenticatedKnowledgeRoute: typeof AuthenticatedKnowledgeRoute
   AuthenticatedReferencesRoute: typeof AuthenticatedReferencesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -469,7 +449,6 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCostRoute: AuthenticatedCostRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
-  AuthenticatedKnowledgeRoute: AuthenticatedKnowledgeRoute,
   AuthenticatedReferencesRoute: AuthenticatedReferencesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
