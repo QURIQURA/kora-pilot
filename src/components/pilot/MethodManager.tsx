@@ -156,7 +156,7 @@ export function MethodManager() {
                           <input
                             type="number"
                             aria-label={`SORT ORDER ${method.name}`}
-                            className={`${inputClass} w-20 border-transparent text-center hover:border-input`}
+                            className={`${inputClass} !w-20 border-transparent text-center hover:border-input`}
                             defaultValue={method.sort_order}
                             key={`sort-${method.id}-${method.sort_order}`}
                             onBlur={(e) => {

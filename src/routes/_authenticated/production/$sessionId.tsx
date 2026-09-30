@@ -543,7 +543,7 @@ function AddFormulaVersionForm({
               inputMode="numeric"
               step="1"
               min="1"
-              className={`${inputClass} w-20 text-center`}
+              className={`${inputClass} !w-20 text-center`}
               value={mouldCount}
               onChange={(e) => setMouldCount(e.target.value)}
             />
@@ -570,7 +570,7 @@ function AddFormulaVersionForm({
               inputMode="numeric"
               step="1"
               min="1"
-              className={`${inputClass} w-24`}
+              className={`${inputClass} !w-24`}
               value={manualMultiplier}
               onChange={(e) => setManualMultiplier(e.target.value)}
             />
@@ -721,7 +721,7 @@ function FormulaVersionRow({
                 inputMode="numeric"
                 step="1"
                 min="1"
-                className={`${inputClass} w-16 text-center`}
+                className={`${inputClass} !w-16 text-center`}
                 value={mouldCount}
                 onChange={(e) => setMouldCount(e.target.value)}
                 onBlur={(e) => {
@@ -749,7 +749,7 @@ function FormulaVersionRow({
                 inputMode="numeric"
                 step="1"
                 min="1"
-                className={`${inputClass} w-24 text-center`}
+                className={`${inputClass} !w-24 text-center`}
                 value={manualMultiplier}
                 onChange={(e) => setManualMultiplier(e.target.value)}
                 onBlur={(e) => {
@@ -1283,7 +1283,7 @@ function WeighingMatrixCell({
       {cell.progressStatus === "SHORTAGE" && editingNote && (
         <input
           autoFocus
-          className={`${inputClass} absolute z-30 mt-8 w-56 text-xs`}
+          className={`${inputClass} absolute z-30 mt-8 !w-56 text-xs`}
           placeholder="예: Butter 부족 — 다음 입고 후 진행"
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -1421,7 +1421,7 @@ function StockReflectSection({
               ) : (
                 <>
                   <input
-                    className={inputClass + " w-24"}
+                    className={inputClass + " !w-24"}
                     placeholder="수량"
                     value={draft.qty}
                     onChange={(e) =>
@@ -1429,7 +1429,7 @@ function StockReflectSection({
                     }
                   />
                   <input
-                    className={inputClass + " w-20"}
+                    className={inputClass + " !w-20"}
                     placeholder="단위"
                     value={draft.unit}
                     onChange={(e) =>

@@ -158,7 +158,7 @@ export function SensoryAttributeManager() {
                           <input
                             type="number"
                             aria-label={`SCALE MIN ${attribute.name}`}
-                            className={`${inputClass} w-16 border-transparent text-center hover:border-input`}
+                            className={`${inputClass} !w-16 border-transparent text-center hover:border-input`}
                             defaultValue={attribute.scale_min}
                             key={`min-${attribute.id}-${attribute.scale_min}`}
                             onBlur={(e) => {
@@ -171,7 +171,7 @@ export function SensoryAttributeManager() {
                           <input
                             type="number"
                             aria-label={`SCALE MAX ${attribute.name}`}
-                            className={`${inputClass} w-16 border-transparent text-center hover:border-input`}
+                            className={`${inputClass} !w-16 border-transparent text-center hover:border-input`}
                             defaultValue={attribute.scale_max}
                             key={`max-${attribute.id}-${attribute.scale_max}`}
                             onBlur={(e) => {
@@ -278,7 +278,7 @@ function AttributeCreateForm({
         <input
           type="number"
           aria-label="SCALE MIN"
-          className={`${inputClass} w-20`}
+          className={`${inputClass} !w-20`}
           value={scaleMin}
           onChange={(e) => setScaleMin(Number(e.target.value))}
         />
@@ -286,7 +286,7 @@ function AttributeCreateForm({
         <input
           type="number"
           aria-label="SCALE MAX"
-          className={`${inputClass} w-20`}
+          className={`${inputClass} !w-20`}
           value={scaleMax}
           onChange={(e) => setScaleMax(Number(e.target.value))}
         />

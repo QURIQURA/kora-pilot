@@ -193,7 +193,7 @@ export function ProcessParameterManager() {
                             {def.value_type}
                           </span>
                           <input
-                            className={`${inputClass} w-24 border-transparent text-center hover:border-input`}
+                            className={`${inputClass} !w-24 border-transparent text-center hover:border-input`}
                             placeholder="UNIT"
                             defaultValue={def.unit ?? ""}
                             key={`unit-${def.id}-${def.unit ?? ""}`}
@@ -326,7 +326,7 @@ function ParameterCreateForm({
           ))}
         </select>
         <input
-          className={`${inputClass} w-24`}
+          className={`${inputClass} !w-24`}
           placeholder="UNIT"
           value={unit}
           onChange={(e) => setUnit(e.target.value)}

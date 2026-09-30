@@ -140,7 +140,7 @@ export function ProductCostItemsSection({
                 inputMode="decimal"
                 step="0.01"
                 min="0"
-                className={`${inputClass} w-20 text-right`}
+                className={`${inputClass} !w-16 text-right`}
                 defaultValue={row.quantity}
                 onBlur={(e) => {
                   const next = e.target.value.trim() ? Number(e.target.value) : 0;

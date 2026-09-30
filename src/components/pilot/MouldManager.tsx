@@ -108,7 +108,7 @@ export function MouldManager() {
                     inputMode="decimal"
                     step="1"
                     min="0"
-                    className={`${inputClass} w-24 border-transparent text-right hover:border-input`}
+                    className={`${inputClass} !w-24 border-transparent text-right hover:border-input`}
                     placeholder="기준(g)"
                     defaultValue={mould.reference_weight_g ?? ""}
                     onBlur={(e) => {

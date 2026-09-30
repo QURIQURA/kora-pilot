@@ -127,7 +127,7 @@ export function FlavourFamilyManager() {
                 <input
                   type="number"
                   aria-label={`SORT ORDER ${family.name}`}
-                  className={`${inputClass} w-20 border-transparent text-center hover:border-input`}
+                  className={`${inputClass} !w-20 border-transparent text-center hover:border-input`}
                   defaultValue={family.sort_order}
                   key={`sort-${family.id}-${family.sort_order}`}
                   onBlur={(e) => {

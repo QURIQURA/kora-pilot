@@ -151,7 +151,7 @@ function ExperimentsPage() {
         <input
           type="date"
           aria-label="FROM DATE"
-          className={`${inputClass} w-auto`}
+          className={`${inputClass} !w-auto`}
           value={from}
           onChange={(e) => setFrom(e.target.value)}
         />
@@ -159,7 +159,7 @@ function ExperimentsPage() {
         <input
           type="date"
           aria-label="TO DATE"
-          className={`${inputClass} w-auto`}
+          className={`${inputClass} !w-auto`}
           value={to}
           onChange={(e) => setTo(e.target.value)}
         />

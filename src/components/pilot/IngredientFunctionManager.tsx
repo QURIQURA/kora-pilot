@@ -155,7 +155,7 @@ export function IngredientFunctionManager() {
                 <input
                   type="number"
                   aria-label={`SORT ORDER ${fn.name}`}
-                  className={`${inputClass} w-20 border-transparent text-center hover:border-input`}
+                  className={`${inputClass} !w-20 border-transparent text-center hover:border-input`}
                   defaultValue={fn.sort_order}
                   key={`sort-${fn.id}-${fn.sort_order}`}
                   onBlur={(e) => {

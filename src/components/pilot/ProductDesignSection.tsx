@@ -185,7 +185,7 @@ function IngredientTagEditor({
       >
         <input
           list={datalistId}
-          className={inputClass + " w-56"}
+          className={inputClass + " !w-56"}
           placeholder="재료 검색해서 추가"
           value={name}
           onChange={(e) => setName(e.target.value)}

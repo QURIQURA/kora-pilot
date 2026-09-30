@@ -265,7 +265,7 @@ function ExperimentDetailPage() {
           <input
             type="date"
             aria-label="EXPERIMENT DATE"
-            className={`${inputClass} w-auto`}
+            className={`${inputClass} !w-auto`}
             defaultValue={exp.date}
             key={`date-${exp.id}`}
             onBlur={(e) => {
@@ -399,7 +399,7 @@ function ExperimentDetailPage() {
                         <input
                           type="number"
                           inputMode="decimal"
-                          className={`${inputClass} w-28`}
+                          className={`${inputClass} !w-28`}
                           defaultValue={row.amount}
                           key={`amt-${row.ingredient_id}-${initializedFor}`}
                           onBlur={(e) => updateDraftRow(idx, { amount: parseNumber(e.target.value) })}
@@ -705,7 +705,7 @@ function ExperimentDetailPage() {
       <SectionCard title="OBSERVATIONS">
         <div className="flex flex-wrap items-center gap-2">
           <input
-            className={`${inputClass} w-36`}
+            className={`${inputClass} !w-36`}
             placeholder="LABEL (HEIGHT…)"
             value={obsLabel}
             onChange={(e) => setObsLabel(e.target.value)}

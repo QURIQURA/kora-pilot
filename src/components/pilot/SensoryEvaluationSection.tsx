@@ -95,7 +95,7 @@ export function SensoryEvaluationSection({ experimentId }: { experimentId: strin
                       aria-label={`SCORE ${attribute.name}`}
                       min={attribute.scale_min}
                       max={attribute.scale_max}
-                      className={`${inputClass} w-20 text-center`}
+                      className={`${inputClass} !w-20 text-center`}
                       defaultValue={existing?.score ?? ""}
                       key={`score-${attribute.id}-${existing?.score ?? ""}`}
                       onBlur={(e) => {

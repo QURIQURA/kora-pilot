@@ -1342,7 +1342,7 @@ function FormulaDetailPage() {
                               inputMode="decimal"
                               step="1"
                               min="0"
-                              className={`${inputClass} w-24`}
+                              className={`${inputClass} !w-24`}
                               value={newBatchCount}
                               onChange={(e) => setNewBatchCount(e.target.value)}
                             />
@@ -1369,7 +1369,7 @@ function FormulaDetailPage() {
                         type="number"
                         inputMode="decimal"
                         step="0.1"
-                        className={`${inputClass} w-24`}
+                        className={`${inputClass} !w-24`}
                         value={newBatchManualMultiplier}
                         onChange={(e) => setNewBatchManualMultiplier(e.target.value)}
                       />
@@ -1383,7 +1383,7 @@ function FormulaDetailPage() {
                     type="number"
                     inputMode="decimal"
                     step="0.1"
-                    className={`${inputClass} w-24`}
+                    className={`${inputClass} !w-24`}
                     value={newBatchManualMultiplier}
                     onChange={(e) => setNewBatchManualMultiplier(e.target.value)}
                   />

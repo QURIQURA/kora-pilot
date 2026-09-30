@@ -1072,7 +1072,7 @@ function UsageQuantityInput({
         type="number"
         inputMode="decimal"
         step="any"
-        className={inputClass + " w-28"}
+        className={inputClass + " !w-16"}
         placeholder="0"
         value={quantityDraft}
         onChange={(e) => setQuantityDraft(e.target.value)}
@@ -1086,7 +1086,7 @@ function UsageQuantityInput({
           if (next !== (quantityG ?? null)) onSave(next);
         }}
       />
-      <span className="font-mono text-xs text-muted-foreground">{unitLabel}</span>
+      <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">{unitLabel}</span>
     </div>
   );
 }

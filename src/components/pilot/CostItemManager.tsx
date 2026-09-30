@@ -140,7 +140,7 @@ function CostItemRow({ item, used }: { item: CostItem; used: number }) {
             inputMode="decimal"
             step="0.01"
             min="0"
-            className={`${inputClass} w-24 border-transparent text-right hover:border-input`}
+            className={`${inputClass} !w-24 border-transparent text-right hover:border-input`}
             defaultValue={item.unit_cost}
             onBlur={(e) => {
               const next = e.target.value.trim() ? Number(e.target.value) : 0;
@@ -149,7 +149,7 @@ function CostItemRow({ item, used }: { item: CostItem; used: number }) {
           />
         </div>
         <input
-          className={`${inputClass} w-28 border-transparent hover:border-input`}
+          className={`${inputClass} !w-28 border-transparent hover:border-input`}
           placeholder="단위(OPTIONAL)"
           defaultValue={item.unit_label ?? ""}
           onBlur={(e) => {
