@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, productSizesQuery } from "@/lib/queries";
+import { currentUserId, mouldsQuery, productSizesQuery } from "@/lib/queries";
 import {
   calcProductSize,
   cmToMm,
@@ -14,6 +14,7 @@ import {
   type ProductSizeShape,
 } from "@/lib/product-size";
 import { fmtCurrency } from "@/lib/cost";
+import { MouldSelect } from "./MouldSelect";
 import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 /**
@@ -44,6 +45,8 @@ export function ProductSizesSection({
 }) {
   const queryClient = useQueryClient();
   const sizes = useQuery(productSizesQuery(productId));
+  const moulds = useQuery(mouldsQuery());
+  const mouldNameById = Object.fromEntries((moulds.data ?? []).map((m) => [m.id, m.name]));
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -139,6 +142,11 @@ export function ProductSizesSection({
                         {size.shape}
                       </span>
                       <span className="text-sm">{formatProductSizeLabel(size)}</span>
+                      {size.mould_id && mouldNameById[size.mould_id] && (
+                        <span className="label-caps text-[11px] text-muted-foreground">
+                          MOULD: {mouldNameById[size.mould_id]}
+                        </span>
+                      )}
                     </div>
                     {(() => {
                       const usageTotal = usageTotals?.[size.id];
@@ -252,6 +260,8 @@ function ProductSizeForm({
   onDone: () => void;
 }) {
   const queryClient = useQueryClient();
+  const moulds = useQuery(mouldsQuery());
+  const [mouldId, setMouldId] = useState(existing?.mould_id ?? "");
   const [shape, setShape] = useState<ProductSizeShape>((existing?.shape as ProductSizeShape) ?? "ROUND");
   const [diameterCm, setDiameterCm] = useState(
     existing?.diameter_mm != null ? String(mmToCm(existing.diameter_mm)) : "",
@@ -281,6 +291,7 @@ function ProductSizeForm({
 
       const payload = {
         shape,
+        mould_id: mouldId || null,
         diameter_mm: shape === "ROUND" ? toMm(diameterCm) : null,
         length_mm: shape === "RECTANGLE" ? toMm(lengthCm) : null,
         width_mm: shape === "RECTANGLE" ? toMm(widthCm) : null,
@@ -326,6 +337,8 @@ function ProductSizeForm({
     },
   });
 
+  const selectedMould = (moulds.data ?? []).find((m) => m.id === mouldId);
+
   return (
     <form
       className="space-y-3 border border-dashed border-border p-3"
@@ -334,6 +347,31 @@ function ProductSizeForm({
         save.mutate();
       }}
     >
+      <Field label="MOULD (OPTIONAL — 선택 시 실측 치수가 자동 입력됩니다)">
+        <MouldSelect
+          value={mouldId}
+          onChange={(id) => {
+            setMouldId(id);
+            const m = (moulds.data ?? []).find((mm) => mm.id === id);
+            if (m) {
+              if (m.diameter_mm != null) {
+                setShape("ROUND");
+                setDiameterCm(String(mmToCm(m.diameter_mm)));
+              }
+              if (m.height_mm != null) setHeightCm(String(mmToCm(m.height_mm)));
+            }
+          }}
+        />
+      </Field>
+      {selectedMould && (selectedMould.diameter_mm != null || selectedMould.height_mm != null) && (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          {selectedMould.name} 실측
+          {selectedMould.diameter_mm != null ? ` Ø${mmToCm(selectedMould.diameter_mm)}cm` : ""}
+          {selectedMould.height_mm != null ? ` × H${mmToCm(selectedMould.height_mm)}cm` : ""}
+          (아이싱 전) — 아이싱 후 완성 사이즈로 아래 값을 직접 조정하세요.
+        </p>
+      )}
+
       <Field label="SHAPE">
         <select
           className={selectClass}

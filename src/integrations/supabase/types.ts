@@ -928,6 +928,8 @@ export type Database = {
       moulds: {
         Row: {
           created_at: string
+          diameter_mm: number | null
+          height_mm: number | null
           id: string
           name: string
           notes: string | null
@@ -938,6 +940,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          diameter_mm?: number | null
+          height_mm?: number | null
           id?: string
           name: string
           notes?: string | null
@@ -948,6 +952,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          diameter_mm?: number | null
+          height_mm?: number | null
           id?: string
           name?: string
           notes?: string | null
@@ -1186,6 +1192,7 @@ export type Database = {
           is_default: boolean
           length_mm: number | null
           monthly_unit_count: number | null
+          mould_id: string | null
           notes: string | null
           product_id: string
           selling_price: number | null
@@ -1202,6 +1209,7 @@ export type Database = {
           is_default?: boolean
           length_mm?: number | null
           monthly_unit_count?: number | null
+          mould_id?: string | null
           notes?: string | null
           product_id: string
           selling_price?: number | null
@@ -1218,6 +1226,7 @@ export type Database = {
           is_default?: boolean
           length_mm?: number | null
           monthly_unit_count?: number | null
+          mould_id?: string | null
           notes?: string | null
           product_id?: string
           selling_price?: number | null
@@ -1227,6 +1236,13 @@ export type Database = {
           width_mm?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "product_sizes_mould_id_fkey"
+            columns: ["mould_id"]
+            isOneToOne: false
+            referencedRelation: "moulds"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "product_sizes_product_id_fkey"
             columns: ["product_id"]

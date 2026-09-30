@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { mouldUsageQuery, mouldsQuery } from "@/lib/queries";
+import { cmToMm, mmToCm } from "@/lib/product-size";
 import { MouldCreateForm } from "./MouldCreateForm";
 import { SectionCard, buttonClass, inputClass } from "./ui";
 
@@ -28,6 +29,8 @@ export function MouldManager() {
         name?: string;
         shape_size?: string | null;
         reference_weight_g?: number | null;
+        diameter_mm?: number | null;
+        height_mm?: number | null;
         notes?: string | null;
       };
     }) => {
@@ -69,6 +72,11 @@ export function MouldManager() {
           />
         </div>
       )}
+
+      <p className="mb-3 font-mono text-[11px] text-muted-foreground">
+        지름/높이는 몰드 자체의 실측 치수입니다(아이싱 전). PRODUCT의 SIZES에서 이 몰드를
+        선택하면 시작값으로 채워지며, 아이싱 후 완성 사이즈는 SIZES 쪽에서 직접 조정하세요.
+      </p>
 
       {rows.length === 0 ? (
         <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -118,6 +126,40 @@ export function MouldManager() {
                     }}
                   />
                   <span className="label-caps text-[10px] text-muted-foreground">G</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    min="0"
+                    className={`${inputClass} !w-20 border-transparent text-right hover:border-input`}
+                    placeholder="지름"
+                    defaultValue={mould.diameter_mm != null ? mmToCm(mould.diameter_mm) : ""}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim() ? cmToMm(Number(e.target.value)) : null;
+                      if (next !== (mould.diameter_mm ?? null))
+                        update.mutate({ id: mould.id, patch: { diameter_mm: next } });
+                    }}
+                  />
+                  <span className="label-caps text-[10px] text-muted-foreground">CM ⌀</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    min="0"
+                    className={`${inputClass} !w-20 border-transparent text-right hover:border-input`}
+                    placeholder="높이"
+                    defaultValue={mould.height_mm != null ? mmToCm(mould.height_mm) : ""}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim() ? cmToMm(Number(e.target.value)) : null;
+                      if (next !== (mould.height_mm ?? null))
+                        update.mutate({ id: mould.id, patch: { height_mm: next } });
+                    }}
+                  />
+                  <span className="label-caps text-[10px] text-muted-foreground">CM H</span>
                 </div>
                 <span className="label-caps text-xs text-muted-foreground">
                   {used > 0 ? `${used} IN USE` : "UNUSED"}
