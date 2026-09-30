@@ -53,9 +53,20 @@ export const TASK_TYPE_SUGGESTIONS = [
  */
 export const OBSERVATION_TASK_TYPES = new Set(["bake"]);
 
-export function hasObservationFields(taskType: string | null | undefined): boolean {
+/**
+ * overrides는 SETTINGS에서 사용자가 TASK TYPE별로 직접 켠/끈 "관찰값 입력칸 보이기" 값
+ * (task_type_definitions.has_observation_fields, 2026-09-30)이다 — 값이 있으면 그걸 그대로
+ * 따르고, 그 TASK TYPE에 대해 아직 한 번도 설정한 적이 없으면(overrides에 키 자체가 없으면)
+ * 기존 하드코딩 기본값(OBSERVATION_TASK_TYPES)으로 대체한다.
+ */
+export function hasObservationFields(
+  taskType: string | null | undefined,
+  overrides?: Record<string, boolean>,
+): boolean {
   if (!taskType) return false;
-  return OBSERVATION_TASK_TYPES.has(taskType.trim().toLowerCase());
+  const key = taskType.trim().toLowerCase();
+  if (overrides && key in overrides) return overrides[key]!;
+  return OBSERVATION_TASK_TYPES.has(key);
 }
 
 /**

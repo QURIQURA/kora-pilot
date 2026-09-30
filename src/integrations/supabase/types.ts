@@ -1523,6 +1523,39 @@ export type Database = {
         }
         Relationships: []
       }
+      task_type_definitions: {
+        Row: {
+          created_at: string
+          has_observation_fields: boolean
+          id: string
+          key: string
+          name: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          has_observation_fields?: boolean
+          id?: string
+          key: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          has_observation_fields?: boolean
+          id?: string
+          key?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       technique_categories: {
         Row: {
           created_at: string

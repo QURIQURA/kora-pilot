@@ -1101,6 +1101,28 @@ export const taskTypeColorsQuery = () =>
       unwrap(await supabase.from("task_type_colors").select("task_type, color_class")),
   });
 
+export interface TaskTypeDefinitionRow {
+  id: string;
+  key: string;
+  name: string;
+  has_observation_fields: boolean;
+  sort_order: number;
+}
+
+/** 사용자가 SETTINGS에서 직접 관리하는 TASK TYPE 이름 목록(2026-09-30) — 코드에 하드코딩된
+ * TASK_TYPE_SUGGESTIONS는 이 테이블이 비어있는(아직 한 번도 저장 안 한) 사용자를 위한 기본값일 뿐. */
+export const taskTypeDefinitionsQuery = () =>
+  queryOptions({
+    queryKey: ["task_type_definitions"],
+    queryFn: async (): Promise<TaskTypeDefinitionRow[]> =>
+      unwrap(
+        await supabase
+          .from("task_type_definitions")
+          .select("id, key, name, has_observation_fields, sort_order")
+          .order("sort_order", { ascending: true }),
+      ),
+  });
+
 /** cost_item별 사용 횟수(component+product 배정 합산) — 삭제 보호용 */
 export const costItemUsageQuery = () =>
   queryOptions({

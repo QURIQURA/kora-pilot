@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
   taskTypeColorsQuery,
+  taskTypeDefinitionsQuery,
   type VersionIngredientRow,
 } from "@/lib/queries";
 import { localDateTimeToISO, toLocalDateString, formatTime, formatDuration } from "@/lib/datetime";
@@ -97,6 +98,7 @@ export function WorkflowView({
   const autoScrolled = useRef(false);
 
   const taskTypeColors = useQuery(taskTypeColorsQuery());
+  const taskTypeDefinitions = useQuery(taskTypeDefinitionsQuery());
 
   // TASK TYPE 이름(소문자) → 사용자가 고른 color_class. 없으면 taskTypeColorClass()가 해시 기본색을 쓴다.
   const colorOverrides = useMemo(() => {
@@ -104,6 +106,13 @@ export function WorkflowView({
     for (const row of taskTypeColors.data ?? []) map[taskTypeColorKey(row.task_type)] = row.color_class;
     return map;
   }, [taskTypeColors.data]);
+
+  // TASK TYPE 이름(소문자) → SETTINGS에서 켠/끈 "관찰값 입력칸" 여부(2026-09-30).
+  const observationOverrides = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const def of taskTypeDefinitions.data ?? []) map[def.key] = def.has_observation_fields;
+    return map;
+  }, [taskTypeDefinitions.data]);
 
   const range = useMemo(() => computeTimelineRange(tasks), [tasks]);
   const nowTop = nowLineOffset(range, PX_PER_MINUTE);
@@ -730,7 +739,7 @@ export function WorkflowView({
                         <span className="text-muted-foreground">· {Math.round(actualDuration)} MIN</span>
                       ) : null}
                     </div>
-                    {hasObservationFields(task.task_type) && (
+                    {hasObservationFields(task.task_type, observationOverrides) && (
                       <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] tracking-wider text-foreground">
                         <span className="text-muted-foreground">관찰</span>
                         <input

@@ -6,6 +6,7 @@ import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
 import { WorkflowTemplateManager } from "@/components/pilot/WorkflowTemplateManager";
+import { TaskTypeManager } from "@/components/pilot/TaskTypeManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
 import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
 import { AromaTagManager } from "@/components/pilot/AromaTagManager";
@@ -114,6 +115,9 @@ function SettingsPage() {
         </SettingsSection>
         <SettingsSection title="WORKFLOW TEMPLATES">
           <WorkflowTemplateManager />
+        </SettingsSection>
+        <SettingsSection title="TASK TYPES">
+          <TaskTypeManager />
         </SettingsSection>
       </SettingsGroup>
 

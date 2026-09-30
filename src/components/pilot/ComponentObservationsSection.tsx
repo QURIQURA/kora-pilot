@@ -46,6 +46,11 @@ export function ComponentObservationsSection({ componentId }: { componentId: str
                     {versionLabel(row.formula_versions.version_number)}
                   </span>
                 )}
+                {row.task_type && (
+                  <span className="label-caps border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {row.task_type.toUpperCase()}
+                  </span>
+                )}
                 <span className="label-caps text-[10px] text-muted-foreground">{row.task_name}</span>
                 <span className="min-w-[10rem] flex-1 text-sm">
                   {row.observation_status ? `${row.observation_status} · ` : ""}

@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
   techniqueCategoriesQuery,
+  taskTypeDefinitionsQuery,
   workflowTemplatesQuery,
   workflowTemplateTasksQuery,
   workflowTemplateTaskPredecessorsQuery,
@@ -157,6 +158,13 @@ export function TemplateTaskEditor({ templateId }: { templateId: string }) {
   const queryClient = useQueryClient();
   const tasks = useQuery(workflowTemplateTasksQuery(templateId));
   const predecessors = useQuery(workflowTemplateTaskPredecessorsQuery(templateId));
+  // TASK TYPE 제안 목록(2026-09-30) — SETTINGS > TASK TYPES에서 사용자가 직접 관리하는 이름을
+  // 우선 쓰고, 아직 하나도 등록하지 않았으면 기존 하드코딩 기본값(TASK_TYPE_SUGGESTIONS)을 쓴다.
+  const taskTypeDefinitions = useQuery(taskTypeDefinitionsQuery());
+  const taskTypeOptions =
+    taskTypeDefinitions.data && taskTypeDefinitions.data.length > 0
+      ? taskTypeDefinitions.data.map((d) => d.name)
+      : TASK_TYPE_SUGGESTIONS;
   const [name, setName] = useState("");
   const [taskType, setTaskType] = useState("");
   const [predecessorTaskIds, setPredecessorTaskIds] = useState<string[]>([]);
@@ -330,7 +338,7 @@ export function TemplateTaskEditor({ templateId }: { templateId: string }) {
           onChange={(e) => setTaskType(e.target.value)}
         />
         <datalist id="workflow-template-task-types">
-          {TASK_TYPE_SUGGESTIONS.map((t) => (
+          {taskTypeOptions.map((t) => (
             <option key={t} value={t} />
           ))}
         </datalist>

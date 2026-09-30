@@ -4,6 +4,75 @@
 
 ---
 
+## 2026-09-30 — TASK TYPE 이름 직접 관리 + OBSERVATION 표시 버그 수정 + WORKFLOW 5차 정리
+
+### TASK TYPE을 SETTINGS에서 직접 관리
+
+- SETTINGS → TECHNIQUE 그룹에 "TASK TYPES" 섹션을 추가했습니다. 이제 MIX/COOK/BAKE 같은 TASK
+  TYPE 이름을 직접 추가·이름변경·삭제할 수 있고, TASK TYPE마다 배지 색상과 "관찰값(높이/온도)
+  입력칸 보이기" 여부까지 한 화면에서 관리합니다. (예전엔 이름은 코드에 고정, 색상만 바꿀 수
+  있었습니다.)
+- 이미 만들어진 TASK는 그때 저장된 이름 그대로 남습니다 — 이름을 바꾸면 앞으로 새로 만드는
+  TASK의 제안 목록만 바뀝니다.
+- COMPONENT 상세 페이지에 있던 "TASK TYPE 색상" 섹션은 이 SETTINGS 화면으로 통합되어 사라졌습니다.
+
+### COMPONENT의 OBSERVATION 기록에 TASK TYPE 표시
+
+- COMPONENT 상세의 OBSERVATION 목록에서 어떤 TASK(예: BAKE)의 기록인지 이제 배지로 함께
+  보입니다.
+
+### TASK TYPE 색상 설정 화면의 중복 표시 버그 수정
+
+- SETTINGS의 TASK TYPE 목록에 같은 타입이 대소문자만 다르게(예: BAKE/bake) 두 번 표시되던
+  버그를 수정했습니다.
+
+### FORMULA 상세 INGREDIENTS 표 비율 정리
+
+- FORMULA 상세의 INGREDIENTS 표에서 FUNCTION 같은 긴 텍스트 칸이 열 너비를 밀어 늘리면서
+  BASE ×1/배수/UNIT/% 같은 숫자 칸들이 내용에 안 맞게 들쭉날쭉 보이던 문제를 고쳤습니다 — 각
+  열 너비를 내용에 맞게 고정했습니다.
+
+### FORMULA 상세 MOULD/YIELD/BATCH ×N 미리보기 박스 삭제
+
+- ADD BATCH 팝업으로 필요한 배수 열을 바로 만들 수 있어 중복이었던 MOULD/YIELD/BATCH ×N
+  미리보기 박스를 지웠습니다. (참고: 이 배합 버전 자체의 기본 MOULD/YIELD를 바꿀 곳이 당분간
+  없습니다 — 필요해지면 다시 요청해 주세요.)
+
+### INGREDIENTS 표 "보조 계량" 단위 드롭다운화
+
+- BASE ×1 아래 보조 계량(그램 외 개수 등)의 단위 칸이 자유 입력 텍스트박스였는데, 드롭다운으로
+  바꾸고 제과에서 자주 쓰는 단위(개/tsp/tbsp/cup/oz/pinch/dash/방울/장/스틱)를 미리 넣어뒀습니다.
+
+### INGREDIENTS 표의 배수 열 헤더 정리
+
+- 이미 만들어진 배수 열(예: "8인치 시폰")의 헤더에 몰드 드롭다운/개수/"배수 직접입력으로"
+  버튼이 항상 펼쳐져 있던 걸 정리했습니다 — 이제 이름·배수만 간단히 보이고, EDIT 버튼을 누르면
+  ADD BATCH와 같은 팝업에서 이름/배수를 고칩니다. (배수를 직접 바꾸면 몰드 연결은 풀리고
+  입력한 배수가 그대로 저장됩니다.)
+
+---
+
+## 2026-09-30 — WORKFLOW TASK 시작시 세션 자동 START + 타임라인 누락 TASK 표시 + 재고반영 위치 이동
+
+- SELECTED FORMULA VERSIONS에서 배합을 REMOVE하면 그 배합으로 자동 생성됐던 TASK LIST의 TASK도
+  함께 삭제됩니다.
+- WORK SESSION이 아직 PLANNED(START WORK 누르기 전) 상태에서 WORKFLOW의 TASK 하나라도 시작시각이
+  기록되면(START 버튼/직접 입력/드래그 이동 모두 포함), 그 시각으로 세션도 자동 IN_PROGRESS
+  전환됩니다.
+- 예전에 SELECTED FORMULA VERSIONS에서 제거된 배합에 딸린 TASK가 타임라인 그래픽에서만 조용히
+  숨겨지던 문제를 고쳤습니다 — "(제거된 배합)" 열로 다시 표시됩니다.
+- "재고 반영" 섹션을 작업 세션 화면 맨 위에서 맨 아래(NOTES 다음)로 옮겼습니다 — 재고 반영은
+  작업이 끝난 뒤 하는 일이라 순서상 마지막이 자연스럽습니다.
+
+---
+
+## 2026-09-30 — COMPONENT OBSERVATION 기록에서 해당 PRODUCTION 작업으로 바로 이동
+
+- COMPONENT 상세의 OBSERVATION 기록 각 줄에 해당 작업이 진행된 PRODUCTION 세션으로 가는 링크를
+  추가했습니다.
+
+---
+
 ## 2026-09-30 — R&D 기능 완전 삭제 + PRODUCTION↔COMPONENT 관찰(OBSERVATION) 연동 + WORKFLOW 4차 정리
 
 ### R&D 기능 완전 삭제

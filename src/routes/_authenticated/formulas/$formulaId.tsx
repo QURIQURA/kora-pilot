@@ -33,6 +33,7 @@ import {
 } from "@/lib/queries";
 import { methodLabel } from "@/lib/method";
 import {
+  SECONDARY_UNITS,
   UNITS,
   fmtNumber,
   parseNumber,
@@ -174,6 +175,12 @@ function FormulaDetailPage() {
   const [newBatchCount, setNewBatchCount] = useState("1");
   const [newBatchManualMultiplier, setNewBatchManualMultiplier] = useState("2");
   const [newBatchLabel, setNewBatchLabel] = useState("");
+  // 저장된 배수 열 수정(2026-09-30) — 헤더에 몰드 드롭다운/스위치 버튼을 계속 늘어놓는 대신,
+  // ADD BATCH와 같은 팝업으로 이름/배수만 바로 고칠 수 있게 뺐다. 몰드 기준 계산은 열을 새로
+  // 만들 때(ADD BATCH)만 하고, 만든 뒤에는 배수 숫자를 직접 입력해 바꾼다.
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
+  const [editBatchLabel, setEditBatchLabel] = useState("");
+  const [editBatchMultiplier, setEditBatchMultiplier] = useState("2");
   const [creatingVersion, setCreatingVersion] = useState(false);
 
   // UNLOCK→EDIT 2단계를 없애고, 페이지를 열자마자 바로 수정할 수 있게 한다 — draft가 로드되면
@@ -489,6 +496,36 @@ function FormulaDetailPage() {
     onError: (error) => {
       console.error("removeBatchPreset failed", error);
       window.alert("배치 열 삭제에 실패했습니다. 다시 시도해 주세요.");
+    },
+  });
+
+  // 저장된 배수 열의 이름/배수 수정(2026-09-30) — EDIT 팝업에서 호출. 배수를 원래 값에서
+  // 바꾸면 몰드 연결을 풀고(직접입력으로 전환) 새 배수를 그대로 저장한다. 이름만 바꿨다면
+  // 몰드 연결은 그대로 둔다.
+  const updateBatchPreset = useMutation({
+    mutationFn: async ({
+      id,
+      label,
+      multiplier,
+      keepMould,
+    }: {
+      id: string;
+      label: string | null;
+      multiplier: number;
+      keepMould: boolean;
+    }) => {
+      const patch: Partial<FormulaVersionBatch> = { label };
+      if (!keepMould) {
+        patch.mould_id = null;
+        patch.mould_count = null;
+        patch.multiplier = multiplier;
+      }
+      const { error } = await supabase.from("formula_version_batches").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setEditingBatchId(null);
+      await invalidate();
     },
   });
 
@@ -888,72 +925,10 @@ function FormulaDetailPage() {
         )}
       </div>
 
-      {/* YIELD & BATCH — 배치 숫자를 입력하면 바로 아래 INGREDIENTS 표가 반응하는 걸 스크롤 없이
-          볼 수 있도록 표 위로 올리고, 상단 SAVE 박스처럼 한 줄 컴팩트 박스로 축소한다 */}
-      <div className="flex flex-wrap items-center gap-3 border border-border bg-card px-3 py-2">
-        {scalingMode === "BASE_WEIGHT" ? (
-          <div className="flex items-center gap-1.5">
-            <span className="label-caps text-[10px] text-muted-foreground">BASE WEIGHT</span>
-            <BaseWeightSelect
-              className={`${compactSelectClass} w-auto`}
-              value={editing ? (draft?.baseWeightId ?? "") : (version?.default_base_weight_id ?? "")}
-              disabled={fieldsDisabled}
-              onChange={(id) => setDraft((d) => (d ? { ...d, baseWeightId: id ?? "" } : d))}
-            />
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <span className="label-caps text-[10px] text-muted-foreground">MOULD</span>
-            <MouldSelect
-              className={`${compactSelectClass} w-auto`}
-              value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
-              disabled={fieldsDisabled}
-              onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id ?? "" } : d))}
-            />
-          </div>
-        )}
-        <div className="flex items-center gap-1.5">
-          <span className="label-caps text-[10px] text-muted-foreground">YIELD</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.5"
-            className={`${compactSelectClass} w-20`}
-            disabled={fieldsDisabled}
-            value={editing ? draft?.yieldQuantity ?? "" : (version?.yield_quantity ?? "")}
-            onChange={(e) => setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))}
-          />
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="label-caps text-[10px] text-muted-foreground">BATCH ×N</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.5"
-            min="0"
-            className={`${compactSelectClass} w-20 bg-secondary`}
-            value={batch}
-            onChange={(e) => setBatch(e.target.value)}
-          />
-        </div>
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-        <p className="font-mono text-xs tabular-nums">
-          {fmtNumber(totalGrams)}g
-          <span className="ml-2 bg-secondary px-1.5 py-0.5">
-            ×{fmtNumber(batchValue, 2)} = {fmtNumber(totalScaled)}g
-          </span>
-        </p>
-        <p className="label-caps text-[10px] uppercase text-muted-foreground">
-          {scalingMode === "BASE_WEIGHT"
-            ? baseWeight
-              ? `${baseWeight.name} · ${fmtNumber(baseWeight.weight_g)}g`
-              : "NO BASE WEIGHT"
-            : mould
-              ? mould.name
-              : "NO MOULD"}
-          {yieldQty ? ` ${fmtNumber(yieldQty * batchValue, 2)}개 · ${fmtNumber(totalScaled)}g` : ""}
-        </p>
-      </div>
+      {/* 2026-09-30: MOULD/YIELD/BATCH ×N 미리보기 박스 삭제 — ADD BATCH 팝업으로 필요한 배수
+          열(몰드 기준/직접입력)을 바로 만들 수 있어 이 박스가 중복이라는 사용자 판단에 따름.
+          단, 이 배합 버전 자체의 기본 MOULD/YIELD/BASE WEIGHT를 바꿀 UI가 이제 없다 — 나중에
+          필요해지면 별도 위치(예: 버전 드롭다운 옆 EDIT)에 가볍게 다시 추가할 것. */}
 
       {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
       {processCautions.length > 0 && (
@@ -1017,7 +992,23 @@ function FormulaDetailPage() {
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] border-collapse">
+            {/* 2026-09-30: table-layout:fixed + colgroup으로 열 비율을 고정 — 예전엔(auto layout)
+                FUNCTION의 긴 텍스트가 그 열을 밀어 넓히면서 BASE ×1/배수/UNIT/%같은 숫자 칸들이
+                내용과 안 맞게 들쭉날쭉해 보였다. 숫자 칸은 실제 입력값에 맞는 좁은 너비로, 텍스트가
+                긴 INGREDIENT/FUNCTION은 넉넉한 너비로 고정해 비율을 맞춘다. */}
+            <table className="w-full table-fixed border-collapse">
+              <colgroup>
+                <col className="w-8" />
+                <col className="w-48" />
+                <col className="w-36" />
+                {batchPresets.map((preset) => (
+                  <col key={preset.id} className="w-32" />
+                ))}
+                <col className="w-24" />
+                <col className="w-40" />
+                <col className="w-56" />
+                <col className="w-24" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-border text-left">
                   <th className="w-8 px-1 py-2" aria-label="공정 순서 드래그" />
@@ -1028,8 +1019,6 @@ function FormulaDetailPage() {
                     BASE ×1
                   </th>
                   {batchPresets.map((preset) => {
-                    const d = draft?.batches[preset.id];
-                    const usingMould = Boolean(d ? d.mouldId : preset.mould_id);
                     const eff = effectiveBatchPresets.find((p) => p.id === preset.id) ?? {
                       ...preset,
                       mismatch: false,
@@ -1039,105 +1028,41 @@ function FormulaDetailPage() {
                         key={preset.id}
                         className="label-caps border-r border-dashed border-border px-2 py-2 text-xs text-muted-foreground"
                       >
-                        {editing ? (
-                          <div className="flex flex-col gap-1 normal-case">
-                            <input
-                              className="min-h-[36px] w-28 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
-                              placeholder="이름 (예: 8인치 시폰몰드)"
-                              value={d?.label ?? preset.label ?? ""}
-                              onChange={(e) => patchBatchDraft(preset.id, { label: e.target.value })}
-                            />
-                            {usingMould ? (
-                              <>
-                                <MouldSelect
-                                  className="min-h-[36px] w-28 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
-                                  value={d?.mouldId ?? preset.mould_id ?? ""}
-                                  onChange={(id) => patchBatchDraft(preset.id, { mouldId: id })}
-                                />
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    step="1"
-                                    min="0"
-                                    className="min-h-[36px] w-14 border border-input bg-background px-1 py-1 font-mono text-xs outline-none focus:border-foreground"
-                                    value={d?.mouldCount ?? String(preset.mould_count ?? 1)}
-                                    onChange={(e) =>
-                                      patchBatchDraft(preset.id, { mouldCount: e.target.value })
-                                    }
-                                  />
-                                  <span className="text-[10px]">개</span>
-                                </div>
-                                <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                                  = ×{fmtNumber(Number(eff.multiplier), 2)}
-                                  {eff.mismatch && (
-                                    <span className="ml-1" title="기준중량 미등록 — 개수를 그대로 배수로 사용">
-                                      ⚠
-                                    </span>
-                                  )}
-                                </p>
-                                <button
-                                  type="button"
-                                  className="label-caps min-h-[22px] w-full border border-dashed border-input px-1 py-0.5 text-[9px] hover:bg-secondary"
-                                  onClick={() => patchBatchDraft(preset.id, { mouldId: "" })}
-                                >
-                                  배수 직접입력으로
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <div className="flex items-center gap-1">
-                                  <span>×</span>
-                                  <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    step="0.1"
-                                    className="min-h-[36px] w-16 border border-input bg-background px-1 py-1 font-mono text-xs outline-none focus:border-foreground"
-                                    value={d?.multiplier ?? String(preset.multiplier)}
-                                    onChange={(e) =>
-                                      patchBatchDraft(preset.id, { multiplier: e.target.value })
-                                    }
-                                  />
-                                </div>
-                                {scalingMode === "MOULD" && (
-                                  <button
-                                    type="button"
-                                    className="label-caps min-h-[22px] w-full border border-dashed border-input px-1 py-0.5 text-[9px] hover:bg-secondary"
-                                    onClick={() =>
-                                      patchBatchDraft(preset.id, {
-                                        mouldId: version?.default_mould_id ?? moulds.data?.[0]?.id ?? "",
-                                      })
-                                    }
-                                  >
-                                    몰드 기준으로
-                                  </button>
-                                )}
-                              </>
-                            )}
+                        {/* 2026-09-30: 헤더에 몰드 드롭다운/직접입력 전환 버튼을 늘어놓던 걸 없애고
+                            간단한 표시 + EDIT 팝업으로 뺐다 — 몰드 기준 계산은 열을 만들 때(ADD
+                            BATCH)만 하고, 만든 뒤엔 이름/배수만 팝업에서 고친다. */}
+                        <div className="flex flex-col items-start gap-1 normal-case">
+                          <span className="text-xs">
+                            {preset.mould_id
+                              ? `${(moulds.data ?? []).find((m) => m.id === preset.mould_id)?.name ?? "몰드"} ×${fmtNumber(Number(preset.mould_count ?? 1), 0)}개`
+                              : `×${fmtNumber(Number(eff.multiplier), 2)}`}
+                            {preset.label ? ` · ${preset.label}` : ""}
+                          </span>
+                          <div className="flex gap-1">
                             <button
                               type="button"
-                              className="label-caps min-h-[32px] w-full border border-input px-1 py-1 text-[10px] hover:bg-secondary active:bg-secondary"
+                              className="label-caps border border-input px-1.5 py-0.5 text-[9px] hover:bg-secondary"
+                              onClick={() => {
+                                setEditingBatchId(preset.id);
+                                setEditBatchLabel(preset.label ?? "");
+                                setEditBatchMultiplier(fmtNumber(Number(eff.multiplier), 2));
+                              }}
+                            >
+                              EDIT
+                            </button>
+                            <button
+                              type="button"
+                              className="label-caps border border-input px-1.5 py-0.5 text-[9px] hover:bg-secondary"
+                              disabled={removeBatchPreset.isPending}
                               onClick={() => {
                                 if (removeBatchPreset.isPending) return;
                                 removeBatchPreset.mutate(preset.id);
                               }}
-                              disabled={removeBatchPreset.isPending}
                             >
-                              ✕ 열 삭제
+                              DELETE
                             </button>
                           </div>
-                        ) : preset.mould_id ? (
-                          <>
-                            {(moulds.data ?? []).find((m) => m.id === preset.mould_id)?.name ?? "몰드"} ×
-                            {fmtNumber(Number(preset.mould_count ?? 1), 0)}개
-                            {preset.label ? ` · ${preset.label}` : ""}
-                          </>
-                        ) : (
-                          <>
-                            ×{fmtNumber(Number(preset.multiplier), 2)}
-                            {preset.label ? ` · ${preset.label}` : ""}
-                          </>
-                        )}
+                        </div>
                       </th>
                     );
                   })}
@@ -1411,6 +1336,88 @@ function FormulaDetailPage() {
         </div>
       )}
 
+      {editingBatchId && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+          <div className="w-full max-w-md border border-border bg-background">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <span className="label-caps">EDIT BATCH</span>
+              <button
+                type="button"
+                className="label-caps px-2 py-2"
+                onClick={() => setEditingBatchId(null)}
+              >
+                CLOSE
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              <input
+                className={inputClass}
+                placeholder="이름 (예: 8인치 시폰몰드)"
+                value={editBatchLabel}
+                onChange={(e) => setEditBatchLabel(e.target.value)}
+              />
+              <div className="flex items-center gap-2">
+                <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">배수</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  className={`${inputClass} !w-24`}
+                  value={editBatchMultiplier}
+                  onChange={(e) => setEditBatchMultiplier(e.target.value)}
+                />
+              </div>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                배수를 바꾸면 이 열의 몰드 연결은 풀리고(직접입력으로 전환) 새 배수가 그대로
+                저장됩니다. 이름만 바꾸면 몰드 연결은 그대로 유지됩니다.
+              </p>
+              <div className="flex justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  className="label-caps px-2 py-2 text-destructive hover:underline"
+                  disabled={removeBatchPreset.isPending}
+                  onClick={() => {
+                    if (removeBatchPreset.isPending) return;
+                    removeBatchPreset.mutate(editingBatchId, {
+                      onSuccess: () => setEditingBatchId(null),
+                    });
+                  }}
+                >
+                  삭제
+                </button>
+                <div className="flex gap-2">
+                  <button type="button" className={buttonClass} onClick={() => setEditingBatchId(null)}>
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    className={primaryButtonClass}
+                    disabled={updateBatchPreset.isPending}
+                    onClick={() => {
+                      const preset = batchPresets.find((p) => p.id === editingBatchId);
+                      if (!preset) return;
+                      const label = editBatchLabel.trim() || null;
+                      const nextMultiplier = parseNumber(editBatchMultiplier);
+                      const eff = effectiveBatchPresets.find((p) => p.id === editingBatchId);
+                      const currentMultiplier = eff ? Number(eff.multiplier) : Number(preset.multiplier);
+                      const multiplierChanged = Math.abs(nextMultiplier - currentMultiplier) > 1e-9;
+                      updateBatchPreset.mutate({
+                        id: editingBatchId,
+                        label,
+                        multiplier: nextMultiplier || currentMultiplier,
+                        keepMould: Boolean(preset.mould_id) && !multiplierChanged,
+                      });
+                    }}
+                  >
+                    {updateBatchPreset.isPending ? "저장 중…" : "저장"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {creatingVersion && (
         <NewVersionModal
           fromLabel={version ? versionLabel(version.version_number) : "—"}
@@ -1533,7 +1540,7 @@ function UnifiedIngredientRow({
       </td>
       {/* INGREDIENT + 출처/기능 뱃지 — 여기서는 재료명을 눌러도 재료 마스터로 이동하지 않는다.
           (배합을 고치려는 클릭이 엉뚱하게 재료 상세 페이지로 튕겨나가던 문제 수정) */}
-      <td className="whitespace-nowrap px-2 py-2 text-sm">
+      <td className="break-words px-2 py-2 text-sm">
         <span>{ing ? ingredientDisplayName(ing) : "—"}</span>
         {isFunctional && (
           <span className="label-caps ml-2 border border-foreground px-1.5 py-0.5 text-[10px]">
@@ -1591,7 +1598,7 @@ function UnifiedIngredientRow({
           </div>
         )}
         {ing?.process_note && (
-          <p className="mt-1 max-w-48 font-mono text-[10px] uppercase text-muted-foreground">
+          <p className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">
             ⚠ {ing.process_note}
           </p>
         )}
@@ -1624,13 +1631,23 @@ function UnifiedIngredientRow({
               value={draft?.secondaryAmount ?? ""}
               onChange={(e) => onDraftChange({ secondaryAmount: e.target.value })}
             />
-            <input
-              type="text"
-              className="min-h-[36px] w-16 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
-              placeholder="개/tsp"
+            <select
+              className="min-h-[36px] w-20 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
               value={draft?.secondaryUnit ?? ""}
               onChange={(e) => onDraftChange({ secondaryUnit: e.target.value })}
-            />
+            >
+              <option value="">단위</option>
+              {/* 예전에 자유 텍스트로 저장된 값이 이 목록에 없으면(예: 커스텀 단위) 선택지에서
+                  사라지지 않도록 맨 위에 그대로 끼워 넣는다(2026-09-30, 텍스트 입력 → 드롭다운 전환). */}
+              {draft?.secondaryUnit && !SECONDARY_UNITS.includes(draft.secondaryUnit as (typeof SECONDARY_UNITS)[number]) && (
+                <option value={draft.secondaryUnit}>{draft.secondaryUnit}</option>
+              )}
+              {SECONDARY_UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
           </div>
         ) : (
           row.secondary_amount != null &&

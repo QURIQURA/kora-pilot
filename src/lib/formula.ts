@@ -47,6 +47,21 @@ export function pickEffectiveFormulaVersion<T extends { status: string; version_
 
 export const UNITS = ["g", "kg", "ml", "l", "ea", "%"] as const;
 
+/** INGREDIENTS 표의 "보조 계량" 단위(2026-09-30) — 그램(계산용)과 별개로 표시용으로만 같이 적어두는
+ * 계량 방법. 자유 텍스트였던 걸 드롭다운으로 바꾸면서, 제과에서 흔히 쓰는 단위를 미리 넣어둔다. */
+export const SECONDARY_UNITS = [
+  "개",
+  "tsp",
+  "tbsp",
+  "cup",
+  "oz",
+  "pinch",
+  "dash",
+  "방울",
+  "장",
+  "스틱",
+] as const;
+
 /** 숫자 포맷 — 불필요한 소수점 제거 */
 export function fmtNumber(value: number, digits = 1): string {
   if (!Number.isFinite(value)) return "—";
