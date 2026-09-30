@@ -153,7 +153,7 @@ export function WorkflowTemplateManager() {
   );
 }
 
-function TemplateTaskEditor({ templateId }: { templateId: string }) {
+export function TemplateTaskEditor({ templateId }: { templateId: string }) {
   const queryClient = useQueryClient();
   const tasks = useQuery(workflowTemplateTasksQuery(templateId));
   const predecessors = useQuery(workflowTemplateTaskPredecessorsQuery(templateId));

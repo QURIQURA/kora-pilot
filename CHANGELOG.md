@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-09-30 — PRODUCTION WORKFLOW 정리(3차) + WORKFLOW TEMPLATE를 COMPONENT 페이지에 표기 + 전체 입력칸/버튼 컴팩트화
+
+- PRODUCTION의 WORKFLOW에서 "TASK 순서" 상자(▲▼ 재정렬)를 없앴습니다 — 이제 TASK 목록의 각 줄에서
+  시작/종료 시각을 직접(달력+시간) 입력·수정할 수 있고, 값을 넣는 순간 그 TASK가 타임라인에 나타납니다.
+  아직 시작 전이라도 미리 시작시간을 정해둘 수 있고, 8시간처럼 긴 작업도 종료시간을 미리/나중에 고칠 수
+  있습니다. "실제"라는 단어도 없앴습니다(계획/실제 구분이 더 이상 없으므로).
+- WORKFLOW의 "+ ADD TASK" 칸과 각 TASK의 EDIT(이름/타입/재료/체크리스트 등 수정) 버튼을 없앴습니다 —
+  TASK는 COMPONENT에 등록된 공유 템플릿을 그대로 불러오거나 "템플릿 불러오기"로 추가하고, 시작/종료
+  시각만 위 방식으로 조정합니다.
+- "TASK TYPE 색상 설정"을 PRODUCTION 화면에서 없애고 COMPONENT 상세 페이지로 옮겼습니다 — 색상 데이터는
+  그대로 전체 공통이라, 어느 COMPONENT 페이지에서 바꿔도 모든 PRODUCTION 화면에 똑같이 반영됩니다.
+- COMPONENT 상세의 "DEFAULT WORKFLOW"에서 기본 템플릿을 고르면 이제 무조건 자동 적용됩니다(끄는
+  옵션 삭제). 또한 그 템플릿에 속한 TASK 목록(추가/순서변경/삭제)을 COMPONENT 페이지에서 바로
+  보고 수정할 수 있습니다 — 제작방법이 같은 다른 COMPONENT와 템플릿을 공유하므로, 여기서 고치면
+  그 템플릿을 쓰는 모든 곳에 반영됩니다.
+- 전체 화면의 입력칸/버튼 기본 크기를 줄였습니다(높이 44px→32px, 여백도 축소) — PRODUCTS 상세의
+  COMPONENT 실사용량 입력칸, PACKAGING/UTILITY/CONSUMABLE 수량 칸, ADD COMPONENT/ADD
+  INGREDIENT/REMOVE 버튼을 포함해 앱 전체가 더 컴팩트해집니다. PRODUCTION의 START/COMPLETE 등
+  손으로 누르는 핵심 버튼은 기존 크기를 유지합니다.
+
 ## 2026-09-30 — PRODUCTION 작업 세션 화면 정리 (2차)
 
 - NOTES 섹션을 화면 맨 아래로 옮겼습니다.

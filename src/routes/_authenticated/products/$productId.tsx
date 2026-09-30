@@ -1136,7 +1136,7 @@ function ComponentUsageEditor({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
-        className="min-h-[44px] w-full truncate border border-input bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-foreground sm:w-64"
+        className="min-h-[32px] w-full truncate border border-input bg-background px-2 py-1 font-body text-sm text-foreground outline-none focus:border-foreground sm:w-64"
         value={link.formula_version_id ?? ""}
         onChange={(e) => onSave({ formula_version_id: e.target.value || null })}
         title={selectedLabel}
