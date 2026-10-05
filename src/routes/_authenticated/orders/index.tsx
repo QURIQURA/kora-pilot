@@ -197,8 +197,10 @@ function OrdersTable({
 
 // 2026-10-06 사용자 요청: ORDERS LIST에서 바로 Status를 바꿀 수 있게 — 기존 색상 배지(StatusChip)를
 // <select>로 바꿔 한눈에 보이는 색상은 그대로 유지하면서 클릭 한 번으로 변경 가능하게 했다.
-// 행 전체가 Link라 클릭이 상세 페이지로 이동시키는데, select 조작은 stopPropagation으로 막아서
-// 상세 페이지를 열지 않고도 이 자리에서 바로 저장된다(색상은 orderStatusColor() 공통 로직 재사용).
+// 행 전체가 Link라 클릭이 상세 페이지로 이동시키는데, stopPropagation만으로는 TanStack Router의
+// Link가 가진 preventDefault()가 실행되지 못해(이벤트가 Link까지 안 올라감) 오히려 브라우저가
+// href를 그대로 따라가 상세로 이동해버리는 버그가 있었다 — onClick에서 preventDefault도 함께
+// 호출해 네비게이션 자체를 막는다(mousedown은 네이티브 드롭다운이 열리는 단계라 그대로 둔다).
 function StatusSelect({
   status,
   color,
@@ -213,7 +215,10 @@ function StatusSelect({
       className="label-caps inline-block cursor-pointer border-0 px-2 py-0.5 text-[11px] outline-none"
       style={{ backgroundColor: color, color: readableTextColor(color) }}
       value={status}
-      onClick={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       onMouseDown={(e) => e.stopPropagation()}
       onChange={(e) => {
         e.stopPropagation();
