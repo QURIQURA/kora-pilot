@@ -2,8 +2,16 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, ordersQuery, type OrderListRow } from "@/lib/queries";
+import {
+  currentUserId,
+  ordersQuery,
+  pilotSettingsQuery,
+  orderStatusLabel,
+  orderStatusColor,
+  type OrderListRow,
+} from "@/lib/queries";
 import { toLocalDateString } from "@/lib/datetime";
+import { readableTextColor } from "@/lib/pilot";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader, primaryButtonClass, buttonClass } from "@/components/pilot/ui";
 
@@ -19,6 +27,8 @@ export const Route = createFileRoute("/_authenticated/orders/")({
 
 function OrdersPage() {
   const orders = useQuery(ordersQuery());
+  const settings = useQuery(pilotSettingsQuery());
+  const statusColors = (settings.data?.order_status_colors as Record<string, string> | null) ?? null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"LIST" | "CALENDAR">("LIST");
@@ -93,7 +103,7 @@ function OrdersPage() {
           onAction={() => createOrder.mutate()}
         />
       ) : view === "LIST" ? (
-        <OrdersTable rows={rows} />
+        <OrdersTable rows={rows} statusColors={statusColors} />
       ) : (
         <OrdersCalendar rows={rows} />
       )}
@@ -101,11 +111,18 @@ function OrdersPage() {
   );
 }
 
-function OrdersTable({ rows }: { rows: OrderListRow[] }) {
+function OrdersTable({
+  rows,
+  statusColors,
+}: {
+  rows: OrderListRow[];
+  statusColors: Record<string, string> | null;
+}) {
   return (
     <div className="border border-border bg-card">
       {/* 2026-10-06 사용자 요청: 열 간격을 내용 길이에 맞춰 재배분 — ORDER는 짧으니 줄이고,
-          DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. gap도 늘려서 옆 열과 안 붙어 보이게. */}
+          DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. STATUS도 "FINAL TOUCH"처럼
+          긴 라벨이 생겨서 한 칸 늘림. gap도 늘려서 옆 열과 안 붙어 보이게. */}
       <div className="hidden items-center border-b border-border py-2 md:flex">
         <div className="grid flex-1 grid-cols-12 gap-x-4 gap-y-1 px-3">
           <span className="label-caps col-span-1 text-xs text-muted-foreground">ORDER</span>
@@ -113,8 +130,8 @@ function OrdersTable({ rows }: { rows: OrderListRow[] }) {
           <span className="label-caps col-span-2 text-xs text-muted-foreground">RECIPIENT</span>
           <span className="label-caps col-span-1 text-xs text-muted-foreground">OCCASION</span>
           <span className="label-caps col-span-2 text-xs text-muted-foreground">DATE</span>
-          <span className="label-caps col-span-3 text-xs text-muted-foreground">PRODUCT</span>
-          <span className="label-caps col-span-1 text-xs text-muted-foreground">STATUS</span>
+          <span className="label-caps col-span-2 text-xs text-muted-foreground">PRODUCT</span>
+          <span className="label-caps col-span-2 text-xs text-muted-foreground">STATUS</span>
         </div>
       </div>
       <ul>
@@ -134,7 +151,7 @@ function OrdersTable({ rows }: { rows: OrderListRow[] }) {
                   ? new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })
                   : o.event_date || "—"}
               </span>
-              <span className="col-span-3 text-sm text-muted-foreground">
+              <span className="col-span-2 text-sm text-muted-foreground">
                 {o.products?.name || (
                   // 2026-10-06 사용자 요청: 행 전체를 칠하면 미감이 안 좋다 — PRODUCT CATEGORY의
                   // 색상 배지(CategoryBadge)처럼 TBD 텍스트에만 작은 배지로 강조.
@@ -143,8 +160,8 @@ function OrdersTable({ rows }: { rows: OrderListRow[] }) {
                   </span>
                 )}
               </span>
-              <span className="col-span-1">
-                <StatusChip status={o.status} />
+              <span className="col-span-2">
+                <StatusChip status={o.status} color={orderStatusColor(statusColors, o.status)} />
               </span>
             </Link>
           </li>
@@ -154,15 +171,16 @@ function OrdersTable({ rows }: { rows: OrderListRow[] }) {
   );
 }
 
-function StatusChip({ status }: { status: string }) {
-  const solid = status === "COMPLETED";
+// 2026-10-06 사용자 요청: Status를 "한눈에 보이는 색상 배지"로 — 색상은 SETTINGS의
+// ORDER STATUS COLORS에서 사용자가 지정한 값(pilot_settings.order_status_colors)을 쓰고,
+// 지정 안 했으면 코드 기본 팔레트를 쓴다(orderStatusColor()가 그 우선순위를 처리).
+function StatusChip({ status, color }: { status: string; color: string }) {
   return (
     <span
-      className={`label-caps inline-block border px-2 py-0.5 text-[11px] ${
-        solid ? "border-foreground bg-foreground text-background" : "border-border text-foreground"
-      }`}
+      className="label-caps inline-block px-2 py-0.5 text-[11px]"
+      style={{ backgroundColor: color, color: readableTextColor(color) }}
     >
-      {status.replace("_", " ")}
+      {orderStatusLabel(status)}
     </span>
   );
 }

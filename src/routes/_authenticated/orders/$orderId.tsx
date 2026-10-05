@@ -6,11 +6,14 @@ import type { Json } from "@/integrations/supabase/types";
 import {
   orderQuery,
   productsQuery,
+  pilotSettingsQuery,
   ORDER_STATUSES,
   ORDER_OCCASIONS,
   ORDER_RECIPIENT_RELATIONSHIPS,
   ORDER_CAKE_SIZES,
   ORDER_PAYMENT_STATUSES,
+  orderStatusLabel,
+  orderStatusColor,
   type OrderListRow,
   type OrderStatus,
   type OrderOccasion,
@@ -91,6 +94,8 @@ function OrderDetailPage() {
   const queryClient = useQueryClient();
   const order = useQuery(orderQuery(orderId));
   const products = useQuery(productsQuery());
+  const pilotSettings = useQuery(pilotSettingsQuery());
+  const statusColors = (pilotSettings.data?.order_status_colors as Record<string, string> | null) ?? null;
 
   const [dmText, setDmText] = useState("");
   const [extracting, setExtracting] = useState(false);
@@ -113,7 +118,7 @@ function OrderDetailPage() {
   const [servings, setServings] = useState("");
   const [price, setPrice] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<OrderPaymentStatus | "">("");
-  const [status, setStatus] = useState<OrderStatus>("NEW");
+  const [status, setStatus] = useState<OrderStatus>("INTAKE");
   const [productId, setProductId] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -140,7 +145,7 @@ function OrderDetailPage() {
       servings: o.servings != null ? String(o.servings) : "",
       price: o.price != null ? String(o.price) : "",
       paymentStatus: o.payment_status ?? "",
-      status: (o.status as OrderStatus) ?? "NEW",
+      status: (o.status as OrderStatus) ?? "INTAKE",
       productId: o.product_id ?? "",
       notes: o.notes ?? "",
     });
@@ -164,7 +169,7 @@ function OrderDetailPage() {
     setServings(o.servings != null ? String(o.servings) : "");
     setPrice(o.price != null ? String(o.price) : "");
     setPaymentStatus(o.payment_status ?? "");
-    setStatus((o.status as OrderStatus) ?? "NEW");
+    setStatus((o.status as OrderStatus) ?? "INTAKE");
     setProductId(o.product_id ?? "");
     setNotes(o.notes ?? "");
   };
@@ -358,17 +363,26 @@ function OrderDetailPage() {
             CREATED {formatDateTime(order.data.created_at)}
           </p>
         </div>
-        <select
-          className={selectClass + " w-auto"}
-          value={status}
-          onChange={(e) => setStatus(e.target.value as OrderStatus)}
-        >
-          {ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s.replace("_", " ")}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          {/* 2026-10-06 사용자 요청: Status 색상은 SETTINGS의 ORDER STATUS COLORS 설정을
+              그대로 따라가도록 — 드롭다운 옆에 현재 선택된 단계의 색을 점으로 보여준다. */}
+          <span
+            className="h-3 w-3 shrink-0 rounded-full"
+            style={{ backgroundColor: orderStatusColor(statusColors, status) }}
+            aria-hidden
+          />
+          <select
+            className={selectClass + " w-auto"}
+            value={status}
+            onChange={(e) => setStatus(e.target.value as OrderStatus)}
+          >
+            {ORDER_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {orderStatusLabel(s)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <SectionCard title="INSTAGRAM DM">

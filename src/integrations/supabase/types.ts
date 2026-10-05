@@ -1218,6 +1218,7 @@ export type Database = {
           ics_feed_token: string | null
           monthly_overhead: number
           monthly_unit_count: number
+          order_status_colors: Json
           product_page_section_order: string[] | null
           updated_at: string
           user_id: string
@@ -1226,6 +1227,7 @@ export type Database = {
           ics_feed_token?: string | null
           monthly_overhead?: number
           monthly_unit_count?: number
+          order_status_colors?: Json
           product_page_section_order?: string[] | null
           updated_at?: string
           user_id?: string
@@ -1234,6 +1236,7 @@ export type Database = {
           ics_feed_token?: string | null
           monthly_overhead?: number
           monthly_unit_count?: number
+          order_status_colors?: Json
           product_page_section_order?: string[] | null
           updated_at?: string
           user_id?: string

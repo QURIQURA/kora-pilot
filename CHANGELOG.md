@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-10-06 — CUSTOMER DETAIL 인스타그램 링크 바로가기
+
+CUSTOMER DETAIL의 INSTAGRAM 입력칸에 값이 있으면 옆에 ↗ 버튼이 생겨 새 탭에서 바로 프로필을 열
+수 있습니다. @handle, handle, 전체 URL 중 어떤 형식으로 입력해도 자동으로 인식합니다.
+
+---
+
+## 2026-10-06 — ORDERS Status 시스템을 CS 진행 단계별로 재정의
+
+기존 NEW/CONFIRMED/IN_PROGRESS/COMPLETED 4단계를 실제 제작 흐름에 맞춘 7단계로 바꿨습니다.
+기존 주문의 상태값은 삭제 없이 새 단계로 자동 치환되었습니다(NEW→INTAKE, IN_PROGRESS→PRODUCTION).
+
+- 새 7단계: INTAKE → CONFIRMED → DESIGN → PRODUCTION → FINAL TOUCH → DELIVERY → COMPLETED.
+- ORDER DETAIL의 Status가 이 7단계 Dropdown으로 바뀌고, 옆에 현재 색상이 점으로 표시됩니다.
+- ORDERS LIST의 각 주문에 Status가 색상 배지로 표시되어, 하나씩 열어보지 않아도 어떤 주문이
+  어느 단계인지 한눈에 보입니다.
+- SETTINGS → ORDERS에 "ORDER STATUS COLORS" 섹션을 추가했습니다 — 각 단계의 색상을 직접
+  지정할 수 있고, 바꾼 색은 ORDERS LIST/ORDER DETAIL 전체에 동일하게 즉시 반영되며 새로고침해도
+  유지됩니다. 색상을 따로 지정하지 않은 단계는 정돈된 기본 색상을 사용합니다.
+
+---
+
 ## 2026-10-06 — ORDERS LIST 열 간격 재조정 (가독성)
 
 OCCASION/DATE/PRODUCT 열이 옆 열과 너무 붙어 보여서 텍스트가 잘려 보인다는 피드백 반영.

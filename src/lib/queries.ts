@@ -1255,8 +1255,45 @@ export const pilotSettingsQuery = () =>
 export type Customer = import("@/integrations/supabase/types").Tables<"customers">;
 export type Order = import("@/integrations/supabase/types").Tables<"orders">;
 
-export const ORDER_STATUSES = ["NEW", "CONFIRMED", "IN_PROGRESS", "COMPLETED"] as const;
+// 2026-10-06 사용자 요청: "NEW"만 있던 단일 상태를 CS 진행 단계별 7단계로 재정의.
+// INTAKE(접수) → CONFIRMED(확정) → DESIGN(디자인 미팅) → PRODUCTION(제작) →
+// FINAL_TOUCH(최종 QC/포장) → DELIVERY(픽업/배달) → COMPLETED(완료).
+// DB 값은 공백 없이 FINAL_TOUCH로 저장하고, 화면 표시는 orderStatusLabel()로 공백 변환한다.
+export const ORDER_STATUSES = [
+  "INTAKE",
+  "CONFIRMED",
+  "DESIGN",
+  "PRODUCTION",
+  "FINAL_TOUCH",
+  "DELIVERY",
+  "COMPLETED",
+] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export function orderStatusLabel(status: string): string {
+  return status.replace(/_/g, " ");
+}
+
+// Status 색상 기본값(= 사용자가 SETTINGS에서 바꾸지 않았을 때 쓰는 팔레트) — SHCS 톤에 맞춰
+// 채도를 낮춘 색으로 구성. 실제 적용 색상은 orderStatusColor()로 pilot_settings.order_status_colors
+// (사용자 커스텀값)를 우선하고, 없으면 이 기본값을 쓴다 — 색상은 코드에 하드코딩하지 않고
+// 항상 이 중앙 설정값을 거쳐 조회한다(2026-10-06 사용자 요청: Status/Color 분리).
+export const DEFAULT_ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
+  INTAKE: "#9ca3af",
+  CONFIRMED: "#60a5fa",
+  DESIGN: "#a78bfa",
+  PRODUCTION: "#fb923c",
+  FINAL_TOUCH: "#fbbf24",
+  DELIVERY: "#34d399",
+  COMPLETED: "#374151",
+};
+
+export function orderStatusColor(
+  colors: Record<string, string> | null | undefined,
+  status: string,
+): string {
+  return (colors && colors[status]) || DEFAULT_ORDER_STATUS_COLORS[status as OrderStatus] || "#9ca3af";
+}
 
 // ── ORDERS 필드 정형화(2026-10-06, 사용자 요청: 통계/분석 가능한 구조) ──────────
 // Occasion = 왜 주문하는가, Recipient Relationship = 누구에게 주는가 — 반드시 분리 관리.

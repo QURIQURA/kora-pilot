@@ -13,6 +13,7 @@ import { AromaTagManager } from "@/components/pilot/AromaTagManager";
 import { CostItemManager } from "@/components/pilot/CostItemManager";
 import { MonthlyOverheadSettings } from "@/components/pilot/MonthlyOverheadSettings";
 import { OrdersCalendarFeedSection } from "@/components/pilot/OrdersCalendarFeedSection";
+import { OrderStatusColorsSettings } from "@/components/pilot/OrderStatusColorsSettings";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -92,6 +93,9 @@ function SettingsPage() {
       <SettingsGroup label="ORDERS">
         <SettingsSection title="GOOGLE 캘린더 구독 (.ics)">
           <OrdersCalendarFeedSection />
+        </SettingsSection>
+        <SettingsSection title="ORDER STATUS COLORS" defaultOpen>
+          <OrderStatusColorsSettings />
         </SettingsSection>
       </SettingsGroup>
 
