@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-10-06 — ORDERS LIST에서 Status 바로 수정
+
+ORDERS LIST의 STATUS 색상 배지를 클릭하면 그 자리에서 바로 Dropdown으로 단계를 바꿀 수 있습니다.
+Order Detail을 열지 않아도 되고, 선택하는 즉시 저장되며 행 클릭(상세 이동)과는 겹치지 않습니다.
+
+---
+
 ## 2026-10-06 — CUSTOMER DETAIL 인스타그램 링크 바로가기
 
 CUSTOMER DETAIL의 INSTAGRAM 입력칸에 값이 있으면 옆에 ↗ 버튼이 생겨 새 탭에서 바로 프로필을 열

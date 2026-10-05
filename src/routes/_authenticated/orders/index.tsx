@@ -8,7 +8,9 @@ import {
   pilotSettingsQuery,
   orderStatusLabel,
   orderStatusColor,
+  ORDER_STATUSES,
   type OrderListRow,
+  type OrderStatus,
 } from "@/lib/queries";
 import { toLocalDateString } from "@/lib/datetime";
 import { readableTextColor } from "@/lib/pilot";
@@ -50,6 +52,18 @@ function OrdersPage() {
     onSuccess: async (id) => {
       await queryClient.invalidateQueries({ queryKey: ["orders"] });
       void navigate({ to: "/orders/$orderId", params: { orderId: id } });
+    },
+  });
+
+  // 2026-10-06 사용자 요청: ORDERS LIST에서 Order Detail을 열지 않고도 Status를 바로 바꿀 수
+  // 있게 — 행의 STATUS 배지 자체를 Dropdown으로 만들고, 여기서 바로 업데이트한다.
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: OrderStatus }) => {
+      const { error } = await supabase.from("orders").update({ status }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
   });
 
@@ -103,7 +117,11 @@ function OrdersPage() {
           onAction={() => createOrder.mutate()}
         />
       ) : view === "LIST" ? (
-        <OrdersTable rows={rows} statusColors={statusColors} />
+        <OrdersTable
+          rows={rows}
+          statusColors={statusColors}
+          onStatusChange={(id, status) => updateStatus.mutate({ id, status })}
+        />
       ) : (
         <OrdersCalendar rows={rows} />
       )}
@@ -114,9 +132,11 @@ function OrdersPage() {
 function OrdersTable({
   rows,
   statusColors,
+  onStatusChange,
 }: {
   rows: OrderListRow[];
   statusColors: Record<string, string> | null;
+  onStatusChange: (id: string, status: OrderStatus) => void;
 }) {
   return (
     <div className="border border-border bg-card">
@@ -161,7 +181,11 @@ function OrdersTable({
                 )}
               </span>
               <span className="col-span-2">
-                <StatusChip status={o.status} color={orderStatusColor(statusColors, o.status)} />
+                <StatusSelect
+                  status={o.status}
+                  color={orderStatusColor(statusColors, o.status)}
+                  onChange={(status) => onStatusChange(o.id, status)}
+                />
               </span>
             </Link>
           </li>
@@ -171,17 +195,37 @@ function OrdersTable({
   );
 }
 
-// 2026-10-06 사용자 요청: Status를 "한눈에 보이는 색상 배지"로 — 색상은 SETTINGS의
-// ORDER STATUS COLORS에서 사용자가 지정한 값(pilot_settings.order_status_colors)을 쓰고,
-// 지정 안 했으면 코드 기본 팔레트를 쓴다(orderStatusColor()가 그 우선순위를 처리).
-function StatusChip({ status, color }: { status: string; color: string }) {
+// 2026-10-06 사용자 요청: ORDERS LIST에서 바로 Status를 바꿀 수 있게 — 기존 색상 배지(StatusChip)를
+// <select>로 바꿔 한눈에 보이는 색상은 그대로 유지하면서 클릭 한 번으로 변경 가능하게 했다.
+// 행 전체가 Link라 클릭이 상세 페이지로 이동시키는데, select 조작은 stopPropagation으로 막아서
+// 상세 페이지를 열지 않고도 이 자리에서 바로 저장된다(색상은 orderStatusColor() 공통 로직 재사용).
+function StatusSelect({
+  status,
+  color,
+  onChange,
+}: {
+  status: string;
+  color: string;
+  onChange: (status: OrderStatus) => void;
+}) {
   return (
-    <span
-      className="label-caps inline-block px-2 py-0.5 text-[11px]"
+    <select
+      className="label-caps inline-block cursor-pointer border-0 px-2 py-0.5 text-[11px] outline-none"
       style={{ backgroundColor: color, color: readableTextColor(color) }}
+      value={status}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        e.stopPropagation();
+        onChange(e.target.value as OrderStatus);
+      }}
     >
-      {orderStatusLabel(status)}
-    </span>
+      {ORDER_STATUSES.map((s) => (
+        <option key={s} value={s}>
+          {orderStatusLabel(s)}
+        </option>
+      ))}
+    </select>
   );
 }
 
