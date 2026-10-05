@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-10-06 — ORDERS LIST VIEW: RECIPIENT 표시 + PRODUCT 미연결 강조 + 날짜 역순
+
+- LIST VIEW에 RECIPIENT(받는 사람) 열을 추가했습니다.
+- PRODUCT가 연결 안 된 주문(= "TBD")은 행 전체가 빨간 배경 + 흰 글자로 강조되어, 놓치지 않고
+  바로 눈에 들어옵니다.
+- 정렬을 PICK UP/DELIVERY 날짜 역순(최신 날짜가 위)으로 바꿨습니다 — 날짜가 없는 주문은
+  그대로 생성일 역순으로 맨 아래 쪽에 유지됩니다.
+
+---
+
 ## 2026-10-06 — ORDERS CALENDAR VIEW 시작요일을 월요일로
 
 ORDERS의 CALENDAR VIEW가 일요일(SUN)로 시작하던 걸 월요일(MON) 시작으로 바꿨습니다 — 요일

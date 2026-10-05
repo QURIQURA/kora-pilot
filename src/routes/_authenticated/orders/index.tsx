@@ -43,14 +43,15 @@ function OrdersPage() {
     },
   });
 
-  // Upcoming 우선 — pickup_at 있으면 그걸, 없으면 event_date, 둘 다 없으면 맨 뒤로.
+  // 2026-10-06 사용자 요청: PICK UP/DELIVERY 날짜 역순(최신 날짜가 위) — pickup_at 있으면
+  // 그걸, 없으면 event_date, 둘 다 없으면 맨 뒤로(날짜 없는 건 역순 기준이 없으므로 그대로 둠).
   const rows = useMemo(() => {
     const list = [...(orders.data ?? [])];
     const keyOf = (o: OrderListRow) => o.pickup_at ?? (o.event_date ? `${o.event_date}T00:00:00` : null);
     list.sort((a, b) => {
       const ka = keyOf(a);
       const kb = keyOf(b);
-      if (ka && kb) return ka.localeCompare(kb);
+      if (ka && kb) return kb.localeCompare(ka);
       if (ka) return -1;
       if (kb) return 1;
       return b.created_at.localeCompare(a.created_at);
@@ -107,51 +108,61 @@ function OrdersTable({ rows }: { rows: OrderListRow[] }) {
         <div className="grid flex-1 grid-cols-12 gap-2 px-3">
           <span className="label-caps col-span-2 text-xs text-muted-foreground">ORDER</span>
           <span className="label-caps col-span-2 text-xs text-muted-foreground">CUSTOMER</span>
-          <span className="label-caps col-span-2 text-xs text-muted-foreground">OCCASION</span>
+          <span className="label-caps col-span-2 text-xs text-muted-foreground">RECIPIENT</span>
+          <span className="label-caps col-span-1 text-xs text-muted-foreground">OCCASION</span>
           <span className="label-caps col-span-2 text-xs text-muted-foreground">DATE</span>
           <span className="label-caps col-span-2 text-xs text-muted-foreground">PRODUCT</span>
-          <span className="label-caps col-span-2 text-xs text-muted-foreground">STATUS</span>
+          <span className="label-caps col-span-1 text-xs text-muted-foreground">STATUS</span>
         </div>
       </div>
       <ul>
-        {rows.map((o) => (
-          <li key={o.id} className="border-b border-border last:border-b-0">
-            <Link
-              to="/orders/$orderId"
-              params={{ orderId: o.id }}
-              className="grid grid-cols-1 gap-1 px-3 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
-            >
-              <span className="col-span-2 font-mono text-sm">{o.order_number}</span>
-              <span className="col-span-2 text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>
-              <span className="col-span-2 text-sm text-muted-foreground">{o.occasion || "—"}</span>
-              <span className="col-span-2 font-mono text-xs text-muted-foreground">
-                {o.pickup_at
-                  ? new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })
-                  : o.event_date || "—"}
-              </span>
-              <span className="col-span-2 text-sm text-muted-foreground">{o.products?.name || "TBD"}</span>
-              <span className="col-span-2">
-                <StatusChip status={o.status} />
-              </span>
-            </Link>
-          </li>
-        ))}
+        {rows.map((o) => {
+          // 2026-10-06 사용자 요청: PRODUCT가 연결 안 된 주문은 놓치기 쉬우니 빨간 배경+흰 글자로 강조.
+          const noProduct = !o.products;
+          return (
+            <li key={o.id} className="border-b border-border last:border-b-0">
+              <Link
+                to="/orders/$orderId"
+                params={{ orderId: o.id }}
+                className={`grid grid-cols-1 gap-1 px-3 py-3 md:grid-cols-12 md:items-center md:gap-2 ${
+                  noProduct ? "bg-destructive text-destructive-foreground hover:opacity-90" : "hover:bg-secondary"
+                }`}
+              >
+                <span className="col-span-2 font-mono text-sm">{o.order_number}</span>
+                <span className="col-span-2 text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>
+                <span className="col-span-2 text-sm">{o.recipient || "—"}</span>
+                <span className={`col-span-1 text-sm ${noProduct ? "" : "text-muted-foreground"}`}>
+                  {o.occasion || "—"}
+                </span>
+                <span className={`col-span-2 font-mono text-xs ${noProduct ? "" : "text-muted-foreground"}`}>
+                  {o.pickup_at
+                    ? new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })
+                    : o.event_date || "—"}
+                </span>
+                <span className={`col-span-2 text-sm ${noProduct ? "font-bold" : "text-muted-foreground"}`}>
+                  {o.products?.name || "TBD"}
+                </span>
+                <span className="col-span-1">
+                  <StatusChip status={o.status} inverted={noProduct} />
+                </span>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
 }
 
-function StatusChip({ status }: { status: string }) {
+function StatusChip({ status, inverted = false }: { status: string; inverted?: boolean }) {
   const solid = status === "COMPLETED";
-  return (
-    <span
-      className={`label-caps inline-block border px-2 py-0.5 text-[11px] ${
+  // inverted: PRODUCT 미연결 강조 행(빨간 배경) 위에 얹힐 때 — 배경에 묻히지 않게 흰 테두리/글자로.
+  const className = inverted
+    ? "label-caps inline-block border border-destructive-foreground px-2 py-0.5 text-[11px] text-destructive-foreground"
+    : `label-caps inline-block border px-2 py-0.5 text-[11px] ${
         solid ? "border-foreground bg-foreground text-background" : "border-border text-foreground"
-      }`}
-    >
-      {status.replace("_", " ")}
-    </span>
-  );
+      }`;
+  return <span className={className}>{status.replace("_", " ")}</span>;
 }
 
 /** 간단한 월간 캘린더 — pickup_at 없으면 event_date 기준으로 날짜 칸에 주문을 배치한다. */
