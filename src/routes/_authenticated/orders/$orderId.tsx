@@ -40,7 +40,6 @@ interface ExtractedOrderInfo {
   instagram_handle: string | null;
   phone: string | null;
   email: string | null;
-  requester: string | null;
   recipient: string | null;
   occasion: string | null;
   event_date: string | null;
@@ -56,7 +55,6 @@ const FIELD_LABELS: Record<keyof ExtractedOrderInfo, string> = {
   instagram_handle: "인스타그램",
   phone: "전화번호",
   email: "이메일",
-  requester: "요청자",
   recipient: "받는 사람",
   occasion: "행사",
   event_date: "행사 날짜",
@@ -100,7 +98,6 @@ function OrderDetailPage() {
   const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set());
 
   const [customerId, setCustomerId] = useState("");
-  const [requester, setRequester] = useState("");
   const [recipient, setRecipient] = useState("");
   const [recipientRelationship, setRecipientRelationship] = useState<OrderRecipientRelationship | "">("");
   const [recipientRelationshipOtherNote, setRecipientRelationshipOtherNote] = useState("");
@@ -124,7 +121,6 @@ function OrderDetailPage() {
     const o = order.data;
     setDmText(o.raw_dm_text ?? "");
     setCustomerId(o.customer_id ?? "");
-    setRequester(o.requester ?? "");
     setRecipient(o.recipient ?? "");
     setRecipientRelationship(o.recipient_relationship ?? "");
     setRecipientRelationshipOtherNote(o.recipient_relationship_other_note ?? "");
@@ -169,9 +165,6 @@ function OrderDetailPage() {
     const v = extracted[key];
     if (v == null) return;
     switch (key) {
-      case "requester":
-        setRequester(v as string);
-        break;
       case "recipient":
         setRecipient(v as string);
         break;
@@ -233,7 +226,6 @@ function OrderDetailPage() {
           raw_dm_text: dmText.trim() || null,
           extracted_json: extracted ? (extracted as unknown as Json) : order.data?.extracted_json ?? null,
           customer_id: customerId || null,
-          requester: requester.trim() || null,
           recipient: recipient.trim() || null,
           recipient_relationship: recipientRelationship || null,
           recipient_relationship_other_note:
@@ -382,7 +374,7 @@ function OrderDetailPage() {
 
       <SectionCard title="주문 정보">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="CUSTOMER">
+          <Field label="CUSTOMER (= 요청자/구매자)">
             <CustomerSelect
               value={customerId}
               onChange={setCustomerId}
@@ -398,9 +390,6 @@ function OrderDetailPage() {
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="REQUESTER (요청자)">
-            <input className={inputClass} value={requester} onChange={(e) => setRequester(e.target.value)} />
           </Field>
           <Field label="RECIPIENT (받는 사람)">
             <input className={inputClass} value={recipient} onChange={(e) => setRecipient(e.target.value)} />

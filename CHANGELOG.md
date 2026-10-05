@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-10-06 — ORDERS REQUESTER를 CUSTOMER로 통합
+
+"구매자가 곧 요청자"라는 이유로, 자유 텍스트였던 REQUESTER(요청자) 필드를 별도로 두지 않고
+CUSTOMER(구조화된 고객 연결)로 통합했습니다. 대리 주문처럼 "고객 본인과 요청자가 다른 경우"를
+대비해 따로 뒀던 필드였는데, 더 이상 그 구분을 쓰지 않습니다.
+
+- 주문 상세 화면에서 REQUESTER 입력칸이 사라지고, CUSTOMER(= 요청자/구매자) 하나로 합쳐졌습니다.
+- 기존 requester 값은 삭제하지 않고 `requester_legacy` 컬럼으로 이름만 바꿔 보존했습니다(주문
+  목록에서 CUSTOMER 연결이 없는 옛 주문은 여전히 이 값을 참고 표시로 보여줍니다).
+- DM에서 AI로 추출하는 항목에서도 "요청자"가 빠지고, 고객 이름(CUSTOMER NAME) 하나로 뽑습니다
+  (Edge Function `extract-order-info` 수정·재배포).
+
+---
+
 ## 2026-10-06 — SETTINGS 그룹 재정리 (앱 메뉴 구조 기준)
 
 SETTINGS 항목들이 중구난방으로 나열돼 있던 걸, 사이드바 메뉴(ORDERS/PRODUCTS/COMPONENTS/

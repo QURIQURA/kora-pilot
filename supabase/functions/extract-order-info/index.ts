@@ -6,6 +6,8 @@
 //
 // 규칙(사용자 명시 요구사항, 2026-10-05): 텍스트에 없는 정보는 절대 추측하지 않는다 —
 // 확실하지 않으면 null. 이 함수는 추출만 하고 저장/확정은 하지 않는다.
+// 2026-10-06: requester(대리 주문 대비 별도 필드)는 제거 — "구매자가 곧 요청자"로 통합,
+// customer_name 하나로 받는다.
 //
 // 필요한 Supabase Edge Function secret: ANTHROPIC_API_KEY (voice-log-event와 동일한 키 재사용)
 
@@ -21,7 +23,6 @@ interface ExtractedOrderInfo {
   instagram_handle: string | null;
   phone: string | null;
   email: string | null;
-  requester: string | null;
   recipient: string | null;
   occasion: string | null;
   event_date: string | null;
@@ -38,7 +39,6 @@ function emptyResult(): ExtractedOrderInfo {
     instagram_handle: null,
     phone: null,
     email: null,
-    requester: null,
     recipient: null,
     occasion: null,
     event_date: null,
@@ -110,7 +110,6 @@ async function extractOrderInfo(text: string, anthropicKey: string): Promise<Ext
         instagram_handle: { type: ["string", "null"], description: "인스타그램 아이디/핸들. 없으면 null." },
         phone: { type: ["string", "null"], description: "전화번호. 없으면 null." },
         email: { type: ["string", "null"], description: "이메일. 없으면 null." },
-        requester: { type: ["string", "null"], description: "주문을 요청하는 사람(고객 본인과 다를 수 있음, 예: 대리 주문). 명확하지 않으면 null." },
         recipient: { type: ["string", "null"], description: "케익을 받을 대상(예: 남편, 딸, 친구). 없으면 null." },
         occasion: { type: ["string", "null"], description: "기념일/행사 종류(예: 생일, 기념일). 없으면 null." },
         event_date: { type: ["string", "null"], description: "행사 날짜, ISO 형식 YYYY-MM-DD로. 연도가 안 나와 있으면 null(추측하지 말 것)." },
@@ -125,7 +124,6 @@ async function extractOrderInfo(text: string, anthropicKey: string): Promise<Ext
         "instagram_handle",
         "phone",
         "email",
-        "requester",
         "recipient",
         "occasion",
         "event_date",

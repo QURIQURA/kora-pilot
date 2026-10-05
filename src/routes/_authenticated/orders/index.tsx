@@ -122,7 +122,7 @@ function OrdersTable({ rows }: { rows: OrderListRow[] }) {
               className="grid grid-cols-1 gap-1 px-3 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
             >
               <span className="col-span-2 font-mono text-sm">{o.order_number}</span>
-              <span className="col-span-2 text-sm">{o.customers?.name || o.requester || "—"}</span>
+              <span className="col-span-2 text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>
               <span className="col-span-2 text-sm text-muted-foreground">{o.occasion || "—"}</span>
               <span className="col-span-2 font-mono text-xs text-muted-foreground">
                 {o.pickup_at

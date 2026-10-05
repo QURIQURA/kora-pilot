@@ -1111,7 +1111,7 @@ export type Database = {
             | Database["public"]["Enums"]["order_recipient_relationship"]
             | null
           recipient_relationship_other_note: string | null
-          requester: string | null
+          requester_legacy: string | null
           servings: number | null
           status: string
           updated_at: string
@@ -1149,7 +1149,7 @@ export type Database = {
             | Database["public"]["Enums"]["order_recipient_relationship"]
             | null
           recipient_relationship_other_note?: string | null
-          requester?: string | null
+          requester_legacy?: string | null
           servings?: number | null
           status?: string
           updated_at?: string
@@ -1187,7 +1187,7 @@ export type Database = {
             | Database["public"]["Enums"]["order_recipient_relationship"]
             | null
           recipient_relationship_other_note?: string | null
-          requester?: string | null
+          requester_legacy?: string | null
           servings?: number | null
           status?: string
           updated_at?: string
