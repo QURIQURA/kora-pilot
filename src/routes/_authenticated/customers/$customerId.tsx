@@ -26,14 +26,34 @@ function CustomerDetailPage() {
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
 
+  // 수정사항 저장 여부를 시각적으로 보여주기 위한 "저장된 상태" 스냅샷(2026-10-06, 사용자
+  // 요청 — FORMULA 페이지의 isDirty 패턴과 동일) — SAVE 누르면 다시 수정 전까지 비활성화.
+  const [savedSnapshot, setSavedSnapshot] = useState("");
+
+  const hydrateFromCustomer = (c: { name: string | null; instagram_handle: string | null; phone: string | null; email: string | null; notes: string | null }) => {
+    setName(c.name ?? "");
+    setInstagramHandle(c.instagram_handle ?? "");
+    setPhone(c.phone ?? "");
+    setEmail(c.email ?? "");
+    setNotes(c.notes ?? "");
+  };
+
   useEffect(() => {
     if (!customer.data) return;
-    setName(customer.data.name ?? "");
-    setInstagramHandle(customer.data.instagram_handle ?? "");
-    setPhone(customer.data.phone ?? "");
-    setEmail(customer.data.email ?? "");
-    setNotes(customer.data.notes ?? "");
+    hydrateFromCustomer(customer.data);
+    setSavedSnapshot(
+      JSON.stringify({
+        name: customer.data.name ?? "",
+        instagramHandle: customer.data.instagram_handle ?? "",
+        phone: customer.data.phone ?? "",
+        email: customer.data.email ?? "",
+        notes: customer.data.notes ?? "",
+      }),
+    );
   }, [customer.data]);
+
+  const currentSnapshot = JSON.stringify({ name, instagramHandle, phone, email, notes });
+  const isDirty = Boolean(customer.data) && currentSnapshot !== savedSnapshot;
 
   const save = useMutation({
     mutationFn: async () => {
@@ -54,6 +74,11 @@ function CustomerDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ["customers", customerId] });
     },
   });
+
+  const handleSave = () => {
+    const snapshotAtSave = currentSnapshot;
+    save.mutate(undefined, { onSuccess: () => setSavedSnapshot(snapshotAtSave) });
+  };
 
   const remove = useMutation({
     mutationFn: async () => {
@@ -106,10 +131,27 @@ function CustomerDetailPage() {
         {save.isError && (
           <p className="mt-2 font-mono text-xs uppercase text-destructive">{(save.error as Error).message}</p>
         )}
-        <div className="mt-3 flex gap-2">
-          <button type="button" className={primaryButtonClass} disabled={save.isPending} onClick={() => save.mutate()}>
-            SAVE
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={primaryButtonClass}
+            disabled={!isDirty || save.isPending}
+            onClick={handleSave}
+          >
+            {save.isPending ? "SAVING…" : "SAVE"}
           </button>
+          {isDirty && (
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => customer.data && hydrateFromCustomer(customer.data)}
+            >
+              되돌리기
+            </button>
+          )}
+          <span className="label-caps text-[10px] text-muted-foreground">
+            {save.isPending ? "저장 중…" : isDirty ? "변경 사항이 있습니다 — 저장하려면 SAVE" : "✓ SAVED"}
+          </span>
           <button
             type="button"
             className={buttonClass}

@@ -11,6 +11,7 @@ import {
   ORDER_RECIPIENT_RELATIONSHIPS,
   ORDER_CAKE_SIZES,
   ORDER_PAYMENT_STATUSES,
+  type OrderListRow,
   type OrderStatus,
   type OrderOccasion,
   type OrderRecipientRelationship,
@@ -116,9 +117,37 @@ function OrderDetailPage() {
   const [productId, setProductId] = useState("");
   const [notes, setNotes] = useState("");
 
-  useEffect(() => {
-    if (!order.data) return;
-    const o = order.data;
+  // 수정사항 저장 여부를 시각적으로 보여주기 위한 "저장된 상태" 스냅샷(2026-10-06, 사용자
+  // 요청 — SAVE 누르면 다시 수정하기 전까지 버튼이 비활성화되고 "✓ SAVED"로 보이게 함.
+  // FORMULA 페이지(formulas/$formulaId.tsx)의 isDirty 패턴과 동일한 방식).
+  // buildRowSnapshot: order.data(서버에 저장된 행) 기준으로 직렬화 — "마지막으로 저장된 상태".
+  const buildRowSnapshot = (o: OrderListRow, extractedJsonForSnapshot: Json | null) =>
+    JSON.stringify({
+      dmText: o.raw_dm_text ?? "",
+      extractedJson: extractedJsonForSnapshot,
+      customerId: o.customer_id ?? "",
+      recipient: o.recipient ?? "",
+      recipientRelationship: o.recipient_relationship ?? "",
+      recipientRelationshipOtherNote: o.recipient_relationship_other_note ?? "",
+      occasion: o.occasion ?? "",
+      occasionOtherNote: o.occasion_other_note ?? "",
+      eventDate: o.event_date ?? "",
+      pickupAt: isoToDatetimeLocal(o.pickup_at),
+      cakeSize: o.cake_size ?? "",
+      customSize: o.custom_size ?? "",
+      customSizeCm: o.custom_size_cm != null ? String(o.custom_size_cm) : "",
+      quantity: o.quantity != null ? String(o.quantity) : "",
+      servings: o.servings != null ? String(o.servings) : "",
+      price: o.price != null ? String(o.price) : "",
+      paymentStatus: o.payment_status ?? "",
+      status: (o.status as OrderStatus) ?? "NEW",
+      productId: o.product_id ?? "",
+      notes: o.notes ?? "",
+    });
+
+  const [savedSnapshot, setSavedSnapshot] = useState("");
+
+  const hydrateFromOrder = (o: OrderListRow) => {
     setDmText(o.raw_dm_text ?? "");
     setCustomerId(o.customer_id ?? "");
     setRecipient(o.recipient ?? "");
@@ -138,7 +167,39 @@ function OrderDetailPage() {
     setStatus((o.status as OrderStatus) ?? "NEW");
     setProductId(o.product_id ?? "");
     setNotes(o.notes ?? "");
+  };
+
+  useEffect(() => {
+    if (!order.data) return;
+    hydrateFromOrder(order.data);
+    setSavedSnapshot(buildRowSnapshot(order.data, order.data.extracted_json ?? null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.data]);
+
+  // currentSnapshot: 지금 화면(로컬 state) 기준 — savedSnapshot과 다르면 "변경사항 있음".
+  const currentSnapshot = JSON.stringify({
+    dmText,
+    extractedJson: extracted ? (extracted as unknown as Json) : (order.data?.extracted_json ?? null),
+    customerId,
+    recipient,
+    recipientRelationship,
+    recipientRelationshipOtherNote,
+    occasion,
+    occasionOtherNote,
+    eventDate,
+    pickupAt,
+    cakeSize,
+    customSize,
+    customSizeCm,
+    quantity,
+    servings,
+    price,
+    paymentStatus,
+    status,
+    productId,
+    notes,
+  });
+  const isDirty = Boolean(order.data) && currentSnapshot !== savedSnapshot;
 
   const runExtraction = async () => {
     setExtractError(null);
@@ -253,6 +314,14 @@ function OrderDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
     },
   });
+
+  // SAVE 클릭 시점의 스냅샷을 캡쳐해서, 저장이 끝나면 그 스냅샷을 "저장된 상태"로 기록한다
+  // (onSuccess 안에서 다시 계산하면, 저장 중 사용자가 계속 입력한 경우 아직 저장 안 된 값까지
+  // "저장됨"으로 잘못 표시될 수 있어 클릭 시점 값을 고정해서 쓴다).
+  const handleSave = () => {
+    const snapshotAtSave = currentSnapshot;
+    save.mutate(undefined, { onSuccess: () => setSavedSnapshot(snapshotAtSave) });
+  };
 
   const remove = useMutation({
     mutationFn: async () => {
@@ -539,10 +608,23 @@ function OrderDetailPage() {
           <p className="mt-2 font-mono text-xs uppercase text-destructive">{(save.error as Error).message}</p>
         )}
 
-        <div className="mt-3 flex gap-2">
-          <button type="button" className={primaryButtonClass} disabled={save.isPending} onClick={() => save.mutate()}>
-            SAVE
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={primaryButtonClass}
+            disabled={!isDirty || save.isPending}
+            onClick={handleSave}
+          >
+            {save.isPending ? "SAVING…" : "SAVE"}
           </button>
+          {isDirty && (
+            <button type="button" className={buttonClass} onClick={() => order.data && hydrateFromOrder(order.data)}>
+              되돌리기
+            </button>
+          )}
+          <span className="label-caps text-[10px] text-muted-foreground">
+            {save.isPending ? "저장 중…" : isDirty ? "변경 사항이 있습니다 — 저장하려면 SAVE" : "✓ SAVED"}
+          </span>
           <button
             type="button"
             className={buttonClass}
