@@ -1340,6 +1340,26 @@ export const customerOrdersQuery = (customerId: string) =>
   });
 
 /**
+ * CUSTOMER 등급(단골/일반고객) 판정용 — customer_id별 전체 주문 개수(2026-10-06).
+ * 등급 자체는 저장하지 않고 이 개수(>=2면 단골)로 매번 계산한다.
+ */
+export const customerOrderCountsQuery = () =>
+  queryOptions({
+    queryKey: ["orders", "counts_by_customer"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(
+        await supabase.from("orders").select("customer_id").not("customer_id", "is", null),
+      ) as { customer_id: string | null }[];
+      const counts: Record<string, number> = {};
+      for (const r of rows) {
+        if (!r.customer_id) continue;
+        counts[r.customer_id] = (counts[r.customer_id] ?? 0) + 1;
+      }
+      return counts;
+    },
+  });
+
+/**
  * COST 탭 전용 집계 — 모든 Product×Size의 원가/마진/월 예상 원가를 한 번에 계산한다(2026-09-23).
  * $productId.tsx의 개별 Product 원가 계산과 동일한 규칙(사이즈 지정 행만 Raw Material에 합산,
  * UTILITY/CONSUMABLE/PACKAGING/OVERHEAD는 케익 1개당 고정 배정)을 전체 Product에 대해 반복한다.

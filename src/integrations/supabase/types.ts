@@ -270,6 +270,7 @@ export type Database = {
           name: string | null
           notes: string | null
           phone: string | null
+          pinned: boolean
           updated_at: string
           user_id: string
         }
@@ -281,6 +282,7 @@ export type Database = {
           name?: string | null
           notes?: string | null
           phone?: string | null
+          pinned?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -292,6 +294,7 @@ export type Database = {
           name?: string | null
           notes?: string | null
           phone?: string | null
+          pinned?: boolean
           updated_at?: string
           user_id?: string
         }
