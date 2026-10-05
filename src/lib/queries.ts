@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { computeLineCosts, costPerGram, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
 import type {
   Category,
@@ -920,6 +921,73 @@ export const workSessionQuery = (id: string) =>
       unwrap(await supabase.from("work_sessions").select("*").eq("id", id).single()),
   });
 
+/* ── PRODUCTION EFFICIENCY (2026-10-06) ──────────────────────────
+ * "노동비 계산"이 아니라 "시간당 몇 개 만드는지 / 어디서 시간을 줄일 수 있는지"가 목적.
+ * Target Time은 아직 없음 — 실측 데이터가 먼저 쌓이고 나중에 사용자가 직접 설정한다. */
+
+export interface ComponentGramsRow {
+  formula_version_id: string | null;
+  quantity_g: number | null;
+  product_size_id: string | null;
+}
+
+/** 이 Product의 Formula Version별 "1단위당 필요한 양(g)" 원본 행 — Size별로 다를 수 있어서
+ * Size 매칭은 호출부(lib/production-efficiency.ts의 buildGramsPerUnitMap)에서 세션마다
+ * 각자의 product_size_id로 계산한다(세션이 여러 Size를 섞어 쓸 수 있으므로). */
+export const productComponentGramsRowsQuery = (productId: string) =>
+  queryOptions({
+    queryKey: ["product_component_grams_rows", productId],
+    enabled: Boolean(productId),
+    queryFn: async (): Promise<ComponentGramsRow[]> =>
+      unwrap(
+        await supabase
+          .from("product_components")
+          .select("formula_version_id, quantity_g, product_size_id")
+          .eq("product_id", productId),
+      ),
+  });
+
+export interface WorkSessionEfficiencyJoinRow extends WorkSession {
+  work_session_tasks: Tables<"work_session_tasks">[];
+}
+
+/** 특정 Product에 연결된(Batch size가 지정된) Work Session들 — PRODUCTS EFFICIENCY 섹션용. */
+export const efficiencySessionsByProductQuery = (productId: string) =>
+  queryOptions({
+    queryKey: ["efficiency_sessions", "by_product", productId],
+    enabled: Boolean(productId),
+    queryFn: async (): Promise<WorkSessionEfficiencyJoinRow[]> =>
+      unwrap(
+        await supabase
+          .from("work_sessions")
+          .select("*, work_session_tasks(*)")
+          .eq("product_id", productId)
+          .not("target_unit_count", "is", null)
+          .order("completed_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false }),
+      ) as unknown as WorkSessionEfficiencyJoinRow[],
+  });
+
+export interface WorkSessionEfficiencyWithProductRow extends WorkSessionEfficiencyJoinRow {
+  products: { id: string; name: string } | null;
+}
+
+/** Product가 지정된 모든 Work Session — EFFICIENCY 대시보드(전체 제품 비교)용. */
+export const allEfficiencySessionsQuery = () =>
+  queryOptions({
+    queryKey: ["efficiency_sessions", "all"],
+    queryFn: async (): Promise<WorkSessionEfficiencyWithProductRow[]> =>
+      unwrap(
+        await supabase
+          .from("work_sessions")
+          .select("*, work_session_tasks(*), products(id, name)")
+          .not("target_unit_count", "is", null)
+          .not("product_id", "is", null)
+          .order("completed_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false }),
+      ) as unknown as WorkSessionEfficiencyWithProductRow[],
+  });
+
 export interface WorkSessionFormulaVersionRow extends WorkSessionFormulaVersion {
   formula_versions: {
     id: string;
@@ -1189,6 +1257,30 @@ export type Order = import("@/integrations/supabase/types").Tables<"orders">;
 
 export const ORDER_STATUSES = ["NEW", "CONFIRMED", "IN_PROGRESS", "COMPLETED"] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+// ── ORDERS 필드 정형화(2026-10-06, 사용자 요청: 통계/분석 가능한 구조) ──────────
+// Occasion = 왜 주문하는가, Recipient Relationship = 누구에게 주는가 — 반드시 분리 관리.
+// 스펠링/대소문자는 사용자가 지정한 목록을 그대로 쓴다(DB enum과 1:1 일치).
+export const ORDER_OCCASIONS = [
+  "Birthday", "Anniversary", "Wedding", "Engagement", "Graduation", "Promotion",
+  "Retirement", "Achievement", "New Baby", "Housewarming", "Thank You",
+  "Congratulations", "Farewell", "Corporate Event", "Client Gift", "Team Celebration",
+  "Mother's Day", "Father's Day", "Valentine's Day", "Christmas", "Easter",
+  "Lunar New Year", "Just Because", "Other",
+] as const;
+export type OrderOccasion = (typeof ORDER_OCCASIONS)[number];
+
+export const ORDER_RECIPIENT_RELATIONSHIPS = [
+  "Self", "Partner", "Spouse", "Family", "Friend", "Colleague", "Client", "Customer",
+  "Team / Coworkers", "Business / Organisation", "Other",
+] as const;
+export type OrderRecipientRelationship = (typeof ORDER_RECIPIENT_RELATIONSHIPS)[number];
+
+export const ORDER_CAKE_SIZES = ['6" Round', '8" Round', '6" Square', '8" Square', "Custom"] as const;
+export type OrderCakeSize = (typeof ORDER_CAKE_SIZES)[number];
+
+export const ORDER_PAYMENT_STATUSES = ["Unpaid", "Deposit Paid", "Paid in Full"] as const;
+export type OrderPaymentStatus = (typeof ORDER_PAYMENT_STATUSES)[number];
 
 export const customersQuery = () =>
   queryOptions({

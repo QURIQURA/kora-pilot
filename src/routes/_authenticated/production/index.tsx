@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, workSessionsQuery } from "@/lib/queries";
+import { currentUserId, productsQuery, workSessionsQuery } from "@/lib/queries";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import {
@@ -11,6 +11,7 @@ import {
   buttonClass,
   inputClass,
   primaryButtonClass,
+  selectClass,
 } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/production/")({
@@ -136,14 +137,25 @@ function WorkSessionDeleteButton({
 
 function WorkSessionCreateForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
+  const products = useQuery(productsQuery());
   const [name, setName] = useState("");
+  // PRODUCTION EFFICIENCY(2026-10-06) — 생성 시점에 바로 Product/Batch를 연결할 수 있게
+  // 옵션으로 열어둔다. 비워두면 지금까지와 동일한 순수 R&D/계량 세션이 된다.
+  const [productId, setProductId] = useState("");
+  const [batchSize, setBatchSize] = useState("");
 
   const create = useMutation({
     mutationFn: async () => {
       const user_id = await currentUserId();
       const { data, error } = await supabase
         .from("work_sessions")
-        .insert({ user_id, name: name.trim(), status: "PLANNED" })
+        .insert({
+          user_id,
+          name: name.trim(),
+          status: "PLANNED",
+          product_id: productId || null,
+          target_unit_count: productId && batchSize.trim() ? Number(batchSize) : null,
+        })
         .select("id")
         .single();
       if (error) throw error;
@@ -152,6 +164,8 @@ function WorkSessionCreateForm({ onDone }: { onDone: () => void }) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
       setName("");
+      setProductId("");
+      setBatchSize("");
       onDone();
     },
   });
@@ -174,6 +188,32 @@ function WorkSessionCreateForm({ onDone }: { onDone: () => void }) {
           onChange={(e) => setName(e.target.value)}
         />
       </Field>
+      <div className="flex flex-wrap gap-3">
+        <Field label="PRODUCT (EFFICIENCY, 선택)">
+          <select
+            className={selectClass + " !w-56"}
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+          >
+            <option value="">— 연결 안 함 —</option>
+            {(products.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {productId && (
+          <Field label="BATCH SIZE(개)">
+            <input
+              type="number"
+              className={inputClass + " !w-24"}
+              value={batchSize}
+              onChange={(e) => setBatchSize(e.target.value)}
+            />
+          </Field>
+        )}
+      </div>
       {create.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
           {(create.error as Error).message}

@@ -77,15 +77,63 @@ function SettingsPage() {
         <h1 className="label-caps text-foreground">SETTINGS</h1>
       </div>
 
+      {/*
+        2026-10-06 — 사용자 요청: 설정 항목이 나열식이라 직관적이지 않으니, 앱의 실제
+        메뉴 구조(ORDERS / PRODUCTS / COMPONENTS / FORMULAS / INGREDIENTS / COST)를
+        그대로 따라 그룹화한다. 각 그룹은 "그 메뉴의 상세 페이지에서 실제로 쓰이는
+        드롭다운/마스터데이터가 어디에 있는지"를 기준으로 분류했다.
+          - PRODUCTS: 제품 분류(CATEGORIES), 사이즈용 MOULDS, 제품의 TECHNIQUE CATEGORY
+          - COMPONENTS: 컴포넌트 생성/작업 흐름에 쓰이는 WORKFLOW TEMPLATES, TASK TYPES
+          - FORMULAS: 포뮬러 버전에 쓰이는 METHODS(기법 카테고리별), BASE WEIGHTS
+          - INGREDIENTS: 재료 태깅용 FUNCTIONS / FLAVOUR FAMILIES / AROMA TAGS
+          - COST: 제품 원가 계산에 쓰이는 COST ITEMS / MONTHLY OVERHEAD
+      */}
+
       <SettingsGroup label="ORDERS">
         <SettingsSection title="GOOGLE 캘린더 구독 (.ics)">
           <OrdersCalendarFeedSection />
         </SettingsSection>
       </SettingsGroup>
 
-      <SettingsGroup label="PRODUCT TAXONOMY">
+      <SettingsGroup label="PRODUCTS">
         <SettingsSection title="CATEGORIES" defaultOpen>
           <CategoryManager />
+        </SettingsSection>
+        <SettingsSection title="MOULDS (사이즈)">
+          <MouldManager />
+        </SettingsSection>
+        <SettingsSection title="TECHNIQUE CATEGORIES">
+          <TechniqueCategoryManager />
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="COMPONENTS">
+        <SettingsSection title="WORKFLOW TEMPLATES">
+          <WorkflowTemplateManager />
+        </SettingsSection>
+        <SettingsSection title="TASK TYPES">
+          <TaskTypeManager />
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="FORMULAS">
+        <SettingsSection title="METHODS (TECHNIQUE CATEGORY별)">
+          <MethodManager />
+        </SettingsSection>
+        <SettingsSection title="BASE WEIGHTS">
+          <BaseWeightManager />
+        </SettingsSection>
+      </SettingsGroup>
+
+      <SettingsGroup label="INGREDIENTS">
+        <SettingsSection title="INGREDIENT FUNCTIONS">
+          <IngredientFunctionManager />
+        </SettingsSection>
+        <SettingsSection title="FLAVOUR FAMILIES">
+          <FlavourFamilyManager />
+        </SettingsSection>
+        <SettingsSection title="AROMA TAGS">
+          <AromaTagManager />
         </SettingsSection>
       </SettingsGroup>
 
@@ -101,42 +149,6 @@ function SettingsPage() {
         </SettingsSection>
         <SettingsSection title="MONTHLY OVERHEAD">
           <MonthlyOverheadSettings />
-        </SettingsSection>
-      </SettingsGroup>
-
-      <SettingsGroup label="PRODUCTION BASIS">
-        <SettingsSection title="MOULDS">
-          <MouldManager />
-        </SettingsSection>
-        <SettingsSection title="BASE WEIGHTS">
-          <BaseWeightManager />
-        </SettingsSection>
-      </SettingsGroup>
-
-      <SettingsGroup label="TECHNIQUE">
-        <SettingsSection title="TECHNIQUE CATEGORIES">
-          <TechniqueCategoryManager />
-        </SettingsSection>
-        <SettingsSection title="METHODS">
-          <MethodManager />
-        </SettingsSection>
-        <SettingsSection title="WORKFLOW TEMPLATES">
-          <WorkflowTemplateManager />
-        </SettingsSection>
-        <SettingsSection title="TASK TYPES">
-          <TaskTypeManager />
-        </SettingsSection>
-      </SettingsGroup>
-
-      <SettingsGroup label="INGREDIENT">
-        <SettingsSection title="INGREDIENT FUNCTIONS">
-          <IngredientFunctionManager />
-        </SettingsSection>
-        <SettingsSection title="FLAVOUR FAMILIES">
-          <FlavourFamilyManager />
-        </SettingsSection>
-        <SettingsSection title="AROMA TAGS">
-          <AromaTagManager />
         </SettingsSection>
       </SettingsGroup>
     </div>

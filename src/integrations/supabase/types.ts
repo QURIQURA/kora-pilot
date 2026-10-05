@@ -1000,69 +1000,195 @@ export type Database = {
         }
         Relationships: []
       }
+      order_allergen_ingredients: {
+        Row: {
+          created_at: string
+          id: string
+          ingredient_id: string
+          order_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ingredient_id: string
+          order_id: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ingredient_id?: string
+          order_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_allergen_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_allergen_ingredients_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_preferred_ingredients: {
+        Row: {
+          created_at: string
+          id: string
+          ingredient_id: string
+          order_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ingredient_id: string
+          order_id: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ingredient_id?: string
+          order_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_preferred_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_preferred_ingredients_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
-          cake_size: string | null
+          allergy_notes: string | null
+          cake_size: Database["public"]["Enums"]["order_cake_size"] | null
+          cake_size_legacy: string | null
           created_at: string
+          custom_size: string | null
+          custom_size_cm: number | null
           customer_id: string | null
+          design_notes: string | null
           event_date: string | null
           extracted_json: Json | null
+          has_allergies: boolean
           id: string
           notes: string | null
-          occasion: string | null
+          occasion: Database["public"]["Enums"]["order_occasion"] | null
+          occasion_legacy: string | null
+          occasion_other_note: string | null
           order_number: string
-          payment_status: string | null
+          payment_status:
+            | Database["public"]["Enums"]["order_payment_status"]
+            | null
+          payment_status_legacy: string | null
           pickup_at: string | null
           price: number | null
           product_id: string | null
           quantity: number | null
           raw_dm_text: string | null
           recipient: string | null
+          recipient_relationship:
+            | Database["public"]["Enums"]["order_recipient_relationship"]
+            | null
+          recipient_relationship_other_note: string | null
           requester: string | null
+          servings: number | null
           status: string
           updated_at: string
           user_id: string
         }
         Insert: {
-          cake_size?: string | null
+          allergy_notes?: string | null
+          cake_size?: Database["public"]["Enums"]["order_cake_size"] | null
+          cake_size_legacy?: string | null
           created_at?: string
+          custom_size?: string | null
+          custom_size_cm?: number | null
           customer_id?: string | null
+          design_notes?: string | null
           event_date?: string | null
           extracted_json?: Json | null
+          has_allergies?: boolean
           id?: string
           notes?: string | null
-          occasion?: string | null
+          occasion?: Database["public"]["Enums"]["order_occasion"] | null
+          occasion_legacy?: string | null
+          occasion_other_note?: string | null
           order_number: string
-          payment_status?: string | null
+          payment_status?:
+            | Database["public"]["Enums"]["order_payment_status"]
+            | null
+          payment_status_legacy?: string | null
           pickup_at?: string | null
           price?: number | null
           product_id?: string | null
           quantity?: number | null
           raw_dm_text?: string | null
           recipient?: string | null
+          recipient_relationship?:
+            | Database["public"]["Enums"]["order_recipient_relationship"]
+            | null
+          recipient_relationship_other_note?: string | null
           requester?: string | null
+          servings?: number | null
           status?: string
           updated_at?: string
           user_id?: string
         }
         Update: {
-          cake_size?: string | null
+          allergy_notes?: string | null
+          cake_size?: Database["public"]["Enums"]["order_cake_size"] | null
+          cake_size_legacy?: string | null
           created_at?: string
+          custom_size?: string | null
+          custom_size_cm?: number | null
           customer_id?: string | null
+          design_notes?: string | null
           event_date?: string | null
           extracted_json?: Json | null
+          has_allergies?: boolean
           id?: string
           notes?: string | null
-          occasion?: string | null
+          occasion?: Database["public"]["Enums"]["order_occasion"] | null
+          occasion_legacy?: string | null
+          occasion_other_note?: string | null
           order_number?: string
-          payment_status?: string | null
+          payment_status?:
+            | Database["public"]["Enums"]["order_payment_status"]
+            | null
+          payment_status_legacy?: string | null
           pickup_at?: string | null
           price?: number | null
           product_id?: string | null
           quantity?: number | null
           raw_dm_text?: string | null
           recipient?: string | null
+          recipient_relationship?:
+            | Database["public"]["Enums"]["order_recipient_relationship"]
+            | null
+          recipient_relationship_other_note?: string | null
           requester?: string | null
+          servings?: number | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -2009,9 +2135,11 @@ export type Database = {
       }
       work_session_tasks: {
         Row: {
+          active_labour_minutes: number | null
           actual_started_at: string | null
           checklist_items: Json | null
           completed_at: string | null
+          component_id: string | null
           created_at: string
           formula_version_id: string | null
           id: string
@@ -2022,6 +2150,8 @@ export type Database = {
           observation_height_start_mm: number | null
           observation_status: string | null
           observation_temperature_c: number | null
+          output_quantity: number | null
+          output_unit: string | null
           planned_end_at: string | null
           planned_start_at: string | null
           predecessor_task_id: string | null
@@ -2035,9 +2165,11 @@ export type Database = {
           work_session_id: string
         }
         Insert: {
+          active_labour_minutes?: number | null
           actual_started_at?: string | null
           checklist_items?: Json | null
           completed_at?: string | null
+          component_id?: string | null
           created_at?: string
           formula_version_id?: string | null
           id?: string
@@ -2048,6 +2180,8 @@ export type Database = {
           observation_height_start_mm?: number | null
           observation_status?: string | null
           observation_temperature_c?: number | null
+          output_quantity?: number | null
+          output_unit?: string | null
           planned_end_at?: string | null
           planned_start_at?: string | null
           predecessor_task_id?: string | null
@@ -2061,9 +2195,11 @@ export type Database = {
           work_session_id: string
         }
         Update: {
+          active_labour_minutes?: number | null
           actual_started_at?: string | null
           checklist_items?: Json | null
           completed_at?: string | null
+          component_id?: string | null
           created_at?: string
           formula_version_id?: string | null
           id?: string
@@ -2074,6 +2210,8 @@ export type Database = {
           observation_height_start_mm?: number | null
           observation_status?: string | null
           observation_temperature_c?: number | null
+          output_quantity?: number | null
+          output_unit?: string | null
           planned_end_at?: string | null
           planned_start_at?: string | null
           predecessor_task_id?: string | null
@@ -2087,6 +2225,13 @@ export type Database = {
           work_session_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "work_session_tasks_component_id_fkey"
+            columns: ["component_id"]
+            isOneToOne: false
+            referencedRelation: "components"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "work_session_tasks_formula_version_id_fkey"
             columns: ["formula_version_id"]
@@ -2117,8 +2262,11 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          product_id: string | null
+          product_size_id: string | null
           started_at: string | null
           status: string
+          target_unit_count: number | null
           updated_at: string
           user_id: string
         }
@@ -2128,8 +2276,11 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          product_id?: string | null
+          product_size_id?: string | null
           started_at?: string | null
           status?: string
+          target_unit_count?: number | null
           updated_at?: string
           user_id: string
         }
@@ -2139,12 +2290,30 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          product_id?: string | null
+          product_size_id?: string | null
           started_at?: string | null
           status?: string
+          target_unit_count?: number | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "work_sessions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_sessions_product_size_id_fkey"
+            columns: ["product_size_id"]
+            isOneToOne: false
+            referencedRelation: "product_sizes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       workflow_template_task_predecessors: {
         Row: {
@@ -2311,6 +2480,50 @@ export type Database = {
         | "SUPERSEDED"
         | "ARCHIVED"
         | "LOGGED"
+      order_cake_size:
+        | '6" Round'
+        | '8" Round'
+        | '6" Square'
+        | '8" Square'
+        | "Custom"
+      order_occasion:
+        | "Birthday"
+        | "Anniversary"
+        | "Wedding"
+        | "Engagement"
+        | "Graduation"
+        | "Promotion"
+        | "Retirement"
+        | "Achievement"
+        | "New Baby"
+        | "Housewarming"
+        | "Thank You"
+        | "Congratulations"
+        | "Farewell"
+        | "Corporate Event"
+        | "Client Gift"
+        | "Team Celebration"
+        | "Mother's Day"
+        | "Father's Day"
+        | "Valentine's Day"
+        | "Christmas"
+        | "Easter"
+        | "Lunar New Year"
+        | "Just Because"
+        | "Other"
+      order_payment_status: "Unpaid" | "Deposit Paid" | "Paid in Full"
+      order_recipient_relationship:
+        | "Self"
+        | "Partner"
+        | "Spouse"
+        | "Family"
+        | "Friend"
+        | "Colleague"
+        | "Client"
+        | "Customer"
+        | "Team / Coworkers"
+        | "Business / Organisation"
+        | "Other"
       product_status: "IDEA" | "ACTIVE" | "TESTING" | "STABLE" | "ARCHIVED"
     }
     CompositeTypes: {
@@ -2454,6 +2667,53 @@ export const Constants = {
         "SUPERSEDED",
         "ARCHIVED",
         "LOGGED",
+      ],
+      order_cake_size: [
+        '6" Round',
+        '8" Round',
+        '6" Square',
+        '8" Square',
+        "Custom",
+      ],
+      order_occasion: [
+        "Birthday",
+        "Anniversary",
+        "Wedding",
+        "Engagement",
+        "Graduation",
+        "Promotion",
+        "Retirement",
+        "Achievement",
+        "New Baby",
+        "Housewarming",
+        "Thank You",
+        "Congratulations",
+        "Farewell",
+        "Corporate Event",
+        "Client Gift",
+        "Team Celebration",
+        "Mother's Day",
+        "Father's Day",
+        "Valentine's Day",
+        "Christmas",
+        "Easter",
+        "Lunar New Year",
+        "Just Because",
+        "Other",
+      ],
+      order_payment_status: ["Unpaid", "Deposit Paid", "Paid in Full"],
+      order_recipient_relationship: [
+        "Self",
+        "Partner",
+        "Spouse",
+        "Family",
+        "Friend",
+        "Colleague",
+        "Client",
+        "Customer",
+        "Team / Coworkers",
+        "Business / Organisation",
+        "Other",
       ],
       product_status: ["IDEA", "ACTIVE", "TESTING", "STABLE", "ARCHIVED"],
     },

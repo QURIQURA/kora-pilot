@@ -4,6 +4,85 @@
 
 ---
 
+## 2026-10-06 — SETTINGS 그룹 재정리 (앱 메뉴 구조 기준)
+
+SETTINGS 항목들이 중구난방으로 나열돼 있던 걸, 사이드바 메뉴(ORDERS/PRODUCTS/COMPONENTS/
+PRODUCTION 등)와 같은 기준으로 다시 그룹화했습니다. 각 그룹은 "그 메뉴 상세 페이지에서
+실제로 쓰이는 설정이 어디 있는지"로 분류했습니다.
+
+- **ORDERS** — 캘린더 구독
+- **PRODUCTS** — CATEGORIES, MOULDS(사이즈), TECHNIQUE CATEGORIES
+- **COMPONENTS** — WORKFLOW TEMPLATES, TASK TYPES
+- **FORMULAS** — METHODS, BASE WEIGHTS
+- **INGREDIENTS** — INGREDIENT FUNCTIONS, FLAVOUR FAMILIES, AROMA TAGS
+- **COST** — COST ITEMS, MONTHLY OVERHEAD
+
+항목이나 기능은 하나도 바뀌지 않았고, 묶이는 그룹만 바뀌었습니다.
+
+---
+
+## 2026-10-06 — ORDERS 필드 정형화 (통계/분석 대비)
+
+주문이 쌓였을 때 "어떤 Occasion이 많은지", "Occasion별 평균 주문금액/인분", "주문자-수령자 관계
+비율", "Business vs Personal 비중" 같은 분석이 가능하도록, 자유 텍스트였던 일부 주문 필드를
+정형화된 Dropdown/숫자 필드로 바꿨습니다. 기존 데이터는 전부 보존됩니다(아래 참고).
+
+### 바뀐 필드 (주문 상세 페이지)
+
+- **OCCASION** (Dropdown) — 왜 주문하는가(이벤트 종류). Birthday / Anniversary / Wedding /
+  Engagement / Graduation / Promotion / Retirement / Achievement / New Baby / Housewarming /
+  Thank You / Congratulations / Farewell / Corporate Event / Client Gift / Team Celebration /
+  Mother's Day / Father's Day / Valentine's Day / Christmas / Easter / Lunar New Year /
+  Just Because / Other 중 선택. "본인 생일"은 Occasion을 따로 만들지 않고 Occasion=Birthday +
+  Recipient Relationship=Self로 기록합니다. Other 선택 시 바로 아래에 설명 입력칸이 생깁니다.
+- **RECIPIENT RELATIONSHIP** (신규 Dropdown) — 누구에게 주는가(주문자-수령자 관계). Self /
+  Partner / Spouse / Family / Friend / Colleague / Client / Customer / Team / Coworkers /
+  Business / Organisation / Other 중 선택. OCCASION과는 완전히 분리된 축이라, 나중에
+  "Birthday × Self", "Birthday × Friend", "Client Gift × Client" 같은 조합 분석이 가능합니다.
+- **CAKE SIZE** (Dropdown) — 6" Round / 8" Round / 6" Square / 8" Square / Custom. Custom
+  선택 시에만 기존처럼 자유 입력(+ 참고용 cm 입력)이 나타납니다.
+- **SERVINGS** (신규 숫자 필드) — 몇 인분인지. 기존 QUANTITY(주문 수량)와는 별개 필드입니다.
+- **PAYMENT STATUS** (Dropdown) — Unpaid / Deposit Paid / Paid in Full로 통일(기존의
+  "미결제/예약금/완결" 같은 자유 텍스트를 대체).
+
+### 데이터베이스 변경 / 기존 데이터 영향
+
+- 기존 occasion/cake_size/payment_status 컬럼은 각각 `occasion_legacy` /
+  `cake_size_legacy` / `payment_status_legacy`로 이름만 바꿔 **원본 값을 그대로 보존**했습니다
+  (삭제 없음).
+- 새 Dropdown 컬럼(occasion, recipient_relationship, cake_size, payment_status 등)을 새로
+  추가했습니다. 기존 주문 중 뜻이 명확한 값(결제상태 "완결" → "Paid in Full")만 자동으로
+  새 필드에 옮겨 넣었고, 뜻이 애매한 값(예: 모양을 알 수 없는 사이즈)은 비워둔 채
+  `*_legacy` 컬럼에만 남겨 억지로 추측하지 않았습니다.
+- AI 추출 기능(DM에서 정보 추출)도 추출된 텍스트를 위 Dropdown 옵션과 정확히 일치할 때만
+  자동 매칭하고, 일치하지 않으면 추측하는 대신 Other/Custom + 원본 텍스트로 안전하게 넣습니다.
+
+---
+
+## 2026-10-06 — PRODUCTION EFFICIENCY (시간당 생산량 측정)
+
+노동비 계산이 아니라 "내가 시간당 몇 개를 만들고 있는지 / 어디서 시간을 줄일 수 있는지"를 보기
+위한 기능입니다. 처음부터 목표시간을 넣지 않고, 실제 데이터가 먼저 쌓이는 구조입니다.
+
+### PRODUCTION — 작업 세션에 PRODUCT/BATCH SIZE 연결(선택)
+
+- 작업 세션을 새로 만들 때(또는 세션 상세의 "PRODUCT / BATCH SIZE (EFFICIENCY)" 섹션에서) 이
+  세션이 어떤 PRODUCT를 몇 개(BATCH SIZE) 만드는 작업인지 연결할 수 있습니다. 연결 안 하면
+  지금까지와 완전히 동일한 순수 R&D/계량 세션으로 동작합니다.
+- 연결하면 WORKFLOW의 각 TASK 줄에 "실제 작업시간(분)"과 "생산량(수량+단위)" 입력칸이
+  나타납니다. 예: 시트 굽기 → 작업시간 20분 · 생산량 4장. 오븐 40분 돌아가도 실제로 손댄 시간이
+  10분이면 10분만 적으면 됩니다(Active Labour Time과 Elapsed Time은 구분 — Elapsed Time은
+  시작/완료 시각으로 자동 계산됩니다).
+
+### PRODUCTS 상세 → EFFICIENCY 섹션 / 신규 EFFICIENCY 탭
+
+- PRODUCT 상세에 "EFFICIENCY" 섹션이 추가되어 그 제품의 평균 MIN/UNIT, 평균 UNITS/HOUR,
+  BEST 기록, 최근 기록, STEP별 시간 비중, BATCH SIZE별 효율을 보여줍니다.
+- 사이드바에 "EFFICIENCY" 탭이 추가되어 BATCH SIZE가 연결된 모든 제품을 한 화면에서 비교할 수
+  있습니다.
+
+---
+
 ## 2026-10-06 — ORDERS / CUSTOMERS 모듈 (Instagram DM AI 추출 + 구글 캘린더 구독)
 
 ### 사이드바에 ORDERS / CUSTOMERS 추가

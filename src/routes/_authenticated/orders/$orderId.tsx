@@ -3,7 +3,20 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { orderQuery, productsQuery, ORDER_STATUSES, type OrderStatus } from "@/lib/queries";
+import {
+  orderQuery,
+  productsQuery,
+  ORDER_STATUSES,
+  ORDER_OCCASIONS,
+  ORDER_RECIPIENT_RELATIONSHIPS,
+  ORDER_CAKE_SIZES,
+  ORDER_PAYMENT_STATUSES,
+  type OrderStatus,
+  type OrderOccasion,
+  type OrderRecipientRelationship,
+  type OrderCakeSize,
+  type OrderPaymentStatus,
+} from "@/lib/queries";
 import { formatDateTime } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import {
@@ -66,6 +79,13 @@ function datetimeLocalToIso(value: string): string | null {
   return new Date(value).toISOString();
 }
 
+/** AI가 뽑아낸 자유텍스트를 정형화된 Dropdown 옵션과 대소문자 무관 정확 일치로 매칭한다.
+ * 못 찾으면 null — 억지로 추측해서 틀린 값을 넣지 않는다(기존 "AI가 추측하지 않는다" 원칙과 동일). */
+function matchOption<T extends string>(options: readonly T[], value: string): T | null {
+  const found = options.find((o) => o.toLowerCase() === value.trim().toLowerCase());
+  return found ?? null;
+}
+
 function OrderDetailPage() {
   const { orderId } = Route.useParams();
   const navigate = useNavigate();
@@ -82,13 +102,19 @@ function OrderDetailPage() {
   const [customerId, setCustomerId] = useState("");
   const [requester, setRequester] = useState("");
   const [recipient, setRecipient] = useState("");
-  const [occasion, setOccasion] = useState("");
+  const [recipientRelationship, setRecipientRelationship] = useState<OrderRecipientRelationship | "">("");
+  const [recipientRelationshipOtherNote, setRecipientRelationshipOtherNote] = useState("");
+  const [occasion, setOccasion] = useState<OrderOccasion | "">("");
+  const [occasionOtherNote, setOccasionOtherNote] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [pickupAt, setPickupAt] = useState("");
-  const [cakeSize, setCakeSize] = useState("");
+  const [cakeSize, setCakeSize] = useState<OrderCakeSize | "">("");
+  const [customSize, setCustomSize] = useState("");
+  const [customSizeCm, setCustomSizeCm] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [servings, setServings] = useState("");
   const [price, setPrice] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState<OrderPaymentStatus | "">("");
   const [status, setStatus] = useState<OrderStatus>("NEW");
   const [productId, setProductId] = useState("");
   const [notes, setNotes] = useState("");
@@ -100,11 +126,17 @@ function OrderDetailPage() {
     setCustomerId(o.customer_id ?? "");
     setRequester(o.requester ?? "");
     setRecipient(o.recipient ?? "");
+    setRecipientRelationship(o.recipient_relationship ?? "");
+    setRecipientRelationshipOtherNote(o.recipient_relationship_other_note ?? "");
     setOccasion(o.occasion ?? "");
+    setOccasionOtherNote(o.occasion_other_note ?? "");
     setEventDate(o.event_date ?? "");
     setPickupAt(isoToDatetimeLocal(o.pickup_at));
     setCakeSize(o.cake_size ?? "");
+    setCustomSize(o.custom_size ?? "");
+    setCustomSizeCm(o.custom_size_cm != null ? String(o.custom_size_cm) : "");
     setQuantity(o.quantity != null ? String(o.quantity) : "");
+    setServings(o.servings != null ? String(o.servings) : "");
     setPrice(o.price != null ? String(o.price) : "");
     setPaymentStatus(o.payment_status ?? "");
     setStatus((o.status as OrderStatus) ?? "NEW");
@@ -143,15 +175,33 @@ function OrderDetailPage() {
       case "recipient":
         setRecipient(v as string);
         break;
-      case "occasion":
-        setOccasion(v as string);
+      case "occasion": {
+        // OCCASION은 이제 Dropdown — AI 추출 텍스트가 옵션과 정확히 일치할 때만 채우고,
+        // 아니면 억지로 맞추지 않고 "Other" + 원문 메모로 보존한다(추측 금지 원칙과 동일).
+        const matched = matchOption(ORDER_OCCASIONS, v as string);
+        if (matched) {
+          setOccasion(matched);
+        } else {
+          setOccasion("Other");
+          setOccasionOtherNote(v as string);
+        }
         break;
+      }
       case "event_date":
         setEventDate(v as string);
         break;
-      case "cake_size":
-        setCakeSize(v as string);
+      case "cake_size": {
+        // CAKE SIZE도 Dropdown — Round/Square 등 모양까지는 AI가 단정할 수 없으므로,
+        // 정확히 일치하지 않으면 "Custom"으로 두고 원문을 CUSTOM SIZE에 그대로 보존한다.
+        const matched = matchOption(ORDER_CAKE_SIZES, v as string);
+        if (matched) {
+          setCakeSize(matched);
+        } else {
+          setCakeSize("Custom");
+          setCustomSize(v as string);
+        }
         break;
+      }
       case "quantity":
         setQuantity(String(v));
         break;
@@ -185,13 +235,20 @@ function OrderDetailPage() {
           customer_id: customerId || null,
           requester: requester.trim() || null,
           recipient: recipient.trim() || null,
-          occasion: occasion.trim() || null,
+          recipient_relationship: recipientRelationship || null,
+          recipient_relationship_other_note:
+            recipientRelationship === "Other" ? recipientRelationshipOtherNote.trim() || null : null,
+          occasion: occasion || null,
+          occasion_other_note: occasion === "Other" ? occasionOtherNote.trim() || null : null,
           event_date: eventDate || null,
           pickup_at: datetimeLocalToIso(pickupAt),
-          cake_size: cakeSize.trim() || null,
+          cake_size: cakeSize || null,
+          custom_size: cakeSize === "Custom" ? customSize.trim() || null : null,
+          custom_size_cm: cakeSize === "Custom" && customSizeCm.trim() ? Number(customSizeCm) : null,
           quantity: quantity.trim() ? Number(quantity) : null,
+          servings: servings.trim() ? Number(servings) : null,
           price: price.trim() ? Number(price) : null,
-          payment_status: paymentStatus.trim() || null,
+          payment_status: paymentStatus || null,
           status,
           product_id: productId || null,
           notes: notes.trim() || null,
@@ -348,8 +405,49 @@ function OrderDetailPage() {
           <Field label="RECIPIENT (받는 사람)">
             <input className={inputClass} value={recipient} onChange={(e) => setRecipient(e.target.value)} />
           </Field>
+          <Field label="RECIPIENT RELATIONSHIP">
+            <select
+              className={selectClass}
+              value={recipientRelationship}
+              onChange={(e) => setRecipientRelationship(e.target.value as OrderRecipientRelationship | "")}
+            >
+              <option value="">— 선택 —</option>
+              {ORDER_RECIPIENT_RELATIONSHIPS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            {recipientRelationship === "Other" && (
+              <input
+                className={inputClass + " mt-1"}
+                placeholder="직접 입력"
+                value={recipientRelationshipOtherNote}
+                onChange={(e) => setRecipientRelationshipOtherNote(e.target.value)}
+              />
+            )}
+          </Field>
           <Field label="OCCASION">
-            <input className={inputClass} value={occasion} onChange={(e) => setOccasion(e.target.value)} />
+            <select
+              className={selectClass}
+              value={occasion}
+              onChange={(e) => setOccasion(e.target.value as OrderOccasion | "")}
+            >
+              <option value="">— 선택 —</option>
+              {ORDER_OCCASIONS.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+            {occasion === "Other" && (
+              <input
+                className={inputClass + " mt-1"}
+                placeholder="직접 입력"
+                value={occasionOtherNote}
+                onChange={(e) => setOccasionOtherNote(e.target.value)}
+              />
+            )}
           </Field>
           <Field label="EVENT DATE">
             <input type="date" className={inputClass} value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
@@ -363,7 +461,37 @@ function OrderDetailPage() {
             />
           </Field>
           <Field label="CAKE SIZE">
-            <input className={inputClass} value={cakeSize} onChange={(e) => setCakeSize(e.target.value)} />
+            <select
+              className={selectClass}
+              value={cakeSize}
+              onChange={(e) => setCakeSize(e.target.value as OrderCakeSize | "")}
+            >
+              <option value="">— 선택 —</option>
+              {ORDER_CAKE_SIZES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            {cakeSize === "Custom" && (
+              <div className="mt-1 flex flex-wrap gap-2">
+                <input
+                  className={inputClass + " !w-40"}
+                  placeholder="커스텀 사이즈 (예: 10인치 하트)"
+                  value={customSize}
+                  onChange={(e) => setCustomSize(e.target.value)}
+                />
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  className={inputClass + " !w-28"}
+                  placeholder="cm (선택)"
+                  value={customSizeCm}
+                  onChange={(e) => setCustomSizeCm(e.target.value)}
+                />
+              </div>
+            )}
           </Field>
           <Field label="QUANTITY">
             <input
@@ -373,6 +501,17 @@ function OrderDetailPage() {
               className={inputClass}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
+            />
+          </Field>
+          <Field label="SERVINGS (인분)">
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              className={inputClass}
+              placeholder="예: 10"
+              value={servings}
+              onChange={(e) => setServings(e.target.value)}
             />
           </Field>
           <Field label="PRICE (AUD)">
@@ -387,12 +526,18 @@ function OrderDetailPage() {
             />
           </Field>
           <Field label="PAYMENT STATUS">
-            <input
-              className={inputClass}
-              placeholder="예: 미결제 / 예약금 / 완결"
+            <select
+              className={selectClass}
               value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value)}
-            />
+              onChange={(e) => setPaymentStatus(e.target.value as OrderPaymentStatus | "")}
+            >
+              <option value="">— 선택 —</option>
+              {ORDER_PAYMENT_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
         <div className="mt-3">

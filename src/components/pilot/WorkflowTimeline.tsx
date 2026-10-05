@@ -75,6 +75,7 @@ export function WorkflowView({
   taskPredecessors,
   onTasksChanged,
   onTaskStarted,
+  showEfficiencyFields,
 }: {
   sessionId: string;
   tasks: WorkSessionTask[];
@@ -90,6 +91,10 @@ export function WorkflowView({
    * 세션도 자동 IN_PROGRESS 전환하도록 부모에 알린다(2026-09-30) — "START WORK 누르는 걸 깜빡해도
    * TASK 시작시간이 기록되는 순간 세션도 같이 시작된 걸로 쳐달라"는 요청. */
   onTaskStarted?: (iso: string) => void | Promise<void>;
+  /** 이 세션이 특정 Product/Batch size에 연결되어 있을 때만(PRODUCTION EFFICIENCY, 2026-10-06)
+   * 각 TASK에 "실제 작업시간(Active Labour Time)"/"생산량" 입력칸을 보여준다 — 연결 안 된
+   * 순수 R&D/계량 세션은 화면이 지금과 완전히 동일하게 유지된다. */
+  showEfficiencyFields?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   // 포커스 모드(2026-09-24) — 한 품목(Component)의 "지금 할 일"에만 집중하는 간단 화면.
@@ -366,6 +371,17 @@ export function WorkflowView({
   ) {
     const { error: updateError } = await supabase.from("work_session_tasks").update(patch).eq("id", task.id);
     if (updateError) setError(`관찰값 저장 실패 — ${updateError.message}`);
+    await onTasksChanged();
+  }
+
+  /** PRODUCTION EFFICIENCY용 — 실제 작업시간(분)/생산량 저장. 노동비 계산 목적이 아니라
+   * Minutes/Unit 계산의 원재료이므로, 입력 안 하면 그냥 null로 둔다(강제 아님). */
+  async function setEfficiencyField(
+    task: WorkSessionTask,
+    patch: Partial<Pick<WorkSessionTask, "active_labour_minutes" | "output_quantity" | "output_unit">>,
+  ) {
+    const { error: updateError } = await supabase.from("work_session_tasks").update(patch).eq("id", task.id);
+    if (updateError) setError(`효율 데이터 저장 실패 — ${updateError.message}`);
     await onTasksChanged();
   }
 
@@ -795,6 +811,43 @@ export function WorkflowView({
                             setObservationField(task, {
                               observation_temperature_c: e.target.value.trim() ? Number(e.target.value) : null,
                             })
+                          }
+                        />
+                      </div>
+                    )}
+                    {showEfficiencyFields && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] tracking-wider text-foreground">
+                        <span className="text-muted-foreground">효율</span>
+                        <input
+                          type="number"
+                          placeholder="작업시간"
+                          className="h-6 w-16 border border-border bg-background px-1 text-[11px] tabular-nums"
+                          defaultValue={task.active_labour_minutes ?? ""}
+                          onBlur={(e) =>
+                            setEfficiencyField(task, {
+                              active_labour_minutes: e.target.value.trim() ? Number(e.target.value) : null,
+                            })
+                          }
+                        />
+                        <span className="text-muted-foreground">분 · 생산량</span>
+                        <input
+                          type="number"
+                          placeholder="수량"
+                          className="h-6 w-16 border border-border bg-background px-1 text-[11px] tabular-nums"
+                          defaultValue={task.output_quantity ?? ""}
+                          onBlur={(e) =>
+                            setEfficiencyField(task, {
+                              output_quantity: e.target.value.trim() ? Number(e.target.value) : null,
+                            })
+                          }
+                        />
+                        <input
+                          type="text"
+                          placeholder="단위(g/개/장)"
+                          className="h-6 w-20 border border-border bg-background px-1 text-[11px]"
+                          defaultValue={task.output_unit ?? ""}
+                          onBlur={(e) =>
+                            setEfficiencyField(task, { output_unit: e.target.value.trim() || null })
                           }
                         />
                       </div>

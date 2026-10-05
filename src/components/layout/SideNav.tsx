@@ -9,6 +9,7 @@ const TOP_ITEMS = [
   { label: "COMPONENTS", to: "/components" },
   { label: "COST", to: "/cost" },
   { label: "PRODUCTION", to: "/production" },
+  { label: "EFFICIENCY", to: "/efficiency" },
   { label: "INVENTORY", to: "/inventory" },
   { label: "INGREDIENTS", to: "/ingredients" },
   { label: "REFERENCES", to: "/references" },

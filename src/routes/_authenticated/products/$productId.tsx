@@ -32,6 +32,7 @@ import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
 import { ProductSizesSection } from "@/components/pilot/ProductSizesSection";
 import { ProductDesignSection } from "@/components/pilot/ProductDesignSection";
 import { ProductImagesSection } from "@/components/pilot/ProductImagesSection";
+import { ProductEfficiencySection } from "@/components/pilot/ProductEfficiencySection";
 import {
   Field,
   SectionCard,
@@ -113,6 +114,7 @@ const DEFAULT_SECTION_ORDER = [
   "DESIGN",
   "SIZES",
   "COST_ADJUSTMENT",
+  "EFFICIENCY",
   "NOTES",
   "DEVELOPMENT",
 ] as const;
@@ -125,6 +127,8 @@ const SECTION_LABELS: Record<ProductSectionKey, string> = {
   // 2026-09-24: 기존에 따로 있던 COMPONENTS/PRODUCTION_COST 두 섹션을 그리드 한 섹션으로 합침
   // (총원가 계산식 | COMPONENTS & ADJUSTMENT | PRODUCTION COST).
   COST_ADJUSTMENT: "총원가 / COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT / PRODUCTION COST",
+  // 2026-10-06: PRODUCTION EFFICIENCY — Minutes/Unit, Units/Hour 등 실측 생산 효율.
+  EFFICIENCY: "EFFICIENCY",
   NOTES: "NOTES",
   DEVELOPMENT: "FORMULAS / DEVELOPMENT HISTORY / OBSERVATIONS",
 };
@@ -421,6 +425,7 @@ function ProductDetailPage() {
         const sectionNodes: Record<ProductSectionKey, ReactNode> = {
           IMAGES: <ProductImagesSection productId={productId} product={data} />,
           DESIGN: <ProductDesignSection productId={productId} product={data} />,
+          EFFICIENCY: <ProductEfficiencySection productId={productId} />,
           SIZES: (
             <ProductSizesSection
               productId={productId}

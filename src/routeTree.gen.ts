@@ -20,6 +20,7 @@ import { Route as AuthenticatedComponentsIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedComponentsComponentIdRouteImport } from './routes/_authenticated/components/$componentId'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers/index'
 import { Route as AuthenticatedCustomersCustomerIdRouteImport } from './routes/_authenticated/customers/$customerId'
+import { Route as AuthenticatedEfficiencyIndexRouteImport } from './routes/_authenticated/efficiency/index'
 import { Route as AuthenticatedFormulasIndexRouteImport } from './routes/_authenticated/formulas/index'
 import { Route as AuthenticatedFormulasFormulaIdRouteImport } from './routes/_authenticated/formulas/$formulaId'
 import { Route as AuthenticatedIngredientsIndexRouteImport } from './routes/_authenticated/ingredients/index'
@@ -88,6 +89,12 @@ const AuthenticatedCustomersCustomerIdRoute =
   AuthenticatedCustomersCustomerIdRouteImport.update({
     id: '/customers/$customerId',
     path: '/customers/$customerId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEfficiencyIndexRoute =
+  AuthenticatedEfficiencyIndexRouteImport.update({
+    id: '/efficiency/',
+    path: '/efficiency/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedFormulasIndexRoute =
@@ -173,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components/': typeof AuthenticatedComponentsIndexRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/efficiency/': typeof AuthenticatedEfficiencyIndexRoute
   '/formulas/': typeof AuthenticatedFormulasIndexRoute
   '/ingredients/': typeof AuthenticatedIngredientsIndexRoute
   '/orders/': typeof AuthenticatedOrdersIndexRoute
@@ -196,6 +204,7 @@ export interface FileRoutesByTo {
   '/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/components': typeof AuthenticatedComponentsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
+  '/efficiency': typeof AuthenticatedEfficiencyIndexRoute
   '/formulas': typeof AuthenticatedFormulasIndexRoute
   '/ingredients': typeof AuthenticatedIngredientsIndexRoute
   '/orders': typeof AuthenticatedOrdersIndexRoute
@@ -221,6 +230,7 @@ export interface FileRoutesById {
   '/_authenticated/products/$productId': typeof AuthenticatedProductsProductIdRoute
   '/_authenticated/components/': typeof AuthenticatedComponentsIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
+  '/_authenticated/efficiency/': typeof AuthenticatedEfficiencyIndexRoute
   '/_authenticated/formulas/': typeof AuthenticatedFormulasIndexRoute
   '/_authenticated/ingredients/': typeof AuthenticatedIngredientsIndexRoute
   '/_authenticated/orders/': typeof AuthenticatedOrdersIndexRoute
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/products/$productId'
     | '/components/'
     | '/customers/'
+    | '/efficiency/'
     | '/formulas/'
     | '/ingredients/'
     | '/orders/'
@@ -269,6 +280,7 @@ export interface FileRouteTypes {
     | '/products/$productId'
     | '/components'
     | '/customers'
+    | '/efficiency'
     | '/formulas'
     | '/ingredients'
     | '/orders'
@@ -293,6 +305,7 @@ export interface FileRouteTypes {
     | '/_authenticated/products/$productId'
     | '/_authenticated/components/'
     | '/_authenticated/customers/'
+    | '/_authenticated/efficiency/'
     | '/_authenticated/formulas/'
     | '/_authenticated/ingredients/'
     | '/_authenticated/orders/'
@@ -383,6 +396,13 @@ declare module '@tanstack/react-router' {
       path: '/customers/$customerId'
       fullPath: '/customers/$customerId'
       preLoaderRoute: typeof AuthenticatedCustomersCustomerIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/efficiency/': {
+      id: '/_authenticated/efficiency/'
+      path: '/efficiency'
+      fullPath: '/efficiency/'
+      preLoaderRoute: typeof AuthenticatedEfficiencyIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/formulas/': {
@@ -480,6 +500,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProductsProductIdRoute: typeof AuthenticatedProductsProductIdRoute
   AuthenticatedComponentsIndexRoute: typeof AuthenticatedComponentsIndexRoute
   AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
+  AuthenticatedEfficiencyIndexRoute: typeof AuthenticatedEfficiencyIndexRoute
   AuthenticatedFormulasIndexRoute: typeof AuthenticatedFormulasIndexRoute
   AuthenticatedIngredientsIndexRoute: typeof AuthenticatedIngredientsIndexRoute
   AuthenticatedOrdersIndexRoute: typeof AuthenticatedOrdersIndexRoute
@@ -505,6 +526,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProductsProductIdRoute: AuthenticatedProductsProductIdRoute,
   AuthenticatedComponentsIndexRoute: AuthenticatedComponentsIndexRoute,
   AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
+  AuthenticatedEfficiencyIndexRoute: AuthenticatedEfficiencyIndexRoute,
   AuthenticatedFormulasIndexRoute: AuthenticatedFormulasIndexRoute,
   AuthenticatedIngredientsIndexRoute: AuthenticatedIngredientsIndexRoute,
   AuthenticatedOrdersIndexRoute: AuthenticatedOrdersIndexRoute,

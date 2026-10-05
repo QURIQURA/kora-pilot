@@ -24,6 +24,8 @@ import {
   currentUserId,
   formulasQuery,
   mouldsQuery,
+  productsQuery,
+  productSizesQuery,
   versionIngredientsBulkQuery,
   workSessionFormulaVersionsQuery,
   workSessionMultiplierHistoryQuery,
@@ -36,6 +38,7 @@ import {
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
 import { fmtNumber, toGrams, versionLabel, type Mould } from "@/lib/formula";
+import { formatProductSizeLabel } from "@/lib/product-size";
 import { mouldBatchMultiplier } from "@/lib/formula-calc";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { formatDateTime } from "@/lib/datetime";
@@ -273,6 +276,13 @@ function WorkSessionPage() {
         </div>
       </div>
 
+      <ProductionEfficiencyLinkSection
+        productId={data.product_id}
+        productSizeId={data.product_size_id}
+        targetUnitCount={data.target_unit_count}
+        onSave={(patch) => updateSession.mutate(patch)}
+      />
+
       <SectionCard
         title="SELECTED FORMULA VERSIONS"
         action={
@@ -362,6 +372,7 @@ function WorkSessionPage() {
           taskPredecessors={taskPredecessors.data ?? {}}
           onTasksChanged={invalidateTasks}
           onTaskStarted={ensureSessionStartedAt}
+          showEfficiencyFields={Boolean(data.product_id)}
         />
       </SectionCard>
 
@@ -390,6 +401,89 @@ function InlineName({ value, onSave }: { value: string; onSave: (value: string) 
         else setDraft(value);
       }}
     />
+  );
+}
+
+/**
+ * PRODUCTION EFFICIENCY 연결(2026-10-06) — 이 세션이 "어떤 Product를 몇 개 만드는 작업인지"
+ * 선택하는 옵션 블록. 비워두면 지금까지와 완전히 동일한 순수 R&D/계량 세션으로 동작한다
+ * (사용자 요청: 처음부터 목표/예상시간을 넣지 않고, 실제 데이터가 먼저 쌓이는 구조).
+ */
+function ProductionEfficiencyLinkSection({
+  productId,
+  productSizeId,
+  targetUnitCount,
+  onSave,
+}: {
+  productId: string | null;
+  productSizeId: string | null;
+  targetUnitCount: number | null;
+  onSave: (patch: TablesUpdate<"work_sessions">) => void;
+}) {
+  const products = useQuery(productsQuery());
+  const sizes = useQuery(productSizesQuery(productId ?? ""));
+  const [batchDraft, setBatchDraft] = useState(targetUnitCount != null ? String(targetUnitCount) : "");
+  useEffect(() => {
+    setBatchDraft(targetUnitCount != null ? String(targetUnitCount) : "");
+  }, [targetUnitCount]);
+
+  return (
+    <SectionCard title="PRODUCT / BATCH SIZE (EFFICIENCY)">
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="PRODUCT">
+          <select
+            className={selectClass + " !w-56"}
+            value={productId ?? ""}
+            onChange={(e) =>
+              onSave({ product_id: e.target.value || null, product_size_id: null })
+            }
+          >
+            <option value="">— 연결 안 함(순수 계량 세션) —</option>
+            {(products.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {productId && (sizes.data ?? []).length > 0 && (
+          <Field label="SIZE">
+            <select
+              className={selectClass + " !w-40"}
+              value={productSizeId ?? ""}
+              onChange={(e) => onSave({ product_size_id: e.target.value || null })}
+            >
+              <option value="">(전체/미지정)</option>
+              {(sizes.data ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {formatProductSizeLabel(s)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        {productId && (
+          <Field label="BATCH SIZE(개)">
+            <input
+              type="number"
+              className={inputClass + " !w-24"}
+              value={batchDraft}
+              onChange={(e) => setBatchDraft(e.target.value)}
+              onBlur={() => {
+                const next = batchDraft.trim() ? Number(batchDraft) : null;
+                if (next !== targetUnitCount) onSave({ target_unit_count: next });
+              }}
+            />
+          </Field>
+        )}
+      </div>
+      {productId && (
+        <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+          WORKFLOW의 각 TASK에 "실제 작업시간"/"생산량"을 입력하면, 이 Product의 EFFICIENCY
+          화면(PRODUCTS 상세 또는 사이드바 EFFICIENCY 탭)에 Minutes/Unit·Units/Hour로 집계됩니다.
+        </p>
+      )}
+    </SectionCard>
   );
 }
 
