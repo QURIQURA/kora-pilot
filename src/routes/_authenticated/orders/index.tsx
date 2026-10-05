@@ -176,7 +176,9 @@ function OrdersCalendar({ rows }: { rows: OrderListRow[] }) {
   const month = Number(monthStr);
   const firstOfMonth = new Date(year, month - 1, 1);
   const daysInMonth = new Date(year, month, 0).getDate();
-  const startWeekday = firstOfMonth.getDay(); // 0=Sun
+  // 2026-10-06 사용자 요청: 캘린더 시작요일을 월요일로 — getDay()는 0=Sun 기준이라
+  // 월요일을 0으로 다시 맞춘다(0=Mon … 6=Sun).
+  const startWeekday = (firstOfMonth.getDay() + 6) % 7;
 
   const cells: (string | null)[] = [
     ...Array(startWeekday).fill(null),
@@ -204,7 +206,7 @@ function OrdersCalendar({ rows }: { rows: OrderListRow[] }) {
         </button>
       </div>
       <div className="grid grid-cols-7 gap-px bg-border">
-        {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => (
+        {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d) => (
           <div key={d} className="bg-card px-1 py-1 text-center text-[10px] text-muted-foreground">
             {d}
           </div>
