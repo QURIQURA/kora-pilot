@@ -3,6 +3,8 @@ import { cn } from "../../lib/utils";
 
 const TOP_ITEMS = [
   { label: "DASHBOARD", to: "/" },
+  { label: "ORDERS", to: "/orders" },
+  { label: "CUSTOMERS", to: "/customers" },
   { label: "PRODUCTS", to: "/products" },
   { label: "COMPONENTS", to: "/components" },
   { label: "COST", to: "/cost" },

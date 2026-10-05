@@ -12,6 +12,7 @@ import { FlavourFamilyManager } from "@/components/pilot/FlavourFamilyManager";
 import { AromaTagManager } from "@/components/pilot/AromaTagManager";
 import { CostItemManager } from "@/components/pilot/CostItemManager";
 import { MonthlyOverheadSettings } from "@/components/pilot/MonthlyOverheadSettings";
+import { OrdersCalendarFeedSection } from "@/components/pilot/OrdersCalendarFeedSection";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -75,6 +76,12 @@ function SettingsPage() {
       <div className="border-b border-border pb-4">
         <h1 className="label-caps text-foreground">SETTINGS</h1>
       </div>
+
+      <SettingsGroup label="ORDERS">
+        <SettingsSection title="GOOGLE 캘린더 구독 (.ics)">
+          <OrdersCalendarFeedSection />
+        </SettingsSection>
+      </SettingsGroup>
 
       <SettingsGroup label="PRODUCT TAXONOMY">
         <SettingsSection title="CATEGORIES" defaultOpen>

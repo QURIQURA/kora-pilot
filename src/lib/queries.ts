@@ -1180,6 +1180,73 @@ export const pilotSettingsQuery = () =>
     },
   });
 
+// ── ORDERS / CUSTOMERS (2026-10-05) ──────────────────────────────────────
+// Instagram DM으로 들어오는 주문을 놓치지 않기 위한 최소 구조.
+// Product/Component/Formula 구조는 전혀 건드리지 않고, orders.product_id로만 참조한다.
+
+export type Customer = import("@/integrations/supabase/types").Tables<"customers">;
+export type Order = import("@/integrations/supabase/types").Tables<"orders">;
+
+export const ORDER_STATUSES = ["NEW", "CONFIRMED", "IN_PROGRESS", "COMPLETED"] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const customersQuery = () =>
+  queryOptions({
+    queryKey: ["customers"],
+    queryFn: async (): Promise<Customer[]> =>
+      unwrap(await supabase.from("customers").select("*").order("name", { ascending: true })),
+  });
+
+export const customerQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["customers", id],
+    queryFn: async (): Promise<Customer> =>
+      unwrap(await supabase.from("customers").select("*").eq("id", id).single()),
+  });
+
+export interface OrderListRow extends Order {
+  customers: { id: string; name: string | null } | null;
+  products: { id: string; name: string } | null;
+}
+
+export const ordersQuery = () =>
+  queryOptions({
+    queryKey: ["orders"],
+    queryFn: async (): Promise<OrderListRow[]> =>
+      unwrap(
+        await supabase
+          .from("orders")
+          .select("*, customers(id, name), products(id, name)")
+          .order("created_at", { ascending: false }),
+      ) as unknown as OrderListRow[],
+  });
+
+export const orderQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["orders", id],
+    queryFn: async (): Promise<OrderListRow> =>
+      unwrap(
+        await supabase
+          .from("orders")
+          .select("*, customers(id, name), products(id, name)")
+          .eq("id", id)
+          .single(),
+      ) as unknown as OrderListRow,
+  });
+
+export const customerOrdersQuery = (customerId: string) =>
+  queryOptions({
+    queryKey: ["orders", "by_customer", customerId],
+    queryFn: async (): Promise<OrderListRow[]> =>
+      unwrap(
+        await supabase
+          .from("orders")
+          .select("*, customers(id, name), products(id, name)")
+          .eq("customer_id", customerId)
+          .order("created_at", { ascending: false }),
+      ) as unknown as OrderListRow[],
+  });
+
 /**
  * COST 탭 전용 집계 — 모든 Product×Size의 원가/마진/월 예상 원가를 한 번에 계산한다(2026-09-23).
  * $productId.tsx의 개별 Product 원가 계산과 동일한 규칙(사이즈 지정 행만 Raw Material에 합산,

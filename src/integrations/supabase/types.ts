@@ -261,6 +261,42 @@ export type Database = {
         }
         Relationships: []
       }
+      customers: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          instagram_handle: string | null
+          name: string | null
+          notes: string | null
+          phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          instagram_handle?: string | null
+          name?: string | null
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          instagram_handle?: string | null
+          name?: string | null
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       flavour_families: {
         Row: {
           color: string
@@ -964,8 +1000,93 @@ export type Database = {
         }
         Relationships: []
       }
+      orders: {
+        Row: {
+          cake_size: string | null
+          created_at: string
+          customer_id: string | null
+          event_date: string | null
+          extracted_json: Json | null
+          id: string
+          notes: string | null
+          occasion: string | null
+          order_number: string
+          payment_status: string | null
+          pickup_at: string | null
+          price: number | null
+          product_id: string | null
+          quantity: number | null
+          raw_dm_text: string | null
+          recipient: string | null
+          requester: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cake_size?: string | null
+          created_at?: string
+          customer_id?: string | null
+          event_date?: string | null
+          extracted_json?: Json | null
+          id?: string
+          notes?: string | null
+          occasion?: string | null
+          order_number: string
+          payment_status?: string | null
+          pickup_at?: string | null
+          price?: number | null
+          product_id?: string | null
+          quantity?: number | null
+          raw_dm_text?: string | null
+          recipient?: string | null
+          requester?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          cake_size?: string | null
+          created_at?: string
+          customer_id?: string | null
+          event_date?: string | null
+          extracted_json?: Json | null
+          id?: string
+          notes?: string | null
+          occasion?: string | null
+          order_number?: string
+          payment_status?: string | null
+          pickup_at?: string | null
+          price?: number | null
+          product_id?: string | null
+          quantity?: number | null
+          raw_dm_text?: string | null
+          recipient?: string | null
+          requester?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pilot_settings: {
         Row: {
+          ics_feed_token: string | null
           monthly_overhead: number
           monthly_unit_count: number
           product_page_section_order: string[] | null
@@ -973,6 +1094,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ics_feed_token?: string | null
           monthly_overhead?: number
           monthly_unit_count?: number
           product_page_section_order?: string[] | null
@@ -980,6 +1102,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          ics_feed_token?: string | null
           monthly_overhead?: number
           monthly_unit_count?: number
           product_page_section_order?: string[] | null
