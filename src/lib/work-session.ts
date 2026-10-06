@@ -6,7 +6,8 @@
  * - Working quantity(= original_amount × multiplier)는 저장하지 않고 항상 read-time 계산한다.
  * - 동일 Ingredient가 여러 Formula에 등장해도 quantity를 합산하지 않는다 — grouping은 표시 편의일 뿐이다.
  */
-import type { Tables } from "@/integrations/supabase/types";
+import type { Tables, TablesUpdate } from "@/integrations/supabase/types";
+import { supabase } from "@/integrations/supabase/client";
 import { ingredientDisplayName } from "@/lib/pilot";
 import type { VersionIngredientRow } from "@/lib/queries";
  
@@ -229,5 +230,196 @@ export function isCustomMultiplier(current: number | null, suggested: number | n
   if (current == null) return true;
   return Math.abs(current - suggested) > MULTIPLIER_MATCH_EPSILON;
 }
- 
+
+/* ── WORK SESSION 병합(2026-10-07) ────────────────────────────────
+ * 사용자 요청: "work session끼리 병합하는 기능" — 예를 들어 서로 다른 주문(hamish, geeky
+ * couple tiramisu)으로 각각 만들어진 Work Session을 실제로는 같이 작업할 때 하나로 합친다.
+ *
+ * sourceId를 targetId로 흡수시킨다: sourceId의 CORE/DECORATIVE 배합 선택, 계량 진행상태,
+ * 배수 히스토리, 워크플로 TASK를 모두 targetId로 옮기고 sourceId는 삭제한다.
+ *
+ * 충돌 처리 규칙:
+ * - 두 세션에 같은 Formula Version이 이미 둘 다 들어있으면(중복) target 쪽을 그대로 두고
+ *   source 쪽 선택/계량진행은 버린다(같은 재료 라인이라 target에 이미 기록이 있을 수 있음).
+ * - source의 CORE 슬롯(SHEET/CREAM/FILLING)이 target에 이미 채워져 있으면, 데이터를 잃지
+ *   않기 위해 DECORATIVE로 내려서 옮긴다(자유 추가 목록에 그대로 남는다).
+ * - TASK 목록은 sort_order를 target 뒤로 이어붙인다. task_id/predecessor_task_id 자체는
+ *   바뀌지 않으므로(행이 그대로 이동할 뿐) 선후관계는 그대로 유지된다.
+ * - source의 주문 연결(order_id)은 target에 아직 연결된 주문이 없을 때만 넘겨받고, 그 외의
+ *   경우 어느 주문에서 왔는지를 target의 NOTES에 남겨서 정보가 사라지지 않게 한다.
+ * - 진짜 DB 트랜잭션은 아니지만(Supabase 클라이언트 제약 — 이 코드베이스의 다른 다단계
+ *   mutation들과 동일한 패턴), 중간에 실패하면 에러를 그대로 던져 호출부에서 보이게 한다.
+ */
+export async function mergeWorkSessions(sourceId: string, targetId: string): Promise<void> {
+  if (sourceId === targetId) throw new Error("같은 WORK SESSION입니다");
+
+  const { data: sourceRows, error: srcErr } = await supabase
+    .from("work_session_formula_versions")
+    .select("id, formula_version_id, sort_order, kind, slot")
+    .eq("work_session_id", sourceId);
+  if (srcErr) throw srcErr;
+
+  const { data: targetRows, error: tgtErr } = await supabase
+    .from("work_session_formula_versions")
+    .select("id, formula_version_id, sort_order, kind, slot")
+    .eq("work_session_id", targetId);
+  if (tgtErr) throw tgtErr;
+
+  const targetVersionIds = new Set((targetRows ?? []).map((r) => r.formula_version_id));
+  const targetSlotsTaken = new Set(
+    (targetRows ?? []).filter((r) => r.kind === "CORE" && r.slot).map((r) => r.slot as string),
+  );
+  let nextSort = (targetRows ?? []).reduce((max, r) => Math.max(max, r.sort_order), -1) + 1;
+
+  const duplicateIds: string[] = [];
+  for (const row of sourceRows ?? []) {
+    if (targetVersionIds.has(row.formula_version_id)) {
+      duplicateIds.push(row.id);
+      continue;
+    }
+    let kind = row.kind;
+    let slot = row.slot;
+    if (kind === "CORE" && slot && targetSlotsTaken.has(slot)) {
+      kind = "DECORATIVE";
+      slot = null;
+    }
+    const { error } = await supabase
+      .from("work_session_formula_versions")
+      .update({ work_session_id: targetId, sort_order: nextSort, kind, slot })
+      .eq("id", row.id);
+    if (error) throw error;
+    if (kind === "CORE" && slot) targetSlotsTaken.add(slot);
+    targetVersionIds.add(row.formula_version_id);
+    nextSort += 1;
+  }
+  if (duplicateIds.length > 0) {
+    const { error } = await supabase
+      .from("work_session_formula_versions")
+      .delete()
+      .in("id", duplicateIds);
+    if (error) throw error;
+  }
+
+  // 계량 진행상태 — 같은 재료 라인에 target 쪽 기록이 이미 있으면 그걸 유지하고 source는 버린다.
+  const { data: targetProgress, error: tpErr } = await supabase
+    .from("work_session_progress")
+    .select("formula_version_ingredient_id")
+    .eq("work_session_id", targetId);
+  if (tpErr) throw tpErr;
+  const targetProgressLineIds = new Set(
+    (targetProgress ?? []).map((p) => p.formula_version_ingredient_id),
+  );
+
+  const { data: sourceProgress, error: spErr } = await supabase
+    .from("work_session_progress")
+    .select("id, formula_version_ingredient_id")
+    .eq("work_session_id", sourceId);
+  if (spErr) throw spErr;
+
+  const progressToMove = (sourceProgress ?? [])
+    .filter((p) => !targetProgressLineIds.has(p.formula_version_ingredient_id))
+    .map((p) => p.id);
+  const progressToDrop = (sourceProgress ?? [])
+    .filter((p) => targetProgressLineIds.has(p.formula_version_ingredient_id))
+    .map((p) => p.id);
+
+  if (progressToMove.length > 0) {
+    const { error } = await supabase
+      .from("work_session_progress")
+      .update({ work_session_id: targetId })
+      .in("id", progressToMove);
+    if (error) throw error;
+  }
+  if (progressToDrop.length > 0) {
+    const { error } = await supabase.from("work_session_progress").delete().in("id", progressToDrop);
+    if (error) throw error;
+  }
+
+  // 배수 히스토리 — 유니크 제약이 없어 전부 그대로 옮긴다(기록 보존용).
+  {
+    const { error } = await supabase
+      .from("work_session_multiplier_history")
+      .update({ work_session_id: targetId })
+      .eq("work_session_id", sourceId);
+    if (error) throw error;
+  }
+
+  // TASK — target 뒤로 sort_order를 이어붙여서 옮긴다. predecessor 관계는 task id 자체가
+  // 바뀌지 않으므로(행이 그대로 이동) 손댈 필요가 없다.
+  const { data: targetTasks, error: ttErr } = await supabase
+    .from("work_session_tasks")
+    .select("sort_order")
+    .eq("work_session_id", targetId);
+  if (ttErr) throw ttErr;
+  let nextTaskSort = (targetTasks ?? []).reduce((max, t) => Math.max(max, t.sort_order), -1) + 1;
+
+  const { data: sourceTasks, error: stErr } = await supabase
+    .from("work_session_tasks")
+    .select("id")
+    .eq("work_session_id", sourceId)
+    .order("sort_order", { ascending: true });
+  if (stErr) throw stErr;
+
+  for (const task of sourceTasks ?? []) {
+    const { error } = await supabase
+      .from("work_session_tasks")
+      .update({ work_session_id: targetId, sort_order: nextTaskSort })
+      .eq("id", task.id);
+    if (error) throw error;
+    nextTaskSort += 1;
+  }
+
+  // task_ingredients/task_predecessors는 work_session_id가 중복 저장돼 있을 뿐이라 함께 갈아준다.
+  {
+    const { error } = await supabase
+      .from("work_session_task_ingredients")
+      .update({ work_session_id: targetId })
+      .eq("work_session_id", sourceId);
+    if (error) throw error;
+  }
+  {
+    const { error } = await supabase
+      .from("work_session_task_predecessors")
+      .update({ work_session_id: targetId })
+      .eq("work_session_id", sourceId);
+    if (error) throw error;
+  }
+
+  // NOTES/주문 연결 — source 정보를 잃지 않고 옮긴다.
+  const { data: sourceSession, error: ssErr } = await supabase
+    .from("work_sessions")
+    .select("name, notes, order_id, orders(order_number)")
+    .eq("id", sourceId)
+    .single();
+  if (ssErr) throw ssErr;
+  const { data: targetSession, error: tsErr } = await supabase
+    .from("work_sessions")
+    .select("notes, order_id")
+    .eq("id", targetId)
+    .single();
+  if (tsErr) throw tsErr;
+
+  const orderLabel = sourceSession.orders?.order_number
+    ? `ORDER ${sourceSession.orders.order_number}`
+    : null;
+  const mergeLine = `[MERGED FROM "${sourceSession.name}"${orderLabel ? ` · ${orderLabel}` : ""} — ${new Date().toISOString().slice(0, 10)}]`;
+  const combinedNotes = [targetSession.notes?.trim(), mergeLine, sourceSession.notes?.trim()]
+    .filter((v): v is string => Boolean(v && v.length > 0))
+    .join("\n");
+
+  const patch: TablesUpdate<"work_sessions"> = { notes: combinedNotes };
+  if (!targetSession.order_id && sourceSession.order_id) {
+    patch.order_id = sourceSession.order_id;
+  }
+  {
+    const { error } = await supabase.from("work_sessions").update(patch).eq("id", targetId);
+    if (error) throw error;
+  }
+
+  // 소스 세션 삭제 — 남은 참조는 FK(ON DELETE CASCADE/SET NULL)로 정리된다.
+  {
+    const { error } = await supabase.from("work_sessions").delete().eq("id", sourceId);
+    if (error) throw error;
+  }
+}
 
