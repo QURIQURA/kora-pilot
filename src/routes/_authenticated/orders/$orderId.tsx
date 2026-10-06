@@ -30,6 +30,7 @@ import {
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
+import { ProductSelect } from "@/components/pilot/ProductSelect";
 import {
   Field,
   SectionCard,
@@ -457,8 +458,12 @@ function OrderDetailPage() {
       if (!order.data) return;
       const o = order.data;
       const deliveryDate = o.pickup_at ? o.pickup_at.slice(0, 10) : o.event_date;
+      // 2026-10-06 사용자 요청: 이름을 RECIPIENT가 아니라 PRODUCT명으로 — PRODUCT 칸에서 아직
+      // SAVE를 안 누른 상태로 바로 WORK SESSION을 만들어도 반영되게, 화면에 선택된(아직 저장 전일
+      // 수 있는) productId를 저장된 o.product_id보다 우선한다.
+      const effectiveProductId = productId || o.product_id || null;
       const baseName =
-        products.data?.find((p) => p.id === o.product_id)?.name || o.recipient || o.order_number;
+        products.data?.find((p) => p.id === effectiveProductId)?.name || o.recipient || o.order_number;
       const userId = await currentUserId();
       const { data: session, error } = await supabase
         .from("work_sessions")
@@ -467,7 +472,7 @@ function OrderDetailPage() {
           order_id: orderId,
           name: generateTitle(baseName, deliveryDate),
           status: "PLANNED",
-          product_id: o.product_id ?? null,
+          product_id: effectiveProductId,
         })
         .select("id")
         .single();
@@ -696,14 +701,7 @@ function OrderDetailPage() {
             />
           </Field>
           <Field label="PRODUCT">
-            <select className={selectClass} value={productId} onChange={(e) => setProductId(e.target.value)}>
-              <option value="">TBD — 아직 미정</option>
-              {(products.data ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <ProductSelect value={productId} onChange={setProductId} emptyLabel="TBD — 아직 미정" />
           </Field>
           <Field label="RECIPIENT (받는 사람)">
             <input className={inputClass} value={recipient} onChange={(e) => setRecipient(e.target.value)} />
