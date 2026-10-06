@@ -1095,7 +1095,10 @@ export type Database = {
           design_notes: string | null
           event_date: string | null
           extracted_json: Json | null
+          flavoring_cream_formula_id: string | null
+          flavoring_filling_formula_id: string | null
           flavoring_note: string | null
+          flavoring_sheet_formula_id: string | null
           has_allergies: boolean
           id: string
           maker_notes: string | null
@@ -1138,7 +1141,10 @@ export type Database = {
           design_notes?: string | null
           event_date?: string | null
           extracted_json?: Json | null
+          flavoring_cream_formula_id?: string | null
+          flavoring_filling_formula_id?: string | null
           flavoring_note?: string | null
+          flavoring_sheet_formula_id?: string | null
           has_allergies?: boolean
           id?: string
           maker_notes?: string | null
@@ -1181,7 +1187,10 @@ export type Database = {
           design_notes?: string | null
           event_date?: string | null
           extracted_json?: Json | null
+          flavoring_cream_formula_id?: string | null
+          flavoring_filling_formula_id?: string | null
           flavoring_note?: string | null
+          flavoring_sheet_formula_id?: string | null
           has_allergies?: boolean
           id?: string
           maker_notes?: string | null
@@ -1217,6 +1226,27 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_flavoring_cream_formula_id_fkey"
+            columns: ["flavoring_cream_formula_id"]
+            isOneToOne: false
+            referencedRelation: "formulas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_flavoring_filling_formula_id_fkey"
+            columns: ["flavoring_filling_formula_id"]
+            isOneToOne: false
+            referencedRelation: "formulas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_flavoring_sheet_formula_id_fkey"
+            columns: ["flavoring_sheet_formula_id"]
+            isOneToOne: false
+            referencedRelation: "formulas"
             referencedColumns: ["id"]
           },
           {
@@ -1518,105 +1548,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      production_plan_elements: {
-        Row: {
-          component_id: string | null
-          created_at: string
-          formula_version_id: string | null
-          id: string
-          kind: string
-          label: string
-          production_plan_id: string
-          slot: string | null
-          sort_order: number
-          user_id: string
-        }
-        Insert: {
-          component_id?: string | null
-          created_at?: string
-          formula_version_id?: string | null
-          id?: string
-          kind: string
-          label: string
-          production_plan_id: string
-          slot?: string | null
-          sort_order?: number
-          user_id: string
-        }
-        Update: {
-          component_id?: string | null
-          created_at?: string
-          formula_version_id?: string | null
-          id?: string
-          kind?: string
-          label?: string
-          production_plan_id?: string
-          slot?: string | null
-          sort_order?: number
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "production_plan_elements_component_id_fkey"
-            columns: ["component_id"]
-            isOneToOne: false
-            referencedRelation: "components"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "production_plan_elements_formula_version_id_fkey"
-            columns: ["formula_version_id"]
-            isOneToOne: false
-            referencedRelation: "formula_versions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "production_plan_elements_production_plan_id_fkey"
-            columns: ["production_plan_id"]
-            isOneToOne: false
-            referencedRelation: "production_plans"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      production_plans: {
-        Row: {
-          created_at: string
-          id: string
-          order_id: string
-          status: string
-          title: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          order_id: string
-          status?: string
-          title?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          order_id?: string
-          status?: string
-          title?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "production_plans_order_id_fkey"
-            columns: ["order_id"]
-            isOneToOne: false
-            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -1995,9 +1926,11 @@ export type Database = {
           base_weight_qty: number | null
           formula_version_id: string
           id: string
+          kind: string
           mould_id: string | null
           mould_qty: number | null
           multiplier: number
+          slot: string | null
           sort_order: number
           updated_at: string
           user_id: string
@@ -2009,9 +1942,11 @@ export type Database = {
           base_weight_qty?: number | null
           formula_version_id: string
           id?: string
+          kind?: string
           mould_id?: string | null
           mould_qty?: number | null
           multiplier?: number
+          slot?: string | null
           sort_order?: number
           updated_at?: string
           user_id: string
@@ -2023,9 +1958,11 @@ export type Database = {
           base_weight_qty?: number | null
           formula_version_id?: string
           id?: string
+          kind?: string
           mould_id?: string | null
           mould_qty?: number | null
           multiplier?: number
+          slot?: string | null
           sort_order?: number
           updated_at?: string
           user_id?: string
@@ -2382,6 +2319,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          order_id: string | null
           product_id: string | null
           product_size_id: string | null
           started_at: string | null
@@ -2396,6 +2334,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          order_id?: string | null
           product_id?: string | null
           product_size_id?: string | null
           started_at?: string | null
@@ -2410,6 +2349,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          order_id?: string | null
           product_id?: string | null
           product_size_id?: string | null
           started_at?: string | null
@@ -2419,6 +2359,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "work_sessions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "work_sessions_product_id_fkey"
             columns: ["product_id"]

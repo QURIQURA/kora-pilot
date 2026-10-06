@@ -34,6 +34,9 @@ import {
   workSessionTaskIngredientsQuery,
   workSessionTaskPredecessorsQuery,
   workSessionTasksQuery,
+  CORE_SLOTS,
+  CORE_SLOT_LABELS,
+  type CoreSlot,
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
@@ -106,6 +109,8 @@ function WorkSessionPage() {
 
   const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA">("WEIGHING");
   const [adding, setAdding] = useState(false);
+  // 2026-10-06: CORE(Sheet/Cream/Filling) 슬롯은 한 번에 하나씩만 추가 폼을 열 수 있게 슬롯별 상태로 관리
+  const [addingSlot, setAddingSlot] = useState<CoreSlot | null>(null);
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -205,6 +210,7 @@ function WorkSessionPage() {
   });
 
   const rows = useMemo(() => selections.data ?? [], [selections.data]);
+  const decorativeRows = useMemo(() => rows.filter((r) => r.kind !== "CORE"), [rows]);
   const ingredientsByVersion = useMemo(() => ingredients.data ?? {}, [ingredients.data]);
   const progressByLineId = useMemo(() => {
     const map: Record<string, { status: string; note: string | null }> = {};
@@ -283,8 +289,57 @@ function WorkSessionPage() {
         onSave={(patch) => updateSession.mutate(patch)}
       />
 
+      {/* 2026-10-06 사용자 정정: Order에서 넘어온 CORE ELEMENT(Sheet/Cream/Filling 고정 슬롯)와
+          자유롭게 추가하는 DECORATIVE를 구분해서 보여준다 — 새 테이블이 아니라 기존
+          work_session_formula_versions 행에 kind/slot 태그만 붙여서 표현한다. */}
+      <SectionCard title="CORE ELEMENTS — SHEET / CREAM / FILLING">
+        <ul className="divide-y divide-border border border-border">
+          {CORE_SLOTS.map((slot) => {
+            const row = rows.find((r) => r.kind === "CORE" && r.slot === slot);
+            return (
+              <li key={slot} className="p-3">
+                <p className="label-caps mb-2 text-xs text-muted-foreground">
+                  {CORE_SLOT_LABELS[slot]}
+                </p>
+                {row ? (
+                  <ul className="divide-y divide-border border border-border">
+                    <FormulaVersionRow
+                      row={row}
+                      sessionId={sessionId}
+                      lines={ingredientsByVersion[row.formula_version_id] ?? []}
+                      onRemove={() => removeFormulaVersion.mutate(row)}
+                    />
+                  </ul>
+                ) : addingSlot === slot ? (
+                  <AddFormulaVersionForm
+                    sessionId={sessionId}
+                    existingIds={rows.map((r) => r.formula_version_id)}
+                    nextSort={rows.length}
+                    kind="CORE"
+                    slot={slot}
+                    onDone={async () => {
+                      setAddingSlot(null);
+                      await invalidateSelections();
+                      await invalidateTasks();
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    onClick={() => setAddingSlot(slot)}
+                  >
+                    {`+ ADD ${CORE_SLOT_LABELS[slot].toUpperCase()}`}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </SectionCard>
+
       <SectionCard
-        title="SELECTED FORMULA VERSIONS"
+        title="DECORATIVE ELEMENTS"
         action={
           <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
             {adding ? "CLOSE" : "+ ADD FORMULA VERSION"}
@@ -304,13 +359,13 @@ function WorkSessionPage() {
               }}
             />
           )}
-          {rows.length === 0 ? (
+          {decorativeRows.length === 0 ? (
             <p className="font-mono text-xs uppercase text-muted-foreground">
               NO FORMULA VERSIONS SELECTED YET
             </p>
           ) : (
             <ul className="divide-y divide-border border border-border">
-              {rows.map((row) => (
+              {decorativeRows.map((row) => (
                 <FormulaVersionRow
                   key={row.id}
                   row={row}
@@ -508,11 +563,16 @@ function AddFormulaVersionForm({
   existingIds,
   nextSort,
   onDone,
+  kind = "DECORATIVE",
+  slot = null,
 }: {
   sessionId: string;
   existingIds: string[];
   nextSort: number;
   onDone: () => void;
+  /** 2026-10-06: CORE(Sheet/Cream/Filling 고정 슬롯)에서 추가할 때 전달 — 기본은 자유 추가인 DECORATIVE */
+  kind?: "CORE" | "DECORATIVE";
+  slot?: CoreSlot | null;
 }) {
   const formulas = useQuery(formulasQuery());
   const formulaList = formulas.data ?? [];
@@ -563,6 +623,8 @@ function AddFormulaVersionForm({
         base_weight_id: null,
         base_weight_qty: null,
         sort_order: nextSort,
+        kind,
+        slot,
       });
       if (error) throw error;
       // Component에 기본 WORKFLOW TEMPLATE이 등록돼 있고 "자동 적용"이 켜져 있으면, 이 Formula

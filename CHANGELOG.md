@@ -4,29 +4,32 @@
 
 ---
 
-## 2026-10-06 — ORDER → PRODUCTION PLAN → PRODUCT 흐름 추가
+## 2026-10-06 — ORDER → WORK SESSION → PRODUCT 흐름 추가 (기존 PRODUCTION 화면 재사용)
 
-주문이 실제로 어떻게 만들어지는지(Production Plan)와, 그 결과를 장기적으로 관리하는 완제품
-정보(Product)를 명확히 분리했습니다. 데이터 흐름: ORDER → PRODUCTION PLAN → ELEMENT →
-FORMULA VERSION → PRODUCT.
+주문을 실제로 만드는 작업(계량/작업 세션)과, 그 결과를 장기적으로 관리하는 완제품 정보(Product)를
+연결했습니다. 처음엔 별도의 "PRODUCTION PLAN" 화면을 새로 만들었지만, 이미 있는 PRODUCTION(작업
+세션) 화면과 중복되는 개념이라 — 새 화면을 걷어내고 기존 PRODUCTION 화면을 그대로 재사용하도록
+바꿨습니다. 데이터 흐름: ORDER → WORK SESSION → FORMULA VERSION(CORE/DECORATIVE) → PRODUCT.
 
 - ORDER DETAIL 메모를 목적별로 3가지로 분리했습니다 — FLAVORING NOTE(맛 밸런스, 내부용),
   DESIGN NOTE(디자인/구조/조립), ORDER NOTE(고객 요청/배송 등). 기존 하나로 섞여 있던 NOTES를
   나눈 것이며, 데이터는 그대로 보존됩니다(ORDER NOTE = 기존 NOTES).
-- ORDER DETAIL에 "+ CREATE PRODUCTION PLAN" 버튼이 추가됐습니다. 누르면 이 주문 전용
-  PRODUCTION PLAN이 만들어지고, CORE ELEMENT(Sheet/Cream/Filling) 3개 빈 슬롯이 미리
-  준비됩니다 — Formula Version은 이 시점에 절대 자동으로 채워지지 않습니다(직접 골라야 함).
-  이미 Plan이 있으면 버튼이 "OPEN PRODUCTION PLAN"으로 바뀌어 중복 생성되지 않습니다.
-- 새 PRODUCTION PLAN 화면(주문 상세 → OPEN PRODUCTION PLAN)에서: PRODUCTION TITLE 직접 수정,
-  상태(PLANNED/IN PROGRESS/COMPLETED), CORE ELEMENTS(Sheet/Cream/Filling 고정 3슬롯) +
-  DECORATIVE ELEMENTS(초콜릿 튀일 등 자유롭게 추가/삭제)를 관리합니다. 각 ELEMENT마다 COMPONENT
-  + FORMULA VERSION을 고르면, 그 아래 "SELECTED FORMULA VERSIONS"에 중복 없이 자동으로
-  모아져 보여집니다 — 따로 다시 선택할 필요 없고, ELEMENT를 더 추가하면 자동으로 늘어납니다.
+- FLAVORING NOTE는 자유 텍스트 외에 Sheet/Cream/Filling 각각 실제 FORMULA를 링크할 수
+  있습니다(드롭다운). FORMULA VERSION까지는 여기서 정하지 않고, WORK SESSION을 만들 때 현재
+  유효한 버전(CURRENT 우선, 없으면 가장 최신)이 시작값으로 자동 채워지며, 이후엔 WORK SESSION
+  화면에서 언제든 바꿀 수 있습니다.
+- ORDER DETAIL에 "+ CREATE WORK SESSION" 버튼이 추가됐습니다. 누르면 이 주문과 연결된 WORK
+  SESSION이 PRODUCTION 화면 쪽에 만들어지고(기존 "+ CREATE WORK SESSION"과 동일한 화면), 위에서
+  FORMULA를 링크해둔 Sheet/Cream/Filling은 CORE ELEMENTS로 자동 채워져 시작합니다. 이미 연결된
+  WORK SESSION이 있으면 버튼이 "OPEN WORK SESSION"으로 바뀌어 중복 생성되지 않습니다.
+- PRODUCTION(WORK SESSION) 화면의 "SELECTED FORMULA VERSIONS"를 CORE ELEMENTS(Sheet/Cream/
+  Filling 고정 3슬롯, 비어있으면 "+ ADD" 버튼)와 DECORATIVE ELEMENTS(초콜릿 튀일 등 자유롭게
+  추가/삭제, 기존과 동일)로 나눠서 보여줍니다.
 - ORDER DETAIL에 "↑ UPGRADE TO PRODUCT" 버튼이 추가됐습니다. 누르면 새 PRODUCT가 만들어지고,
-  연결된 PRODUCTION PLAN이 있으면 그 ELEMENT들이 실제로 선택한 FORMULA VERSION이 그대로
-  PRODUCT COMPONENT로 옮겨집니다(Order 텍스트를 복사하는 게 아니라 실제 생산 데이터를 기반으로
-  만듦). Production Plan이 없어도 승격은 가능하며, 그 경우 빈 PRODUCT가 생성됩니다. 이미 연결된
-  PRODUCT가 있으면 버튼이 "OPEN PRODUCT"로 바뀝니다.
+  연결된 WORK SESSION이 있으면 그 FORMULA VERSION들이 그대로 PRODUCT COMPONENT로 옮겨집니다
+  (Order 텍스트를 복사하는 게 아니라 실제 생산 데이터를 기반으로 만듦). WORK SESSION이 없어도
+  승격은 가능하며, 그 경우 빈 PRODUCT가 생성됩니다. 이미 연결된 PRODUCT가 있으면 버튼이 "OPEN
+  PRODUCT"로 바뀝니다.
 - PRODUCT DETAIL에 "CURRENT RECIPE INFORMATION" 섹션이 추가되어, 이 PRODUCT의 COMPONENT들이
   실제로 가리키는 FORMULA + 버전을 한눈에 보는 목록을 보여줍니다(같은 버전은 한 번만 표시).
 

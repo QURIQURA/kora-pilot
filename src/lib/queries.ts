@@ -1874,54 +1874,24 @@ export const componentObservationsQuery = (componentId: string) =>
       ) as unknown as ComponentObservationRow[],
   });
 
-// ── PRODUCTION PLAN (2026-10-06 사용자 요청) ────────────────────────────
-// ORDER → PRODUCTION PLAN → ELEMENT → FORMULA VERSION → PRODUCTION WORKFLOW → PRODUCT 흐름.
-// "Component"는 이미 PRODUCT COMPONENT가 쓰고 있어서, 생산 단계의 제작 요소는 ELEMENT라고 부른다.
-// ELEMENT는 새 Formula/Recipe 시스템이 아니라 기존 components→formulas→formula_versions 체인을
-// 그대로 가리킨다 — Element.component_id/formula_version_id가 바로 그 FK.
-export type ProductionPlan = import("@/integrations/supabase/types").Tables<"production_plans">;
-export type ProductionPlanElement = import("@/integrations/supabase/types").Tables<"production_plan_elements">;
-
-/** CORE ELEMENTS는 항상 이 3개 슬롯이 고정 — Flavoring(Sheet/Cream/Filling)과 1:1 대응. */
-export const CORE_ELEMENT_SLOTS = ["SHEET", "CREAM", "FILLING"] as const;
-export type CoreElementSlot = (typeof CORE_ELEMENT_SLOTS)[number];
-export const CORE_ELEMENT_LABELS: Record<CoreElementSlot, string> = {
+// ── ORDER ↔ WORK SESSION 연결 (2026-10-06 수정 — 기존 PRODUCTION 시스템 재사용) ──────────
+// 처음엔 별도 production_plans/production_plan_elements 테이블을 새로 만들었으나, 사용자가
+// "기존 PRODUCTION(work_sessions) 시스템을 재사용하라"고 명확히 정정해서 걷어냈다.
+// ELEMENT 개념(Sheet/Cream/Filling 고정 CORE 슬롯 + 자유 추가 DECORATIVE)은 새 테이블 없이
+// 기존 work_session_formula_versions 행에 kind/slot 태그만 추가해서 흡수시켰다 — Formula+Version
+// 선택은 이미 그 테이블의 formula_version_id가 하고 있었으므로.
+export const CORE_SLOTS = ["SHEET", "CREAM", "FILLING"] as const;
+export type CoreSlot = (typeof CORE_SLOTS)[number];
+export const CORE_SLOT_LABELS: Record<CoreSlot, string> = {
   SHEET: "Sheet",
   CREAM: "Cream",
   FILLING: "Filling",
 };
 
-export interface ProductionPlanElementRow extends ProductionPlanElement {
-  components: { id: string; name: string } | null;
-  formula_versions: {
-    id: string;
-    version_number: number;
-    status: FormulaVersion["status"];
-    formulas: { id: string; name: string } | null;
-  } | null;
-}
-
-export const productionPlanByOrderQuery = (orderId: string) =>
+/** Order 하나당 Work Session은 최대 1개(order_id unique). 없으면 null. */
+export const workSessionByOrderQuery = (orderId: string) =>
   queryOptions({
-    queryKey: ["production_plans", "by_order", orderId],
-    queryFn: async (): Promise<ProductionPlan | null> =>
-      unwrap(await supabase.from("production_plans").select("*").eq("order_id", orderId).maybeSingle()),
-  });
-
-export const productionPlanElementsQuery = (planId: string | null) =>
-  queryOptions({
-    queryKey: ["production_plan_elements", planId],
-    enabled: Boolean(planId),
-    queryFn: async (): Promise<ProductionPlanElementRow[]> => {
-      if (!planId) return [];
-      return unwrap(
-        await supabase
-          .from("production_plan_elements")
-          .select(
-            "*, components(id, name), formula_versions(id, version_number, status, formulas(id, name))",
-          )
-          .eq("production_plan_id", planId)
-          .order("sort_order"),
-      ) as unknown as ProductionPlanElementRow[];
-    },
+    queryKey: ["work_sessions", "by_order", orderId],
+    queryFn: async (): Promise<WorkSession | null> =>
+      unwrap(await supabase.from("work_sessions").select("*").eq("order_id", orderId).maybeSingle()),
   });

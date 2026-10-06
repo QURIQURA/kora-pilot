@@ -7,15 +7,17 @@ import {
   orderQuery,
   productsQuery,
   pilotSettingsQuery,
-  productionPlanByOrderQuery,
+  workSessionByOrderQuery,
+  formulasQuery,
   currentUserId,
   ORDER_STATUSES,
   ORDER_OCCASIONS,
   ORDER_RECIPIENT_RELATIONSHIPS,
   ORDER_CAKE_SIZES,
   ORDER_PAYMENT_STATUSES,
-  CORE_ELEMENT_SLOTS,
-  CORE_ELEMENT_LABELS,
+  CORE_SLOTS,
+  CORE_SLOT_LABELS,
+  type CoreSlot,
   orderStatusLabel,
   orderStatusColor,
   type OrderListRow,
@@ -25,6 +27,7 @@ import {
   type OrderCakeSize,
   type OrderPaymentStatus,
 } from "@/lib/queries";
+import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import {
@@ -140,7 +143,8 @@ function OrderDetailPage() {
   const order = useQuery(orderQuery(orderId));
   const products = useQuery(productsQuery());
   const pilotSettings = useQuery(pilotSettingsQuery());
-  const productionPlan = useQuery(productionPlanByOrderQuery(orderId));
+  const workSession = useQuery(workSessionByOrderQuery(orderId));
+  const formulas = useQuery(formulasQuery());
   const statusColors = (pilotSettings.data?.order_status_colors as Record<string, string> | null) ?? null;
 
   const [dmText, setDmText] = useState("");
@@ -173,6 +177,12 @@ function OrderDetailPage() {
   const [flavoringNote, setFlavoringNote] = useState("");
   const [designNote, setDesignNote] = useState("");
   const [orderNote, setOrderNote] = useState("");
+  // 2026-10-06 사용자 재확인: FLAVORING NOTE는 자유 텍스트뿐 아니라 실제 FORMULA까지 링크할 수
+  // 있어야 한다(Sheet/Cream/Filling 각각). FORMULA VERSION까지는 아직 정하지 않음 — 실제 버전은
+  // WORK SESSION 생성 시 시작값으로 자동 채워지되, 그 뒤엔 언제든 WORK SESSION 쪽에서 바꿀 수 있다.
+  const [flavoringSheetFormulaId, setFlavoringSheetFormulaId] = useState("");
+  const [flavoringCreamFormulaId, setFlavoringCreamFormulaId] = useState("");
+  const [flavoringFillingFormulaId, setFlavoringFillingFormulaId] = useState("");
 
   // 2026-10-06 사용자 요청: Satisfaction(만족도) — Status(진행 단계)와는 완전히 별개 개념이라
   // 독립된 필드로 관리한다. makerSatisfaction/customerSatisfaction은 1~5 또는 "" (미입력/미수집).
@@ -209,6 +219,9 @@ function OrderDetailPage() {
       status: (o.status as OrderStatus) ?? "INTAKE",
       productId: o.product_id ?? "",
       flavoringNote: o.flavoring_note ?? "",
+      flavoringSheetFormulaId: o.flavoring_sheet_formula_id ?? "",
+      flavoringCreamFormulaId: o.flavoring_cream_formula_id ?? "",
+      flavoringFillingFormulaId: o.flavoring_filling_formula_id ?? "",
       designNote: o.design_notes ?? "",
       orderNote: o.notes ?? "",
       makerSatisfaction: o.maker_satisfaction ?? "",
@@ -239,6 +252,9 @@ function OrderDetailPage() {
     setStatus((o.status as OrderStatus) ?? "INTAKE");
     setProductId(o.product_id ?? "");
     setFlavoringNote(o.flavoring_note ?? "");
+    setFlavoringSheetFormulaId(o.flavoring_sheet_formula_id ?? "");
+    setFlavoringCreamFormulaId(o.flavoring_cream_formula_id ?? "");
+    setFlavoringFillingFormulaId(o.flavoring_filling_formula_id ?? "");
     setDesignNote(o.design_notes ?? "");
     setOrderNote(o.notes ?? "");
     setMakerSatisfaction(o.maker_satisfaction ?? "");
@@ -276,6 +292,9 @@ function OrderDetailPage() {
     status,
     productId,
     flavoringNote,
+    flavoringSheetFormulaId,
+    flavoringCreamFormulaId,
+    flavoringFillingFormulaId,
     designNote,
     orderNote,
     makerSatisfaction,
@@ -389,6 +408,9 @@ function OrderDetailPage() {
           status,
           product_id: productId || null,
           flavoring_note: flavoringNote.trim() || null,
+          flavoring_sheet_formula_id: flavoringSheetFormulaId || null,
+          flavoring_cream_formula_id: flavoringCreamFormulaId || null,
+          flavoring_filling_formula_id: flavoringFillingFormulaId || null,
           design_notes: designNote.trim() || null,
           notes: orderNote.trim() || null,
           maker_satisfaction: makerSatisfaction === "" ? null : makerSatisfaction,
@@ -424,11 +446,13 @@ function OrderDetailPage() {
     },
   });
 
-  // 2026-10-06 사용자 요청: ORDER → PRODUCTION PLAN 생성. Formula Version은 여기서 절대
-  // 자동으로 채우거나 추측하지 않는다 — 비어 있는 CORE ELEMENT(Sheet/Cream/Filling) 3개 슬롯만
-  // 미리 만들어두고, 실제 Formula Version 선택은 Production Plan 화면에서 한다.
-  // 이미 Plan이 있으면 중복 생성하지 않고 그 화면으로 이동만 한다(버튼 쪽에서 분기).
-  const createProductionPlan = useMutation({
+  // 2026-10-06 사용자 정정: 별도 PRODUCTION PLAN 테이블이 아니라 기존 PRODUCTION(work_sessions)
+  // 시스템을 그대로 재사용한다. CORE ELEMENT(Sheet/Cream/Filling)는 새 테이블 없이
+  // work_session_formula_versions 행에 kind='CORE'/slot 태그를 붙여서 만든다. 위에서 사용자가
+  // Flavoring Formula를 지정해둔 경우, pickEffectiveFormulaVersion으로 고른 버전을 "시작값"으로
+  // 자동 채워 넣는다 — 잠겨있지 않고, Work Session 화면에서 언제든 바꿀 수 있다.
+  // 이미 연결된 Work Session이 있으면 중복 생성하지 않고 그 화면으로 이동만 한다(버튼 쪽에서 분기).
+  const createWorkSession = useMutation({
     mutationFn: async () => {
       if (!order.data) return;
       const o = order.data;
@@ -436,41 +460,64 @@ function OrderDetailPage() {
       const baseName =
         products.data?.find((p) => p.id === o.product_id)?.name || o.recipient || o.order_number;
       const userId = await currentUserId();
-      const { data: plan, error } = await supabase
-        .from("production_plans")
+      const { data: session, error } = await supabase
+        .from("work_sessions")
         .insert({
           user_id: userId,
           order_id: orderId,
-          title: generateTitle(baseName, deliveryDate),
+          name: generateTitle(baseName, deliveryDate),
           status: "PLANNED",
+          product_id: o.product_id ?? null,
         })
         .select("id")
         .single();
       if (error) throw error;
-      const { error: elementsError } = await supabase.from("production_plan_elements").insert(
-        CORE_ELEMENT_SLOTS.map((slot, i) => ({
-          user_id: userId,
-          production_plan_id: plan.id,
-          kind: "CORE",
-          slot,
-          label: CORE_ELEMENT_LABELS[slot],
-          sort_order: i,
-        })),
-      );
-      if (elementsError) throw elementsError;
+
+      const slotFormulaIds: Record<CoreSlot, string> = {
+        SHEET: flavoringSheetFormulaId,
+        CREAM: flavoringCreamFormulaId,
+        FILLING: flavoringFillingFormulaId,
+      };
+      const coreRows = CORE_SLOTS.flatMap((slot) => {
+        const formulaId = slotFormulaIds[slot];
+        if (!formulaId) return [];
+        const formula = formulas.data?.find((f) => f.id === formulaId);
+        const version = formula ? pickEffectiveFormulaVersion(formula.formula_versions) : null;
+        if (!version) return [];
+        return [
+          {
+            user_id: userId,
+            work_session_id: session.id,
+            formula_version_id: version.id,
+            kind: "CORE" as const,
+            slot,
+            multiplier: 1,
+            mould_id: null,
+            mould_qty: null,
+            base_weight_id: null,
+            base_weight_qty: null,
+            sort_order: CORE_SLOTS.indexOf(slot),
+          },
+        ];
+      });
+      if (coreRows.length > 0) {
+        const { error: rowsError } = await supabase.from("work_session_formula_versions").insert(coreRows);
+        if (rowsError) throw rowsError;
+      }
+      return session.id;
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["production_plans", "by_order", orderId] });
-      void navigate({ to: "/orders/$orderId/production", params: { orderId } });
+    onSuccess: async (sessionId) => {
+      await queryClient.invalidateQueries({ queryKey: ["work_sessions", "by_order", orderId] });
+      await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
+      if (sessionId) void navigate({ to: "/production/$sessionId", params: { sessionId } });
     },
   });
 
   // 2026-10-06 사용자 요청: ORDER → PRODUCT 승격. Order 텍스트를 그대로 복사하지 않고,
-  // 연결된 Production Plan이 있으면 그 Element들이 실제로 선택한 Formula Version을 모아
-  // Product Component로 옮긴다(중복 Formula+Version은 자동으로 한 번만 반영됨 — 각 Element는
-  // product_components 행 하나씩 그대로 생성되므로 같은 Formula Version을 쓰는 Element가 여럿이면
-  // 여러 행이 생기지만, 화면의 "CURRENT RECIPE INFORMATION"에서는 보여줄 때 dedupe한다).
-  // Production Plan이 없어도 승격은 허용 — 그 경우 Product Component 없이 빈 Product만 생성(사용자 확인).
+  // 연결된 Work Session이 있으면 그 work_session_formula_versions 행들이 실제로 선택한
+  // Formula Version을 모아 Product Component로 옮긴다(component_id는 formula_versions.formulas를
+  // 통해 구한다 — component_id가 없는 "기준 배합"에서 고른 행은 제외).
+  // Work Session이 없어도 승격은 허용 — 그 경우 Product Component 없이 빈 Product만 생성(사용자 확인).
   const upgradeToProduct = useMutation({
     mutationFn: async () => {
       if (!order.data) return;
@@ -485,15 +532,19 @@ function OrderDetailPage() {
         .single();
       if (error) throw error;
 
-      if (productionPlan.data) {
-        const { data: elements, error: elementsError } = await supabase
-          .from("production_plan_elements")
-          .select("component_id, formula_version_id")
-          .eq("production_plan_id", productionPlan.data.id)
-          .not("component_id", "is", null)
-          .not("formula_version_id", "is", null);
-        if (elementsError) throw elementsError;
-        if (elements && elements.length > 0) {
+      if (workSession.data) {
+        const { data: rows, error: rowsError } = await supabase
+          .from("work_session_formula_versions")
+          .select("formula_version_id, formula_versions(formulas(component_id))")
+          .eq("work_session_id", workSession.data.id);
+        if (rowsError) throw rowsError;
+        const elements = (rows ?? [])
+          .map((r) => ({
+            component_id: r.formula_versions?.formulas?.component_id ?? null,
+            formula_version_id: r.formula_version_id,
+          }))
+          .filter((el): el is { component_id: string; formula_version_id: string } => el.component_id != null);
+        if (elements.length > 0) {
           const { error: insertError } = await supabase.from("product_components").insert(
             elements.map((el, i) => ({
               user_id: userId,
@@ -802,6 +853,37 @@ function OrderDetailPage() {
               value={flavoringNote}
               onChange={(e) => setFlavoringNote(e.target.value)}
             />
+            {/* 2026-10-06 사용자 재확인: 자유 텍스트만으론 부족 — Sheet/Cream/Filling 각각 실제
+                FORMULA까지 링크할 수 있어야 한다. FORMULA VERSION은 아직 안 정함 — WORK SESSION
+                생성 시 pickEffectiveFormulaVersion으로 시작값만 자동 채우고, 그 뒤엔 WORK SESSION
+                쪽에서 바꾼다. */}
+            <div className="mt-2 grid grid-cols-1 gap-1.5">
+              {(
+                [
+                  ["SHEET", flavoringSheetFormulaId, setFlavoringSheetFormulaId],
+                  ["CREAM", flavoringCreamFormulaId, setFlavoringCreamFormulaId],
+                  ["FILLING", flavoringFillingFormulaId, setFlavoringFillingFormulaId],
+                ] as const
+              ).map(([slot, value, setValue]) => (
+                <label key={slot} className="flex items-center gap-2">
+                  <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">
+                    {CORE_SLOT_LABELS[slot]}
+                  </span>
+                  <select
+                    className={selectClass}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                  >
+                    <option value="">— FORMULA 링크 안 함 —</option>
+                    {(formulas.data ?? []).map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.components?.name ?? f.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
           </Field>
           <Field label="DESIGN NOTE — 디자인/구조/조립">
             <textarea
@@ -867,26 +949,27 @@ function OrderDetailPage() {
         </div>
       </SectionCard>
 
-      {/* 2026-10-06 사용자 요청: ORDER → PRODUCTION PLAN → PRODUCT 흐름의 진입점.
-          이미 Production Plan/Product가 있으면 "생성"이 아니라 "열기"로 바뀐다(중복 생성 금지). */}
+      {/* 2026-10-06 사용자 정정: "PRODUCTION PLAN"이라는 별도 개념이 아니라 기존 PRODUCTION
+          (work_sessions) 화면으로 바로 연결된다. 이미 연결된 Work Session/Product가 있으면
+          "생성"이 아니라 "열기"로 바뀐다(중복 생성 금지). */}
       <SectionCard title="PRODUCTION / PRODUCT">
         <div className="flex flex-wrap items-center gap-2">
-          {productionPlan.data ? (
+          {workSession.data ? (
             <Link
-              to="/orders/$orderId/production"
-              params={{ orderId }}
+              to="/production/$sessionId"
+              params={{ sessionId: workSession.data.id }}
               className={buttonClass}
             >
-              OPEN PRODUCTION PLAN{productionPlan.data.title ? ` — ${productionPlan.data.title}` : ""}
+              OPEN WORK SESSION{workSession.data.name ? ` — ${workSession.data.name}` : ""}
             </Link>
           ) : (
             <button
               type="button"
               className={buttonClass}
-              disabled={createProductionPlan.isPending}
-              onClick={() => createProductionPlan.mutate()}
+              disabled={createWorkSession.isPending}
+              onClick={() => createWorkSession.mutate()}
             >
-              {createProductionPlan.isPending ? "생성 중…" : "+ CREATE PRODUCTION PLAN"}
+              {createWorkSession.isPending ? "생성 중…" : "+ CREATE WORK SESSION"}
             </button>
           )}
           {order.data.product_id ? (
@@ -908,9 +991,9 @@ function OrderDetailPage() {
             </button>
           )}
         </div>
-        {(createProductionPlan.isError || upgradeToProduct.isError) && (
+        {(createWorkSession.isError || upgradeToProduct.isError) && (
           <p className="mt-2 font-mono text-xs uppercase text-destructive">
-            {((createProductionPlan.error ?? upgradeToProduct.error) as Error).message}
+            {((createWorkSession.error ?? upgradeToProduct.error) as Error).message}
           </p>
         )}
       </SectionCard>
