@@ -8,12 +8,13 @@ import {
   pilotSettingsQuery,
   orderStatusLabel,
   orderStatusColor,
+  ORDER_STATUSES,
+  type OrderStatus,
   type OrderListRow,
 } from "@/lib/queries";
 import { toLocalDateString } from "@/lib/datetime";
-import { readableTextColor } from "@/lib/pilot";
 import { EmptyState } from "@/components/EmptyState";
-import { PageHeader, primaryButtonClass, buttonClass } from "@/components/pilot/ui";
+import { PageHeader, primaryButtonClass, buttonClass, selectClass } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/orders/")({
   head: () => ({
@@ -136,52 +137,88 @@ function OrdersTable({
       </div>
       <ul>
         {rows.map((o) => (
-          <li key={o.id} className="border-b border-border last:border-b-0">
-            <Link
-              to="/orders/$orderId"
-              params={{ orderId: o.id }}
-              className="grid grid-cols-1 gap-1 px-3 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-x-4 md:gap-y-1"
-            >
-              <span className="col-span-1 truncate font-mono text-sm">{o.order_number}</span>
-              <span className="col-span-2 text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>
-              <span className="col-span-2 text-sm">{o.recipient || "—"}</span>
-              <span className="col-span-1 text-sm text-muted-foreground">{o.occasion || "—"}</span>
-              <span className="col-span-2 font-mono text-xs text-muted-foreground">
-                {o.pickup_at
-                  ? new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })
-                  : o.event_date || "—"}
-              </span>
-              <span className="col-span-2 text-sm text-muted-foreground">
-                {o.products?.name || (
-                  // 2026-10-06 사용자 요청: 행 전체를 칠하면 미감이 안 좋다 — PRODUCT CATEGORY의
-                  // 색상 배지(CategoryBadge)처럼 TBD 텍스트에만 작은 배지로 강조.
-                  <span className="label-caps inline-block bg-destructive px-2 py-0.5 text-[11px] text-destructive-foreground">
-                    TBD
-                  </span>
-                )}
-              </span>
-              <span className="col-span-2">
-                <StatusChip status={o.status} color={orderStatusColor(statusColors, o.status)} />
-              </span>
-            </Link>
-          </li>
+          <OrderRow key={o.id} order={o} statusColors={statusColors} />
         ))}
       </ul>
     </div>
   );
 }
 
-// 2026-10-06 사용자 요청: Status를 "한눈에 보이는 색상 배지"로 — 색상은 SETTINGS의
-// ORDER STATUS COLORS에서 사용자가 지정한 값(pilot_settings.order_status_colors)을 쓰고,
-// 지정 안 했으면 코드 기본 팔레트를 쓴다(orderStatusColor()가 그 우선순위를 처리).
-function StatusChip({ status, color }: { status: string; color: string }) {
+// 2026-10-06 사용자 재요청: 목록에서 STATUS를 색상 배지로만 보여주면 바꾸려고 누를 때마다
+// 매번 ORDER DETAIL로 들어가야 했음(행 전체가 Link라 배지를 눌러도 그냥 이동만 됨) — 이제
+// 목록에서 바로 드롭다운으로 상태를 바꿀 수 있다. 행 전체를 <a>로 감싸면 그 안에 <select>를
+// 넣는 게 유효하지 않은 HTML이라(클릭 버블링도 꼬임), 행을 Link 대신 onClick 네비게이션으로
+// 바꾸고 STATUS 드롭다운 쪽만 stopPropagation으로 분리했다.
+function OrderRow({
+  order: o,
+  statusColors,
+}: {
+  order: OrderListRow;
+  statusColors: Record<string, string> | null;
+}) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const updateStatus = useMutation({
+    mutationFn: async (status: OrderStatus) => {
+      const { error } = await supabase.from("orders").update({ status }).eq("id", o.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
+  });
+
   return (
-    <span
-      className="label-caps inline-block px-2 py-0.5 text-[11px]"
-      style={{ backgroundColor: color, color: readableTextColor(color) }}
-    >
-      {orderStatusLabel(status)}
-    </span>
+    <li className="border-b border-border last:border-b-0">
+      <div
+        role="link"
+        tabIndex={0}
+        onClick={() => void navigate({ to: "/orders/$orderId", params: { orderId: o.id } })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void navigate({ to: "/orders/$orderId", params: { orderId: o.id } });
+        }}
+        className="grid grid-cols-1 gap-1 px-3 py-3 hover:bg-secondary cursor-pointer md:grid-cols-12 md:items-center md:gap-x-4 md:gap-y-1"
+      >
+        <span className="col-span-1 truncate font-mono text-sm">{o.order_number}</span>
+        <span className="col-span-2 text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>
+        <span className="col-span-2 text-sm">{o.recipient || "—"}</span>
+        <span className="col-span-1 text-sm text-muted-foreground">{o.occasion || "—"}</span>
+        <span className="col-span-2 font-mono text-xs text-muted-foreground">
+          {o.pickup_at
+            ? new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })
+            : o.event_date || "—"}
+        </span>
+        <span className="col-span-2 text-sm text-muted-foreground">
+          {o.products?.name || (
+            // 2026-10-06 사용자 요청: 행 전체를 칠하면 미감이 안 좋다 — PRODUCT CATEGORY의
+            // 색상 배지(CategoryBadge)처럼 TBD 텍스트에만 작은 배지로 강조.
+            <span className="label-caps inline-block bg-destructive px-2 py-0.5 text-[11px] text-destructive-foreground">
+              TBD
+            </span>
+          )}
+        </span>
+        <span className="col-span-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: orderStatusColor(statusColors, o.status) }}
+              aria-hidden
+            />
+            <select
+              className={`${selectClass} !w-auto !min-h-0 border-none bg-transparent px-1 py-0.5 text-[11px]`}
+              value={o.status}
+              disabled={updateStatus.isPending}
+              onChange={(e) => updateStatus.mutate(e.target.value as OrderStatus)}
+            >
+              {ORDER_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {orderStatusLabel(s)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </span>
+      </div>
+    </li>
   );
 }
 
