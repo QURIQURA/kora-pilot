@@ -4,8 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   baseFormulaLibraryQuery,
+  baseWeightsQuery,
   currentUserId,
   formulasByComponentQuery,
+  mouldsQuery,
   versionIngredientsQuery,
   type FormulaListRow,
 } from "@/lib/queries";
@@ -14,6 +16,7 @@ import { fmtNumber, versionLabel } from "@/lib/formula";
 import { computeLineCosts, fmtCurrency } from "@/lib/cost";
 import { formatDateTime } from "@/lib/datetime";
 import { VersionComparisonSheet } from "./VersionComparisonSheet";
+import { mouldOptionLabel } from "./MouldSelect";
 import { SectionCard, StatusBadge, buttonClass, primaryButtonClass } from "./ui";
 
 export function CurrentFormulaPanel({
@@ -28,11 +31,29 @@ export function CurrentFormulaPanel({
 
   const formulas = useQuery(formulasByComponentQuery(componentId));
   const baseLibrary = useQuery(baseFormulaLibraryQuery());
+  const moulds = useQuery(mouldsQuery());
+  const baseWeights = useQuery(baseWeightsQuery());
 
   const formula = (formulas.data ?? [])[0] ?? null;
   const version = formula ? currentVersion(formula) : null;
   const ingredients = useQuery(versionIngredientsQuery(version?.id ?? null));
   const rows = ingredients.data ?? [];
+
+  // 2026-10-06 사용자 요청: "몰드 기준이라 되어있는데 어떤 용량의 몰드 기준인지는 안적혀있어" —
+  // Component의 "계량 기준"(scaling_mode) 드롭다운은 MOULD/BASE_WEIGHT 중 어느 방식을 쓰는지만
+  // 말해줄 뿐, 이 Formula Version이 실제로 어느 몰드/기준중량을 기준으로 적혀있는지는 안 보였다.
+  // formula_versions.default_mould_id/default_base_weight_id는 이미 있던 컬럼이고 FORMULA 상세
+  // 페이지 EDIT에서 계속 저장도 되고 있었는데(그 UI만 2026-09-30에 지워짐), SETTINGS > MOULDS의
+  // reference_weight_g와 여기서 연결해서 보여준다.
+  const scalingMode = formula?.components?.scaling_mode ?? "MOULD";
+  const basisMould =
+    scalingMode === "MOULD" && version?.default_mould_id
+      ? (moulds.data ?? []).find((m) => m.id === version.default_mould_id)
+      : null;
+  const basisWeight =
+    scalingMode === "BASE_WEIGHT" && version?.default_base_weight_id
+      ? (baseWeights.data ?? []).find((b) => b.id === version.default_base_weight_id)
+      : null;
 
   const cost = computeLineCosts(rows);
   const totalGrams = cost.totalGrams;
@@ -214,6 +235,29 @@ export function CurrentFormulaPanel({
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <span className="label-caps block text-xs text-muted-foreground">
+              {scalingMode === "MOULD" ? "MOULD BASIS" : "BASE WEIGHT BASIS"}
+            </span>
+            {scalingMode === "MOULD" ? (
+              basisMould ? (
+                <p className="font-mono text-base">{mouldOptionLabel(basisMould)}</p>
+              ) : (
+                <p className="font-mono text-xs text-muted-foreground">
+                  미지정 — OPEN FULL FORMULA에서 지정
+                </p>
+              )
+            ) : basisWeight ? (
+              <p className="font-mono text-base">
+                {basisWeight.name}
+                {basisWeight.weight_g != null ? ` (${basisWeight.weight_g}g 기준)` : ""}
+              </p>
+            ) : (
+              <p className="font-mono text-xs text-muted-foreground">
+                미지정 — OPEN FULL FORMULA에서 지정
+              </p>
+            )}
+          </div>
           <div className="space-y-1">
             <span className="label-caps block text-xs text-muted-foreground">TOTAL WEIGHT</span>
             <p className="font-mono text-base tabular-nums">{fmtNumber(totalGrams)}g</p>

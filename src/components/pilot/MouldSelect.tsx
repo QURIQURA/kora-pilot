@@ -1,10 +1,22 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { mouldsQuery } from "@/lib/queries";
+import type { Mould } from "@/lib/formula";
 import { selectClass } from "./ui";
 import { MouldCreateForm } from "./MouldCreateForm";
 
 const NEW_VALUE = "__new_mould__";
+
+// 2026-10-06 사용자 요청: "몰드 기준이라 되어있는데 어떤 용량의 몰드 기준인지는 안적혀있어" —
+// 드롭다운/표시 어디서도 몰드의 기준중량(reference_weight_g, SETTINGS > MOULDS에서 등록)이
+// 안 보여서 어떤 용량 기준인지 알 수 없었던 문제. 이 라벨 포맷을 한 곳에 모아서 MouldSelect와
+// 그걸 쓰는 화면(FORMULA 상세, Component CURRENT FORMULA 요약 등) 전체에서 공유한다.
+export function mouldOptionLabel(mould: Pick<Mould, "name" | "shape_size" | "reference_weight_g">): string {
+  const parts = [mould.name];
+  if (mould.shape_size) parts.push(mould.shape_size);
+  const label = parts.join(" · ");
+  return mould.reference_weight_g != null ? `${label} (${mould.reference_weight_g}g 기준)` : label;
+}
 
 /** 몰드 선택 드롭다운. 맨 아래 "+ NEW MOULD"로 즉석 생성 후 자동 선택. */
 export function MouldSelect({
@@ -40,7 +52,7 @@ export function MouldSelect({
         <option value="">{emptyLabel}</option>
         {(moulds.data ?? []).map((mould) => (
           <option key={mould.id} value={mould.id}>
-            {mould.shape_size ? `${mould.name} · ${mould.shape_size}` : mould.name}
+            {mouldOptionLabel(mould)}
           </option>
         ))}
         <option value={NEW_VALUE}>+ NEW MOULD</option>

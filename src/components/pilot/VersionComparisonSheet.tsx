@@ -141,6 +141,7 @@ export function VersionComparisonSheet({
 
   const sheetLoading = versionIngredientQueries.some((q) => q.isLoading);
   const queryClient = useQueryClient();
+  const [reorderError, setReorderError] = useState<string | null>(null);
 
   // 행(재료) 드래그 재정렬은 실제 저장된다(2026-09-26) — 화면에 보이는 모든 버전에
   // 새 순서를 적용하되, 각 버전에 실제로 존재하는 재료만으로 그 버전 자신의 sort_order를
@@ -171,12 +172,19 @@ export function VersionComparisonSheet({
       );
     },
     onSuccess: () => {
+      setReorderError(null);
       baseVersions.forEach((v) =>
         queryClient.invalidateQueries({ queryKey: ["formula_version_ingredients", v.id] }),
       );
     },
+    // 2026-10-06 사용자 요청: 드래그로 순서를 바꿔도 실제로는 저장이 안 되고 페이지를 떠났다
+    // 돌아오면 원래대로 돌아가 있는 문제 신고 — 실패가 콘솔에만 찍히고 화면엔 전혀 안 보여서
+    // 저장이 안 됐는데도 성공한 것처럼 보였던 게 원인 중 하나였다. 이제 실패하면 바로 눈에
+    // 보이게 표시하고, 로컬에 미리 반영했던 순서도 실제 저장된 값으로 되돌린다(거짓 성공 방지).
     onError: (error) => {
       console.error("재료 순서 저장 실패", error);
+      setReorderError(error instanceof Error ? error.message : "재료 순서 저장에 실패했습니다");
+      setRowOrder(baseRows.map((r) => r.id));
     },
   });
 
@@ -303,7 +311,13 @@ export function VersionComparisonSheet({
     displayVersions.reduce((sum, v) => sum + (colWidths[v.id] ?? DEFAULT_COL_WIDTH), 0);
 
   return (
-    <div className="overflow-x-auto border border-border">
+    <div className="space-y-2">
+      {reorderError && (
+        <p className="font-mono text-xs uppercase text-destructive">
+          순서 저장 실패: {reorderError}
+        </p>
+      )}
+      <div className="overflow-x-auto border border-border">
       <table className="w-full border-collapse text-sm" style={{ tableLayout: "auto", minWidth: dataWidth }}>
         <colgroup>
           <col style={{ width: ingredientColWidth }} />
@@ -364,6 +378,7 @@ export function VersionComparisonSheet({
           </SortableContext>
         </DndContext>
       </table>
+      </div>
     </div>
   );
 }

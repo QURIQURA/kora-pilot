@@ -427,6 +427,8 @@ function FormulaDetailPage() {
     onSuccess: invalidate,
   });
 
+  const [reorderError, setReorderError] = useState<string | null>(null);
+
   /** 재료 행 드래그 재정렬 — 공정 순서대로 배열하기 위한 것으로, EDIT 모드와 무관하게
    *  (LOCK만 아니면) 바로 저장된다. sort_order만 바뀌므로 SAVE를 별도로 요구하지 않는다. */
   const reorderRows = useMutation({
@@ -446,7 +448,21 @@ function FormulaDetailPage() {
         ),
       );
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setReorderError(null);
+      void invalidate();
+    },
+    // 2026-10-06 사용자 요청: 드래그 재정렬이 저장 안 되고 페이지를 떠나면 원래대로 돌아가
+    // 있던 문제 — 실패가 화면엔 전혀 안 보이고 콘솔에만 찍혀서 저장 안 된 걸 알 수가 없었다.
+    // 실패 시 눈에 보이게 알리고, queryData에 미리 반영했던 낙관적 순서도 실제 저장된 값으로
+    // 되돌린다(그래야 "성공한 것처럼 보이는" 거짓 화면이 안 남는다).
+    onError: (error) => {
+      console.error("재료 순서 저장 실패", error);
+      setReorderError(error instanceof Error ? error.message : "재료 순서 저장에 실패했습니다");
+      // 실패 시 미리 반영했던 낙관적 순서(queryData)를 DB의 실제 값으로 다시 맞춘다 —
+      // "성공한 것처럼 보이는" 화면이 남지 않도록.
+      void queryClient.invalidateQueries({ queryKey: ["formula_version_ingredients", versionId] });
+    },
   });
 
   const sensors = useSensors(
@@ -925,10 +941,48 @@ function FormulaDetailPage() {
         )}
       </div>
 
-      {/* 2026-09-30: MOULD/YIELD/BATCH ×N 미리보기 박스 삭제 — ADD BATCH 팝업으로 필요한 배수
-          열(몰드 기준/직접입력)을 바로 만들 수 있어 이 박스가 중복이라는 사용자 판단에 따름.
-          단, 이 배합 버전 자체의 기본 MOULD/YIELD/BASE WEIGHT를 바꿀 UI가 이제 없다 — 나중에
-          필요해지면 별도 위치(예: 버전 드롭다운 옆 EDIT)에 가볍게 다시 추가할 것. */}
+      {/* 2026-09-30에 MOULD/YIELD/BATCH ×N 미리보기 박스를 지우면서, 이 배합 버전 자체의 기본
+          MOULD/BASE WEIGHT/YIELD를 "바꾸는" UI만 없앤 것이었는데, 그 값을 "보여주는" 곳도 결국
+          없어져서 — 2026-10-06 사용자가 "몰드 기준이라 되어있는데 어떤 용량의 몰드 기준인지는
+          안적혀있어"로 재발견. draft.mouldId/baseWeightId/yieldQuantity는 그동안도 계속
+          buildDraft/isDirty/SAVE에 다 연결돼 있었고(죽은 코드가 아니라 입력 UI만 없었음) —
+          여기 가볍게 한 줄로 되살린다. SETTINGS > MOULDS의 reference_weight_g(기준중량)가
+          드롭다운 라벨에 그대로 보이므로(MouldSelect의 mouldOptionLabel 공용 포맷) 어떤 용량
+          기준인지 더 이상 헷갈리지 않는다. */}
+      <div className="flex flex-wrap items-center gap-2 border border-border bg-card px-3 py-2">
+        <span className="label-caps text-xs text-muted-foreground">
+          {scalingMode === "MOULD" ? "MOULD BASIS" : "BASE WEIGHT BASIS"}
+        </span>
+        {scalingMode === "MOULD" ? (
+          <MouldSelect
+            className={`${compactSelectClass} w-auto`}
+            value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
+            disabled={fieldsDisabled}
+            onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id } : d))}
+          />
+        ) : (
+          <BaseWeightSelect
+            className={`${compactSelectClass} w-auto`}
+            value={editing ? (draft?.baseWeightId ?? "") : (version?.default_base_weight_id ?? "")}
+            disabled={fieldsDisabled}
+            onChange={(id) => setDraft((d) => (d ? { ...d, baseWeightId: id } : d))}
+          />
+        )}
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <label className="flex items-center gap-1.5 text-xs">
+          <span className="label-caps text-muted-foreground">YIELD</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            className={`${compactSelectClass} !w-24`}
+            placeholder="g"
+            value={editing ? (draft?.yieldQuantity ?? "") : (yieldQty || "")}
+            disabled={fieldsDisabled}
+            onChange={(e) => setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))}
+          />
+        </label>
+      </div>
+
 
       {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
       {processCautions.length > 0 && (
@@ -945,6 +999,11 @@ function FormulaDetailPage() {
       )}
 
       {/* INGREDIENTS — BASE ×1 vs 저장된 배수 프리셋을 한 표 안에서 박스로 구분해 보여준다 */}
+      {reorderError && (
+        <p className="font-mono text-xs uppercase text-destructive">
+          순서 저장 실패: {reorderError}
+        </p>
+      )}
       <SectionCard
         title="INGREDIENTS"
         action={
