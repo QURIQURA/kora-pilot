@@ -2,7 +2,13 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { customersQuery, customerOrderCountsQuery, type Customer } from "@/lib/queries";
+import {
+  customersQuery,
+  customerOrderCountsQuery,
+  customerLastOrderInfoQuery,
+  type Customer,
+  type CustomerLastOrderInfo,
+} from "@/lib/queries";
 import { EmptyState } from "@/components/EmptyState";
 import { CustomerCreateForm } from "@/components/pilot/CustomerCreateForm";
 import { PageHeader, primaryButtonClass } from "@/components/pilot/ui";
@@ -20,6 +26,7 @@ const REGULAR_MIN_ORDERS = 2;
 function CustomersPage() {
   const customers = useQuery(customersQuery());
   const orderCounts = useQuery(customerOrderCountsQuery());
+  const lastOrderInfo = useQuery(customerLastOrderInfoQuery());
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
 
@@ -35,6 +42,7 @@ function CustomersPage() {
 
   const rows = customers.data ?? [];
   const counts = orderCounts.data ?? {};
+  const lastOrders = lastOrderInfo.data ?? {};
 
   // 핀고정 = 단골(주문 2회 이상) 고객에게만 허용되는 정렬용 고정(2026-10-06 사용자 확인).
   // 단골 섹션: 핀고정 먼저, 그다음 주문 많은 순, 그다음 이름. 일반고객 섹션: 이름순(기존 정렬 유지).
@@ -82,10 +90,17 @@ function CustomersPage() {
             title="단골 REGULAR"
             count={regulars.length}
             entries={regulars}
+            lastOrders={lastOrders}
             showPin
             onTogglePin={(id, pinned) => togglePin.mutate({ id, pinned })}
           />
-          <CustomerSection title="일반고객 GENERAL" count={generals.length} entries={generals} showPin={false} />
+          <CustomerSection
+            title="일반고객 GENERAL"
+            count={generals.length}
+            entries={generals}
+            lastOrders={lastOrders}
+            showPin={false}
+          />
         </div>
       )}
     </div>
@@ -96,12 +111,14 @@ function CustomerSection({
   title,
   count,
   entries,
+  lastOrders,
   showPin,
   onTogglePin,
 }: {
   title: string;
   count: number;
   entries: { customer: Customer; orderCount: number }[];
+  lastOrders: Record<string, CustomerLastOrderInfo>;
   showPin: boolean;
   onTogglePin?: (id: string, pinned: boolean) => void;
 }) {
@@ -146,6 +163,18 @@ function CustomerSection({
                 {[c.instagram_handle, c.phone, c.email].filter(Boolean).join(" · ") || "—"}
               </p>
               <p className="mt-2 font-mono text-[11px] text-muted-foreground">주문 {orderCount}회</p>
+              {/* 2026-10-06 사용자 요청: 최근 DELIVERY 날짜(시간 제외)와 어떤 행사였는지(예:
+                  family-birthday, self-birthday)를 카드에서 바로 볼 수 있게. */}
+              {(() => {
+                const last = lastOrders[c.id];
+                return (
+                  last && (
+                    <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                      최근 {last.lastDeliveryDate} · {last.eventLabel}
+                    </p>
+                  )
+                );
+              })()}
             </Link>
           ))}
         </div>

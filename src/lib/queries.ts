@@ -1396,6 +1396,63 @@ export const customerOrderCountsQuery = () =>
     },
   });
 
+function slugPart(v: string | null): string {
+  if (!v) return "";
+  return v
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+export interface CustomerLastOrderInfo {
+  /** pickup_at(없으면 event_date) 기준 가장 최근 DELIVERY 날짜 — 시간 제외, "YYYY-MM-DD". */
+  lastDeliveryDate: string;
+  /** 예: "family-birthday", "self-birthday" — RECIPIENT RELATIONSHIP + OCCASION을 소문자-하이픈으로 결합. */
+  eventLabel: string;
+}
+
+/**
+ * CUSTOMER 카드뷰에 "최근 DELIVERY 날짜 + 어떤 행사였는지"를 보여주기 위한 집계(2026-10-06 사용자 요청).
+ * customer_id별로 pickup_at(없으면 event_date) 기준 가장 최근 주문 하나만 골라 날짜(시간 제외)와
+ * RECIPIENT RELATIONSHIP-OCCASION 라벨(예: family-birthday)을 계산한다.
+ */
+export const customerLastOrderInfoQuery = () =>
+  queryOptions({
+    queryKey: ["orders", "last_by_customer"],
+    queryFn: async (): Promise<Record<string, CustomerLastOrderInfo>> => {
+      const rows = unwrap(
+        await supabase
+          .from("orders")
+          .select("customer_id, pickup_at, event_date, occasion, recipient_relationship")
+          .not("customer_id", "is", null),
+      ) as {
+        customer_id: string | null;
+        pickup_at: string | null;
+        event_date: string | null;
+        occasion: string | null;
+        recipient_relationship: string | null;
+      }[];
+
+      const best: Record<string, { key: string; row: (typeof rows)[number] }> = {};
+      for (const r of rows) {
+        if (!r.customer_id) continue;
+        const date = r.pickup_at ? r.pickup_at.slice(0, 10) : r.event_date;
+        if (!date) continue;
+        const existing = best[r.customer_id];
+        if (!existing || date > existing.key) {
+          best[r.customer_id] = { key: date, row: r };
+        }
+      }
+
+      const result: Record<string, CustomerLastOrderInfo> = {};
+      for (const [customerId, { key, row }] of Object.entries(best)) {
+        const label = [slugPart(row.recipient_relationship), slugPart(row.occasion)].filter(Boolean).join("-");
+        result[customerId] = { lastDeliveryDate: key, eventLabel: label || "—" };
+      }
+      return result;
+    },
+  });
+
 /**
  * COST 탭 전용 집계 — 모든 Product×Size의 원가/마진/월 예상 원가를 한 번에 계산한다(2026-09-23).
  * $productId.tsx의 개별 Product 원가 계산과 동일한 규칙(사이즈 지정 행만 Raw Material에 합산,

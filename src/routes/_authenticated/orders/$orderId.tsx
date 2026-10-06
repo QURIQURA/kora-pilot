@@ -88,6 +88,47 @@ function matchOption<T extends string>(options: readonly T[], value: string): T 
   return found ?? null;
 }
 
+// 2026-10-06 사용자 요청: Satisfaction(만족도) — Status와는 별개의 5단계 평가.
+const SATISFACTION_LABELS: Record<number, string> = {
+  1: "Very Dissatisfied",
+  2: "Dissatisfied",
+  3: "Neutral",
+  4: "Satisfied",
+  5: "Very Satisfied",
+};
+
+/** Maker/Customer Satisfaction 공용 별점 입력 — value가 ""(미입력/미수집)이면 별이 전부 빈 상태. */
+function StarRating({
+  value,
+  onChange,
+}: {
+  value: number | "";
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-0.5">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            className="px-0.5 text-xl leading-none text-border hover:text-foreground"
+            aria-label={`${n}점 — ${SATISFACTION_LABELS[n]}`}
+          >
+            <span className={value !== "" && n <= value ? "text-foreground" : ""}>
+              {value !== "" && n <= value ? "★" : "☆"}
+            </span>
+          </button>
+        ))}
+      </div>
+      <span className="label-caps text-[10px] text-muted-foreground">
+        {value !== "" ? `${value} — ${SATISFACTION_LABELS[value]}` : "—"}
+      </span>
+    </div>
+  );
+}
+
 function OrderDetailPage() {
   const { orderId } = Route.useParams();
   const navigate = useNavigate();
@@ -122,6 +163,15 @@ function OrderDetailPage() {
   const [productId, setProductId] = useState("");
   const [notes, setNotes] = useState("");
 
+  // 2026-10-06 사용자 요청: Satisfaction(만족도) — Status(진행 단계)와는 완전히 별개 개념이라
+  // 독립된 필드로 관리한다. makerSatisfaction/customerSatisfaction은 1~5 또는 "" (미입력/미수집).
+  // customerSatisfaction은 특히 "아직 미수집"과 "1점"을 절대 같은 값으로 저장하면 안 되므로
+  // ""(= null, 미수집)과 1~5를 구분되는 상태로 다룬다.
+  const [makerSatisfaction, setMakerSatisfaction] = useState<number | "">("");
+  const [customerSatisfaction, setCustomerSatisfaction] = useState<number | "">("");
+  const [customerFeedback, setCustomerFeedback] = useState("");
+  const [makerNotes, setMakerNotes] = useState("");
+
   // 수정사항 저장 여부를 시각적으로 보여주기 위한 "저장된 상태" 스냅샷(2026-10-06, 사용자
   // 요청 — SAVE 누르면 다시 수정하기 전까지 버튼이 비활성화되고 "✓ SAVED"로 보이게 함.
   // FORMULA 페이지(formulas/$formulaId.tsx)의 isDirty 패턴과 동일한 방식).
@@ -148,6 +198,10 @@ function OrderDetailPage() {
       status: (o.status as OrderStatus) ?? "INTAKE",
       productId: o.product_id ?? "",
       notes: o.notes ?? "",
+      makerSatisfaction: o.maker_satisfaction ?? "",
+      customerSatisfaction: o.customer_satisfaction ?? "",
+      customerFeedback: o.customer_feedback ?? "",
+      makerNotes: o.maker_notes ?? "",
     });
 
   const [savedSnapshot, setSavedSnapshot] = useState("");
@@ -172,6 +226,10 @@ function OrderDetailPage() {
     setStatus((o.status as OrderStatus) ?? "INTAKE");
     setProductId(o.product_id ?? "");
     setNotes(o.notes ?? "");
+    setMakerSatisfaction(o.maker_satisfaction ?? "");
+    setCustomerSatisfaction(o.customer_satisfaction ?? "");
+    setCustomerFeedback(o.customer_feedback ?? "");
+    setMakerNotes(o.maker_notes ?? "");
   };
 
   useEffect(() => {
@@ -203,6 +261,10 @@ function OrderDetailPage() {
     status,
     productId,
     notes,
+    makerSatisfaction,
+    customerSatisfaction,
+    customerFeedback,
+    makerNotes,
   });
   const isDirty = Boolean(order.data) && currentSnapshot !== savedSnapshot;
 
@@ -310,6 +372,10 @@ function OrderDetailPage() {
           status,
           product_id: productId || null,
           notes: notes.trim() || null,
+          maker_satisfaction: makerSatisfaction === "" ? null : makerSatisfaction,
+          customer_satisfaction: customerSatisfaction === "" ? null : customerSatisfaction,
+          customer_feedback: customerFeedback.trim() || null,
+          maker_notes: makerNotes.trim() || null,
         })
         .eq("id", orderId);
       if (error) throw error;
@@ -617,12 +683,56 @@ function OrderDetailPage() {
             <textarea rows={4} className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </Field>
         </div>
+      </SectionCard>
 
+      {/* 2026-10-06 사용자 요청: Satisfaction — Status(진행 단계)와는 별개 개념이라 별도 섹션으로
+          분리. Maker/Customer Satisfaction을 각각 독립 필드로 관리(향후 둘을 비교 분석하기 위함).
+          SAVE/DELETE 버튼은 기존과 동일하게 이 페이지 전체(주문 정보 + Satisfaction)에 공통 적용. */}
+      <SectionCard title="SATISFACTION">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Field label="MAKER SATISFACTION — 내가 이 주문에 얼마나 만족했는가">
+            <StarRating value={makerSatisfaction} onChange={setMakerSatisfaction} />
+          </Field>
+          <Field label="CUSTOMER SATISFACTION — 고객이 이 주문에 얼마나 만족했는가">
+            <div className="space-y-1">
+              <StarRating value={customerSatisfaction} onChange={setCustomerSatisfaction} />
+              <button
+                type="button"
+                className="label-caps text-[10px] text-muted-foreground hover:text-foreground"
+                onClick={() => setCustomerSatisfaction("")}
+              >
+                {customerSatisfaction === "" ? "— NOT YET COLLECTED" : "✕ 미수집으로 되돌리기 (NOT YET COLLECTED)"}
+              </button>
+            </div>
+          </Field>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Field label="CUSTOMER FEEDBACK — 고객의 실제 반응 (고객에게 노출되지 않음, 내부 기록용)">
+            <textarea
+              rows={3}
+              className={inputClass}
+              placeholder='예: "She absolutely loved the surprise!"'
+              value={customerFeedback}
+              onChange={(e) => setCustomerFeedback(e.target.value)}
+            />
+          </Field>
+          <Field label="MAKER NOTES — 제작자 내부 평가 (고객에게 노출되지 않음)">
+            <textarea
+              rows={3}
+              className={inputClass}
+              placeholder='예: "Result was beautiful but production took too long."'
+              value={makerNotes}
+              onChange={(e) => setMakerNotes(e.target.value)}
+            />
+          </Field>
+        </div>
+      </SectionCard>
+
+      <div className="border border-border bg-card p-4">
         {save.isError && (
-          <p className="mt-2 font-mono text-xs uppercase text-destructive">{(save.error as Error).message}</p>
+          <p className="mb-2 font-mono text-xs uppercase text-destructive">{(save.error as Error).message}</p>
         )}
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             className={primaryButtonClass}
@@ -649,7 +759,7 @@ function OrderDetailPage() {
             DELETE ORDER
           </button>
         </div>
-      </SectionCard>
+      </div>
     </div>
   );
 }

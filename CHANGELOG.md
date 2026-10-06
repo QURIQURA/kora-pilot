@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-10-06 — CUSTOMERS 카드에 최근 DELIVERY 날짜 + 행사 표시
+
+CUSTOMERS 카드뷰의 각 카드에 가장 최근 주문의 DELIVERY/PICKUP 날짜(시간 제외)와 어떤 행사였는지가
+"family-birthday", "self-birthday"처럼 RECIPIENT RELATIONSHIP-OCCASION 형식으로 표시됩니다.
+
+---
+
+## 2026-10-06 — fix: ORDERS "+ NEW ORDER" 버튼 먹통 수정 (DB 기본값)
+
+Status를 7단계로 재정의하면서 orders.status 컬럼의 DB 기본값이 예전 값 'NEW'로 남아있어 상태값을
+생략하는 "+ NEW ORDER"가 매번 조용히 실패하던 버그를 수정했습니다. 기본값을 INTAKE로 교체.
+
+---
+
+## 2026-10-06 — ORDER DETAIL에 Satisfaction(만족도) 추가
+
+ORDER DETAIL에 Status와는 별개인 "SATISFACTION" 섹션을 추가했습니다.
+
+- MAKER SATISFACTION: 제작자가 이 주문에 얼마나 만족했는지 1~5 별점으로 기록.
+- CUSTOMER SATISFACTION: 고객 만족도를 1~5 별점으로 기록하되, "아직 미수집" 상태를 별도로 둬서
+  1점과 미수집을 서로 다른 값으로 구분합니다("미수집으로 되돌리기" 버튼으로 전환).
+- CUSTOMER FEEDBACK: 고객이 실제로 남긴 반응을 적는 텍스트 칸.
+- MAKER NOTES: 제작자 내부 평가용 텍스트 칸(고객에게 노출되지 않는 내부 기록).
+
+Maker/Customer Satisfaction은 각각 독립된 데이터로 저장되어, 나중에 둘을 비교(평균, Maker↑/
+Customer↓ 등)하는 분석에 쓸 수 있습니다. 이번 작업은 Order Detail에서 입력/저장까지만 구현했고,
+대시보드나 집계 화면은 포함하지 않았습니다.
+
+---
+
 ## 2026-10-06 — ORDERS LIST에서 Status 바로 수정
 
 ORDERS LIST의 STATUS 색상 배지를 클릭하면 그 자리에서 바로 Dropdown으로 단계를 바꿀 수 있습니다.

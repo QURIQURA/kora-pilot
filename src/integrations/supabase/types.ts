@@ -1089,12 +1089,16 @@ export type Database = {
           created_at: string
           custom_size: string | null
           custom_size_cm: number | null
+          customer_feedback: string | null
           customer_id: string | null
+          customer_satisfaction: number | null
           design_notes: string | null
           event_date: string | null
           extracted_json: Json | null
           has_allergies: boolean
           id: string
+          maker_notes: string | null
+          maker_satisfaction: number | null
           notes: string | null
           occasion: Database["public"]["Enums"]["order_occasion"] | null
           occasion_legacy: string | null
@@ -1127,12 +1131,16 @@ export type Database = {
           created_at?: string
           custom_size?: string | null
           custom_size_cm?: number | null
+          customer_feedback?: string | null
           customer_id?: string | null
+          customer_satisfaction?: number | null
           design_notes?: string | null
           event_date?: string | null
           extracted_json?: Json | null
           has_allergies?: boolean
           id?: string
+          maker_notes?: string | null
+          maker_satisfaction?: number | null
           notes?: string | null
           occasion?: Database["public"]["Enums"]["order_occasion"] | null
           occasion_legacy?: string | null
@@ -1165,12 +1173,16 @@ export type Database = {
           created_at?: string
           custom_size?: string | null
           custom_size_cm?: number | null
+          customer_feedback?: string | null
           customer_id?: string | null
+          customer_satisfaction?: number | null
           design_notes?: string | null
           event_date?: string | null
           extracted_json?: Json | null
           has_allergies?: boolean
           id?: string
+          maker_notes?: string | null
+          maker_satisfaction?: number | null
           notes?: string | null
           occasion?: Database["public"]["Enums"]["order_occasion"] | null
           occasion_legacy?: string | null
