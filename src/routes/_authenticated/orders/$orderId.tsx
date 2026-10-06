@@ -7,11 +7,15 @@ import {
   orderQuery,
   productsQuery,
   pilotSettingsQuery,
+  productionPlanByOrderQuery,
+  currentUserId,
   ORDER_STATUSES,
   ORDER_OCCASIONS,
   ORDER_RECIPIENT_RELATIONSHIPS,
   ORDER_CAKE_SIZES,
   ORDER_PAYMENT_STATUSES,
+  CORE_ELEMENT_SLOTS,
+  CORE_ELEMENT_LABELS,
   orderStatusLabel,
   orderStatusColor,
   type OrderListRow,
@@ -21,7 +25,7 @@ import {
   type OrderCakeSize,
   type OrderPaymentStatus,
 } from "@/lib/queries";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import {
   Field,
@@ -136,6 +140,7 @@ function OrderDetailPage() {
   const order = useQuery(orderQuery(orderId));
   const products = useQuery(productsQuery());
   const pilotSettings = useQuery(pilotSettingsQuery());
+  const productionPlan = useQuery(productionPlanByOrderQuery(orderId));
   const statusColors = (pilotSettings.data?.order_status_colors as Record<string, string> | null) ?? null;
 
   const [dmText, setDmText] = useState("");
@@ -161,7 +166,13 @@ function OrderDetailPage() {
   const [paymentStatus, setPaymentStatus] = useState<OrderPaymentStatus | "">("");
   const [status, setStatus] = useState<OrderStatus>("INTAKE");
   const [productId, setProductId] = useState("");
-  const [notes, setNotes] = useState("");
+  // 2026-10-06 사용자 요청: Order의 메모는 성격이 다른 세 가지로 분리 관리한다 — 섞어서 쓰지 않음.
+  // - Flavoring Note: Sheet/Cream/Filling 등 전체 맛 밸런스(내부용, 새 flavoring_note 컬럼)
+  // - Design Note: 디자인/구조/조립(기존에 있었지만 UI에 없던 design_notes 컬럼 재사용)
+  // - Order Note: 고객 요청/배송 등 주문 자체에 대한 메모(기존 notes 컬럼, 라벨만 변경)
+  const [flavoringNote, setFlavoringNote] = useState("");
+  const [designNote, setDesignNote] = useState("");
+  const [orderNote, setOrderNote] = useState("");
 
   // 2026-10-06 사용자 요청: Satisfaction(만족도) — Status(진행 단계)와는 완전히 별개 개념이라
   // 독립된 필드로 관리한다. makerSatisfaction/customerSatisfaction은 1~5 또는 "" (미입력/미수집).
@@ -197,7 +208,9 @@ function OrderDetailPage() {
       paymentStatus: o.payment_status ?? "",
       status: (o.status as OrderStatus) ?? "INTAKE",
       productId: o.product_id ?? "",
-      notes: o.notes ?? "",
+      flavoringNote: o.flavoring_note ?? "",
+      designNote: o.design_notes ?? "",
+      orderNote: o.notes ?? "",
       makerSatisfaction: o.maker_satisfaction ?? "",
       customerSatisfaction: o.customer_satisfaction ?? "",
       customerFeedback: o.customer_feedback ?? "",
@@ -225,7 +238,9 @@ function OrderDetailPage() {
     setPaymentStatus(o.payment_status ?? "");
     setStatus((o.status as OrderStatus) ?? "INTAKE");
     setProductId(o.product_id ?? "");
-    setNotes(o.notes ?? "");
+    setFlavoringNote(o.flavoring_note ?? "");
+    setDesignNote(o.design_notes ?? "");
+    setOrderNote(o.notes ?? "");
     setMakerSatisfaction(o.maker_satisfaction ?? "");
     setCustomerSatisfaction(o.customer_satisfaction ?? "");
     setCustomerFeedback(o.customer_feedback ?? "");
@@ -260,7 +275,9 @@ function OrderDetailPage() {
     paymentStatus,
     status,
     productId,
-    notes,
+    flavoringNote,
+    designNote,
+    orderNote,
     makerSatisfaction,
     customerSatisfaction,
     customerFeedback,
@@ -328,7 +345,7 @@ function OrderDetailPage() {
         break;
       case "special_requests":
       case "preferences":
-        setNotes((prev) => {
+        setOrderNote((prev) => {
           const line = `${FIELD_LABELS[key]}: ${v}`;
           return prev.trim() ? `${prev}\n${line}` : line;
         });
@@ -371,7 +388,9 @@ function OrderDetailPage() {
           payment_status: paymentStatus || null,
           status,
           product_id: productId || null,
-          notes: notes.trim() || null,
+          flavoring_note: flavoringNote.trim() || null,
+          design_notes: designNote.trim() || null,
+          notes: orderNote.trim() || null,
           maker_satisfaction: makerSatisfaction === "" ? null : makerSatisfaction,
           customer_satisfaction: customerSatisfaction === "" ? null : customerSatisfaction,
           customer_feedback: customerFeedback.trim() || null,
@@ -402,6 +421,101 @@ function OrderDetailPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["orders"] });
       void navigate({ to: "/orders" });
+    },
+  });
+
+  // 2026-10-06 사용자 요청: ORDER → PRODUCTION PLAN 생성. Formula Version은 여기서 절대
+  // 자동으로 채우거나 추측하지 않는다 — 비어 있는 CORE ELEMENT(Sheet/Cream/Filling) 3개 슬롯만
+  // 미리 만들어두고, 실제 Formula Version 선택은 Production Plan 화면에서 한다.
+  // 이미 Plan이 있으면 중복 생성하지 않고 그 화면으로 이동만 한다(버튼 쪽에서 분기).
+  const createProductionPlan = useMutation({
+    mutationFn: async () => {
+      if (!order.data) return;
+      const o = order.data;
+      const deliveryDate = o.pickup_at ? o.pickup_at.slice(0, 10) : o.event_date;
+      const baseName =
+        products.data?.find((p) => p.id === o.product_id)?.name || o.recipient || o.order_number;
+      const userId = await currentUserId();
+      const { data: plan, error } = await supabase
+        .from("production_plans")
+        .insert({
+          user_id: userId,
+          order_id: orderId,
+          title: generateTitle(baseName, deliveryDate),
+          status: "PLANNED",
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      const { error: elementsError } = await supabase.from("production_plan_elements").insert(
+        CORE_ELEMENT_SLOTS.map((slot, i) => ({
+          user_id: userId,
+          production_plan_id: plan.id,
+          kind: "CORE",
+          slot,
+          label: CORE_ELEMENT_LABELS[slot],
+          sort_order: i,
+        })),
+      );
+      if (elementsError) throw elementsError;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["production_plans", "by_order", orderId] });
+      void navigate({ to: "/orders/$orderId/production", params: { orderId } });
+    },
+  });
+
+  // 2026-10-06 사용자 요청: ORDER → PRODUCT 승격. Order 텍스트를 그대로 복사하지 않고,
+  // 연결된 Production Plan이 있으면 그 Element들이 실제로 선택한 Formula Version을 모아
+  // Product Component로 옮긴다(중복 Formula+Version은 자동으로 한 번만 반영됨 — 각 Element는
+  // product_components 행 하나씩 그대로 생성되므로 같은 Formula Version을 쓰는 Element가 여럿이면
+  // 여러 행이 생기지만, 화면의 "CURRENT RECIPE INFORMATION"에서는 보여줄 때 dedupe한다).
+  // Production Plan이 없어도 승격은 허용 — 그 경우 Product Component 없이 빈 Product만 생성(사용자 확인).
+  const upgradeToProduct = useMutation({
+    mutationFn: async () => {
+      if (!order.data) return;
+      const o = order.data;
+      const deliveryDate = o.pickup_at ? o.pickup_at.slice(0, 10) : o.event_date;
+      const baseName = o.recipient || o.order_number;
+      const userId = await currentUserId();
+      const { data: product, error } = await supabase
+        .from("products")
+        .insert({ user_id: userId, name: generateTitle(baseName, deliveryDate) })
+        .select("id")
+        .single();
+      if (error) throw error;
+
+      if (productionPlan.data) {
+        const { data: elements, error: elementsError } = await supabase
+          .from("production_plan_elements")
+          .select("component_id, formula_version_id")
+          .eq("production_plan_id", productionPlan.data.id)
+          .not("component_id", "is", null)
+          .not("formula_version_id", "is", null);
+        if (elementsError) throw elementsError;
+        if (elements && elements.length > 0) {
+          const { error: insertError } = await supabase.from("product_components").insert(
+            elements.map((el, i) => ({
+              user_id: userId,
+              product_id: product.id,
+              component_id: el.component_id,
+              formula_version_id: el.formula_version_id,
+              sort_order: i,
+            })),
+          );
+          if (insertError) throw insertError;
+        }
+      }
+
+      const { error: linkError } = await supabase.from("orders").update({ product_id: product.id }).eq("id", orderId);
+      if (linkError) throw linkError;
+      return product.id;
+    },
+    onSuccess: async (productId) => {
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      if (productId) void navigate({ to: "/products/$productId", params: { productId } });
     },
   });
 
@@ -678,9 +792,34 @@ function OrderDetailPage() {
             </select>
           </Field>
         </div>
-        <div className="mt-3">
-          <Field label="NOTES">
-            <textarea rows={4} className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        {/* 2026-10-06 사용자 요청: 메모를 목적별로 분리 — 섞어 쓰지 않는다. */}
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Field label="FLAVORING NOTE — Sheet/Cream/Filling 등 맛 밸런스 (내부용)">
+            <textarea
+              rows={4}
+              className={inputClass}
+              placeholder="예: 코코아 시트 + 바나나 필링, 전체적으로 덜 달게"
+              value={flavoringNote}
+              onChange={(e) => setFlavoringNote(e.target.value)}
+            />
+          </Field>
+          <Field label="DESIGN NOTE — 디자인/구조/조립">
+            <textarea
+              rows={4}
+              className={inputClass}
+              placeholder="예: 2단 구조, 초콜릿 튀일 장식은 배송 직전 부착"
+              value={designNote}
+              onChange={(e) => setDesignNote(e.target.value)}
+            />
+          </Field>
+          <Field label="ORDER NOTE — 고객 요청/배송 등">
+            <textarea
+              rows={4}
+              className={inputClass}
+              placeholder="예: 오후 3시 이후 픽업 희망"
+              value={orderNote}
+              onChange={(e) => setOrderNote(e.target.value)}
+            />
           </Field>
         </div>
       </SectionCard>
@@ -726,6 +865,54 @@ function OrderDetailPage() {
             />
           </Field>
         </div>
+      </SectionCard>
+
+      {/* 2026-10-06 사용자 요청: ORDER → PRODUCTION PLAN → PRODUCT 흐름의 진입점.
+          이미 Production Plan/Product가 있으면 "생성"이 아니라 "열기"로 바뀐다(중복 생성 금지). */}
+      <SectionCard title="PRODUCTION / PRODUCT">
+        <div className="flex flex-wrap items-center gap-2">
+          {productionPlan.data ? (
+            <Link
+              to="/orders/$orderId/production"
+              params={{ orderId }}
+              className={buttonClass}
+            >
+              OPEN PRODUCTION PLAN{productionPlan.data.title ? ` — ${productionPlan.data.title}` : ""}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={createProductionPlan.isPending}
+              onClick={() => createProductionPlan.mutate()}
+            >
+              {createProductionPlan.isPending ? "생성 중…" : "+ CREATE PRODUCTION PLAN"}
+            </button>
+          )}
+          {order.data.product_id ? (
+            <Link
+              to="/products/$productId"
+              params={{ productId: order.data.product_id }}
+              className={buttonClass}
+            >
+              OPEN PRODUCT
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={upgradeToProduct.isPending}
+              onClick={() => upgradeToProduct.mutate()}
+            >
+              {upgradeToProduct.isPending ? "승격 중…" : "↑ UPGRADE TO PRODUCT"}
+            </button>
+          )}
+        </div>
+        {(createProductionPlan.isError || upgradeToProduct.isError) && (
+          <p className="mt-2 font-mono text-xs uppercase text-destructive">
+            {((createProductionPlan.error ?? upgradeToProduct.error) as Error).message}
+          </p>
+        )}
       </SectionCard>
 
       <div className="border border-border bg-card p-4">

@@ -81,6 +81,26 @@ export function formatDateTime(input: Date | string): string {
   return `${toLocalDateString(date)} ${formatTime(date)}`;
 }
 
+const KOREAN_WEEKDAYS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+
+/**
+ * "YYYY-MM-DD" 문자열의 한국어 요일("월요일" 등)을 반환 (2026-10-06, Production/Product Title 생성용)
+ */
+export function koreanWeekday(dateStr: string): string {
+  return KOREAN_WEEKDAYS[parseLocalDate(dateStr).getDay()] ?? "";
+}
+
+/**
+ * Production Title / Product Title 공용 생성 규칙(2026-10-06 사용자 요청):
+ * "이름 — YYYY-MM-DD (한국어 요일)". 날짜가 없으면 요일 없이 이름만 반환.
+ * 생성된 값은 항상 사용자가 그 자리에서 다시 고칠 수 있는 시작값일 뿐이다(자동 고정 아님).
+ */
+export function generateTitle(name: string, dateStr: string | null): string {
+  const base = name.trim() || "Untitled";
+  if (!dateStr) return base;
+  return `${base} — ${dateStr} (${koreanWeekday(dateStr)})`;
+}
+
 /**
  * "YYYY-MM-DD" 문자열에서 "2026-08-20 THU" 형태의 라벨 반환
  */

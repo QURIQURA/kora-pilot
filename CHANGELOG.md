@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-10-06 — ORDER → PRODUCTION PLAN → PRODUCT 흐름 추가
+
+주문이 실제로 어떻게 만들어지는지(Production Plan)와, 그 결과를 장기적으로 관리하는 완제품
+정보(Product)를 명확히 분리했습니다. 데이터 흐름: ORDER → PRODUCTION PLAN → ELEMENT →
+FORMULA VERSION → PRODUCT.
+
+- ORDER DETAIL 메모를 목적별로 3가지로 분리했습니다 — FLAVORING NOTE(맛 밸런스, 내부용),
+  DESIGN NOTE(디자인/구조/조립), ORDER NOTE(고객 요청/배송 등). 기존 하나로 섞여 있던 NOTES를
+  나눈 것이며, 데이터는 그대로 보존됩니다(ORDER NOTE = 기존 NOTES).
+- ORDER DETAIL에 "+ CREATE PRODUCTION PLAN" 버튼이 추가됐습니다. 누르면 이 주문 전용
+  PRODUCTION PLAN이 만들어지고, CORE ELEMENT(Sheet/Cream/Filling) 3개 빈 슬롯이 미리
+  준비됩니다 — Formula Version은 이 시점에 절대 자동으로 채워지지 않습니다(직접 골라야 함).
+  이미 Plan이 있으면 버튼이 "OPEN PRODUCTION PLAN"으로 바뀌어 중복 생성되지 않습니다.
+- 새 PRODUCTION PLAN 화면(주문 상세 → OPEN PRODUCTION PLAN)에서: PRODUCTION TITLE 직접 수정,
+  상태(PLANNED/IN PROGRESS/COMPLETED), CORE ELEMENTS(Sheet/Cream/Filling 고정 3슬롯) +
+  DECORATIVE ELEMENTS(초콜릿 튀일 등 자유롭게 추가/삭제)를 관리합니다. 각 ELEMENT마다 COMPONENT
+  + FORMULA VERSION을 고르면, 그 아래 "SELECTED FORMULA VERSIONS"에 중복 없이 자동으로
+  모아져 보여집니다 — 따로 다시 선택할 필요 없고, ELEMENT를 더 추가하면 자동으로 늘어납니다.
+- ORDER DETAIL에 "↑ UPGRADE TO PRODUCT" 버튼이 추가됐습니다. 누르면 새 PRODUCT가 만들어지고,
+  연결된 PRODUCTION PLAN이 있으면 그 ELEMENT들이 실제로 선택한 FORMULA VERSION이 그대로
+  PRODUCT COMPONENT로 옮겨집니다(Order 텍스트를 복사하는 게 아니라 실제 생산 데이터를 기반으로
+  만듦). Production Plan이 없어도 승격은 가능하며, 그 경우 빈 PRODUCT가 생성됩니다. 이미 연결된
+  PRODUCT가 있으면 버튼이 "OPEN PRODUCT"로 바뀝니다.
+- PRODUCT DETAIL에 "CURRENT RECIPE INFORMATION" 섹션이 추가되어, 이 PRODUCT의 COMPONENT들이
+  실제로 가리키는 FORMULA + 버전을 한눈에 보는 목록을 보여줍니다(같은 버전은 한 번만 표시).
+
+---
+
 ## 2026-10-06 — CUSTOMERS 카드에 최근 DELIVERY 날짜 + 행사 표시
 
 CUSTOMERS 카드뷰의 각 카드에 가장 최근 주문의 DELIVERY/PICKUP 날짜(시간 제외)와 어떤 행사였는지가

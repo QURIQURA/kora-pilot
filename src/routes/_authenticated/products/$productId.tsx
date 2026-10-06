@@ -687,6 +687,39 @@ function ProductDetailPage() {
         )}
       </SectionCard>
 
+        {/* 2026-10-06 사용자 요청: Product의 "현재 레시피 정보" — 새 레시피 시스템이 아니라
+            위 PRODUCT COMPONENTS가 실제로 가리키는 Formula + Formula Version을 보기 좋게 요약만
+            한다. 같은 Formula Version을 여러 Component가 쓰더라도 한 번만 보여준다(dedupe). */}
+        <SectionCard title="CURRENT RECIPE INFORMATION">
+          {(() => {
+            const seen = new Map<string, { formulaName: string; versionNumber: number; status: string }>();
+            for (const l of links.data ?? []) {
+              if (l.formula_version_id && l.formula_versions) {
+                seen.set(l.formula_version_id, {
+                  formulaName: l.formula_versions.formulas?.name ?? "—",
+                  versionNumber: l.formula_versions.version_number,
+                  status: l.formula_versions.status,
+                });
+              }
+            }
+            const entries = [...seen.values()];
+            return entries.length === 0 ? (
+              <p className="font-mono text-xs text-muted-foreground">
+                아직 FORMULA VERSION이 지정된 COMPONENT가 없습니다.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {entries.map((e, i) => (
+                  <li key={i} className="py-1.5 text-sm">
+                    {e.formulaName} — v{e.versionNumber}
+                    {e.status !== "DRAFT" && <span className="text-muted-foreground"> ({e.status})</span>}
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+        </SectionCard>
+
         {/* PRODUCTION COST 항목 */}
         <ProductCostItemsSection productId={productId} overheadPerCake={overheadPerCake} />
         </div>
