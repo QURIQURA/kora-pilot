@@ -101,7 +101,7 @@ export function CurrentFormulaPanel({
 
       const { data: baseIngredients, error: biError } = await supabase
         .from("formula_version_ingredients")
-        .select("ingredient_id, amount, unit, note, sort_order")
+        .select("ingredient_id, amount, unit, note, sort_order, secondary_amount, secondary_unit")
         .eq("formula_version_id", baseVersionSummary.id);
       if (biError) throw biError;
 
@@ -143,6 +143,10 @@ export function CurrentFormulaPanel({
             unit: row.unit,
             note: row.note,
             sort_order: row.sort_order,
+            // 2026-10-07 사용자 정정: "버전 복사해도 동일하게 적용되게" — 보조 계량(예: 계란 3개)도
+            // 다른 복제 경로($formulaId.tsx의 새 버전 만들기)와 동일하게 함께 복사한다.
+            secondary_amount: row.secondary_amount,
+            secondary_unit: row.secondary_unit,
             amount_source: "copied",
           })),
         );
