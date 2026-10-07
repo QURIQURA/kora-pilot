@@ -2008,6 +2008,7 @@ export type Database = {
           previous_multiplier: number
           resulting_working_quantity_snapshot: Json | null
           user_id: string
+          work_session_formula_version_id: string | null
           work_session_id: string
         }
         Insert: {
@@ -2018,6 +2019,7 @@ export type Database = {
           previous_multiplier: number
           resulting_working_quantity_snapshot?: Json | null
           user_id: string
+          work_session_formula_version_id?: string | null
           work_session_id: string
         }
         Update: {
@@ -2028,9 +2030,17 @@ export type Database = {
           previous_multiplier?: number
           resulting_working_quantity_snapshot?: Json | null
           user_id?: string
+          work_session_formula_version_id?: string | null
           work_session_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "work_session_multiplier_histo_work_session_formula_version_fkey"
+            columns: ["work_session_formula_version_id"]
+            isOneToOne: false
+            referencedRelation: "work_session_formula_versions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "work_session_multiplier_history_formula_version_id_fkey"
             columns: ["formula_version_id"]
@@ -2055,6 +2065,7 @@ export type Database = {
           status: string
           updated_at: string
           user_id: string
+          work_session_formula_version_id: string
           work_session_id: string
         }
         Insert: {
@@ -2064,6 +2075,7 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id: string
+          work_session_formula_version_id: string
           work_session_id: string
         }
         Update: {
@@ -2073,6 +2085,7 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string
+          work_session_formula_version_id?: string
           work_session_id?: string
         }
         Relationships: [
@@ -2081,6 +2094,13 @@ export type Database = {
             columns: ["formula_version_ingredient_id"]
             isOneToOne: false
             referencedRelation: "formula_version_ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_session_progress_work_session_formula_version_id_fkey"
+            columns: ["work_session_formula_version_id"]
+            isOneToOne: false
+            referencedRelation: "work_session_formula_versions"
             referencedColumns: ["id"]
           },
           {

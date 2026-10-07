@@ -1751,21 +1751,21 @@ export const stockMovementsQuery = (stockItemId: string | null) =>
   });
 
 /** Multiplier 변경 이력 — append-only, 최신순 */
-export const workSessionMultiplierHistoryQuery = (
-  sessionId: string,
-  formulaVersionId: string | null,
-) =>
+/** 2026-10-07: formula_version_id가 아니라 selectionId(work_session_formula_versions.id)로
+ * 조회한다 — 같은 FORMULA VERSION이 한 세션에 두 번 이상 선택돼도(중복 추가 허용) 히스토리가
+ * 서로 섞이지 않도록. */
+export const workSessionMultiplierHistoryQuery = (sessionId: string, selectionId: string | null) =>
   queryOptions({
-    queryKey: ["work_session_multiplier_history", sessionId, formulaVersionId],
-    enabled: Boolean(formulaVersionId),
+    queryKey: ["work_session_multiplier_history", sessionId, selectionId],
+    enabled: Boolean(selectionId),
     queryFn: async (): Promise<WorkSessionMultiplierHistory[]> => {
-      if (!formulaVersionId) return [];
+      if (!selectionId) return [];
       return unwrap(
         await supabase
           .from("work_session_multiplier_history")
           .select("*")
           .eq("work_session_id", sessionId)
-          .eq("formula_version_id", formulaVersionId)
+          .eq("work_session_formula_version_id", selectionId)
           .order("applied_at", { ascending: false }),
       );
     },

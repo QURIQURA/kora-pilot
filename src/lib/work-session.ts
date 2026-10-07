@@ -55,6 +55,9 @@ export function workingAmount(originalAmount: number, multiplier: number): numbe
 /* ── Weighing View grouping (Ingredient Master ID 기준) ─────────── */
  
 export interface WeighingCell {
+  /** work_session_formula_versions.id — 열(컬럼)의 실제 식별자. 같은 FORMULA VERSION이 두 번
+   * 이상 선택돼도(2026-10-07, 동일 포뮬라 중복 추가 허용) 각 선택마다 고유하다. */
+  selectionId: string;
   formulaVersionId: string;
   formulaName: string;
   ingredientLineId: string;
@@ -69,20 +72,22 @@ export interface WeighingCell {
   secondaryAmount: number | null;
   secondaryUnit: string | null;
 }
- 
+
 export interface WeighingGroup {
   ingredientId: string;
   ingredientName: string;
   cells: WeighingCell[];
 }
- 
+
 export interface WeighingSelection {
+  /** work_session_formula_versions.id — 열의 고유 키(동일 FORMULA VERSION 중복 추가 시에도 구분됨) */
+  selectionId: string;
   formulaVersionId: string;
   formulaName: string;
   multiplier: number;
   sortOrder: number;
 }
- 
+
 /**
  * Ingredient Master ID(ingredient_id) 기준으로 그룹화한다 — 이름 문자열 비교는 절대 하지 않는다.
  * quantity는 절대 합산하지 않고, Formula×Ingredient 라인 하나하나가 독립된 cell로 남는다.
@@ -91,11 +96,18 @@ export interface WeighingSelection {
  * 특정 Formula에만 쓰이는 재료는 그 Formula 열 쪽으로 몰리고, 여러 Formula에 공통으로 쓰이는
  * 재료는 그 Formula들 사이(중간)에 자연스럽게 위치하게 된다 — 겹치는 재료를 한눈에 찾기 위함.
  * (컬럼 index의 최소~최대 구간으로 정렬 → 구간이 겹치면 이름순으로 tie-break)
+ *
+ * 열(컬럼) 식별은 formula_version_id가 아니라 selectionId(work_session_formula_versions.id)로
+ * 한다(2026-10-07) — 같은 FORMULA VERSION을 두 번 추가해도(예: 같은 레시피를 다른 몰드/배치로)
+ * 서로 다른 열로 분리되고, 계량 진행상태도 선택마다 독립적으로 유지된다. 재료 목록 자체는
+ * formula_version_id로 조회하므로(ingredientsByVersion) 같은 포뮬라의 두 선택이 같은 재료
+ * 목록을 그대로 공유하는 건 의도된 동작이다.
  */
 export function buildWeighingGroups(params: {
   selections: WeighingSelection[];
   ingredientsByVersion: Record<string, VersionIngredientRow[]>;
-  progressByLineId: Record<string, { status: string; note: string | null }>;
+  /** key: `${selectionId}:${formula_version_ingredient_id}` */
+  progressBySelectionAndLine: Record<string, { status: string; note: string | null }>;
 }): WeighingGroup[] {
   const groups = new Map<
     string,
@@ -103,12 +115,12 @@ export function buildWeighingGroups(params: {
   >();
   const orderedSelections = [...params.selections].sort((a, b) => a.sortOrder - b.sortOrder);
   const columnIndex = new Map<string, number>();
-  orderedSelections.forEach((sel, idx) => columnIndex.set(sel.formulaVersionId, idx));
+  orderedSelections.forEach((sel, idx) => columnIndex.set(sel.selectionId, idx));
 
   for (const sel of orderedSelections) {
     // Formula 페이지에서 정해둔 재료 배치 순서(sort_order)를 그대로 따른다 — 이미 정렬된 채로 넘어온다.
     const lines = params.ingredientsByVersion[sel.formulaVersionId] ?? [];
-    const colIdx = columnIndex.get(sel.formulaVersionId) ?? 0;
+    const colIdx = columnIndex.get(sel.selectionId) ?? 0;
     for (const line of lines) {
       const ingredientId = line.ingredient_id;
       let group = groups.get(ingredientId);
@@ -127,8 +139,9 @@ export function buildWeighingGroups(params: {
         group.maxCol = Math.max(group.maxCol, colIdx);
         group.firstSortOrder = Math.min(group.firstSortOrder, line.sort_order);
       }
-      const progress = params.progressByLineId[line.id];
+      const progress = params.progressBySelectionAndLine[`${sel.selectionId}:${line.id}`];
       group.cells.push({
+        selectionId: sel.selectionId,
         formulaVersionId: sel.formulaVersionId,
         formulaName: sel.formulaName,
         ingredientLineId: line.id,
@@ -143,7 +156,7 @@ export function buildWeighingGroups(params: {
       });
     }
   }
- 
+
   return [...groups.values()].sort((a, b) => {
     if (a.minCol !== b.minCol) return a.minCol - b.minCol;
     if (a.maxCol !== b.maxCol) return a.maxCol - b.maxCol;
@@ -238,11 +251,12 @@ export function isCustomMultiplier(current: number | null, suggested: number | n
  * sourceId를 targetId로 흡수시킨다: sourceId의 CORE/DECORATIVE 배합 선택, 계량 진행상태,
  * 배수 히스토리, 워크플로 TASK를 모두 targetId로 옮기고 sourceId는 삭제한다.
  *
- * 충돌 처리 규칙:
- * - 두 세션에 같은 Formula Version이 이미 둘 다 들어있으면(중복) target 쪽을 그대로 두고
- *   source 쪽 선택/계량진행은 버린다(같은 재료 라인이라 target에 이미 기록이 있을 수 있음).
- * - source의 CORE 슬롯(SHEET/CREAM/FILLING)이 target에 이미 채워져 있으면, 데이터를 잃지
- *   않기 위해 DECORATIVE로 내려서 옮긴다(자유 추가 목록에 그대로 남는다).
+ * 2026-10-07 수정: "같은 FORMULA VERSION도 중복 추가 가능하게" 요청에 맞춰, 병합 시에도 더 이상
+ * 중복 선택을 버리거나 CORE 슬롯 충돌을 이유로 DECORATIVE로 내리지 않는다 — source의 모든 선택을
+ * 그대로 옮긴다. 계량 진행상태/배수 히스토리는 이제 "어느 선택(work_session_formula_versions
+ * 행)"인지로 식별되므로(formula_version_id가 같아도 선택 id는 서로 다름), 두 세션에 같은
+ * 포뮬라가 있었더라도 충돌 없이 전부 옮겨진다.
+ *
  * - TASK 목록은 sort_order를 target 뒤로 이어붙인다. task_id/predecessor_task_id 자체는
  *   바뀌지 않으므로(행이 그대로 이동할 뿐) 선후관계는 그대로 유지된다.
  * - source의 주문 연결(order_id)은 target에 아직 연결된 주문이 없을 때만 넘겨받고, 그 외의
@@ -255,87 +269,38 @@ export async function mergeWorkSessions(sourceId: string, targetId: string): Pro
 
   const { data: sourceRows, error: srcErr } = await supabase
     .from("work_session_formula_versions")
-    .select("id, formula_version_id, sort_order, kind, slot")
-    .eq("work_session_id", sourceId);
+    .select("id, sort_order")
+    .eq("work_session_id", sourceId)
+    .order("sort_order", { ascending: true });
   if (srcErr) throw srcErr;
 
   const { data: targetRows, error: tgtErr } = await supabase
     .from("work_session_formula_versions")
-    .select("id, formula_version_id, sort_order, kind, slot")
+    .select("sort_order")
     .eq("work_session_id", targetId);
   if (tgtErr) throw tgtErr;
 
-  const targetVersionIds = new Set((targetRows ?? []).map((r) => r.formula_version_id));
-  const targetSlotsTaken = new Set(
-    (targetRows ?? []).filter((r) => r.kind === "CORE" && r.slot).map((r) => r.slot as string),
-  );
   let nextSort = (targetRows ?? []).reduce((max, r) => Math.max(max, r.sort_order), -1) + 1;
 
-  const duplicateIds: string[] = [];
+  // 선택(동일 FORMULA VERSION 중복 포함)을 그대로 전부 옮긴다 — kind/slot도 바꾸지 않는다.
   for (const row of sourceRows ?? []) {
-    if (targetVersionIds.has(row.formula_version_id)) {
-      duplicateIds.push(row.id);
-      continue;
-    }
-    let kind = row.kind;
-    let slot = row.slot;
-    if (kind === "CORE" && slot && targetSlotsTaken.has(slot)) {
-      kind = "DECORATIVE";
-      slot = null;
-    }
     const { error } = await supabase
       .from("work_session_formula_versions")
-      .update({ work_session_id: targetId, sort_order: nextSort, kind, slot })
+      .update({ work_session_id: targetId, sort_order: nextSort })
       .eq("id", row.id);
     if (error) throw error;
-    if (kind === "CORE" && slot) targetSlotsTaken.add(slot);
-    targetVersionIds.add(row.formula_version_id);
     nextSort += 1;
   }
-  if (duplicateIds.length > 0) {
-    const { error } = await supabase
-      .from("work_session_formula_versions")
-      .delete()
-      .in("id", duplicateIds);
-    if (error) throw error;
-  }
 
-  // 계량 진행상태 — 같은 재료 라인에 target 쪽 기록이 이미 있으면 그걸 유지하고 source는 버린다.
-  const { data: targetProgress, error: tpErr } = await supabase
-    .from("work_session_progress")
-    .select("formula_version_ingredient_id")
-    .eq("work_session_id", targetId);
-  if (tpErr) throw tpErr;
-  const targetProgressLineIds = new Set(
-    (targetProgress ?? []).map((p) => p.formula_version_ingredient_id),
-  );
-
-  const { data: sourceProgress, error: spErr } = await supabase
-    .from("work_session_progress")
-    .select("id, formula_version_ingredient_id")
-    .eq("work_session_id", sourceId);
-  if (spErr) throw spErr;
-
-  const progressToMove = (sourceProgress ?? [])
-    .filter((p) => !targetProgressLineIds.has(p.formula_version_ingredient_id))
-    .map((p) => p.id);
-  const progressToDrop = (sourceProgress ?? [])
-    .filter((p) => targetProgressLineIds.has(p.formula_version_ingredient_id))
-    .map((p) => p.id);
-
-  if (progressToMove.length > 0) {
+  // 계량 진행상태/배수 히스토리는 선택(work_session_formula_versions 행) 단위로 식별되어
+  // 더 이상 충돌할 수 없으므로, work_session_id만 그대로 옮기면 된다.
+  {
     const { error } = await supabase
       .from("work_session_progress")
       .update({ work_session_id: targetId })
-      .in("id", progressToMove);
+      .eq("work_session_id", sourceId);
     if (error) throw error;
   }
-  if (progressToDrop.length > 0) {
-    const { error } = await supabase.from("work_session_progress").delete().in("id", progressToDrop);
-    if (error) throw error;
-  }
-
-  // 배수 히스토리 — 유니크 제약이 없어 전부 그대로 옮긴다(기록 보존용).
   {
     const { error } = await supabase
       .from("work_session_multiplier_history")

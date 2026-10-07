@@ -168,33 +168,34 @@ function WorkSessionPage() {
     }
   };
 
+  const rows = useMemo(() => selections.data ?? [], [selections.data]);
+
   const removeFormulaVersion = useMutation({
     mutationFn: async (row: WorkSessionFormulaVersionRow) => {
-      // 이 formula version에 속한 ingredient line들의 checklist 기록도 함께 정리한다
-      // (work_session_progress는 formula_version_ingredients를 참조할 뿐,
-      //  work_session_formula_versions를 직접 참조하지 않으므로 앱 레벨에서 정리한다).
-      const { data: lines, error: linesError } = await supabase
-        .from("formula_version_ingredients")
-        .select("id")
-        .eq("formula_version_id", row.formula_version_id);
-      if (linesError) throw linesError;
-      const lineIds = (lines ?? []).map((l) => l.id);
-      if (lineIds.length > 0) {
-        const { error: progressError } = await supabase
-          .from("work_session_progress")
+      // 계량 진행상태는 이제 "이 선택(work_session_formula_versions 행)"에 직접 묶여 있으므로
+      // (2026-10-07, 동일 포뮬라 중복 추가 허용) 이 행의 id로만 지우면 된다 — 같은 FORMULA
+      // VERSION의 다른 선택(중복 추가본)이 있어도 그쪽 진행상태는 건드리지 않는다.
+      const { error: progressError } = await supabase
+        .from("work_session_progress")
+        .delete()
+        .eq("work_session_formula_version_id", row.id);
+      if (progressError) throw progressError;
+
+      // TASK는 formula_version_id로만 연결돼 선택 단위로 분리돼 있지 않다 — 같은 FORMULA
+      // VERSION의 다른 선택이 이 세션에 남아있다면(중복 추가) 그 TASK는 여전히 유효하므로
+      // 지우지 않는다.
+      const hasSiblingSelection = rows.some(
+        (r) => r.id !== row.id && r.formula_version_id === row.formula_version_id,
+      );
+      if (!hasSiblingSelection) {
+        // work_session_task_ingredients/predecessors는 FK ON DELETE CASCADE라 같이 정리된다.
+        const { error: tasksError } = await supabase
+          .from("work_session_tasks")
           .delete()
           .eq("work_session_id", sessionId)
-          .in("formula_version_ingredient_id", lineIds);
-        if (progressError) throw progressError;
+          .eq("formula_version_id", row.formula_version_id);
+        if (tasksError) throw tasksError;
       }
-      // 이 formula version으로 자동 적용됐던 TASK LIST(work_session_tasks)도 함께 지운다 —
-      // work_session_task_ingredients/predecessors는 FK ON DELETE CASCADE라 같이 정리된다.
-      const { error: tasksError } = await supabase
-        .from("work_session_tasks")
-        .delete()
-        .eq("work_session_id", sessionId)
-        .eq("formula_version_id", row.formula_version_id);
-      if (tasksError) throw tasksError;
 
       const { error } = await supabase
         .from("work_session_formula_versions")
@@ -209,13 +210,17 @@ function WorkSessionPage() {
     },
   });
 
-  const rows = useMemo(() => selections.data ?? [], [selections.data]);
   const decorativeRows = useMemo(() => rows.filter((r) => r.kind !== "CORE"), [rows]);
   const ingredientsByVersion = useMemo(() => ingredients.data ?? {}, [ingredients.data]);
-  const progressByLineId = useMemo(() => {
+  // key: `${work_session_formula_version_id}:${formula_version_ingredient_id}` — 2026-10-07,
+  // 같은 FORMULA VERSION이 두 번 이상 선택돼도 선택마다 독립된 진행상태를 갖도록 바뀌었다.
+  const progressBySelectionAndLine = useMemo(() => {
     const map: Record<string, { status: string; note: string | null }> = {};
     for (const p of progress.data ?? []) {
-      map[p.formula_version_ingredient_id] = { status: p.status, note: p.note };
+      map[`${p.work_session_formula_version_id}:${p.formula_version_ingredient_id}`] = {
+        status: p.status,
+        note: p.note,
+      };
     }
     return map;
   }, [progress.data]);
@@ -225,6 +230,7 @@ function WorkSessionPage() {
       [...rows]
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((r) => ({
+          selectionId: r.id,
           formulaVersionId: r.formula_version_id,
           formulaName: r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name,
           multiplier: Number(r.multiplier),
@@ -238,9 +244,9 @@ function WorkSessionPage() {
       buildWeighingGroups({
         selections: orderedSelections,
         ingredientsByVersion,
-        progressByLineId,
+        progressBySelectionAndLine,
       }),
-    [orderedSelections, ingredientsByVersion, progressByLineId],
+    [orderedSelections, ingredientsByVersion, progressBySelectionAndLine],
   );
 
   if (session.isLoading) {
@@ -295,25 +301,30 @@ function WorkSessionPage() {
       <SectionCard title="CORE ELEMENTS — SHEET / CREAM / FILLING">
         <ul className="divide-y divide-border border border-border">
           {CORE_SLOTS.map((slot) => {
-            const row = rows.find((r) => r.kind === "CORE" && r.slot === slot);
+            // 2026-10-07: 같은 FORMULA VERSION 중복 추가를 허용하면서, 한 슬롯에 여러 개(예: 같은
+            // 레시피를 다른 몰드/배치로 두 번)가 들어갈 수도 있게 됐다 — 하나만 찾지 않고 전부 보여준다.
+            const slotRows = rows.filter((r) => r.kind === "CORE" && r.slot === slot);
             return (
               <li key={slot} className="p-3">
                 <p className="label-caps mb-2 text-xs text-muted-foreground">
                   {CORE_SLOT_LABELS[slot]}
                 </p>
-                {row ? (
-                  <ul className="divide-y divide-border border border-border">
-                    <FormulaVersionRow
-                      row={row}
-                      sessionId={sessionId}
-                      lines={ingredientsByVersion[row.formula_version_id] ?? []}
-                      onRemove={() => removeFormulaVersion.mutate(row)}
-                    />
+                {slotRows.length > 0 && (
+                  <ul className="mb-2 divide-y divide-border border border-border">
+                    {slotRows.map((row) => (
+                      <FormulaVersionRow
+                        key={row.id}
+                        row={row}
+                        sessionId={sessionId}
+                        lines={ingredientsByVersion[row.formula_version_id] ?? []}
+                        onRemove={() => removeFormulaVersion.mutate(row)}
+                      />
+                    ))}
                   </ul>
-                ) : addingSlot === slot ? (
+                )}
+                {addingSlot === slot ? (
                   <AddFormulaVersionForm
                     sessionId={sessionId}
-                    existingIds={rows.map((r) => r.formula_version_id)}
                     nextSort={rows.length}
                     kind="CORE"
                     slot={slot}
@@ -350,7 +361,6 @@ function WorkSessionPage() {
           {adding && (
             <AddFormulaVersionForm
               sessionId={sessionId}
-              existingIds={rows.map((r) => r.formula_version_id)}
               nextSort={rows.length}
               onDone={async () => {
                 setAdding(false);
@@ -560,14 +570,12 @@ function NotesEditor({ value, onSave }: { value: string; onSave: (value: string)
 
 function AddFormulaVersionForm({
   sessionId,
-  existingIds,
   nextSort,
   onDone,
   kind = "DECORATIVE",
   slot = null,
 }: {
   sessionId: string;
-  existingIds: string[];
   nextSort: number;
   onDone: () => void;
   /** 2026-10-06: CORE(Sheet/Cream/Filling 고정 슬롯)에서 추가할 때 전달 — 기본은 자유 추가인 DECORATIVE */
@@ -609,8 +617,8 @@ function AddFormulaVersionForm({
   const add = useMutation({
     mutationFn: async () => {
       if (!versionId) throw new Error("Select a formula version");
-      if (existingIds.includes(versionId))
-        throw new Error("이미 이 Work Session에 추가된 버전입니다");
+      // 2026-10-07 사용자 요청: 같은 FORMULA VERSION도 이 WORK SESSION에 중복으로 추가할 수
+      // 있다(예: 같은 레시피를 다른 몰드/배치로 각각) — 더 이상 막지 않는다.
       const user_id = await currentUserId();
       const finalMultiplier = usingMould ? computedMultiplier : Number(manualMultiplier) || 1;
       const { error } = await supabase.from("work_session_formula_versions").insert({
@@ -775,7 +783,7 @@ function FormulaVersionRow({
   const queryClient = useQueryClient();
   const [showHistory, setShowHistory] = useState(false);
   const history = useQuery({
-    ...workSessionMultiplierHistoryQuery(sessionId, row.formula_version_id),
+    ...workSessionMultiplierHistoryQuery(sessionId, row.id),
     enabled: showHistory,
   });
   const moulds = useQuery(mouldsQuery());
@@ -826,6 +834,8 @@ function FormulaVersionRow({
           user_id,
           work_session_id: sessionId,
           formula_version_id: row.formula_version_id,
+          // 2026-10-07: 같은 FORMULA VERSION 중복 추가 시 히스토리가 섞이지 않도록 선택 단위로도 남긴다.
+          work_session_formula_version_id: row.id,
           previous_multiplier: previous,
           applied_multiplier: next.multiplier,
           resulting_working_quantity_snapshot: snapshot,
@@ -842,7 +852,7 @@ function FormulaVersionRow({
         queryKey: ["work_session_formula_versions", sessionId],
       });
       await queryClient.invalidateQueries({
-        queryKey: ["work_session_multiplier_history", sessionId, row.formula_version_id],
+        queryKey: ["work_session_multiplier_history", sessionId, row.id],
       });
     },
   });
@@ -969,6 +979,8 @@ function FormulaVersionRow({
 }
 
 type WeighingColumn = {
+  /** work_session_formula_versions.id — 열의 고유 키(동일 FORMULA VERSION 중복 추가 시에도 구분됨) */
+  selectionId: string;
   formulaVersionId: string;
   formulaName: string;
   multiplier: number;
@@ -1013,7 +1025,7 @@ function WeighingView({
   // 유지하고, 새로 생긴 항목만 뒤에 붙이고 사라진 항목은 뺀다.
   useEffect(() => {
     setColumnOrder((prev) => {
-      const ids = columns.map((c) => c.formulaVersionId);
+      const ids = columns.map((c) => c.selectionId);
       const kept = prev.filter((id) => ids.includes(id));
       const added = ids.filter((id) => !kept.includes(id));
       return [...kept, ...added];
@@ -1030,7 +1042,7 @@ function WeighingView({
   }, [groups]);
 
   const displayColumns = useMemo(() => {
-    const byId = new Map(columns.map((c) => [c.formulaVersionId, c]));
+    const byId = new Map(columns.map((c) => [c.selectionId, c]));
     return columnOrder.map((id) => byId.get(id)).filter((c): c is WeighingColumn => Boolean(c));
   }, [columns, columnOrder]);
 
@@ -1050,7 +1062,7 @@ function WeighingView({
       for (const cell of group.cells) {
         const grams = toGrams(cell.workingAmount, cell.unit);
         if (grams == null) continue;
-        totals[cell.formulaVersionId] = (totals[cell.formulaVersionId] ?? 0) + grams;
+        totals[cell.selectionId] = (totals[cell.selectionId] ?? 0) + grams;
       }
     }
     return totals;
@@ -1134,7 +1146,7 @@ function WeighingView({
 
   const dataWidth =
     ingredientColWidth +
-    displayColumns.reduce((sum, c) => sum + (colWidths[c.formulaVersionId] ?? DEFAULT_MATRIX_COL_WIDTH), 0);
+    displayColumns.reduce((sum, c) => sum + (colWidths[c.selectionId] ?? DEFAULT_MATRIX_COL_WIDTH), 0);
 
   return (
     <div className="max-h-[70vh] overflow-auto border border-border">
@@ -1146,8 +1158,8 @@ function WeighingView({
           <col style={{ width: ingredientColWidth }} />
           {displayColumns.map((col) => (
             <col
-              key={col.formulaVersionId}
-              style={{ width: colWidths[col.formulaVersionId] ?? DEFAULT_MATRIX_COL_WIDTH }}
+              key={col.selectionId}
+              style={{ width: colWidths[col.selectionId] ?? DEFAULT_MATRIX_COL_WIDTH }}
             />
           ))}
           <col />
@@ -1171,11 +1183,11 @@ function WeighingView({
               <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
                 {displayColumns.map((col) => (
                   <MatrixColumnHeader
-                    key={col.formulaVersionId}
-                    id={col.formulaVersionId}
+                    key={col.selectionId}
+                    id={col.selectionId}
                     formulaName={col.formulaName}
                     multiplier={col.multiplier}
-                    onResizeStart={(clientX) => startColumnResize(col.formulaVersionId, clientX)}
+                    onResizeStart={(clientX) => startColumnResize(col.selectionId, clientX)}
                   />
                 ))}
               </SortableContext>
@@ -1207,10 +1219,10 @@ function WeighingView({
             </th>
             {displayColumns.map((col) => (
               <td
-                key={col.formulaVersionId}
+                key={col.selectionId}
                 className="border-t border-l border-border bg-secondary px-2 py-2 text-left text-sm font-semibold tabular-nums"
               >
-                {fmtNumber(totalsByColumn[col.formulaVersionId] ?? 0, 0)}g
+                {fmtNumber(totalsByColumn[col.selectionId] ?? 0, 0)}g
               </td>
             ))}
             <td className="border-t border-l border-border bg-secondary" />
@@ -1328,10 +1340,10 @@ function MatrixBodyRow({
         />
       </td>
       {columns.map((col) => {
-        const cell = group.cells.find((c) => c.formulaVersionId === col.formulaVersionId);
+        const cell = group.cells.find((c) => c.selectionId === col.selectionId);
         return (
           <td
-            key={col.formulaVersionId}
+            key={col.selectionId}
             className="border-l border-border px-2 py-1 align-middle"
             style={{ height }}
           >
@@ -1384,11 +1396,12 @@ function WeighingMatrixCell({
         {
           user_id,
           work_session_id: sessionId,
+          work_session_formula_version_id: cell.selectionId,
           formula_version_ingredient_id: cell.ingredientLineId,
           status: patch.status ?? cell.progressStatus,
           note: patch.note !== undefined ? patch.note : cell.note,
         },
-        { onConflict: "work_session_id,formula_version_ingredient_id" },
+        { onConflict: "work_session_formula_version_id,formula_version_ingredient_id" },
       );
       if (error) throw error;
     },
