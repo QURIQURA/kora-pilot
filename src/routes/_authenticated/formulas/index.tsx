@@ -75,6 +75,9 @@ function FormulasPage() {
       methodId: string;
       isBase: boolean;
     }) => {
+      if (!componentId) {
+        throw new Error("COMPONENT IS REQUIRED");
+      }
       const user_id = await currentUserId();
       const base = await confirmBaseFormula({
         techniqueId: techniqueId || null,
@@ -85,7 +88,7 @@ function FormulasPage() {
         .insert({
           user_id,
           name,
-          component_id: componentId || null,
+          component_id: componentId,
           technique_category_id: techniqueId || null,
           method_id: methodId || null,
           is_base_formula: base,
@@ -254,7 +257,7 @@ function NewFormulaModal({
           className="space-y-4 p-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (name.trim()) onCreate(name.trim(), componentId, techniqueId, methodId, isBase);
+            if (name.trim() && componentId) onCreate(name.trim(), componentId, techniqueId, methodId, isBase);
           }}
         >
           <Field label="NAME">
@@ -266,19 +269,27 @@ function NewFormulaModal({
               onChange={(e) => setName(e.target.value)}
             />
           </Field>
-          <Field label="COMPONENT (OPTIONAL)">
+          <Field label="COMPONENT">
             <select
               className={selectClass}
               value={componentId}
+              required
               onChange={(e) => setComponentId(e.target.value)}
             >
-              <option value="">NO COMPONENT</option>
+              <option value="" disabled>
+                SELECT A COMPONENT
+              </option>
               {components.map((component) => (
                 <option key={component.id} value={component.id}>
                   {component.name}
                 </option>
               ))}
             </select>
+            {components.length === 0 && (
+              <p className="mt-1 font-mono text-[10px] uppercase text-destructive">
+                NO COMPONENTS YET — CREATE A COMPONENT FIRST
+              </p>
+            )}
           </Field>
           <Field label="기법 분류 TECHNIQUE (OPTIONAL)">
             <TechniqueSelect
@@ -310,7 +321,7 @@ function NewFormulaModal({
             V1 DRAFT WILL BE CREATED
           </p>
           <div className="flex gap-2">
-            <button type="submit" className={primaryButtonClass} disabled={pending}>
+            <button type="submit" className={primaryButtonClass} disabled={pending || !componentId}>
               CREATE
             </button>
             <button type="button" className={buttonClass} onClick={onCancel}>
