@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { GripVertical } from "lucide-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -112,6 +113,70 @@ function OrdersPage() {
   );
 }
 
+type ColumnKey = "order" | "customer" | "recipient" | "occasion" | "date" | "product" | "status";
+
+// 2026-10-06 사용자 요청: 열 간격을 내용 길이에 맞춰 재배분 — ORDER는 짧으니 줄이고,
+// DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. STATUS도 "FINAL TOUCH"처럼
+// 긴 라벨이 생겨서 한 칸 늘림. gap도 늘려서 옆 열과 안 붙어 보이게.
+const COLUMN_LABELS: Record<ColumnKey, string> = {
+  order: "ORDER",
+  customer: "CUSTOMER",
+  recipient: "RECIPIENT",
+  occasion: "OCCASION",
+  date: "DATE",
+  product: "PRODUCT",
+  status: "STATUS",
+};
+const COLUMN_SPANS: Record<ColumnKey, string> = {
+  order: "col-span-1",
+  customer: "col-span-2",
+  recipient: "col-span-2",
+  occasion: "col-span-1",
+  date: "col-span-2",
+  product: "col-span-2",
+  status: "col-span-2",
+};
+const DEFAULT_COLUMN_ORDER: ColumnKey[] = ["order", "customer", "recipient", "occasion", "date", "product", "status"];
+const COLUMN_ORDER_STORAGE_KEY = "kora-pilot:orders-column-order";
+
+function loadColumnOrder(): ColumnKey[] {
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+    if (!raw) return DEFAULT_COLUMN_ORDER;
+    const parsed = JSON.parse(raw) as string[];
+    // 저장된 값에 알 수 없는 키가 섞여있거나(과거 버전) 새 컬럼이 추가된 경우를 대비해,
+    // DEFAULT_COLUMN_ORDER와 대조해서 유효한 키만 남기고 빠진 키는 뒤에 보충한다.
+    const valid = parsed.filter((k): k is ColumnKey => (DEFAULT_COLUMN_ORDER as string[]).includes(k));
+    const missing = DEFAULT_COLUMN_ORDER.filter((k) => !valid.includes(k));
+    return [...valid, ...missing];
+  } catch {
+    return DEFAULT_COLUMN_ORDER;
+  }
+}
+
+/** 컬럼 드래그 순서 — 브라우저(localStorage)에만 저장되는 개인 화면 설정이라 DB엔 안 남긴다. */
+function useColumnOrder() {
+  const [order, setOrder] = useState<ColumnKey[]>(DEFAULT_COLUMN_ORDER);
+  useEffect(() => {
+    setOrder(loadColumnOrder());
+  }, []);
+  const reorder = (dragKey: ColumnKey, dropKey: ColumnKey) => {
+    if (dragKey === dropKey) return;
+    setOrder((prev) => {
+      const next = prev.filter((k) => k !== dragKey);
+      const dropIdx = next.indexOf(dropKey);
+      next.splice(dropIdx, 0, dragKey);
+      try {
+        localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // 저장 실패해도(프라이빗 모드 등) 화면 표시는 그대로 유지 — 조용히 무시.
+      }
+      return next;
+    });
+  };
+  return { order, reorder };
+}
+
 function OrdersTable({
   rows,
   statusColors,
@@ -119,25 +184,37 @@ function OrdersTable({
   rows: OrderListRow[];
   statusColors: Record<string, string> | null;
 }) {
+  const { order: columnOrder, reorder } = useColumnOrder();
+  const [draggingKey, setDraggingKey] = useState<ColumnKey | null>(null);
+
   return (
     <div className="border border-border bg-card">
-      {/* 2026-10-06 사용자 요청: 열 간격을 내용 길이에 맞춰 재배분 — ORDER는 짧으니 줄이고,
-          DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. STATUS도 "FINAL TOUCH"처럼
-          긴 라벨이 생겨서 한 칸 늘림. gap도 늘려서 옆 열과 안 붙어 보이게. */}
       <div className="hidden items-center border-b border-border py-2 md:flex">
         <div className="grid flex-1 grid-cols-12 gap-x-4 gap-y-1 px-3">
-          <span className="label-caps col-span-1 text-xs text-muted-foreground">ORDER</span>
-          <span className="label-caps col-span-2 text-xs text-muted-foreground">CUSTOMER</span>
-          <span className="label-caps col-span-2 text-xs text-muted-foreground">RECIPIENT</span>
-          <span className="label-caps col-span-1 text-xs text-muted-foreground">OCCASION</span>
-          <span className="label-caps col-span-2 text-xs text-muted-foreground">DATE</span>
-          <span className="label-caps col-span-2 text-xs text-muted-foreground">PRODUCT</span>
-          <span className="label-caps col-span-2 text-xs text-muted-foreground">STATUS</span>
+          {columnOrder.map((key) => (
+            <span
+              key={key}
+              draggable
+              onDragStart={() => setDraggingKey(key)}
+              onDragEnd={() => setDraggingKey(null)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggingKey) reorder(draggingKey, key);
+                setDraggingKey(null);
+              }}
+              title="드래그해서 열 순서 변경"
+              className={`label-caps ${COLUMN_SPANS[key]} flex cursor-grab items-center gap-1 text-xs text-muted-foreground active:cursor-grabbing ${draggingKey === key ? "opacity-40" : ""}`}
+            >
+              <GripVertical size={10} className="shrink-0 opacity-50" />
+              {COLUMN_LABELS[key]}
+            </span>
+          ))}
         </div>
       </div>
       <ul>
         {rows.map((o) => (
-          <OrderRow key={o.id} order={o} statusColors={statusColors} />
+          <OrderRow key={o.id} order={o} statusColors={statusColors} columnOrder={columnOrder} />
         ))}
       </ul>
     </div>
@@ -152,9 +229,11 @@ function OrdersTable({
 function OrderRow({
   order: o,
   statusColors,
+  columnOrder,
 }: {
   order: OrderListRow;
   statusColors: Record<string, string> | null;
+  columnOrder: ColumnKey[];
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -167,6 +246,52 @@ function OrderRow({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
   });
 
+  const cells: Record<ColumnKey, ReactNode> = {
+    order: <span className="truncate font-mono text-sm">{o.order_number}</span>,
+    customer: <span className="text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>,
+    recipient: <span className="text-sm">{o.recipient || "—"}</span>,
+    occasion: <span className="text-sm text-muted-foreground">{o.occasion || "—"}</span>,
+    date: (
+      <span className="font-mono text-xs text-muted-foreground">
+        {o.pickup_at
+          ? new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })
+          : o.event_date || "—"}
+      </span>
+    ),
+    product: (
+      <span className="text-sm text-muted-foreground">
+        {o.products?.name || (
+          // 2026-10-06 사용자 요청: 행 전체를 칠하면 미감이 안 좋다 — PRODUCT CATEGORY의
+          // 색상 배지(CategoryBadge)처럼 TBD 텍스트에만 작은 배지로 강조.
+          <span className="label-caps inline-block bg-destructive px-2 py-0.5 text-[11px] text-destructive-foreground">
+            TBD
+          </span>
+        )}
+      </span>
+    ),
+    status: (
+      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: orderStatusColor(statusColors, o.status) }}
+          aria-hidden
+        />
+        <select
+          className={`${selectClass} !w-auto !min-h-0 border-none bg-transparent px-1 py-0.5 text-[11px]`}
+          value={o.status}
+          disabled={updateStatus.isPending}
+          onChange={(e) => updateStatus.mutate(e.target.value as OrderStatus)}
+        >
+          {ORDER_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {orderStatusLabel(s)}
+            </option>
+          ))}
+        </select>
+      </div>
+    ),
+  };
+
   return (
     <li className="border-b border-border last:border-b-0">
       <div
@@ -178,45 +303,11 @@ function OrderRow({
         }}
         className="grid grid-cols-1 gap-1 px-3 py-3 hover:bg-secondary cursor-pointer md:grid-cols-12 md:items-center md:gap-x-4 md:gap-y-1"
       >
-        <span className="col-span-1 truncate font-mono text-sm">{o.order_number}</span>
-        <span className="col-span-2 text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>
-        <span className="col-span-2 text-sm">{o.recipient || "—"}</span>
-        <span className="col-span-1 text-sm text-muted-foreground">{o.occasion || "—"}</span>
-        <span className="col-span-2 font-mono text-xs text-muted-foreground">
-          {o.pickup_at
-            ? new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })
-            : o.event_date || "—"}
-        </span>
-        <span className="col-span-2 text-sm text-muted-foreground">
-          {o.products?.name || (
-            // 2026-10-06 사용자 요청: 행 전체를 칠하면 미감이 안 좋다 — PRODUCT CATEGORY의
-            // 색상 배지(CategoryBadge)처럼 TBD 텍스트에만 작은 배지로 강조.
-            <span className="label-caps inline-block bg-destructive px-2 py-0.5 text-[11px] text-destructive-foreground">
-              TBD
-            </span>
-          )}
-        </span>
-        <span className="col-span-2" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: orderStatusColor(statusColors, o.status) }}
-              aria-hidden
-            />
-            <select
-              className={`${selectClass} !w-auto !min-h-0 border-none bg-transparent px-1 py-0.5 text-[11px]`}
-              value={o.status}
-              disabled={updateStatus.isPending}
-              onChange={(e) => updateStatus.mutate(e.target.value as OrderStatus)}
-            >
-              {ORDER_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {orderStatusLabel(s)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </span>
+        {columnOrder.map((key) => (
+          <span key={key} className={COLUMN_SPANS[key]}>
+            {cells[key]}
+          </span>
+        ))}
       </div>
     </li>
   );
