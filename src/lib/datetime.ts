@@ -82,12 +82,21 @@ export function formatDateTime(input: Date | string): string {
 }
 
 const KOREAN_WEEKDAYS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+const KOREAN_WEEKDAYS_SHORT = ["일", "월", "화", "수", "목", "금", "토"];
 
 /**
  * "YYYY-MM-DD" 문자열의 한국어 요일("월요일" 등)을 반환 (2026-10-06, Production/Product Title 생성용)
  */
 export function koreanWeekday(dateStr: string): string {
   return KOREAN_WEEKDAYS[parseLocalDate(dateStr).getDay()] ?? "";
+}
+
+/**
+ * "YYYY-MM-DD" 문자열의 한국어 요일 한 글자("금" 등)를 반환 — 2026-10-12 사용자 요청:
+ * Orders 목록 DATE 컬럼에 "(금)"처럼 짧게 붙이기 위한 용도.
+ */
+export function koreanWeekdayShort(dateStr: string): string {
+  return KOREAN_WEEKDAYS_SHORT[parseLocalDate(dateStr).getDay()] ?? "";
 }
 
 /**

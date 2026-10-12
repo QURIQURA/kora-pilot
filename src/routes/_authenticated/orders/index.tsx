@@ -13,7 +13,7 @@ import {
   type OrderStatus,
   type OrderListRow,
 } from "@/lib/queries";
-import { toLocalDateString } from "@/lib/datetime";
+import { toLocalDateString, koreanWeekdayShort } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader, primaryButtonClass, buttonClass, selectClass } from "@/components/pilot/ui";
 
@@ -266,9 +266,19 @@ function OrderRow({
     occasion: <span className="text-sm text-muted-foreground">{o.occasion || "—"}</span>,
     date: (
       <span className="font-mono text-xs text-muted-foreground">
-        {o.pickup_at
-          ? new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })
-          : o.event_date || "—"}
+        {o.pickup_at ? (
+          <>
+            {new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })}
+            {" "}
+            ({koreanWeekdayShort(toLocalDateString(new Date(o.pickup_at)))})
+          </>
+        ) : o.event_date ? (
+          <>
+            {o.event_date} ({koreanWeekdayShort(o.event_date)})
+          </>
+        ) : (
+          "—"
+        )}
       </span>
     ),
     product: (
