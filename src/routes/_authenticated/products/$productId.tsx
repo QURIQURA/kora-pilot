@@ -527,12 +527,10 @@ function ProductDetailPage() {
             onChange={(id) => updateProduct.mutate({ category_id: id || null })}
             emptyLabel="NO CATEGORY"
           />
-          <TechniqueSelect
-            className={selectClass + " w-auto"}
-            value={data.technique_category_id ?? ""}
-            onChange={(id) => updateProduct.mutate({ technique_category_id: id || null })}
-            emptyLabel="제작방법 미지정"
-          />
+          {/* 2026-10-12 사용자 요청: PRODUCT 레벨 제작방법(TECHNIQUE CATEGORY) 선택은 제거 —
+              제작방법은 PRODUCT가 아니라 그 안의 각 COMPONENT별로 지정된다(COMPONENT 상세 페이지).
+              products.technique_category_id 컬럼/값 자체는 그대로 두되(다른 화면에서 참조하지
+              않음), 이 선택 UI만 없앤다. */}
           <button
             type="button"
             className={`${buttonClass} text-xs`}
