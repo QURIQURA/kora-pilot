@@ -6,6 +6,7 @@ import type { Json } from "@/integrations/supabase/types";
 import {
   orderQuery,
   productsQuery,
+  productComponentsQuery,
   pilotSettingsQuery,
   workSessionByOrderQuery,
   formulasQuery,
@@ -190,6 +191,33 @@ function OrderDetailPage() {
   const [flavoringSheetFormulaId, setFlavoringSheetFormulaId] = useState("");
   const [flavoringCreamFormulaId, setFlavoringCreamFormulaId] = useState("");
   const [flavoringFillingFormulaId, setFlavoringFillingFormulaId] = useState("");
+
+  // 2026-10-12 사용자 요청: "오더 넣고 기존 상품을 링크하는 경우"에만 그 PRODUCT의 현재 레시피
+  // (컴포넌트별 FORMULA)를 보여줘서 SHEET/CREAM/FILLING에 바로 적용할 수 있게 한다 — "기획해서
+  // 상품으로 업그레이드"하는 경우(FLAVORING NOTE를 먼저 채우고 나중에 UPGRADE TO PRODUCT)는
+  // 이 시점엔 PRODUCT가 아직 없으므로(비어있으므로) 자동으로 영향받지 않는다.
+  const productLinks = useQuery({
+    ...productComponentsQuery(productId),
+    enabled: Boolean(productId),
+  });
+  const productRecipeFormulas = (() => {
+    const seen = new Map<
+      string,
+      { formulaId: string; formulaName: string; versionNumber: number; componentName: string }
+    >();
+    for (const l of productLinks.data ?? []) {
+      const f = l.formula_versions?.formulas;
+      if (l.formula_version_id && f) {
+        seen.set(f.id, {
+          formulaId: f.id,
+          formulaName: f.name,
+          versionNumber: l.formula_versions?.version_number ?? 0,
+          componentName: l.components?.name ?? l.ingredients?.name ?? "—",
+        });
+      }
+    }
+    return [...seen.values()];
+  })();
 
   // 2026-10-06 사용자 요청: Satisfaction(만족도) — Status(진행 단계)와는 완전히 별개 개념이라
   // 독립된 필드로 관리한다. makerSatisfaction/customerSatisfaction은 1~5 또는 "" (미입력/미수집).
@@ -922,6 +950,55 @@ function OrderDetailPage() {
                 </label>
               ))}
             </div>
+            {/* 2026-10-12 사용자 요청: 기존 PRODUCT를 링크한 경우에만 그 PRODUCT의 현재 레시피를
+                보여주고, 버튼 한 번으로 SHEET/CREAM/FILLING에 적용할 수 있게 한다 — FLAVORING NOTE를
+                먼저 채워서 나중에 UPGRADE TO PRODUCT 하는 기획 단계 주문에는 이 시점에 PRODUCT가
+                없으므로 영향 없다. */}
+            {productId && productRecipeFormulas.length > 0 && (
+              <div className="mt-3 border border-dashed border-border p-2">
+                <p className="label-caps mb-1.5 text-[10px] text-muted-foreground">
+                  연결된 PRODUCT의 현재 레시피 — 버튼으로 바로 적용
+                </p>
+                <ul className="space-y-1">
+                  {productRecipeFormulas.map((r) => (
+                    <li
+                      key={r.formulaId}
+                      className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                    >
+                      <span>
+                        {r.componentName}{" "}
+                        <span className="text-muted-foreground">
+                          — {r.formulaName} v{r.versionNumber}
+                        </span>
+                      </span>
+                      <span className="flex gap-1">
+                        <button
+                          type="button"
+                          className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
+                          onClick={() => setFlavoringSheetFormulaId(r.formulaId)}
+                        >
+                          SHEET로
+                        </button>
+                        <button
+                          type="button"
+                          className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
+                          onClick={() => setFlavoringCreamFormulaId(r.formulaId)}
+                        >
+                          CREAM으로
+                        </button>
+                        <button
+                          type="button"
+                          className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
+                          onClick={() => setFlavoringFillingFormulaId(r.formulaId)}
+                        >
+                          FILLING으로
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Field>
           <Field label="DESIGN NOTE — 디자인/구조/조립">
             <textarea
