@@ -1322,6 +1322,18 @@ export type OrderCakeSize = (typeof ORDER_CAKE_SIZES)[number];
 export const ORDER_PAYMENT_STATUSES = ["Unpaid", "Deposit Paid", "Paid in Full"] as const;
 export type OrderPaymentStatus = (typeof ORDER_PAYMENT_STATUSES)[number];
 
+// 2026-10-12 사용자 요청: Order를 WANN Weekly OS의 "제품 라인"과 연결 — CONFIRMED 전환 시
+// sync_confirmed_order_to_planner() DB 트리거가 orders.product_line 값을 그대로
+// planner_multiple_tasks.product_line에 실어보낸다. 이 key들은 WANN 쪽
+// wann-planner/src/lib/wann-groups.ts의 PRODUCT_LINES와 1:1로 맞춰져 있어야 한다 —
+// 여기서 바꾸면 그쪽도 같이 바꿔야 한다(지금은 공식 공유 테이블이 없어 양쪽에 각각 하드코딩).
+export const ORDER_PRODUCT_LINES = [
+  { key: "weekly_cake", label: "Weekly Surprise Cake" },
+  { key: "chiffon", label: "딸기·카카오 시폰 케이크" },
+  { key: "confectionery", label: "컨펙셔너리 박스" },
+] as const;
+export type OrderProductLineKey = (typeof ORDER_PRODUCT_LINES)[number]["key"];
+
 export const customersQuery = () =>
   queryOptions({
     queryKey: ["customers"],

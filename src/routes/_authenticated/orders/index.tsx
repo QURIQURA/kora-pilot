@@ -113,11 +113,13 @@ function OrdersPage() {
   );
 }
 
-type ColumnKey = "order" | "customer" | "recipient" | "occasion" | "date" | "product" | "status";
+type ColumnKey = "order" | "customer" | "recipient" | "occasion" | "date" | "product" | "cake_size" | "status";
 
 // 2026-10-06 사용자 요청: 열 간격을 내용 길이에 맞춰 재배분 — ORDER는 짧으니 줄이고,
 // DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. STATUS도 "FINAL TOUCH"처럼
 // 긴 라벨이 생겨서 한 칸 늘림. gap도 늘려서 옆 열과 안 붙어 보이게.
+// 2026-10-12 사용자 요청: CAKE SIZE 열 추가(orders.cake_size — 주문 상세에 이미 있던 필드).
+// 전체 12칸 안에 맞추려고 RECIPIENT/PRODUCT를 1칸씩 줄여 CAKE SIZE에 배정.
 const COLUMN_LABELS: Record<ColumnKey, string> = {
   order: "ORDER",
   customer: "CUSTOMER",
@@ -125,18 +127,29 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   occasion: "OCCASION",
   date: "DATE",
   product: "PRODUCT",
+  cake_size: "CAKE SIZE",
   status: "STATUS",
 };
 const COLUMN_SPANS: Record<ColumnKey, string> = {
   order: "col-span-1",
   customer: "col-span-2",
-  recipient: "col-span-2",
+  recipient: "col-span-1",
   occasion: "col-span-1",
   date: "col-span-2",
-  product: "col-span-2",
+  product: "col-span-1",
+  cake_size: "col-span-1",
   status: "col-span-2",
 };
-const DEFAULT_COLUMN_ORDER: ColumnKey[] = ["order", "customer", "recipient", "occasion", "date", "product", "status"];
+const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
+  "order",
+  "customer",
+  "recipient",
+  "occasion",
+  "date",
+  "product",
+  "cake_size",
+  "status",
+];
 const COLUMN_ORDER_STORAGE_KEY = "kora-pilot:orders-column-order";
 
 function loadColumnOrder(): ColumnKey[] {
@@ -269,6 +282,7 @@ function OrderRow({
         )}
       </span>
     ),
+    cake_size: <span className="text-sm text-muted-foreground">{o.cake_size || "—"}</span>,
     status: (
       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
         <span

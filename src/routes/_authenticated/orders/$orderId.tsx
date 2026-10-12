@@ -15,6 +15,7 @@ import {
   ORDER_RECIPIENT_RELATIONSHIPS,
   ORDER_CAKE_SIZES,
   ORDER_PAYMENT_STATUSES,
+  ORDER_PRODUCT_LINES,
   CORE_SLOTS,
   CORE_SLOT_LABELS,
   type CoreSlot,
@@ -26,6 +27,7 @@ import {
   type OrderRecipientRelationship,
   type OrderCakeSize,
   type OrderPaymentStatus,
+  type OrderProductLineKey,
 } from "@/lib/queries";
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
@@ -161,6 +163,9 @@ function OrderDetailPage() {
   const [recipientRelationshipOtherNote, setRecipientRelationshipOtherNote] = useState("");
   const [occasion, setOccasion] = useState<OrderOccasion | "">("");
   const [occasionOtherNote, setOccasionOtherNote] = useState("");
+  // 2026-10-12 사용자 요청: WANN Weekly OS 제품 라인과 연결 — CONFIRMED 전환 시
+  // sync_confirmed_order_to_planner() 트리거가 이 값을 그대로 WANN 프로젝트에 실어보낸다.
+  const [productLine, setProductLine] = useState<OrderProductLineKey | "">("");
   const [eventDate, setEventDate] = useState("");
   const [pickupAt, setPickupAt] = useState("");
   const [cakeSize, setCakeSize] = useState<OrderCakeSize | "">("");
@@ -210,6 +215,7 @@ function OrderDetailPage() {
       recipientRelationshipOtherNote: o.recipient_relationship_other_note ?? "",
       occasion: o.occasion ?? "",
       occasionOtherNote: o.occasion_other_note ?? "",
+      productLine: o.product_line ?? "",
       eventDate: o.event_date ?? "",
       pickupAt: isoToDatetimeLocal(o.pickup_at),
       cakeSize: o.cake_size ?? "",
@@ -244,6 +250,7 @@ function OrderDetailPage() {
     setRecipientRelationshipOtherNote(o.recipient_relationship_other_note ?? "");
     setOccasion(o.occasion ?? "");
     setOccasionOtherNote(o.occasion_other_note ?? "");
+    setProductLine((o.product_line as OrderProductLineKey | null) ?? "");
     setEventDate(o.event_date ?? "");
     setPickupAt(isoToDatetimeLocal(o.pickup_at));
     setCakeSize(o.cake_size ?? "");
@@ -285,6 +292,7 @@ function OrderDetailPage() {
     recipientRelationshipOtherNote,
     occasion,
     occasionOtherNote,
+    productLine,
     eventDate,
     pickupAt,
     cakeSize,
@@ -406,6 +414,7 @@ function OrderDetailPage() {
             recipientRelationship === "Other" ? recipientRelationshipOtherNote.trim() || null : null,
           occasion: occasion || null,
           occasion_other_note: occasion === "Other" ? occasionOtherNote.trim() || null : null,
+          product_line: productLine || null,
           event_date: eventDate || null,
           pickup_at: datetimeLocalToIso(pickupAt),
           cake_size: cakeSize || null,
@@ -763,6 +772,23 @@ function OrderDetailPage() {
                 onChange={(e) => setOccasionOtherNote(e.target.value)}
               />
             )}
+          </Field>
+          <Field label="PRODUCT LINE">
+            <select
+              className={selectClass}
+              value={productLine}
+              onChange={(e) => setProductLine(e.target.value as OrderProductLineKey | "")}
+            >
+              <option value="">— 선택 —</option>
+              {ORDER_PRODUCT_LINES.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가 생성/동기화됩니다.
+            </p>
           </Field>
           <Field label="EVENT DATE">
             <input type="date" className={inputClass} value={eventDate} onChange={(e) => setEventDate(e.target.value)} />

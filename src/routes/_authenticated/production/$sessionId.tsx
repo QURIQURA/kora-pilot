@@ -51,6 +51,8 @@ import {
   PROGRESS_STATUS_ICON,
   PROGRESS_STATUS_LABEL,
   workingAmount,
+  sumBaseGrams,
+  suggestedMultiplierFromTarget,
   type WorkSessionProgressStatus,
 } from "@/lib/work-session";
 import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
@@ -802,11 +804,19 @@ function FormulaVersionRow({
   );
   const [manualMultiplier, setManualMultiplier] = useState(String(Number(row.multiplier)));
   const [useManual, setUseManual] = useState(scalingMode !== "MOULD");
+  // 2026-10-12 사용자 요청: "배수 직접입력" 대신 원하는 총 반죽량(g)을 입력하면 역산해서
+  // 배수를 자동 적용 — 배수 = 목표 총g ÷ BASE(×1) 총g. 배수 입력칸과 서로 양방향으로
+  // 동기화(한쪽을 바꾸면 다른 쪽도 같이 갱신)된다.
+  const baseTotalGrams = sumBaseGrams(lines);
+  const [targetGrams, setTargetGrams] = useState(
+    baseTotalGrams > 0 ? fmtNumber(baseTotalGrams * Number(row.multiplier), 0) : "",
+  );
   useEffect(() => {
     setMouldId(row.mould_id ?? row.formula_versions.default_mould_id ?? "");
     setMouldCount(row.mould_qty != null ? String(row.mould_qty) : String(Number(row.multiplier)));
     setManualMultiplier(String(Number(row.multiplier)));
-  }, [row.id, row.multiplier, row.mould_id, row.mould_qty]);
+    setTargetGrams(baseTotalGrams > 0 ? fmtNumber(baseTotalGrams * Number(row.multiplier), 0) : "");
+  }, [row.id, row.multiplier, row.mould_id, row.mould_qty, baseTotalGrams]);
 
   const usingMould = scalingMode === "MOULD" && !useManual;
   const baseMould = moulds.data?.find((m) => m.id === row.formula_versions.default_mould_id) ?? null;
@@ -908,22 +918,47 @@ function FormulaVersionRow({
               </button>
             </div>
           ) : (
-            <label className="flex items-center gap-2">
-              <span className="label-caps text-xs text-muted-foreground">개수(배수) ×</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                step="1"
-                min="1"
-                className={`${inputClass} !w-24 text-center`}
-                value={manualMultiplier}
-                onChange={(e) => setManualMultiplier(e.target.value)}
-                onBlur={(e) => {
-                  const next = Number(e.target.value);
-                  if (Number.isFinite(next) && next > 0)
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2">
+                <span className="label-caps text-xs text-muted-foreground">개수(배수) ×</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  step="1"
+                  min="1"
+                  className={`${inputClass} !w-24 text-center`}
+                  value={manualMultiplier}
+                  onChange={(e) => setManualMultiplier(e.target.value)}
+                  onBlur={(e) => {
+                    const next = Number(e.target.value);
+                    if (!Number.isFinite(next) || next <= 0) return;
                     applyBatch.mutate({ multiplier: next, mouldId: null, mouldQty: null });
-                }}
-              />
+                    if (baseTotalGrams > 0) setTargetGrams(fmtNumber(baseTotalGrams * next, 0));
+                  }}
+                />
+              </label>
+              {baseTotalGrams > 0 && (
+                <label className="flex items-center gap-2">
+                  <span className="label-caps text-xs text-muted-foreground">또는 총 중량(g)</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    step="1"
+                    min="0"
+                    className={`${inputClass} !w-24 text-center`}
+                    value={targetGrams}
+                    onChange={(e) => setTargetGrams(e.target.value)}
+                    onBlur={(e) => {
+                      const grams = Number(e.target.value);
+                      if (!Number.isFinite(grams) || grams <= 0) return;
+                      const next = suggestedMultiplierFromTarget(grams, 1, baseTotalGrams);
+                      if (next == null) return;
+                      setManualMultiplier(fmtNumber(next, 2));
+                      applyBatch.mutate({ multiplier: next, mouldId: null, mouldQty: null });
+                    }}
+                  />
+                </label>
+              )}
               {scalingMode === "MOULD" && (
                 <button
                   type="button"
@@ -933,7 +968,7 @@ function FormulaVersionRow({
                   몰드 기준으로
                 </button>
               )}
-            </label>
+            </div>
           )}
           <div className="flex items-center gap-1 border-l border-border pl-3">
             <button

@@ -14,6 +14,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      _ddl_probe: {
+        Row: {
+          id: number | null
+        }
+        Insert: {
+          id?: number | null
+        }
+        Update: {
+          id?: number | null
+        }
+        Relationships: []
+      }
       base_weight_presets: {
         Row: {
           created_at: string
@@ -1115,6 +1127,7 @@ export type Database = {
           pickup_at: string | null
           price: number | null
           product_id: string | null
+          product_line: string | null
           quantity: number | null
           raw_dm_text: string | null
           recipient: string | null
@@ -1127,6 +1140,8 @@ export type Database = {
           status: string
           updated_at: string
           user_id: string
+          wann_delivery_task_id: string | null
+          wann_project_id: string | null
         }
         Insert: {
           allergy_notes?: string | null
@@ -1161,6 +1176,7 @@ export type Database = {
           pickup_at?: string | null
           price?: number | null
           product_id?: string | null
+          product_line?: string | null
           quantity?: number | null
           raw_dm_text?: string | null
           recipient?: string | null
@@ -1173,6 +1189,8 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string
+          wann_delivery_task_id?: string | null
+          wann_project_id?: string | null
         }
         Update: {
           allergy_notes?: string | null
@@ -1207,6 +1225,7 @@ export type Database = {
           pickup_at?: string | null
           price?: number | null
           product_id?: string | null
+          product_line?: string | null
           quantity?: number | null
           raw_dm_text?: string | null
           recipient?: string | null
@@ -1219,6 +1238,8 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string
+          wann_delivery_task_id?: string | null
+          wann_project_id?: string | null
         }
         Relationships: [
           {
