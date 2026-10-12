@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, mouldsQuery, productSizesQuery } from "@/lib/queries";
+import { currentUserId, productSizesQuery } from "@/lib/queries";
 import {
   calcProductSize,
   cmToMm,
@@ -14,12 +14,16 @@ import {
   type ProductSizeShape,
 } from "@/lib/product-size";
 import { fmtCurrency } from "@/lib/cost";
-import { MouldSelect } from "./MouldSelect";
 import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 /**
  * Product 상세 화면의 SIZES 섹션.
- * product_sizes는 products의 child table — Mould(생산 도구)와는 독립적인 개념.
+ * product_sizes는 products의 child table — Mould(생산 도구, 반죽량 기준)와는 완전히 다른 개념이다
+ * (2026-10-12 사용자 정정). 여기서 말하는 SIZE는 시트/크림/필링을 전부 조립·아이싱한 "완성된
+ * 제품"의 외형 치수 기준이라, 특정 Mould를 골라서 치수를 대신 채우는 식으로 만들면 안 된다 —
+ * 이 폼에는 Mould 선택 자체가 없다. SHAPE/치수는 완성 제품 실측값을 직접 입력한다.
+ * 총중량(g)은 이 폼에서 입력하지 않는다 — COMPONENTS 섹션에서 이 사이즈에 연결한 각 COMPONENT의
+ * quantity_g를 합산해 read-time으로 자동 계산한다(sumUsageBySize, $productId.tsx).
  * DB canonical unit은 mm, 이 UI는 cm로 입력/표시하고 저장 직전 mm로 변환한다.
  * Area/Volume은 저장하지 않고 lib/product-size.ts로 read-time 계산한다.
  */
@@ -45,8 +49,6 @@ export function ProductSizesSection({
 }) {
   const queryClient = useQueryClient();
   const sizes = useQuery(productSizesQuery(productId));
-  const moulds = useQuery(mouldsQuery());
-  const mouldNameById = Object.fromEntries((moulds.data ?? []).map((m) => [m.id, m.name]));
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -142,20 +144,20 @@ export function ProductSizesSection({
                         {size.shape}
                       </span>
                       <span className="text-sm">{formatProductSizeLabel(size)}</span>
-                      {size.mould_id && mouldNameById[size.mould_id] && (
-                        <span className="label-caps text-[11px] text-muted-foreground">
-                          MOULD: {mouldNameById[size.mould_id]}
-                        </span>
-                      )}
                     </div>
                     {(() => {
                       const usageTotal = usageTotals?.[size.id];
-                      const usageLabel =
-                        usageTotal != null ? `재료 합산 ${usageTotal.toFixed(1).replace(/\.0$/, "")}g` : null;
+                      // 2026-10-12 사용자 요청: "총중량"은 이 사이즈에 연결된 모든 COMPONENT(시트+크림+
+                      // 필링 등)의 quantity_g 자동 합산값 — 직접 입력하는 값이 아니다(수동 입력은
+                      // COMPONENTS 섹션의 사이즈별 사용량 칸에서 함). AREA/VOLUME과는 별개 줄로 분리해
+                      // 눈에 띄게 보여준다.
+                      const totalWeightLabel =
+                        usageTotal != null
+                          ? `총중량 ${usageTotal.toFixed(1).replace(/\.0$/, "")}g (COMPONENT 합산 자동계산)`
+                          : "총중량 미계산 — COMPONENTS에서 이 사이즈에 중량을 지정하세요";
                       const costTotal = costTotals?.[size.id];
                       const costLabel =
                         costTotal != null ? `RAW MATERIAL ${fmtCurrency(costTotal)}` : null;
-                      const extra = [usageLabel, costLabel].filter(Boolean).join(" · ");
                       const fullCost = costTotal != null ? costTotal + (perCakeExtras ?? 0) : null;
                       const monthlyCount = size.monthly_unit_count;
                       const monthlyCost =
@@ -171,14 +173,17 @@ export function ProductSizesSection({
                           : null;
                       return (
                         <>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {totalWeightLabel}
+                          </p>
                           {calc ? (
                             <p className="font-mono text-xs text-muted-foreground">
                               AREA {formatAreaCm2(calc.areaCm2)} · VOLUME{" "}
                               {formatVolumeCm3(calc.volumeCm3)}
-                              {extra ? ` · ${extra}` : ""}
+                              {costLabel ? ` · ${costLabel}` : ""}
                             </p>
-                          ) : extra ? (
-                            <p className="font-mono text-xs text-muted-foreground">{extra}</p>
+                          ) : costLabel ? (
+                            <p className="font-mono text-xs text-muted-foreground">{costLabel}</p>
                           ) : null}
                           {fullCost != null && (
                             <p className="font-mono text-xs text-muted-foreground">
@@ -260,8 +265,6 @@ function ProductSizeForm({
   onDone: () => void;
 }) {
   const queryClient = useQueryClient();
-  const moulds = useQuery(mouldsQuery());
-  const [mouldId, setMouldId] = useState(existing?.mould_id ?? "");
   const [shape, setShape] = useState<ProductSizeShape>((existing?.shape as ProductSizeShape) ?? "ROUND");
   const [diameterCm, setDiameterCm] = useState(
     existing?.diameter_mm != null ? String(mmToCm(existing.diameter_mm)) : "",
@@ -291,7 +294,6 @@ function ProductSizeForm({
 
       const payload = {
         shape,
-        mould_id: mouldId || null,
         diameter_mm: shape === "ROUND" ? toMm(diameterCm) : null,
         length_mm: shape === "RECTANGLE" ? toMm(lengthCm) : null,
         width_mm: shape === "RECTANGLE" ? toMm(widthCm) : null,
@@ -337,8 +339,6 @@ function ProductSizeForm({
     },
   });
 
-  const selectedMould = (moulds.data ?? []).find((m) => m.id === mouldId);
-
   return (
     <form
       className="space-y-3 border border-dashed border-border p-3"
@@ -347,30 +347,10 @@ function ProductSizeForm({
         save.mutate();
       }}
     >
-      <Field label="MOULD (OPTIONAL — 선택 시 실측 치수가 자동 입력됩니다)">
-        <MouldSelect
-          value={mouldId}
-          onChange={(id) => {
-            setMouldId(id);
-            const m = (moulds.data ?? []).find((mm) => mm.id === id);
-            if (m) {
-              if (m.diameter_mm != null) {
-                setShape("ROUND");
-                setDiameterCm(String(mmToCm(m.diameter_mm)));
-              }
-              if (m.height_mm != null) setHeightCm(String(mmToCm(m.height_mm)));
-            }
-          }}
-        />
-      </Field>
-      {selectedMould && (selectedMould.diameter_mm != null || selectedMould.height_mm != null) && (
-        <p className="font-mono text-[11px] text-muted-foreground">
-          {selectedMould.name} 실측
-          {selectedMould.diameter_mm != null ? ` Ø${mmToCm(selectedMould.diameter_mm)}cm` : ""}
-          {selectedMould.height_mm != null ? ` × H${mmToCm(selectedMould.height_mm)}cm` : ""}
-          (아이싱 전) — 아이싱 후 완성 사이즈로 아래 값을 직접 조정하세요.
-        </p>
-      )}
+      <p className="font-mono text-[11px] text-muted-foreground">
+        시트/크림/필링을 전부 조립·아이싱한 완성 제품의 실측 외형 치수를 입력하세요 (MOULD 기준이
+        아님 — MOULD는 FORMULA 배수 계산용 별개 개념입니다).
+      </p>
 
       <Field label="SHAPE">
         <select
