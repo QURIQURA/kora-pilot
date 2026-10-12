@@ -154,6 +154,7 @@ function OrderDetailPage() {
   const [extracted, setExtracted] = useState<ExtractedOrderInfo | null>(null);
   const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set());
 
+  const [orderNumber, setOrderNumber] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [recipient, setRecipient] = useState("");
   const [recipientRelationship, setRecipientRelationship] = useState<OrderRecipientRelationship | "">("");
@@ -200,6 +201,7 @@ function OrderDetailPage() {
   // buildRowSnapshot: order.data(서버에 저장된 행) 기준으로 직렬화 — "마지막으로 저장된 상태".
   const buildRowSnapshot = (o: OrderListRow, extractedJsonForSnapshot: Json | null) =>
     JSON.stringify({
+      orderNumber: o.order_number ?? "",
       dmText: o.raw_dm_text ?? "",
       extractedJson: extractedJsonForSnapshot,
       customerId: o.customer_id ?? "",
@@ -234,6 +236,7 @@ function OrderDetailPage() {
   const [savedSnapshot, setSavedSnapshot] = useState("");
 
   const hydrateFromOrder = (o: OrderListRow) => {
+    setOrderNumber(o.order_number ?? "");
     setDmText(o.raw_dm_text ?? "");
     setCustomerId(o.customer_id ?? "");
     setRecipient(o.recipient ?? "");
@@ -273,6 +276,7 @@ function OrderDetailPage() {
 
   // currentSnapshot: 지금 화면(로컬 state) 기준 — savedSnapshot과 다르면 "변경사항 있음".
   const currentSnapshot = JSON.stringify({
+    orderNumber,
     dmText,
     extractedJson: extracted ? (extracted as unknown as Json) : (order.data?.extracted_json ?? null),
     customerId,
@@ -385,9 +389,14 @@ function OrderDetailPage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      const trimmedOrderNumber = orderNumber.trim();
+      if (!trimmedOrderNumber) {
+        throw new Error("ORDER NUMBER IS REQUIRED");
+      }
       const { error } = await supabase
         .from("orders")
         .update({
+          order_number: trimmedOrderNumber,
           raw_dm_text: dmText.trim() || null,
           extracted_json: extracted ? (extracted as unknown as Json) : order.data?.extracted_json ?? null,
           customer_id: customerId || null,
@@ -594,7 +603,12 @@ function OrderDetailPage() {
           <Link to="/orders" className="label-caps text-xs text-muted-foreground hover:text-foreground">
             ← ORDERS
           </Link>
-          <h1 className="label-caps text-lg text-foreground">{order.data.order_number}</h1>
+          <input
+            className="label-caps w-full max-w-[16rem] border-0 bg-transparent p-0 text-lg text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            value={orderNumber}
+            onChange={(e) => setOrderNumber(e.target.value)}
+            aria-label="ORDER NUMBER"
+          />
           <p className="font-mono text-xs uppercase text-muted-foreground">
             CREATED {formatDateTime(order.data.created_at)}
           </p>
