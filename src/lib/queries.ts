@@ -506,6 +506,8 @@ export interface FormulaListRow extends Formula {
     /** 이 Component를 세션에 추가할 때 자동으로 깔아줄 기본 WORKFLOW TEMPLATE(2026-09-24) */
     default_workflow_template_id: string | null;
     auto_apply_default_workflow: boolean;
+    /** 2026-10-12 사용자 요청: SHEET/CREAM/FILLING 자동 분류용 — resolveSlotGroup()과 함께 사용. */
+    technique_category_id: string | null;
   } | null;
   formula_versions: {
     id: string;
@@ -524,7 +526,7 @@ export const formulasQuery = () =>
         await supabase
           .from("formulas")
           .select(
-            "*, components(id, name, scaling_mode, default_workflow_template_id, auto_apply_default_workflow), formula_versions(id, version_number, status, default_mould_id, default_base_weight_id)",
+            "*, components(id, name, scaling_mode, default_workflow_template_id, auto_apply_default_workflow, technique_category_id), formula_versions(id, version_number, status, default_mould_id, default_base_weight_id)",
           )
           .order("updated_at", { ascending: false }),
       ) as unknown as FormulaListRow[],
@@ -1936,10 +1938,13 @@ export const componentObservationsQuery = (componentId: string) =>
 // 선택은 이미 그 테이블의 formula_version_id가 하고 있었으므로.
 export const CORE_SLOTS = ["SHEET", "CREAM", "FILLING"] as const;
 export type CoreSlot = (typeof CORE_SLOTS)[number];
+// 2026-10-12 사용자 요청: 기존 Sheet/Cream/Filling이라는 이름이 "반죽을 구워 만드는 것 vs
+// 굽지 않는 크림베이스 vs 삽입/인서트"라는 실제 구분 기준을 잘 드러내지 못해서 더 명확한
+// 이름으로 변경 — 내부 저장값(SHEET/CREAM/FILLING, DB 컬럼명 등)은 그대로 유지하고 표시 라벨만 바꾼다.
 export const CORE_SLOT_LABELS: Record<CoreSlot, string> = {
-  SHEET: "Sheet",
-  CREAM: "Cream",
-  FILLING: "Filling",
+  SHEET: "Pastry Base",
+  CREAM: "Cream & Aerated Components",
+  FILLING: "Fillings & Inserts",
 };
 
 /** Order 하나당 Work Session은 최대 1개(order_id unique). 없으면 null. */

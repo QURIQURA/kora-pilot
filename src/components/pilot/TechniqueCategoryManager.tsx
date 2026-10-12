@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, techniqueCategoriesQuery } from "@/lib/queries";
+import { currentUserId, techniqueCategoriesQuery, CORE_SLOTS, CORE_SLOT_LABELS } from "@/lib/queries";
 import {
   buildTechniqueTree,
+  resolveSlotGroup,
   type TechniqueCategory,
   type TechniqueNode,
 } from "@/lib/technique";
-import { SectionCard, buttonClass, inputClass } from "./ui";
+import { SectionCard, buttonClass, inputClass, selectClass } from "./ui";
 
 /**
  * SETTINGS의 TECHNIQUE CATEGORIES 관리 섹션.
@@ -115,6 +116,7 @@ export function TechniqueCategoryManager() {
               <li key={node.category.id}>
                 <GroupBlock
                   node={node}
+                  allCategories={list}
                   onCreate={(name, parentId) =>
                     create.mutate({
                       name,
@@ -145,17 +147,20 @@ export function TechniqueCategoryManager() {
 
 function GroupBlock({
   node,
+  allCategories,
   onCreate,
   onUpdate,
   onDelete,
 }: {
   node: TechniqueNode;
+  allCategories: TechniqueCategory[];
   onCreate: (name: string, parentId: string | null) => void;
   onUpdate: (id: string, patch: Partial<TechniqueCategory>) => void;
   onDelete: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const groupSlot = resolveSlotGroup(allCategories, node.category.id);
 
   return (
     <div className="border border-border">
@@ -171,6 +176,11 @@ function GroupBlock({
               {node.category.name_en}
             </span>
           )}
+          {groupSlot && (
+            <span className="ml-2 border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {CORE_SLOT_LABELS[groupSlot]}
+            </span>
+          )}
         </span>
         <span className="label-caps text-xs text-muted-foreground">
           {node.children.length} · {open ? "− CLOSE" : "+ OPEN"}
@@ -181,6 +191,7 @@ function GroupBlock({
         <div className="space-y-3 border-t border-border p-3">
           <TechniqueFields
             category={node.category}
+            allCategories={allCategories}
             onUpdate={(patch) => onUpdate(node.category.id, patch)}
             onDelete={
               node.children.length === 0
@@ -197,6 +208,7 @@ function GroupBlock({
               <li key={child.category.id} className="border border-border p-3">
                 <TechniqueFields
                   category={child.category}
+                  allCategories={allCategories}
                   isLeaf={child.children.length === 0}
                   onUpdate={(patch) => onUpdate(child.category.id, patch)}
                   onDelete={
@@ -218,6 +230,7 @@ function GroupBlock({
                       >
                         <TechniqueFields
                           category={sub.category}
+                          allCategories={allCategories}
                           isLeaf
                           onUpdate={(patch) => onUpdate(sub.category.id, patch)}
                           onDelete={() => {
@@ -297,15 +310,20 @@ function SubtypeAdder({
 /** 이름/영문명/참고 기준 배합/핵심 원리 인라인 수정 + 리프면 CALIBRATION 링크 */
 function TechniqueFields({
   category,
+  allCategories,
   isLeaf = false,
   onUpdate,
   onDelete,
 }: {
   category: TechniqueCategory;
+  allCategories: TechniqueCategory[];
   isLeaf?: boolean;
   onUpdate: (patch: Partial<TechniqueCategory>) => void;
   onDelete?: (() => void) | undefined;
 }) {
+  // 2026-10-12 사용자 요청: 이 노드가 상속받을 값(부모 체인에서 찾은 값) — 드롭다운의
+  // "상속" 옵션에 참고용으로 보여준다. 본인에게 직접 지정된 값은 category.slot_group.
+  const inheritedSlot = resolveSlotGroup(allCategories, category.parent_id);
   const commit = (key: keyof TechniqueCategory, raw: string, nullable = true) => {
     const value = raw.trim();
     const current = (category[key] as string | null) ?? "";
@@ -346,6 +364,29 @@ function TechniqueFields({
         defaultValue={category.notes ?? ""}
         onBlur={(e) => commit("notes", e.target.value)}
       />
+      <div>
+        <label className="label-caps mb-1 block text-[10px] text-muted-foreground">
+          SLOT — SHEET/CREAM/FILLING 자동 분류 (Order/Work Session에서 이 기준으로 보여줌)
+        </label>
+        <select
+          className={selectClass}
+          value={category.slot_group ?? ""}
+          onChange={(e) =>
+            onUpdate({
+              slot_group: (e.target.value || null) as TechniqueCategory["slot_group"],
+            })
+          }
+        >
+          <option value="">
+            {inheritedSlot ? `상속 — ${CORE_SLOT_LABELS[inheritedSlot]}` : "미지정 (상속 없음 · 어느 슬롯에도 안 뜸)"}
+          </option>
+          {CORE_SLOTS.map((slot) => (
+            <option key={slot} value={slot}>
+              {CORE_SLOT_LABELS[slot]}로 지정
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         {isLeaf && (
           <Link

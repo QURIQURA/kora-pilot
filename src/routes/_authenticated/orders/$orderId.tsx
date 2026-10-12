@@ -10,6 +10,7 @@ import {
   pilotSettingsQuery,
   workSessionByOrderQuery,
   formulasQuery,
+  techniqueCategoriesQuery,
   currentUserId,
   ORDER_STATUSES,
   ORDER_OCCASIONS,
@@ -31,6 +32,7 @@ import {
   type OrderProductLineKey,
 } from "@/lib/queries";
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
+import { resolveSlotGroup } from "@/lib/technique";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
@@ -150,6 +152,16 @@ function OrderDetailPage() {
   const workSession = useQuery(workSessionByOrderQuery(orderId));
   const formulas = useQuery(formulasQuery());
   const statusColors = (pilotSettings.data?.order_status_colors as Record<string, string> | null) ?? null;
+  // 2026-10-12 사용자 요청: SHEET/CREAM/FILLING 각 칸에는 TECHNIQUE CATEGORIES에서 그 슬롯으로
+  // 분류된(또는 상속된) COMPONENT의 FORMULA만 뜨도록 — 이름으로 추측하지 않고 명시적 분류 기준으로.
+  const techniqueCategories = useQuery(techniqueCategoriesQuery());
+  const formulasForSlot = (slot: CoreSlot, currentValue: string) =>
+    (formulas.data ?? []).filter((f) => {
+      // 기존에 이미 선택돼 있던 FORMULA는 분류가 바뀌거나 없어도 계속 보여준다(과거 데이터 유실 방지).
+      if (f.id === currentValue) return true;
+      const catId = f.components?.technique_category_id ?? null;
+      return resolveSlotGroup(techniqueCategories.data ?? [], catId) === slot;
+    });
 
   const [dmText, setDmText] = useState("");
   const [extracting, setExtracting] = useState(false);
@@ -932,7 +944,7 @@ function OrderDetailPage() {
                 ] as const
               ).map(([slot, value, setValue]) => (
                 <label key={slot} className="flex items-center gap-2">
-                  <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">
+                  <span className="label-caps w-32 shrink-0 text-[10px] text-muted-foreground">
                     {CORE_SLOT_LABELS[slot]}
                   </span>
                   <select
@@ -941,7 +953,7 @@ function OrderDetailPage() {
                     onChange={(e) => setValue(e.target.value)}
                   >
                     <option value="">— FORMULA 링크 안 함 —</option>
-                    {(formulas.data ?? []).map((f) => (
+                    {formulasForSlot(slot, value).map((f) => (
                       <option key={f.id} value={f.id}>
                         {f.components?.name ?? f.name}
                       </option>
@@ -950,6 +962,10 @@ function OrderDetailPage() {
                 </label>
               ))}
             </div>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              각 칸에는 SETTINGS → TECHNIQUE CATEGORIES에서 해당 슬롯으로 분류된 COMPONENT의 FORMULA만
+              표시됩니다.
+            </p>
             {/* 2026-10-12 사용자 요청: 기존 PRODUCT를 링크한 경우에만 그 PRODUCT의 현재 레시피를
                 보여주고, 버튼 한 번으로 SHEET/CREAM/FILLING에 적용할 수 있게 한다 — FLAVORING NOTE를
                 먼저 채워서 나중에 UPGRADE TO PRODUCT 하는 기획 단계 주문에는 이 시점에 PRODUCT가

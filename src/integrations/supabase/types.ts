@@ -26,6 +26,27 @@ export type Database = {
         }
         Relationships: []
       }
+      _sync_debug_log: {
+        Row: {
+          created_at: string | null
+          detail: string | null
+          id: number
+          step: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          detail?: string | null
+          id?: number
+          step?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          detail?: string | null
+          id?: number
+          step?: string | null
+        }
+        Relationships: []
+      }
       base_weight_presets: {
         Row: {
           created_at: string
@@ -1111,6 +1132,7 @@ export type Database = {
           flavoring_filling_formula_id: string | null
           flavoring_note: string | null
           flavoring_sheet_formula_id: string | null
+          google_calendar_event_id: string | null
           has_allergies: boolean
           id: string
           maker_notes: string | null
@@ -1160,6 +1182,7 @@ export type Database = {
           flavoring_filling_formula_id?: string | null
           flavoring_note?: string | null
           flavoring_sheet_formula_id?: string | null
+          google_calendar_event_id?: string | null
           has_allergies?: boolean
           id?: string
           maker_notes?: string | null
@@ -1209,6 +1232,7 @@ export type Database = {
           flavoring_filling_formula_id?: string | null
           flavoring_note?: string | null
           flavoring_sheet_formula_id?: string | null
+          google_calendar_event_id?: string | null
           has_allergies?: boolean
           id?: string
           maker_notes?: string | null
@@ -1901,6 +1925,7 @@ export type Database = {
           name_en: string | null
           notes: string | null
           parent_id: string | null
+          slot_group: string | null
           sort_order: number
           suggested_base_formula: string | null
           updated_at: string
@@ -1913,6 +1938,7 @@ export type Database = {
           name_en?: string | null
           notes?: string | null
           parent_id?: string | null
+          slot_group?: string | null
           sort_order?: number
           suggested_base_formula?: string | null
           updated_at?: string
@@ -1925,6 +1951,7 @@ export type Database = {
           name_en?: string | null
           notes?: string | null
           parent_id?: string | null
+          slot_group?: string | null
           sort_order?: number
           suggested_base_formula?: string | null
           updated_at?: string

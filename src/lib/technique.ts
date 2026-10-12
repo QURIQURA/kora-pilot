@@ -78,6 +78,24 @@ export function techniquePath(
   return path;
 }
 
+/**
+ * 2026-10-12 사용자 요청: SHEET/CREAM/FILLING(= Pastry Base/Cream & Aerated/Fillings & Inserts)
+ * 자동 분류 — technique_categories.slot_group을 "가장 가까운 조상의 값을 상속"하는 규칙으로
+ * 해석한다. 리프(또는 중간) 노드에 직접 override된 값이 있으면 그 값을 쓰고, 없으면 부모→조부모
+ * 순으로 올라가며 처음 만나는 non-null 값을 쓴다. 끝까지 없으면 null(= 어느 슬롯에도 안 뜸).
+ */
+export function resolveSlotGroup(
+  list: TechniqueCategory[],
+  id: string | null | undefined,
+): "SHEET" | "CREAM" | "FILLING" | null {
+  const path = techniquePath(list, id); // 루트 → 해당 노드 순
+  for (let i = path.length - 1; i >= 0; i--) {
+    const sg = path[i]!.slot_group;
+    if (sg === "SHEET" || sg === "CREAM" || sg === "FILLING") return sg;
+  }
+  return null;
+}
+
 /** 표시 라벨 — 한글 우선, 영문은 보조 */
 export function techniqueLabel(c: TechniqueCategory): string {
   return c.name_en ? `${c.name} (${c.name_en})` : c.name;

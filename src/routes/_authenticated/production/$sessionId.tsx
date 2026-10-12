@@ -26,6 +26,7 @@ import {
   mouldsQuery,
   productsQuery,
   productSizesQuery,
+  techniqueCategoriesQuery,
   versionIngredientsBulkQuery,
   workSessionFormulaVersionsQuery,
   workSessionMultiplierHistoryQuery,
@@ -40,6 +41,7 @@ import {
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
+import { resolveSlotGroup } from "@/lib/technique";
 import { fmtNumber, toGrams, versionLabel, type Mould } from "@/lib/formula";
 import { formatProductSizeLabel } from "@/lib/product-size";
 import { mouldBatchMultiplier } from "@/lib/formula-calc";
@@ -585,7 +587,15 @@ function AddFormulaVersionForm({
   slot?: CoreSlot | null;
 }) {
   const formulas = useQuery(formulasQuery());
-  const formulaList = formulas.data ?? [];
+  // 2026-10-12 사용자 요청: CORE(SHEET/CREAM/FILLING) 슬롯에서 추가할 때는 TECHNIQUE
+  // CATEGORIES에서 그 슬롯으로 분류된 COMPONENT의 FORMULA만 보여준다. DECORATIVE(자유 추가)는
+  // 기존처럼 전체를 다 보여준다.
+  const techniqueCategories = useQuery(techniqueCategoriesQuery());
+  const formulaList = (formulas.data ?? []).filter((f) => {
+    if (!slot) return true;
+    const catId = f.components?.technique_category_id ?? null;
+    return resolveSlotGroup(techniqueCategories.data ?? [], catId) === slot;
+  });
   const moulds = useQuery(mouldsQuery());
   const [formulaId, setFormulaId] = useState("");
   const [versionId, setVersionId] = useState("");
