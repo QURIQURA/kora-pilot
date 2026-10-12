@@ -203,49 +203,21 @@ function GroupBlock({
             }
           />
 
+          {/* 2026-10-12 사용자 요청: 제품군이 많지 않아 그룹(Pastry Base/Cream & Aerated
+              Components/Fillings & Inserts) → 기법 2단계로 충분 — 기법군/서브타입 같은
+              추가 하위 depth를 두지 않는다. */}
           <ul className="space-y-2">
             {node.children.map((child) => (
               <li key={child.category.id} className="border border-border p-3">
                 <TechniqueFields
                   category={child.category}
                   allCategories={allCategories}
-                  isLeaf={child.children.length === 0}
+                  isLeaf
                   onUpdate={(patch) => onUpdate(child.category.id, patch)}
-                  onDelete={
-                    child.children.length === 0
-                      ? () => {
-                          if (confirm(`DELETE "${child.category.name}"?`))
-                            onDelete(child.category.id);
-                        }
-                      : undefined
-                  }
-                />
-
-                {child.children.length > 0 && (
-                  <ul className="mt-3 space-y-2 border-l border-dashed border-border pl-3">
-                    {child.children.map((sub) => (
-                      <li
-                        key={sub.category.id}
-                        className="border border-border p-3"
-                      >
-                        <TechniqueFields
-                          category={sub.category}
-                          allCategories={allCategories}
-                          isLeaf
-                          onUpdate={(patch) => onUpdate(sub.category.id, patch)}
-                          onDelete={() => {
-                            if (confirm(`DELETE "${sub.category.name}"?`))
-                              onDelete(sub.category.id);
-                          }}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                <SubtypeAdder
-                  parentId={child.category.id}
-                  onCreate={onCreate}
+                  onDelete={() => {
+                    if (confirm(`DELETE "${child.category.name}"?`))
+                      onDelete(child.category.id);
+                  }}
                 />
               </li>
             ))}
@@ -253,7 +225,7 @@ function GroupBlock({
 
           {adding ? (
             <InlineAdd
-              label="새 기법군 이름"
+              label="새 기법 이름"
               onCancel={() => setAdding(false)}
               onCreate={(name) => {
                 onCreate(name, node.category.id);
@@ -266,44 +238,12 @@ function GroupBlock({
               className={`${buttonClass} text-xs`}
               onClick={() => setAdding(true)}
             >
-              + 기법군 추가
+              + 기법 추가
             </button>
           )}
         </div>
       )}
     </div>
-  );
-}
-
-function SubtypeAdder({
-  parentId,
-  onCreate,
-}: {
-  parentId: string;
-  onCreate: (name: string, parentId: string | null) => void;
-}) {
-  const [adding, setAdding] = useState(false);
-  if (adding)
-    return (
-      <div className="mt-3">
-        <InlineAdd
-          label="새 서브타입 이름"
-          onCancel={() => setAdding(false)}
-          onCreate={(name) => {
-            onCreate(name, parentId);
-            setAdding(false);
-          }}
-        />
-      </div>
-    );
-  return (
-    <button
-      type="button"
-      className={`${buttonClass} mt-3 text-xs`}
-      onClick={() => setAdding(true)}
-    >
-      + 서브타입
-    </button>
   );
 }
 

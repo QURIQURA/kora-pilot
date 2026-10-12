@@ -26,6 +26,7 @@ import {
   mouldsQuery,
   productsQuery,
   productSizesQuery,
+  productComponentsQuery,
   techniqueCategoriesQuery,
   versionIngredientsBulkQuery,
   workSessionFormulaVersionsQuery,
@@ -332,6 +333,8 @@ function WorkSessionPage() {
                     nextSort={rows.length}
                     kind="CORE"
                     slot={slot}
+                    productId={data.product_id}
+                    productSizeId={data.product_size_id}
                     onDone={async () => {
                       setAddingSlot(null);
                       await invalidateSelections();
@@ -366,6 +369,8 @@ function WorkSessionPage() {
             <AddFormulaVersionForm
               sessionId={sessionId}
               nextSort={rows.length}
+              productId={data.product_id}
+              productSizeId={data.product_size_id}
               onDone={async () => {
                 setAdding(false);
                 await invalidateSelections();
@@ -578,6 +583,8 @@ function AddFormulaVersionForm({
   onDone,
   kind = "DECORATIVE",
   slot = null,
+  productId = null,
+  productSizeId = null,
 }: {
   sessionId: string;
   nextSort: number;
@@ -585,6 +592,11 @@ function AddFormulaVersionForm({
   /** 2026-10-06: CORE(Sheet/Cream/Filling 고정 슬롯)에서 추가할 때 전달 — 기본은 자유 추가인 DECORATIVE */
   kind?: "CORE" | "DECORATIVE";
   slot?: CoreSlot | null;
+  /** 2026-10-12 사용자 요청: WORK SESSION이 특정 PRODUCT/PRODUCT SIZE에 연결돼 있으면,
+   * product_components.quantity_g(그 사이즈의 COMPONENT별 목표중량)를 읽어와서 배수를
+   * 자동으로 미리 채워준다 — 몰드개수/기본중량개수를 매번 수동 입력하지 않도록. */
+  productId?: string | null;
+  productSizeId?: string | null;
 }) {
   const formulas = useQuery(formulasQuery());
   // 2026-10-12 사용자 요청: CORE(SHEET/CREAM/FILLING) 슬롯에서 추가할 때는 TECHNIQUE
@@ -593,7 +605,10 @@ function AddFormulaVersionForm({
   const techniqueCategories = useQuery(techniqueCategoriesQuery());
   const formulaList = (formulas.data ?? []).filter((f) => {
     if (!slot) return true;
-    const catId = f.components?.technique_category_id ?? null;
+    // 2026-10-12 사용자 발견: COMPONENT에 연결 안 된 FORMULA(예: Tiramisu Mousse)는
+    // components?.technique_category_id가 없어서 늘 빠졌다 — FORMULA 자체의
+    // technique_category_id도 폴백으로 같이 봐야 CORE 슬롯에 정상적으로 뜬다.
+    const catId = f.components?.technique_category_id ?? f.technique_category_id ?? null;
     return resolveSlotGroup(techniqueCategories.data ?? [], catId) === slot;
   });
   const moulds = useQuery(mouldsQuery());
@@ -606,6 +621,7 @@ function AddFormulaVersionForm({
   const [mouldId, setMouldId] = useState("");
   const [mouldCount, setMouldCount] = useState("1");
   const [manualMultiplier, setManualMultiplier] = useState("1");
+  const [targetGrams, setTargetGrams] = useState("");
   const [useManual, setUseManual] = useState(false);
 
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
@@ -613,9 +629,42 @@ function AddFormulaVersionForm({
     (a, b) => b.version_number - a.version_number,
   );
   const selectedVersion = versionOptions.find((v) => v.id === versionId) ?? null;
+
+  // 2026-10-12 사용자 요청: PRODUCT SIZE가 연결돼 있으면 그 사이즈의 product_components.quantity_g
+  // (COMPONENT별 목표중량)를 읽어와서 배수를 자동으로 미리 채운다.
+  const productComponents = useQuery({
+    ...productComponentsQuery(productId ?? ""),
+    enabled: Boolean(productId && productSizeId),
+  });
+  const sizeMatch = formula?.components?.id
+    ? (productComponents.data ?? []).find(
+        (pc) => pc.component_id === formula.components!.id && pc.product_size_id === productSizeId,
+      )
+    : undefined;
+  const sizeTargetGrams = sizeMatch?.quantity_g != null ? Number(sizeMatch.quantity_g) : null;
+  const versionIngredients = useQuery({
+    ...versionIngredientsBulkQuery(selectedVersion ? [selectedVersion.id] : []),
+    enabled: Boolean(selectedVersion && sizeTargetGrams != null),
+  });
+  const baseTotalGrams = selectedVersion
+    ? sumBaseGrams(versionIngredients.data?.[selectedVersion.id] ?? [])
+    : 0;
+
   useEffect(() => {
     setMouldId(selectedVersion?.default_mould_id ?? "");
-  }, [selectedVersion?.id]);
+    // PRODUCT SIZE 목표중량을 알 수 있으면 몰드 개수 대신 그 중량 기준 배수를 기본값으로 채운다
+    // — 사용자가 매번 몰드개수/배수를 직접 입력하지 않아도 되게.
+    if (sizeTargetGrams != null && baseTotalGrams > 0) {
+      const suggested = suggestedMultiplierFromTarget(sizeTargetGrams, 1, baseTotalGrams);
+      if (suggested != null) {
+        setUseManual(true);
+        setManualMultiplier(fmtNumber(suggested, 2));
+        setTargetGrams(fmtNumber(sizeTargetGrams, 0));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVersion?.id, sizeTargetGrams, baseTotalGrams]);
+
   const scalingMode = formula?.components?.scaling_mode ?? null;
   const usingMould = scalingMode === "MOULD" && !useManual;
   const baseMould = moulds.data?.find((m) => m.id === selectedVersion?.default_mould_id) ?? null;
@@ -750,8 +799,39 @@ function AddFormulaVersionForm({
               min="1"
               className={`${inputClass} !w-24`}
               value={manualMultiplier}
-              onChange={(e) => setManualMultiplier(e.target.value)}
+              onChange={(e) => {
+                setManualMultiplier(e.target.value);
+                const next = Number(e.target.value);
+                if (baseTotalGrams > 0 && Number.isFinite(next) && next > 0) {
+                  setTargetGrams(fmtNumber(baseTotalGrams * next, 0));
+                }
+              }}
             />
+            {baseTotalGrams > 0 && (
+              <label className="flex items-center gap-2">
+                <span className="label-caps text-xs text-muted-foreground">또는 총 중량(g)</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  step="1"
+                  min="0"
+                  className={`${inputClass} !w-24 text-center`}
+                  value={targetGrams}
+                  onChange={(e) => {
+                    setTargetGrams(e.target.value);
+                    const grams = Number(e.target.value);
+                    if (!Number.isFinite(grams) || grams <= 0) return;
+                    const next = suggestedMultiplierFromTarget(grams, 1, baseTotalGrams);
+                    if (next != null) setManualMultiplier(fmtNumber(next, 2));
+                  }}
+                />
+              </label>
+            )}
+            {sizeTargetGrams != null && (
+              <span className="font-mono text-[11px] text-muted-foreground">
+                PRODUCT SIZE 목표: {fmtNumber(sizeTargetGrams, 0)}g 기준 자동 적용됨
+              </span>
+            )}
             {scalingMode === "MOULD" && (
               <button
                 type="button"

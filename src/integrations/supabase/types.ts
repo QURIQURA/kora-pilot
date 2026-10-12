@@ -1150,6 +1150,7 @@ export type Database = {
           price: number | null
           product_id: string | null
           product_line: string | null
+          product_size_id: string | null
           quantity: number | null
           raw_dm_text: string | null
           recipient: string | null
@@ -1200,6 +1201,7 @@ export type Database = {
           price?: number | null
           product_id?: string | null
           product_line?: string | null
+          product_size_id?: string | null
           quantity?: number | null
           raw_dm_text?: string | null
           recipient?: string | null
@@ -1250,6 +1252,7 @@ export type Database = {
           price?: number | null
           product_id?: string | null
           product_line?: string | null
+          product_size_id?: string | null
           quantity?: number | null
           raw_dm_text?: string | null
           recipient?: string | null
@@ -1299,6 +1302,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_product_size_id_fkey"
+            columns: ["product_size_id"]
+            isOneToOne: false
+            referencedRelation: "product_sizes"
             referencedColumns: ["id"]
           },
         ]
@@ -2586,6 +2596,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _tmp_delete_formula: { Args: { p_id: string }; Returns: undefined }
+      _tmp_delete_formula_version: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+      _tmp_delete_technique_category: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
       seed_default_ingredients: {
         Args: { p_user_id: string }
         Returns: undefined

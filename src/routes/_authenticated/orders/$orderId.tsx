@@ -6,6 +6,7 @@ import type { Json } from "@/integrations/supabase/types";
 import {
   orderQuery,
   productsQuery,
+  productSizesQuery,
   productComponentsQuery,
   pilotSettingsQuery,
   workSessionByOrderQuery,
@@ -33,6 +34,7 @@ import {
 } from "@/lib/queries";
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { resolveSlotGroup } from "@/lib/technique";
+import { formatProductSizeLabel } from "@/lib/product-size";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
@@ -190,6 +192,14 @@ function OrderDetailPage() {
   const [paymentStatus, setPaymentStatus] = useState<OrderPaymentStatus | "">("");
   const [status, setStatus] = useState<OrderStatus>("INTAKE");
   const [productId, setProductId] = useState("");
+  // 2026-10-12 사용자 요청: orders.cake_size(독립 enum)와 별개로, PRODUCT를 연결한 경우
+  // 그 PRODUCT에 등록된 product_sizes 중 "최종 사이즈"를 FK로 골라둘 수 있게 한다 — Work
+  // Session을 이 ORDER에서 만들 때 그대로 넘겨서 PRODUCT SIZE 기준 자동 배수 계산에 쓰인다.
+  const [productSizeId, setProductSizeId] = useState("");
+  const productSizes = useQuery({
+    ...productSizesQuery(productId),
+    enabled: Boolean(productId),
+  });
   // 2026-10-06 사용자 요청: Order의 메모는 성격이 다른 세 가지로 분리 관리한다 — 섞어서 쓰지 않음.
   // - Flavoring Note: Sheet/Cream/Filling 등 전체 맛 밸런스(내부용, 새 flavoring_note 컬럼)
   // - Design Note: 디자인/구조/조립(기존에 있었지만 UI에 없던 design_notes 컬럼 재사용)
@@ -267,6 +277,7 @@ function OrderDetailPage() {
       paymentStatus: o.payment_status ?? "",
       status: (o.status as OrderStatus) ?? "INTAKE",
       productId: o.product_id ?? "",
+      productSizeId: o.product_size_id ?? "",
       flavoringNote: o.flavoring_note ?? "",
       flavoringSheetFormulaId: o.flavoring_sheet_formula_id ?? "",
       flavoringCreamFormulaId: o.flavoring_cream_formula_id ?? "",
@@ -302,6 +313,7 @@ function OrderDetailPage() {
     setPaymentStatus(o.payment_status ?? "");
     setStatus((o.status as OrderStatus) ?? "INTAKE");
     setProductId(o.product_id ?? "");
+    setProductSizeId(o.product_size_id ?? "");
     setFlavoringNote(o.flavoring_note ?? "");
     setFlavoringSheetFormulaId(o.flavoring_sheet_formula_id ?? "");
     setFlavoringCreamFormulaId(o.flavoring_cream_formula_id ?? "");
@@ -466,6 +478,7 @@ function OrderDetailPage() {
           payment_status: paymentStatus || null,
           status,
           product_id: productId || null,
+          product_size_id: productSizeId || null,
           flavoring_note: flavoringNote.trim() || null,
           flavoring_sheet_formula_id: flavoringSheetFormulaId || null,
           flavoring_cream_formula_id: flavoringCreamFormulaId || null,
@@ -520,6 +533,9 @@ function OrderDetailPage() {
       // SAVE를 안 누른 상태로 바로 WORK SESSION을 만들어도 반영되게, 화면에 선택된(아직 저장 전일
       // 수 있는) productId를 저장된 o.product_id보다 우선한다.
       const effectiveProductId = productId || o.product_id || null;
+      // 2026-10-12 사용자 요청: ORDER에 PRODUCT SIZE가 골라져 있으면 WORK SESSION 생성 시 그대로
+      // 넘겨서(work_sessions.product_size_id) PRODUCT SIZE 기준 자동 배수 계산에 바로 쓰일 수 있게.
+      const effectiveProductSizeId = productSizeId || o.product_size_id || null;
       const baseName =
         products.data?.find((p) => p.id === effectiveProductId)?.name || o.recipient || o.order_number;
       const userId = await currentUserId();
@@ -531,6 +547,7 @@ function OrderDetailPage() {
           name: generateTitle(baseName, deliveryDate),
           status: "PLANNED",
           product_id: effectiveProductId,
+          product_size_id: effectiveProductSizeId,
         })
         .select("id")
         .single();
@@ -764,8 +781,31 @@ function OrderDetailPage() {
             />
           </Field>
           <Field label="PRODUCT">
-            <ProductSelect value={productId} onChange={setProductId} emptyLabel="TBD — 아직 미정" />
+            <ProductSelect
+              value={productId}
+              onChange={(next) => {
+                setProductId(next);
+                setProductSizeId("");
+              }}
+              emptyLabel="TBD — 아직 미정"
+            />
           </Field>
+          {productId && (productSizes.data ?? []).length > 0 && (
+            <Field label="최종 사이즈 (PRODUCT SIZE)">
+              <select
+                className={selectClass}
+                value={productSizeId}
+                onChange={(e) => setProductSizeId(e.target.value)}
+              >
+                <option value="">— 미지정 —</option>
+                {(productSizes.data ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {formatProductSizeLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="RECIPIENT (받는 사람)">
             <input className={inputClass} value={recipient} onChange={(e) => setRecipient(e.target.value)} />
           </Field>
