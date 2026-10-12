@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { currentUserId, productsQuery } from "@/lib/queries";
@@ -70,61 +71,66 @@ export function ProductSelect({
         <option value={NEW_VALUE}>+ NEW PRODUCT</option>
       </select>
 
-      {creating && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
-          <div className="w-full max-w-md border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <span className="label-caps">NEW PRODUCT</span>
-              <button
-                type="button"
-                className="label-caps px-2 py-2"
-                onClick={() => {
-                  setCreating(false);
-                  setName("");
-                }}
-              >
-                CLOSE
-              </button>
-            </div>
-            <form
-              className="space-y-3 p-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (name.trim()) create.mutate();
-              }}
-            >
-              <input
-                className={inputClass}
-                autoFocus
-                required
-                placeholder="PRODUCT NAME"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              {create.isError && (
-                <p className="font-mono text-xs uppercase text-destructive">
-                  {(create.error as Error).message}
-                </p>
-              )}
-              <div className="flex gap-2">
-                <button type="submit" className={primaryButtonClass} disabled={create.isPending}>
-                  {create.isPending ? "생성 중…" : "CREATE"}
-                </button>
+      {creating &&
+        createPortal(
+          // 2026-10-12: MouldSelect/BaseWeightSelect와 같은 버그 — ORDER 폼처럼 바깥쪽 <form> 안에서
+          // 쓰일 때 이 모달이 같은 DOM 트리에 있으면 <form> 중첩으로 CREATE가 바깥쪽 폼을 제출해버린다
+          // (페이지 새로고침 + 화면 이탈). document.body로 포탈링해서 방지.
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+            <div className="w-full max-w-md border border-border bg-background">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <span className="label-caps">NEW PRODUCT</span>
                 <button
                   type="button"
-                  className={buttonClass}
+                  className="label-caps px-2 py-2"
                   onClick={() => {
                     setCreating(false);
                     setName("");
                   }}
                 >
-                  CANCEL
+                  CLOSE
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+              <form
+                className="space-y-3 p-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (name.trim()) create.mutate();
+                }}
+              >
+                <input
+                  className={inputClass}
+                  autoFocus
+                  required
+                  placeholder="PRODUCT NAME"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                {create.isError && (
+                  <p className="font-mono text-xs uppercase text-destructive">
+                    {(create.error as Error).message}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button type="submit" className={primaryButtonClass} disabled={create.isPending}>
+                    {create.isPending ? "생성 중…" : "CREATE"}
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    onClick={() => {
+                      setCreating(false);
+                      setName("");
+                    }}
+                  >
+                    CANCEL
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

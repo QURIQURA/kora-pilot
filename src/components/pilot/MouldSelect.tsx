@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { mouldsQuery } from "@/lib/queries";
 import type { Mould } from "@/lib/formula";
@@ -58,31 +59,40 @@ export function MouldSelect({
         <option value={NEW_VALUE}>+ NEW MOULD</option>
       </select>
 
-      {creating && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
-          <div className="w-full max-w-md border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <span className="label-caps">NEW MOULD</span>
-              <button
-                type="button"
-                className="label-caps px-2 py-2"
-                onClick={() => setCreating(false)}
-              >
-                CLOSE
-              </button>
+      {creating &&
+        createPortal(
+          // 2026-10-12 사용자 버그 리포트: "new mould 생성하면 계속 에러나" — Production 화면의
+          // AddFormulaVersionForm처럼 MouldSelect가 바깥쪽 <form> 안에 쓰이는 곳에서, 이 모달이
+          // (예전처럼) 같은 DOM 트리 안에 그냥 렌더링되면 <form> 안에 <form>이 중첩된다. 브라우저가
+          // 이 중첩을 허용하지 않아 안쪽 CREATE 버튼이 안쪽 폼 대신 바깥쪽 폼을 제출해버려서,
+          // 네이티브 폼 제출(페이지 새로고침 — "화면이 하얗게 깜빡") 후 바깥쪽 화면(PRODUCT 등)으로
+          // 튕기는 증상이었다. document.body로 포탈링해서 어떤 부모 <form> 안에서 쓰이든 항상
+          // DOM 트리 바깥에 독립적으로 뜨도록 고쳤다.
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+            <div className="w-full max-w-md border border-border bg-background">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <span className="label-caps">NEW MOULD</span>
+                <button
+                  type="button"
+                  className="label-caps px-2 py-2"
+                  onClick={() => setCreating(false)}
+                >
+                  CLOSE
+                </button>
+              </div>
+              <div className="p-4">
+                <MouldCreateForm
+                  onCancel={() => setCreating(false)}
+                  onCreated={(id) => {
+                    setCreating(false);
+                    onChange(id);
+                  }}
+                />
+              </div>
             </div>
-            <div className="p-4">
-              <MouldCreateForm
-                onCancel={() => setCreating(false)}
-                onCreated={(id) => {
-                  setCreating(false);
-                  onChange(id);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
