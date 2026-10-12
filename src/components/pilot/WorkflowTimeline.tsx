@@ -421,6 +421,26 @@ export function WorkflowView({
     await onTasksChanged();
   }
 
+  // 2026-10-12 사용자 요청: 지금까지 TASK는 Component의 "기본 WORKFLOW TEMPLATE + 자동 적용"을
+  // 통해서만 생겼다(applyWorkflowTemplate) — 그 설정이 없는 Component는 WORKFLOW가 "NO TASKS
+  // YET"에서 영영 못 벗어났다. 수동으로 TASK 하나를 바로 추가할 수 있는 길을 열어준다.
+  async function createTask(params: { taskName: string; taskType: string; columnKey: string }) {
+    const trimmedName = params.taskName.trim();
+    if (!trimmedName) return;
+    const user_id = await currentUserId();
+    const maxSort = tasks.reduce((max, t) => Math.max(max, t.sort_order), -1);
+    const { error: insertError } = await supabase.from("work_session_tasks").insert({
+      user_id,
+      work_session_id: sessionId,
+      task_name: trimmedName,
+      task_type: params.taskType.trim() || null,
+      formula_version_id: params.columnKey === GENERAL_KEY ? null : params.columnKey,
+      sort_order: maxSort + 1,
+    });
+    if (insertError) setError(`TASK 추가 실패 — ${insertError.message}`);
+    await onTasksChanged();
+  }
+
 
 
   return (
@@ -700,6 +720,10 @@ export function WorkflowView({
             </div>
           </div>
 
+
+          {/* ── TASK 수동 추가(2026-10-12) — Component에 기본 WORKFLOW TEMPLATE/자동 적용이
+              없으면 TASK가 자동으로 안 생기므로, 여기서 바로 하나 추가할 수 있게 한다. ── */}
+          <AddTaskForm columns={columns} onAdd={createTask} />
 
           {/* ── TASK LIST (상세/삭제) ───────────────────── */}
           <div className="border border-border">
@@ -1052,5 +1076,110 @@ export function WorkflowView({
           );
         })()}
     </div>
+  );
+}
+
+/** TASK 수동 추가 폼(2026-10-12) — 이름 + TASK TYPE(선택) + 어느 품목(열) 소속인지만 받는다.
+ * 시작/완료 시각은 여기서 정하지 않는다 — TASK LIST에서 START를 눌러야(또는 시간을 직접 입력해야)
+ * 타임라인에 나타난다(이 파일 상단 "절대 규칙" 참고). */
+function AddTaskForm({
+  columns,
+  onAdd,
+}: {
+  columns: { key: string; label: string }[];
+  onAdd: (params: { taskName: string; taskType: string; columnKey: string }) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [taskName, setTaskName] = useState("");
+  const [taskType, setTaskType] = useState("");
+  const [columnKey, setColumnKey] = useState(GENERAL_KEY);
+  const [pending, setPending] = useState(false);
+
+  if (!open) {
+    return (
+      <button type="button" className={buttonClass} onClick={() => setOpen(true)}>
+        + ADD TASK
+      </button>
+    );
+  }
+
+  const submit = async () => {
+    if (!taskName.trim() || pending) return;
+    setPending(true);
+    try {
+      await onAdd({ taskName, taskType, columnKey });
+      setTaskName("");
+      setTaskType("");
+      setOpen(false);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2 border border-border p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <div className="flex-1 basis-40">
+        <label className="label-caps mb-1 block text-[10px] text-muted-foreground">TASK NAME</label>
+        <input
+          autoFocus
+          required
+          className={inputClass}
+          placeholder="예: 틀 준비"
+          value={taskName}
+          onChange={(e) => setTaskName(e.target.value)}
+        />
+      </div>
+      <div className="w-40">
+        <label className="label-caps mb-1 block text-[10px] text-muted-foreground">TASK TYPE</label>
+        <input
+          className={inputClass}
+          list="workflow-task-type-suggestions"
+          placeholder="(선택)"
+          value={taskType}
+          onChange={(e) => setTaskType(e.target.value)}
+        />
+        <datalist id="workflow-task-type-suggestions">
+          {TASK_TYPE_SUGGESTIONS.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+      </div>
+      <div className="w-48">
+        <label className="label-caps mb-1 block text-[10px] text-muted-foreground">품목</label>
+        <select
+          className={inputClass}
+          value={columnKey}
+          onChange={(e) => setColumnKey(e.target.value)}
+        >
+          {columns.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" className={primaryButtonClass} disabled={pending || !taskName.trim()}>
+          {pending ? "ADDING…" : "ADD"}
+        </button>
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() => {
+            setOpen(false);
+            setTaskName("");
+            setTaskType("");
+          }}
+        >
+          CANCEL
+        </button>
+      </div>
+    </form>
   );
 }

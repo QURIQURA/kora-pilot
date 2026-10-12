@@ -1436,14 +1436,24 @@ function WeighingMatrixCell({
       </button>
       <button
         type="button"
-        className="label-caps flex h-5 w-5 shrink-0 items-center justify-center border border-border text-xs leading-none hover:border-foreground"
+        className="label-caps flex h-5 w-5 shrink-0 items-center justify-center border border-border text-xs leading-none hover:border-foreground disabled:opacity-40"
+        disabled={setProgress.isPending}
         onClick={() => {
           setProgress.mutate({ status: toggleProgressStatus(cell.progressStatus) });
         }}
-        title={PROGRESS_STATUS_LABEL[cell.progressStatus]}
+        title={
+          setProgress.isError
+            ? `저장 실패: ${(setProgress.error as Error).message}`
+            : PROGRESS_STATUS_LABEL[cell.progressStatus]
+        }
       >
-        {PROGRESS_STATUS_ICON[cell.progressStatus]}
+        {setProgress.isError ? "⚠" : PROGRESS_STATUS_ICON[cell.progressStatus]}
       </button>
+      {setProgress.isError && (
+        <p className="absolute z-30 mt-8 w-40 bg-destructive px-1 py-0.5 text-[10px] text-destructive-foreground">
+          저장 실패 — 다시 클릭해보세요
+        </p>
+      )}
       {cell.progressStatus === "SHORTAGE" && editingNote && (
         <input
           autoFocus
