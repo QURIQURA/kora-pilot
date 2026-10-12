@@ -4,14 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ProductCreateModal } from "@/components/pilot/ProductCreateModal";
-import { categoriesQuery, productsQuery } from "@/lib/queries";
+import { categoriesQuery, orderDeliverDateKey, productsQuery, type ProductListRow } from "@/lib/queries";
 import {
   categoryPath,
   categoryPathLabel,
   categoryWithDescendants,
   flattenCategories,
 } from "@/lib/pilot";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, koreanWeekdayShort, toLocalDateString } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import {
   CategoryBadge,
@@ -53,8 +53,20 @@ function ProductsPage() {
     },
   });
 
-  // 정렬은 항상 이름순 고정(2026-09-22) — 단, 📌 고정한 제품은 지금 작업 중인 레시피이므로
-  // 이름순과 무관하게 항상 맨 위에 온다(2026-09-22 추가).
+  // 2026-10-12 사용자 요청: Product가 Order 생기기 전에 만들어져서 "어떤 주문에 쓰였는지"를
+  // 알 수 없었다 — 각 Product에 연결된 주문의 deliver date(pickup_at, 없으면 event_date) 중
+  // 가장 최신 값을 구해서, 그 최신순으로 목록 상위에 뜨도록 정렬 기준을 바꾼다.
+  // 연결된 주문이 없는 Product는 날짜 기준이 없으므로 맨 뒤로 보내고 이름순으로 둔다.
+  // 📌 고정한 제품은 기존 규칙대로 정렬 기준과 무관하게 항상 맨 위에 온다.
+  const latestOrderDateOf = (p: ProductListRow): string | null => {
+    let latest: string | null = null;
+    for (const o of p.orders ?? []) {
+      const key = orderDeliverDateKey(o);
+      if (key && (!latest || key > latest)) latest = key;
+    }
+    return latest;
+  };
+
   const rows = useMemo(() => {
     let list = [...(products.data ?? [])];
     if (categoryFilter) {
@@ -63,6 +75,10 @@ function ProductsPage() {
     }
     list.sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      const da = latestOrderDateOf(a);
+      const db = latestOrderDateOf(b);
+      if (da && db) return db.localeCompare(da);
+      if (da !== db) return da ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
     return list;
@@ -119,14 +135,17 @@ function ProductsPage() {
           <div className="hidden items-center border-b border-border py-2 md:flex">
           <span className="w-10 shrink-0" aria-hidden />
           <div className="grid flex-1 grid-cols-12 gap-2 pr-4">
-            <span className="label-caps col-span-5 text-xs text-muted-foreground">
+            <span className="label-caps col-span-4 text-xs text-muted-foreground">
               NAME
             </span>
-            <span className="label-caps col-span-4 text-xs text-muted-foreground">
+            <span className="label-caps col-span-3 text-xs text-muted-foreground">
               CATEGORY
             </span>
             <span className="label-caps col-span-1 text-xs text-muted-foreground">
               COMP
+            </span>
+            <span className="label-caps col-span-2 text-xs text-muted-foreground">
+              LATEST ORDER
             </span>
             <span className="label-caps col-span-2 text-xs text-muted-foreground">
               UPDATED
@@ -157,8 +176,8 @@ function ProductsPage() {
                   params={{ productId: product.id }}
                   className="grid flex-1 grid-cols-1 gap-1 py-3 pr-4 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
                 >
-                  <span className="col-span-5 text-sm">{product.name}</span>
-                  <span className="col-span-4 font-mono text-xs uppercase">
+                  <span className="col-span-4 text-sm">{product.name}</span>
+                  <span className="col-span-3 font-mono text-xs uppercase">
                     <CategoryBadge
                       label={categoryPathLabel(categoryList, product.category_id)}
                       color={
@@ -168,6 +187,15 @@ function ProductsPage() {
                   </span>
                   <span className="col-span-1 font-mono text-xs text-muted-foreground">
                     {product.product_components?.[0]?.count ?? 0}
+                  </span>
+                  <span className="col-span-2 font-mono text-xs text-muted-foreground">
+                    {(() => {
+                      const key = latestOrderDateOf(product);
+                      const count = (product.orders ?? []).length;
+                      if (!key) return count > 0 ? `주문 ${count}건 (날짜 없음)` : "—";
+                      const dateStr = toLocalDateString(new Date(key));
+                      return `${dateStr} (${koreanWeekdayShort(dateStr)}) · ${count}건`;
+                    })()}
                   </span>
                   <span className="col-span-2 font-mono text-xs text-muted-foreground">
                     {formatDateTime(product.updated_at)}

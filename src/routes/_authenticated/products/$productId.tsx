@@ -11,6 +11,10 @@ import {
   currentUserId,
   formulasByComponentQuery,
   ingredientsQuery,
+  orderDeliverDateKey,
+  orderStatusColor,
+  orderStatusLabel,
+  ordersByProductQuery,
   pilotSettingsQuery,
   productComponentsQuery,
   productCostItemsQuery,
@@ -18,6 +22,7 @@ import {
   productSizesQuery,
   versionIngredientsQuery,
   type ComponentCostInfo,
+  type OrderListRow,
   type ProductComponentRow,
 } from "@/lib/queries";
 import { costPerGram, fmtCurrency, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
@@ -26,7 +31,7 @@ import { fmtNumber, toGrams } from "@/lib/formula";
 import { categoryPath } from "@/lib/pilot";
 import { formatProductSizeLabel, type ProductSize } from "@/lib/product-size";
 import type { TablesUpdate } from "@/integrations/supabase/types";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, koreanWeekdayShort, toLocalDateString } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
 import { ProductSizesSection } from "@/components/pilot/ProductSizesSection";
@@ -115,6 +120,7 @@ const DEFAULT_SECTION_ORDER = [
   "SIZES",
   "COST_ADJUSTMENT",
   "EFFICIENCY",
+  "ORDERS",
   "NOTES",
   "DEVELOPMENT",
 ] as const;
@@ -129,6 +135,8 @@ const SECTION_LABELS: Record<ProductSectionKey, string> = {
   COST_ADJUSTMENT: "총원가 / COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT / PRODUCTION COST",
   // 2026-10-06: PRODUCTION EFFICIENCY — Minutes/Unit, Units/Hour 등 실측 생산 효율.
   EFFICIENCY: "EFFICIENCY",
+  // 2026-10-12 사용자 요청: 이 Product로 들어온 주문 목록 — deliver date 최신순.
+  ORDERS: "ORDERS",
   NOTES: "NOTES",
   DEVELOPMENT: "FORMULAS / DEVELOPMENT HISTORY / OBSERVATIONS",
 };
@@ -139,6 +147,24 @@ function resolveSectionOrder(stored: string[] | null | undefined): ProductSectio
   const fromStored = (stored ?? []).filter((k): k is ProductSectionKey => valid.has(k));
   const missing = DEFAULT_SECTION_ORDER.filter((k) => !fromStored.includes(k));
   return [...fromStored, ...missing];
+}
+
+/** ORDERS 섹션 한 행의 deliver date 표시 — pickup_at 있으면 날짜+시간, 없으면 event_date만, 둘 다 없으면 "—". */
+function deliverDateLabel(o: OrderListRow): string {
+  if (o.pickup_at) {
+    const dateStr = toLocalDateString(new Date(o.pickup_at));
+    const time = new Date(o.pickup_at).toLocaleString("en-AU", {
+      timeZone: "Australia/Sydney",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    return `${dateStr} ${time} (${koreanWeekdayShort(dateStr)})`;
+  }
+  if (o.event_date) {
+    return `${o.event_date} (${koreanWeekdayShort(o.event_date)})`;
+  }
+  return "—";
 }
 
 function sizeLabelFor(sizes: ProductSize[], sizeId: string): string {
@@ -198,6 +224,16 @@ function ProductDetailPage() {
   const categories = useQuery(categoriesQuery());
   const links = useQuery(productComponentsQuery(productId));
   const sizes = useQuery(productSizesQuery(productId));
+  // 2026-10-12 사용자 요청: 이 Product에 연결된 주문 — deliver date(pickup_at, 없으면
+  // event_date) 기준 최신순으로 정렬해서 ORDERS 섹션에 보여준다.
+  const productOrders = useQuery(ordersByProductQuery(productId));
+  const sortedProductOrders = [...(productOrders.data ?? [])].sort((a, b) => {
+    const da = orderDeliverDateKey(a);
+    const db = orderDeliverDateKey(b);
+    if (da && db) return db.localeCompare(da);
+    if (da !== db) return da ? -1 : 1;
+    return b.created_at.localeCompare(a.created_at);
+  });
   const componentIds = [
     ...new Set((links.data ?? []).map((l) => l.component_id).filter((id): id is string => id != null)),
   ];
@@ -433,6 +469,54 @@ function ProductDetailPage() {
               costTotals={sumCostBySize(links.data ?? [], costsByComponent)}
               perCakeExtras={perCakeExtras}
             />
+          ),
+          ORDERS: (
+            <SectionCard
+              title="ORDERS"
+              subtitle={<>연결된 주문 {sortedProductOrders.length}건 · deliver date 최신순</>}
+            >
+              {productOrders.isLoading ? (
+                <p className="font-mono text-xs text-muted-foreground">LOADING…</p>
+              ) : sortedProductOrders.length === 0 ? (
+                <p className="font-mono text-xs text-muted-foreground">
+                  아직 이 PRODUCT로 들어온 주문이 없습니다.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {sortedProductOrders.map((o) => (
+                    <li key={o.id}>
+                      <Link
+                        to="/orders/$orderId"
+                        params={{ orderId: o.id }}
+                        className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm hover:bg-secondary"
+                      >
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {o.order_number}
+                          </span>
+                          <span>{o.customers?.name ?? "—"}</span>
+                          {o.recipient && (
+                            <span className="text-muted-foreground">→ {o.recipient}</span>
+                          )}
+                          <span
+                            className="font-mono text-[10px] uppercase px-1.5 py-0.5"
+                            style={{
+                              backgroundColor: orderStatusColor(null, o.status) + "22",
+                              color: orderStatusColor(null, o.status),
+                            }}
+                          >
+                            {orderStatusLabel(o.status)}
+                          </span>
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {deliverDateLabel(o)}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
           ),
           NOTES: (
             <SectionCard title="NOTES">

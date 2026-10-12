@@ -36,8 +36,31 @@ export const categoriesQuery = () =>
       ),
   });
 
+/** PRODUCTS 목록/상세에서 "연결된 주문" 표시용 최소 필드(2026-10-12 사용자 요청). */
+export interface ProductOrderRow {
+  id: string;
+  order_number: string;
+  recipient: string | null;
+  status: string;
+  pickup_at: string | null;
+  event_date: string | null;
+  customers: { id: string; name: string | null } | null;
+}
+
 export interface ProductListRow extends Product {
   product_components: { count: number }[];
+  orders: ProductOrderRow[];
+}
+
+/**
+ * 주문의 "배송/픽업 날짜" 정렬 키 — orders 목록(index.tsx)과 동일한 규칙:
+ * pickup_at 있으면 그걸, 없으면 event_date(자정)를 쓴다. 둘 다 없으면 null(정렬 시 맨 뒤).
+ */
+export function orderDeliverDateKey(order: {
+  pickup_at: string | null;
+  event_date: string | null;
+}): string | null {
+  return order.pickup_at ?? (order.event_date ? `${order.event_date}T00:00:00` : null);
 }
 
 export const productsQuery = () =>
@@ -47,9 +70,25 @@ export const productsQuery = () =>
       unwrap(
         await supabase
           .from("products")
-          .select("*, product_components(count)")
+          .select(
+            "*, product_components(count), orders(id, order_number, recipient, status, pickup_at, event_date, customers(id, name))",
+          )
           .order("updated_at", { ascending: false }),
       ) as unknown as ProductListRow[],
+  });
+
+/** 특정 Product에 연결된 주문 목록 — Product 상세 페이지 ORDERS 섹션용(2026-10-12 사용자 요청). */
+export const ordersByProductQuery = (productId: string) =>
+  queryOptions({
+    queryKey: ["orders", "by_product", productId],
+    queryFn: async (): Promise<OrderListRow[]> =>
+      unwrap(
+        await supabase
+          .from("orders")
+          .select("*, customers(id, name), products(id, name)")
+          .eq("product_id", productId)
+          .order("created_at", { ascending: false }),
+      ) as unknown as OrderListRow[],
   });
 
 export const productQuery = (id: string) =>
