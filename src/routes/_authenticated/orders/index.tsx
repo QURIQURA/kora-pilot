@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { GripVertical } from "lucide-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -119,7 +119,10 @@ type ColumnKey = "order" | "customer" | "recipient" | "occasion" | "date" | "pro
 // DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. STATUS도 "FINAL TOUCH"처럼
 // 긴 라벨이 생겨서 한 칸 늘림. gap도 늘려서 옆 열과 안 붙어 보이게.
 // 2026-10-12 사용자 요청: CAKE SIZE 열 추가(orders.cake_size — 주문 상세에 이미 있던 필드).
-// 전체 12칸 안에 맞추려고 RECIPIENT/PRODUCT를 1칸씩 줄여 CAKE SIZE에 배정.
+// 2026-10-12 사용자 재요청: 요일이 붙으니 DATE가 줄바꿈됨 — "칼럼 사이즈를 사용자가 직접
+// 바꿀 수 있고 바꾼 대로 저장"되길 원해서, Tailwind의 고정 col-span 방식(12칸 분할)을
+// 버리고 픽셀 단위 너비(DEFAULT_COLUMN_WIDTHS) + 드래그 리사이즈로 교체했다. 순서(ORDER)와
+// 마찬가지로 너비도 브라우저 localStorage에만 저장되는 개인 화면 설정이라 DB엔 안 남긴다.
 const COLUMN_LABELS: Record<ColumnKey, string> = {
   order: "ORDER",
   customer: "CUSTOMER",
@@ -130,16 +133,17 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   cake_size: "CAKE SIZE",
   status: "STATUS",
 };
-const COLUMN_SPANS: Record<ColumnKey, string> = {
-  order: "col-span-1",
-  customer: "col-span-2",
-  recipient: "col-span-1",
-  occasion: "col-span-1",
-  date: "col-span-2",
-  product: "col-span-1",
-  cake_size: "col-span-1",
-  status: "col-span-2",
+const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
+  order: 90,
+  customer: 150,
+  recipient: 110,
+  occasion: 100,
+  date: 190,
+  product: 150,
+  cake_size: 100,
+  status: 150,
 };
+const MIN_COLUMN_WIDTH = 60;
 const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
   "order",
   "customer",
@@ -151,6 +155,7 @@ const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
   "status",
 ];
 const COLUMN_ORDER_STORAGE_KEY = "kora-pilot:orders-column-order";
+const COLUMN_WIDTHS_STORAGE_KEY = "kora-pilot:orders-column-widths";
 
 function loadColumnOrder(): ColumnKey[] {
   try {
@@ -190,6 +195,100 @@ function useColumnOrder() {
   return { order, reorder };
 }
 
+function loadColumnWidths(): Record<ColumnKey, number> {
+  try {
+    const raw = localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_COLUMN_WIDTHS };
+    const parsed = JSON.parse(raw) as Partial<Record<ColumnKey, number>>;
+    const next = { ...DEFAULT_COLUMN_WIDTHS };
+    for (const key of DEFAULT_COLUMN_ORDER) {
+      const v = parsed[key];
+      if (typeof v === "number" && Number.isFinite(v) && v >= MIN_COLUMN_WIDTH) next[key] = v;
+    }
+    return next;
+  } catch {
+    return { ...DEFAULT_COLUMN_WIDTHS };
+  }
+}
+
+/** 컬럼 너비(드래그 리사이즈) — 순서와 마찬가지로 localStorage에만 저장. */
+function useColumnWidths() {
+  const [widths, setWidths] = useState<Record<ColumnKey, number>>(DEFAULT_COLUMN_WIDTHS);
+  useEffect(() => {
+    setWidths(loadColumnWidths());
+  }, []);
+  const setWidth = (key: ColumnKey, px: number) => {
+    setWidths((prev) => {
+      const next = { ...prev, [key]: Math.max(MIN_COLUMN_WIDTH, Math.round(px)) };
+      try {
+        localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // 저장 실패해도(프라이빗 모드 등) 화면 표시는 그대로 유지 — 조용히 무시.
+      }
+      return next;
+    });
+  };
+  return { widths, setWidth };
+}
+
+/** 뷰포트가 md(768px) 이상인지 — 그 미만에서는 행이 1열로 쌓이는 모바일 레이아웃이라
+ * 픽셀 그리드 템플릿을 적용하지 않는다. */
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    setIsDesktop(mq.matches);
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return isDesktop;
+}
+
+/** 리사이즈 핸들 — 헤더 셀 오른쪽 가장자리의 드래그 바. 드래그 중엔 커서 이동량만큼
+ * 실시간으로 onResize(미리보기)를 호출하고, 떼는 순간 onResizeEnd(저장)를 호출한다. */
+function ColumnResizeHandle({
+  startWidth,
+  onResize,
+  onResizeEnd,
+}: {
+  startWidth: number;
+  onResize: (px: number) => void;
+  onResizeEnd: (px: number) => void;
+}) {
+  const onMouseDown = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    let latest = startWidth;
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      latest = startWidth + (moveEvent.clientX - startX);
+      onResize(Math.max(MIN_COLUMN_WIDTH, latest));
+    };
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      onResizeEnd(Math.max(MIN_COLUMN_WIDTH, latest));
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  return (
+    <span
+      role="separator"
+      aria-orientation="vertical"
+      title="드래그해서 열 너비 변경"
+      onMouseDown={onMouseDown}
+      onClick={(e) => e.stopPropagation()}
+      draggable={false}
+      className="absolute -right-2 top-0 z-10 h-full w-4 cursor-col-resize select-none"
+    >
+      <span className="mx-auto block h-full w-px bg-border hover:bg-foreground/40" />
+    </span>
+  );
+}
+
 function OrdersTable({
   rows,
   statusColors,
@@ -198,12 +297,22 @@ function OrdersTable({
   statusColors: Record<string, string> | null;
 }) {
   const { order: columnOrder, reorder } = useColumnOrder();
+  const { widths: columnWidths, setWidth } = useColumnWidths();
   const [draggingKey, setDraggingKey] = useState<ColumnKey | null>(null);
+  // 리사이즈 드래그 중엔 로컬 state만 바꿔 매끄럽게 미리보이고(저장은 떼는 순간 한 번만),
+  // 드래그 중이 아닐 땐 저장된 폭(columnWidths)을 그대로 쓴다.
+  const [previewWidths, setPreviewWidths] = useState<Record<ColumnKey, number> | null>(null);
+  const isDesktop = useIsDesktop();
+
+  const effectiveWidths = previewWidths ?? columnWidths;
+  const gridTemplateColumns = isDesktop
+    ? columnOrder.map((key) => `${effectiveWidths[key]}px`).join(" ")
+    : undefined;
 
   return (
-    <div className="border border-border bg-card">
+    <div className="overflow-x-auto border border-border bg-card">
       <div className="hidden items-center border-b border-border py-2 md:flex">
-        <div className="grid flex-1 grid-cols-12 gap-x-4 gap-y-1 px-3">
+        <div className="grid flex-1 gap-x-4 gap-y-1 px-3" style={{ gridTemplateColumns }}>
           {columnOrder.map((key) => (
             <span
               key={key}
@@ -217,17 +326,31 @@ function OrdersTable({
                 setDraggingKey(null);
               }}
               title="드래그해서 열 순서 변경"
-              className={`label-caps ${COLUMN_SPANS[key]} flex cursor-grab items-center gap-1 text-xs text-muted-foreground active:cursor-grabbing ${draggingKey === key ? "opacity-40" : ""}`}
+              className={`label-caps relative flex cursor-grab items-center gap-1 text-xs text-muted-foreground active:cursor-grabbing ${draggingKey === key ? "opacity-40" : ""}`}
             >
               <GripVertical size={10} className="shrink-0 opacity-50" />
-              {COLUMN_LABELS[key]}
+              <span className="truncate">{COLUMN_LABELS[key]}</span>
+              <ColumnResizeHandle
+                startWidth={effectiveWidths[key]}
+                onResize={(px) => setPreviewWidths({ ...effectiveWidths, [key]: px })}
+                onResizeEnd={(px) => {
+                  setWidth(key, px);
+                  setPreviewWidths(null);
+                }}
+              />
             </span>
           ))}
         </div>
       </div>
       <ul>
         {rows.map((o) => (
-          <OrderRow key={o.id} order={o} statusColors={statusColors} columnOrder={columnOrder} />
+          <OrderRow
+            key={o.id}
+            order={o}
+            statusColors={statusColors}
+            columnOrder={columnOrder}
+            gridTemplateColumns={gridTemplateColumns}
+          />
         ))}
       </ul>
     </div>
@@ -243,10 +366,12 @@ function OrderRow({
   order: o,
   statusColors,
   columnOrder,
+  gridTemplateColumns,
 }: {
   order: OrderListRow;
   statusColors: Record<string, string> | null;
   columnOrder: ColumnKey[];
+  gridTemplateColumns: string | undefined;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -265,7 +390,7 @@ function OrderRow({
     recipient: <span className="text-sm">{o.recipient || "—"}</span>,
     occasion: <span className="text-sm text-muted-foreground">{o.occasion || "—"}</span>,
     date: (
-      <span className="font-mono text-xs text-muted-foreground">
+      <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
         {o.pickup_at ? (
           <>
             {new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })}
@@ -325,10 +450,11 @@ function OrderRow({
         onKeyDown={(e) => {
           if (e.key === "Enter") void navigate({ to: "/orders/$orderId", params: { orderId: o.id } });
         }}
-        className="grid grid-cols-1 gap-1 px-3 py-3 hover:bg-secondary cursor-pointer md:grid-cols-12 md:items-center md:gap-x-4 md:gap-y-1"
+        className="grid grid-cols-1 gap-1 px-3 py-3 hover:bg-secondary cursor-pointer md:items-center md:gap-x-4 md:gap-y-1"
+        style={{ gridTemplateColumns }}
       >
         {columnOrder.map((key) => (
-          <span key={key} className={COLUMN_SPANS[key]}>
+          <span key={key} className="min-w-0 overflow-hidden">
             {cells[key]}
           </span>
         ))}
