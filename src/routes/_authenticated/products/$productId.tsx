@@ -15,6 +15,7 @@ import {
   orderStatusColor,
   orderStatusLabel,
   ordersByProductQuery,
+  ordersQuery,
   pilotSettingsQuery,
   productComponentsQuery,
   productCostItemsQuery,
@@ -165,6 +166,74 @@ function deliverDateLabel(o: OrderListRow): string {
     return `${o.event_date} (${koreanWeekdayShort(o.event_date)})`;
   }
   return "—";
+}
+
+/**
+ * ORDERS 섹션의 "+ LINK ORDER" 패널 — 기존 주문을 검색해서 이 PRODUCT에 연결한다
+ * (2026-10-12 사용자 요청: Product 쪽에서도 주문을 연결할 수 있어야 함). 이미 다른
+ * PRODUCT에 연결된 주문도 보여주되, 연결하면 그쪽 연결은 덮어써진다는 걸 표시해준다.
+ */
+function LinkOrderPanel({
+  productId,
+  linkedOrderIds,
+  onLink,
+}: {
+  productId: string;
+  linkedOrderIds: string[];
+  onLink: (orderId: string) => void;
+}) {
+  const orders = useQuery(ordersQuery());
+  const [search, setSearch] = useState("");
+
+  const q = search.trim().toLowerCase();
+  const results = (orders.data ?? [])
+    .filter((o) => !linkedOrderIds.includes(o.id))
+    .filter(
+      (o) =>
+        q === "" ||
+        o.order_number.toLowerCase().includes(q) ||
+        (o.customers?.name ?? "").toLowerCase().includes(q) ||
+        (o.recipient ?? "").toLowerCase().includes(q),
+    )
+    .slice(0, 30);
+
+  return (
+    <div className="mb-3 border border-dashed border-border p-2">
+      <input
+        type="text"
+        autoFocus
+        className={inputClass}
+        placeholder="주문번호 / 고객명 / 받는사람으로 검색…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+      {orders.isLoading ? (
+        <p className="mt-2 font-mono text-xs text-muted-foreground">LOADING…</p>
+      ) : results.length === 0 ? (
+        <p className="mt-2 font-mono text-xs text-muted-foreground">연결할 수 있는 주문이 없습니다.</p>
+      ) : (
+        <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto">
+          {results.map((o) => (
+            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs text-muted-foreground">{o.order_number}</span>
+                <span>{o.customers?.name ?? "—"}</span>
+                {o.recipient && <span className="text-muted-foreground">→ {o.recipient}</span>}
+                {o.product_id && o.product_id !== productId && o.products && (
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    (현재 연결: {o.products.name})
+                  </span>
+                )}
+              </span>
+              <button type="button" className={buttonClass} onClick={() => onLink(o.id)}>
+                LINK
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function sizeLabelFor(sizes: ProductSize[], sizeId: string): string {
@@ -384,6 +453,29 @@ function ProductDetailPage() {
   const [adding, setAdding] = useState(false);
   const [addingIngredient, setAddingIngredient] = useState(false);
   const [editingLayout, setEditingLayout] = useState(false);
+  const [linkingOrder, setLinkingOrder] = useState(false);
+
+  // 2026-10-12 사용자 요청: Product 쪽에서도 주문을 연결/해제할 수 있도록 — 주문의
+  // product_id를 이 Product로 설정(연결)하거나 null로 되돌린다(해제).
+  const invalidateProductOrders = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["orders", "by_product", productId] });
+    await queryClient.invalidateQueries({ queryKey: ["orders"] });
+    await queryClient.invalidateQueries({ queryKey: ["products"] });
+  };
+  const linkOrder = useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error } = await supabase.from("orders").update({ product_id: productId }).eq("id", orderId);
+      if (error) throw error;
+    },
+    onSuccess: invalidateProductOrders,
+  });
+  const unlinkOrder = useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error } = await supabase.from("orders").update({ product_id: null }).eq("id", orderId);
+      if (error) throw error;
+    },
+    onSuccess: invalidateProductOrders,
+  });
 
   const sectionOrder = resolveSectionOrder(pilotSettings.data?.product_page_section_order);
   const updateSectionOrder = useMutation({
@@ -474,21 +566,37 @@ function ProductDetailPage() {
             <SectionCard
               title="ORDERS"
               subtitle={<>연결된 주문 {sortedProductOrders.length}건 · deliver date 최신순</>}
+              action={
+                <button
+                  type="button"
+                  className={buttonClass}
+                  onClick={() => setLinkingOrder((v) => !v)}
+                >
+                  {linkingOrder ? "CLOSE" : "+ LINK ORDER"}
+                </button>
+              }
             >
+              {linkingOrder && (
+                <LinkOrderPanel
+                  productId={productId}
+                  linkedOrderIds={sortedProductOrders.map((o) => o.id)}
+                  onLink={(orderId) => linkOrder.mutate(orderId)}
+                />
+              )}
               {productOrders.isLoading ? (
                 <p className="font-mono text-xs text-muted-foreground">LOADING…</p>
               ) : sortedProductOrders.length === 0 ? (
                 <p className="font-mono text-xs text-muted-foreground">
-                  아직 이 PRODUCT로 들어온 주문이 없습니다.
+                  아직 이 PRODUCT로 들어온 주문이 없습니다. 위 "+ LINK ORDER"로 기존 주문을 연결할 수 있습니다.
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
                   {sortedProductOrders.map((o) => (
-                    <li key={o.id}>
+                    <li key={o.id} className="flex items-center gap-2 py-2">
                       <Link
                         to="/orders/$orderId"
                         params={{ orderId: o.id }}
-                        className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm hover:bg-secondary"
+                        className="flex flex-1 flex-wrap items-center justify-between gap-2 text-sm hover:bg-secondary"
                       >
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-xs text-muted-foreground">
@@ -512,6 +620,18 @@ function ProductDetailPage() {
                           {deliverDateLabel(o)}
                         </span>
                       </Link>
+                      <button
+                        type="button"
+                        title="이 PRODUCT에서 연결 해제"
+                        className="shrink-0 px-2 font-mono text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          if (confirm(`주문 ${o.order_number}의 연결을 해제할까요?`)) {
+                            unlinkOrder.mutate(o.id);
+                          }
+                        }}
+                      >
+                        UNLINK
+                      </button>
                     </li>
                   ))}
                 </ul>
