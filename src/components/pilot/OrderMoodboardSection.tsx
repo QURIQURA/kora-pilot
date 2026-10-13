@@ -82,7 +82,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
         y,
         width,
         height,
-        rotation: Math.random() * 6 - 3,
+        // 2026-10-13 사용자 요청: "처음 추가할 땐 기본적으로 틸트하지 않고 정각으로" —
+        // 예전엔 랜덤 각도(-3~3도)로 자연스러운 스크랩북 느낌을 줬지만, 틸트를 직접
+        // 조정하는 핸들이 생겼으니 시작은 0도(정각)로 두고 조정은 사용자가 하게 한다.
+        rotation: 0,
         z_index: maxZ + 1,
       });
       if (insertError) throw insertError;
@@ -104,7 +107,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
         y,
         width: DEFAULT_NOTE_SIZE.width,
         height: DEFAULT_NOTE_SIZE.height,
-        rotation: Math.random() * 6 - 3,
+        rotation: 0, // 2026-10-13 사용자 요청: 처음엔 정각으로, 틸트는 핸들로 직접 조정
         z_index: maxZ + 1,
         color,
       });
