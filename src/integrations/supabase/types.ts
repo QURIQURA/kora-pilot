@@ -1226,6 +1226,7 @@ export type Database = {
           updated_at: string
           user_id: string
           wann_delivery_task_id: string | null
+          wann_order_link_task_id: string | null
           wann_project_id: string | null
         }
         Insert: {
@@ -1277,6 +1278,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           wann_delivery_task_id?: string | null
+          wann_order_link_task_id?: string | null
           wann_project_id?: string | null
         }
         Update: {
@@ -1328,6 +1330,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           wann_delivery_task_id?: string | null
+          wann_order_link_task_id?: string | null
           wann_project_id?: string | null
         }
         Relationships: [
