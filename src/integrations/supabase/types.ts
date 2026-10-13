@@ -1078,6 +1078,7 @@ export type Database = {
       order_moodboard_items: {
         Row: {
           color: string | null
+          color2: string | null
           content: string | null
           created_at: string
           height: number
@@ -1086,6 +1087,7 @@ export type Database = {
           kind: string
           order_id: string
           rotation: number
+          shape: string
           updated_at: string
           user_id: string
           width: number
@@ -1095,6 +1097,7 @@ export type Database = {
         }
         Insert: {
           color?: string | null
+          color2?: string | null
           content?: string | null
           created_at?: string
           height?: number
@@ -1103,6 +1106,7 @@ export type Database = {
           kind?: string
           order_id: string
           rotation?: number
+          shape?: string
           updated_at?: string
           user_id?: string
           width?: number
@@ -1112,6 +1116,7 @@ export type Database = {
         }
         Update: {
           color?: string | null
+          color2?: string | null
           content?: string | null
           created_at?: string
           height?: number
@@ -1120,6 +1125,7 @@ export type Database = {
           kind?: string
           order_id?: string
           rotation?: number
+          shape?: string
           updated_at?: string
           user_id?: string
           width?: number

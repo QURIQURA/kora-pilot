@@ -19,6 +19,10 @@ import { cn } from "@/lib/utils";
  *   주던 각도를 드래그로 직접 조절 가능하게).
  * - 메모(NOTE) 색상도 생성 시 랜덤 배정에서 끝나지 않고, 헤더의 프리셋 스와치 + 네이티브 컬러
  *   피커로 언제든 자유롭게 바꿀 수 있다(2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정").
+ * - 메모(NOTE) 카드 모양(셰입)도 사각형/둥근 사각형/원형 중 헤더에서 언제든 바꿀 수 있다
+ *   (2026-10-14 사용자 요청: "메모 카드에 셰입 선택 옵션 추가"). 이미지 카드는 대상 아님.
+ * - 메모 색상에 두 번째 컬러(color2)를 추가하면 단색 대신 135deg 그라데이션으로 표시된다
+ *   (2026-10-14 사용자 요청: "메모 컬러 그라데이션 기능도 추가"). color2를 다시 비우면 단색으로 복귀.
  * - 드래그/리사이즈/회전 중에는 로컬 상태(livePos)만 갱신하고, 포인터를 뗄 때(pointerup)만 DB에
  *   커밋한다 — WorkflowTimeline.tsx의 드래그 패턴과 동일한 방식(과도한 쓰기 방지).
  */
@@ -26,6 +30,27 @@ const BOARD_HEIGHT = 440;
 const DEFAULT_IMAGE_WIDTH = 200;
 const DEFAULT_NOTE_SIZE = { width: 180, height: 140 };
 const NOTE_COLORS = ["#fde68a", "#fecaca", "#bbf7d0", "#bfdbfe", "#e9d5ff"];
+
+/** 메모 카드 셰입(모양) 옵션(2026-10-14 사용자 요청: "고정된 사각형 말고 동그라미 등 다른 shape 선택"). */
+const NOTE_SHAPES = [
+  { value: "rect", label: "사각형", radiusClass: "rounded-none" },
+  { value: "rounded", label: "둥근 사각형", radiusClass: "rounded-xl" },
+  { value: "circle", label: "원형", radiusClass: "rounded-full" },
+] as const;
+
+function shapeRadiusClass(shape: string | null | undefined): string {
+  return NOTE_SHAPES.find((s) => s.value === shape)?.radiusClass ?? "rounded-none";
+}
+
+/**
+ * 메모 배경 — color2가 있으면 그라데이션, 없으면 단색(2026-10-14 사용자 요청: "메모 컬러
+ * 그라데이션 기능도 추가"). `background` 단축 속성은 단색에도 그대로 쓸 수 있어 분기 없이 적용.
+ */
+function noteBackground(item: Pick<OrderMoodboardItem, "color" | "color2">): string {
+  const c1 = item.color ?? "#fde68a";
+  if (item.color2) return `linear-gradient(135deg, ${c1} 0%, ${item.color2} 100%)`;
+  return c1;
+}
 
 function readImageSize(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
@@ -43,7 +68,14 @@ function readImageSize(file: File): Promise<{ width: number; height: number }> {
   });
 }
 
-type LivePos = { id: string; x: number; y: number; width: number; height: number; rotation: number };
+type LivePos = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+};
 
 export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   const queryClient = useQueryClient();
@@ -134,10 +166,15 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
         const marker = "/order-moodboards/";
         const idx = item.image_url.indexOf(marker);
         if (idx !== -1) {
-          await supabase.storage.from("order-moodboards").remove([item.image_url.slice(idx + marker.length)]);
+          await supabase.storage
+            .from("order-moodboards")
+            .remove([item.image_url.slice(idx + marker.length)]);
         }
       }
-      const { error: deleteError } = await supabase.from("order_moodboard_items").delete().eq("id", item.id);
+      const { error: deleteError } = await supabase
+        .from("order_moodboard_items")
+        .delete()
+        .eq("id", item.id);
       if (deleteError) throw deleteError;
     },
     onSuccess: invalidate,
@@ -203,12 +240,25 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       mode,
       startX: e.clientX,
       startY: e.clientY,
-      orig: { x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation },
+      orig: {
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+        rotation: item.rotation,
+      },
       centerX: 0,
       centerY: 0,
       startAngle: 0,
     };
-    setLivePos({ id: item.id, x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation });
+    setLivePos({
+      id: item.id,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+      rotation: item.rotation,
+    });
   };
 
   /** 상단 중앙 회전 핸들 — 아이템 중심에서 포인터까지의 각도 변화만큼 rotation을 더한다. */
@@ -225,12 +275,25 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       mode: "rotate",
       startX: e.clientX,
       startY: e.clientY,
-      orig: { x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation },
+      orig: {
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+        rotation: item.rotation,
+      },
       centerX,
       centerY,
       startAngle,
     };
-    setLivePos({ id: item.id, x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation });
+    setLivePos({
+      id: item.id,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+      rotation: item.rotation,
+    });
   };
 
   useEffect(() => {
@@ -264,7 +327,8 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
           rotation: s.orig.rotation,
         });
       } else {
-        const currentAngle = (Math.atan2(e.clientY - s.centerY, e.clientX - s.centerX) * 180) / Math.PI;
+        const currentAngle =
+          (Math.atan2(e.clientY - s.centerY, e.clientX - s.centerX) * 180) / Math.PI;
         setLivePos({
           id: s.id,
           x: s.orig.x,
@@ -314,7 +378,11 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
               e.target.value = "";
             }}
           />
-          <button type="button" className={buttonClass} onClick={() => fileInputRef.current?.click()}>
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={() => fileInputRef.current?.click()}
+          >
             <ImagePlus className="mr-1 inline h-3.5 w-3.5" />
             IMAGE
           </button>
@@ -356,7 +424,12 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 zIndex: item.z_index,
               }}
             >
-              <div className="absolute inset-0 border border-border bg-background shadow-sm">
+              <div
+                className={cn(
+                  "absolute inset-0 overflow-hidden border border-border bg-background shadow-sm",
+                  item.kind === "note" && shapeRadiusClass(item.shape),
+                )}
+              >
                 {item.kind === "image" ? (
                   <img
                     src={item.image_url ?? ""}
@@ -366,13 +439,19 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                     onPointerDown={(e) => beginDrag(e, item, "move")}
                   />
                 ) : (
-                  <div className="flex h-full flex-col" style={{ backgroundColor: item.color ?? "#fde68a" }}>
+                  <div
+                    className="flex h-full flex-col"
+                    style={{ background: noteBackground(item) }}
+                  >
                     <div
-                      className="flex h-6 shrink-0 cursor-move items-center justify-between gap-1 px-1"
+                      className="flex shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5"
                       onPointerDown={(e) => beginDrag(e, item, "move")}
                     >
                       {/* 프리셋 스와치 — 빠른 선택 */}
-                      <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                      <div
+                        className="flex items-center gap-1"
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
                         {NOTE_COLORS.map((c) => (
                           <button
                             key={c}
@@ -382,6 +461,30 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                             title="색상 변경"
                             onClick={() => update.mutate({ id: item.id, patch: { color: c } })}
                           />
+                        ))}
+                      </div>
+                      {/* 셰입(모양) 선택 — 2026-10-14 사용자 요청: "메모 카드 모양을 동그라미 등으로 바꿀 수 있게" */}
+                      <div
+                        className="flex items-center gap-1"
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        {NOTE_SHAPES.map((s) => (
+                          <button
+                            key={s.value}
+                            type="button"
+                            title={s.label}
+                            onClick={() =>
+                              update.mutate({ id: item.id, patch: { shape: s.value } })
+                            }
+                            className={cn(
+                              "flex h-3.5 w-3.5 shrink-0 items-center justify-center border",
+                              (item.shape ?? "rect") === s.value
+                                ? "border-foreground"
+                                : "border-black/20",
+                            )}
+                          >
+                            <span className={cn("block h-2 w-2 bg-foreground/70", s.radiusClass)} />
+                          </button>
                         ))}
                       </div>
                       {/* 자유 컬러 피커 — 2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정" */}
@@ -394,10 +497,54 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                         <input
                           type="color"
                           value={item.color ?? "#fde68a"}
-                          onChange={(e) => update.mutate({ id: item.id, patch: { color: e.target.value } })}
+                          onChange={(e) =>
+                            update.mutate({ id: item.id, patch: { color: e.target.value } })
+                          }
                           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         />
                       </label>
+                      {/* 그라데이션 — 2026-10-14 사용자 요청: "메모 컬러 그라데이션 기능도 추가".
+                          원형 스와치 클릭으로 on/off 토글, 켜지면 2번째 색상 피커가 나타난다. */}
+                      <div
+                        className="flex items-center gap-1"
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          title={item.color2 ? "그라데이션 끄기(단색으로)" : "그라데이션 켜기"}
+                          onClick={() =>
+                            update.mutate({
+                              id: item.id,
+                              patch: { color2: item.color2 ? null : "#ffffff" },
+                            })
+                          }
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0 rounded-full border",
+                            item.color2 ? "border-foreground" : "border-black/30",
+                          )}
+                          style={{
+                            background: `linear-gradient(135deg, ${item.color ?? "#fde68a"} 0%, ${
+                              item.color2 ?? "#ffffff"
+                            } 100%)`,
+                          }}
+                        />
+                        {item.color2 && (
+                          <label
+                            className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
+                            style={{ backgroundColor: item.color2 }}
+                            title="그라데이션 2번째 색상"
+                          >
+                            <input
+                              type="color"
+                              value={item.color2}
+                              onChange={(e) =>
+                                update.mutate({ id: item.id, patch: { color2: e.target.value } })
+                              }
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            />
+                          </label>
+                        )}
+                      </div>
                     </div>
                     <textarea
                       className="flex-1 resize-none border-0 bg-transparent p-2 text-xs font-mono text-foreground outline-none"
@@ -437,9 +584,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
           );
         })}
       </div>
-      {error && (
-        <p className={cn("mt-2 font-mono text-xs uppercase text-destructive")}>{error}</p>
-      )}
+      {error && <p className={cn("mt-2 font-mono text-xs uppercase text-destructive")}>{error}</p>}
     </SectionCard>
   );
 }
