@@ -19,8 +19,10 @@ import { cn } from "@/lib/utils";
  *   주던 각도를 드래그로 직접 조절 가능하게).
  * - 메모(NOTE) 색상도 생성 시 랜덤 배정에서 끝나지 않고, 헤더의 프리셋 스와치 + 네이티브 컬러
  *   피커로 언제든 자유롭게 바꿀 수 있다(2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정").
- * - 메모(NOTE) 카드 모양(셰입)도 사각형/둥근 사각형/원형 중 헤더에서 언제든 바꿀 수 있다
- *   (2026-10-14 사용자 요청: "메모 카드에 셰입 선택 옵션 추가"). 이미지 카드는 대상 아님.
+ * - 메모(NOTE) 카드 모양(셰입)도 사각형/정사각형/원형/삼각형 중 헤더에서 언제든 바꿀 수 있다
+ *   (2026-10-14 사용자 요청: "메모 카드에 셰입 선택 옵션 추가" → "사각 하나를 정사각으로 바꾸고
+ *   삼각형도 추가"). 이미지 카드는 대상 아님. 정사각형 선택 시 현재 폭/높이 중 작은 쪽으로
+ *   맞춰 즉시 1:1 비율로 리사이즈한다(그래야 "정사각"이라는 이름이 실제와 맞음).
  * - 메모 색상에 두 번째 컬러(color2)를 추가하면 단색 대신 135deg 그라데이션으로 표시된다
  *   (2026-10-14 사용자 요청: "메모 컬러 그라데이션 기능도 추가"). color2를 다시 비우면 단색으로 복귀.
  * - 드래그/리사이즈/회전 중에는 로컬 상태(livePos)만 갱신하고, 포인터를 뗄 때(pointerup)만 DB에
@@ -31,15 +33,48 @@ const DEFAULT_IMAGE_WIDTH = 200;
 const DEFAULT_NOTE_SIZE = { width: 180, height: 140 };
 const NOTE_COLORS = ["#fde68a", "#fecaca", "#bbf7d0", "#bfdbfe", "#e9d5ff"];
 
-/** 메모 카드 셰입(모양) 옵션(2026-10-14 사용자 요청: "고정된 사각형 말고 동그라미 등 다른 shape 선택"). */
+/**
+ * 메모 카드 셰입(모양) 옵션(2026-10-14 사용자 요청: "고정된 사각형 말고 동그라미 등 다른 shape
+ * 선택" → "사각 하나를 정사각으로 바꾸고 삼각형도 추가"). radiusClass는 둥근 모서리용, clipPath는
+ * border-radius로 표현 안 되는 모양(삼각형)용 — 적용 시 둘 중 하나만 의미를 가진다.
+ */
 const NOTE_SHAPES = [
-  { value: "rect", label: "사각형", radiusClass: "rounded-none" },
-  { value: "rounded", label: "둥근 사각형", radiusClass: "rounded-xl" },
-  { value: "circle", label: "원형", radiusClass: "rounded-full" },
+  {
+    value: "rect",
+    label: "사각형",
+    radiusClass: "rounded-none",
+    clipPath: null,
+    forceSquare: false,
+  },
+  {
+    value: "square",
+    label: "정사각형",
+    radiusClass: "rounded-none",
+    clipPath: null,
+    forceSquare: true,
+  },
+  {
+    value: "circle",
+    label: "원형",
+    radiusClass: "rounded-full",
+    clipPath: null,
+    forceSquare: false,
+  },
+  {
+    value: "triangle",
+    label: "삼각형",
+    radiusClass: "rounded-none",
+    clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)",
+    forceSquare: false,
+  },
 ] as const;
 
 function shapeRadiusClass(shape: string | null | undefined): string {
   return NOTE_SHAPES.find((s) => s.value === shape)?.radiusClass ?? "rounded-none";
+}
+
+function shapeClipPath(shape: string | null | undefined): string | undefined {
+  return NOTE_SHAPES.find((s) => s.value === shape)?.clipPath ?? undefined;
 }
 
 /**
@@ -429,6 +464,11 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                   "absolute inset-0 overflow-hidden border border-border bg-background shadow-sm",
                   item.kind === "note" && shapeRadiusClass(item.shape),
                 )}
+                style={
+                  item.kind === "note" && shapeClipPath(item.shape)
+                    ? { clipPath: shapeClipPath(item.shape) }
+                    : undefined
+                }
               >
                 {item.kind === "image" ? (
                   <img
@@ -473,9 +513,19 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                             key={s.value}
                             type="button"
                             title={s.label}
-                            onClick={() =>
-                              update.mutate({ id: item.id, patch: { shape: s.value } })
-                            }
+                            onClick={() => {
+                              // 정사각형은 이름값대로 실제 1:1 비율이어야 하므로 선택 즉시
+                              // 현재 폭/높이 중 작은 쪽으로 맞춰 리사이즈한다.
+                              if (s.forceSquare) {
+                                const side = Math.min(item.width, item.height);
+                                update.mutate({
+                                  id: item.id,
+                                  patch: { shape: s.value, width: side, height: side },
+                                });
+                              } else {
+                                update.mutate({ id: item.id, patch: { shape: s.value } });
+                              }
+                            }}
                             className={cn(
                               "flex h-3.5 w-3.5 shrink-0 items-center justify-center border",
                               (item.shape ?? "rect") === s.value
@@ -483,7 +533,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                                 : "border-black/20",
                             )}
                           >
-                            <span className={cn("block h-2 w-2 bg-foreground/70", s.radiusClass)} />
+                            <span
+                              className={cn("block h-2 w-2 bg-foreground/70", s.radiusClass)}
+                              style={s.clipPath ? { clipPath: s.clipPath } : undefined}
+                            />
                           </button>
                         ))}
                       </div>
