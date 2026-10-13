@@ -44,7 +44,7 @@ export function DuplicateComponentModal({
 
       const { data: sourceComponent, error: sourceError } = await supabase
         .from("components")
-        .select("technique_category_id, description, notes")
+        .select("technique_category_id, description, notes, scaling_mode")
         .eq("id", sourceComponentId)
         .single();
       if (sourceError) throw sourceError;
@@ -57,6 +57,10 @@ export function DuplicateComponentModal({
           technique_category_id: sourceComponent.technique_category_id,
           description: sourceComponent.description,
           notes: sourceComponent.notes,
+          // 2026-10-13: 원본 COMPONENT의 scaling_mode를 그대로 복사 — 원본이 수동으로 다르게
+          // 설정돼 있었다면(예: TECHNIQUE CATEGORY 자동판정과 다르게 직접 바꿔둔 경우) 복제본도
+          // 그 값을 그대로 따라간다. 비어있으면 DB 트리거가 TECHNIQUE CATEGORY로 자동판정.
+          scaling_mode: sourceComponent.scaling_mode ?? "",
         })
         .select("id")
         .single();

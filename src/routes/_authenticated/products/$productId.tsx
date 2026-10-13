@@ -1057,6 +1057,9 @@ function AddComponentPanel({
           user_id: userId,
           name: search.trim(),
           technique_category_id: techniqueCategoryId || null,
+          // 2026-10-13: 빈 문자열 → DB 트리거(components_auto_scaling_mode)가 TECHNIQUE
+          // CATEGORY로 자동판정(SHEET=MOULD, 그 외=BASE_WEIGHT).
+          scaling_mode: "",
         })
         .select("id")
         .single();

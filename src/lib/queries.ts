@@ -1419,6 +1419,21 @@ export const orderQuery = (id: string) =>
       ) as unknown as OrderListRow,
   });
 
+/** ORDER 상세 맨 위 MOOD BOARD(2026-10-13) — 쌓임 순서(z_index) 기준 정렬해서 반환 */
+export type OrderMoodboardItem = Tables<"order_moodboard_items">;
+export const orderMoodboardItemsQuery = (orderId: string) =>
+  queryOptions({
+    queryKey: ["order_moodboard_items", orderId],
+    queryFn: async (): Promise<OrderMoodboardItem[]> =>
+      unwrap(
+        await supabase
+          .from("order_moodboard_items")
+          .select("*")
+          .eq("order_id", orderId)
+          .order("z_index"),
+      ),
+  });
+
 export const customerOrdersQuery = (customerId: string) =>
   queryOptions({
     queryKey: ["orders", "by_customer", customerId],

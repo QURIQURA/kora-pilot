@@ -184,7 +184,7 @@ export type Database = {
           name: string
           notes?: string | null
           pinned?: boolean
-          scaling_mode?: string
+          scaling_mode: string
           technique_category_id?: string | null
           updated_at?: string
           user_id: string
@@ -1068,6 +1068,68 @@ export type Database = {
           },
           {
             foreignKeyName: "order_allergen_ingredients_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_moodboard_items: {
+        Row: {
+          color: string | null
+          content: string | null
+          created_at: string
+          height: number
+          id: string
+          image_url: string | null
+          kind: string
+          order_id: string
+          rotation: number
+          updated_at: string
+          user_id: string
+          width: number
+          x: number
+          y: number
+          z_index: number
+        }
+        Insert: {
+          color?: string | null
+          content?: string | null
+          created_at?: string
+          height?: number
+          id?: string
+          image_url?: string | null
+          kind?: string
+          order_id: string
+          rotation?: number
+          updated_at?: string
+          user_id?: string
+          width?: number
+          x?: number
+          y?: number
+          z_index?: number
+        }
+        Update: {
+          color?: string | null
+          content?: string | null
+          created_at?: string
+          height?: number
+          id?: string
+          image_url?: string | null
+          kind?: string
+          order_id?: string
+          rotation?: number
+          updated_at?: string
+          user_id?: string
+          width?: number
+          x?: number
+          y?: number
+          z_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_moodboard_items_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"

@@ -38,6 +38,7 @@ import { formatProductSizeLabel } from "@/lib/product-size";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
+import { OrderMoodboardSection } from "@/components/pilot/OrderMoodboardSection";
 import {
   Field,
   SectionCard,
@@ -700,6 +701,11 @@ function OrderDetailPage() {
           </select>
         </div>
       </div>
+
+      {/* 2026-10-13 사용자 요청: "오더마다 무드보드를 만들고싶은데, 디자인 아이디어 구상용으로.
+          피그마 ppt 처럼 이미지를 스크랩해서 바로 붙여넣기할수 있는 보드" — 상세페이지 맨 위에
+          배치해달라고 함. */}
+      <OrderMoodboardSection orderId={order.data.id} />
 
       <SectionCard title="INSTAGRAM DM">
         <p className="mb-2 font-mono text-[11px] text-muted-foreground">

@@ -26,6 +26,11 @@ export function ComponentCreateModal({ onClose }: { onClose: () => void }) {
           user_id: userId,
           name: name.trim(),
           technique_category_id: techniqueCategoryId || null,
+          // 2026-10-13: scaling_mode는 DB 트리거(components_auto_scaling_mode)가 TECHNIQUE
+          // CATEGORY를 보고 자동으로 채운다(SHEET=MOULD, 그 외=BASE_WEIGHT) — 빈 문자열을 넘기면
+          // 트리거가 "미지정"으로 보고 자동판정한다. 컬럼이 NOT NULL(string)이라 TS 타입상
+          // null/생략은 불가.
+          scaling_mode: "",
         })
         .select("id")
         .single();
