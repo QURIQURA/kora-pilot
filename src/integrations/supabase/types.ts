@@ -2400,6 +2400,9 @@ export type Database = {
           order_id: string | null
           product_id: string | null
           product_size_id: string | null
+          scheduled_date: string | null
+          scheduled_end_time: string | null
+          scheduled_start_time: string | null
           started_at: string | null
           status: string
           target_unit_count: number | null
@@ -2415,6 +2418,9 @@ export type Database = {
           order_id?: string | null
           product_id?: string | null
           product_size_id?: string | null
+          scheduled_date?: string | null
+          scheduled_end_time?: string | null
+          scheduled_start_time?: string | null
           started_at?: string | null
           status?: string
           target_unit_count?: number | null
@@ -2430,6 +2436,9 @@ export type Database = {
           order_id?: string | null
           product_id?: string | null
           product_size_id?: string | null
+          scheduled_date?: string | null
+          scheduled_end_time?: string | null
+          scheduled_start_time?: string | null
           started_at?: string | null
           status?: string
           target_unit_count?: number | null
