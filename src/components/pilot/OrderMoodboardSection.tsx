@@ -35,6 +35,13 @@ import { cn } from "@/lib/utils";
  *       어디를 눌러도 최소한 이동은 되게 한다(보이는 부분은 그 위의 실제 콘텐츠가 그대로 받음).
  *   (B) 회전 핸들처럼 셰입 밖(좌상단)에 항상 보이는 전용 "이동" 그립 아이콘을 추가해 셰입과
  *       무관하게 확실한 그랩 지점을 제공한다.
+ * - 메모 헤더(셰입/컬러/그라데이션 컨트롤)는 평소엔 숨겨져 있다가 카드에 마우스를 올렸을 때만
+ *   보인다(2026-10-14 사용자 요청: "도형 프리셋도 시각적으로 거슬린다" A안 — 회전/리사이즈/삭제
+ *   핸들과 동일한 group-hover 패턴으로 통일).
+ * - 카드(이미지/메모 모두)는 어디를 클릭하든 항상 맨 앞으로 올라온다(2026-10-14 사용자 요청:
+ *   "도형 어디를 눌러도 맨앞으로 당겨지도록, 이미지처럼" — 최상위 아이템 div에 캡처 단계
+ *   onPointerDownCapture로 bringToFront를 걸어, 텍스트영역처럼 내부에서 stopPropagation하는
+ *   요소를 클릭해도 항상 맨 앞으로 온다).
  * - 드래그/리사이즈/회전 중에는 로컬 상태(livePos)만 갱신하고, 포인터를 뗄 때(pointerup)만 DB에
  *   커밋한다 — WorkflowTimeline.tsx의 드래그 패턴과 동일한 방식(과도한 쓰기 방지).
  */
@@ -468,6 +475,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 transform: `rotate(${pos.rotation}deg)`,
                 zIndex: item.z_index,
               }}
+              // 2026-10-14 사용자 요청: "도형 어디를 눌러도 맨앞으로 당겨지도록, 이미지처럼" —
+              // 캡처 단계에서 먼저 실행되므로 헤더/텍스트영역의 stopPropagation과 무관하게
+              // 카드 어디를 클릭하든(텍스트영역 포함) 항상 맨 앞으로 올라온다.
+              onPointerDownCapture={() => bringToFront(item)}
             >
               {/* (A) 셰입 클리핑 사각지대 대책 — 잘리지 않는 전체 박스 투명 이동 레이어를
                   셰입 박스보다 먼저(= 아래에) 둔다. 셰입이 그려진 부분은 그 위의 실제 헤더/
@@ -504,7 +515,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                     style={{ background: noteBackground(item) }}
                   >
                     <div
-                      className="flex shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5"
+                      className="hidden shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5 group-hover:flex"
                       onPointerDown={(e) => beginDrag(e, item, "move")}
                     >
                       {/* 셰입(모양) 선택 — 2026-10-14 사용자 요청: "메모 카드 모양을 동그라미 등으로 바꿀 수 있게" */}
