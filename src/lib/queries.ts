@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
-import { computeLineCosts, costPerGram, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
+import { analyzeBatch, computeLineCosts, costPerGram, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
 import type {
   Category,
   Component,
@@ -1697,6 +1697,147 @@ export const costDashboardQuery = () =>
         });
       }
       return rows;
+    },
+  });
+
+/**
+ * COST 탭 — "포뮬라 단가 비교"용(2026-10-13). 사용자가 고른 FORMULA들을 effective version(CURRENT
+ * 우선, 없으면 최신 DRAFT/TESTING — pickEffectiveFormulaVersion과 동일 규칙) 기준으로 비교한다.
+ * 기존 computeLineCosts/analyzeBatch를 그대로 재사용 — 별도 원가 계산 로직을 새로 만들지 않는다.
+ * 재료 원가·배치 중량 등 원본 데이터는 전혀 변경하지 않고 조회만 한다.
+ */
+export type FormulaCostCompareIssueCode =
+  | "NO_VERSION"
+  | "ZERO_WEIGHT"
+  | "UNIT_CONVERSION"
+  | "MISSING_PRICE"
+  | "CALC_ERROR";
+
+export interface FormulaCostCompareIssue {
+  code: FormulaCostCompareIssueCode;
+  message: string;
+}
+
+export interface FormulaCostCompareRow {
+  formulaId: string;
+  formulaName: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  versionId: string | null;
+  versionNumber: number | null;
+  versionStatus: string | null;
+  /** 배치 총중량(g) — 재료 원가 유무와 무관하게 전부 합산(중량 단위만) */
+  totalGrams: number;
+  /** 배치 총 재료 원가(원가 정보가 있는 재료만 합산) */
+  totalCost: number;
+  /** totalCost / totalGrams, totalGrams가 0 이하면 null */
+  costPerGram: number | null;
+  /** 비어있으면 "유효한" 비교 대상. 하나라도 있으면 화면에서 최저 원가 선정 대상에서 제외. */
+  issues: FormulaCostCompareIssue[];
+}
+
+export const formulaCostCompareQuery = (formulaIds: string[]) =>
+  queryOptions({
+    queryKey: ["formula_cost_compare", [...formulaIds].sort()],
+    enabled: formulaIds.length > 0,
+    queryFn: async (): Promise<FormulaCostCompareRow[]> => {
+      if (formulaIds.length === 0) return [];
+      const rows = unwrap(
+        await supabase
+          .from("formulas")
+          .select(
+            "id, name, technique_category_id, technique_categories(id, name), formula_versions(id, version_number, status, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
+          )
+          .in("id", formulaIds),
+      ) as unknown as {
+        id: string;
+        name: string;
+        technique_category_id: string | null;
+        technique_categories: { id: string; name: string } | null;
+        formula_versions: {
+          id: string;
+          version_number: number;
+          status: string;
+          formula_version_ingredients: {
+            amount: number;
+            unit: string;
+            ingredients: {
+              purchase_price: number | null;
+              purchase_qty: number | null;
+              purchase_unit: string | null;
+            } | null;
+          }[];
+        }[];
+      }[];
+
+      return rows.map((formula) => {
+        const base = {
+          formulaId: formula.id,
+          formulaName: formula.name,
+          categoryId: formula.technique_category_id,
+          categoryName: formula.technique_categories?.name ?? null,
+        };
+        const version = pickEffectiveFormulaVersion(formula.formula_versions ?? []);
+        if (!version) {
+          return {
+            ...base,
+            versionId: null,
+            versionNumber: null,
+            versionStatus: null,
+            totalGrams: 0,
+            totalCost: 0,
+            costPerGram: null,
+            issues: [
+              { code: "NO_VERSION", message: "사용 가능한 FORMULA VERSION이 없습니다." },
+            ] as FormulaCostCompareIssue[],
+          };
+        }
+        try {
+          const diag = analyzeBatch(version.formula_version_ingredients ?? []);
+          const issues: FormulaCostCompareIssue[] = [];
+          if (diag.isEmpty) {
+            issues.push({
+              code: "ZERO_WEIGHT",
+              message: "포뮬라의 총 완성 중량을 확인할 수 없습니다(등록된 재료 없음).",
+            });
+          } else if (diag.totalGrams <= 0) {
+            issues.push(
+              diag.hasUnconvertibleUnit
+                ? { code: "UNIT_CONVERSION", message: "재료의 단위를 g 기준으로 환산할 수 없습니다." }
+                : { code: "ZERO_WEIGHT", message: "배치 중량이 0g 이하이므로 단가를 계산할 수 없습니다." },
+            );
+          }
+          if (diag.hasMissingPrice) {
+            issues.push({
+              code: "MISSING_PRICE",
+              message: "가격이 등록되지 않은 재료가 있습니다 — 원가가 실제보다 낮게 계산될 수 있습니다.",
+            });
+          }
+          return {
+            ...base,
+            versionId: version.id,
+            versionNumber: version.version_number,
+            versionStatus: version.status,
+            totalGrams: diag.totalGrams,
+            totalCost: diag.totalCost,
+            costPerGram: diag.costPerGram,
+            issues,
+          };
+        } catch {
+          return {
+            ...base,
+            versionId: version.id,
+            versionNumber: version.version_number,
+            versionStatus: version.status,
+            totalGrams: 0,
+            totalCost: 0,
+            costPerGram: null,
+            issues: [
+              { code: "CALC_ERROR", message: "기존 원가 계산 결과를 확인할 수 없습니다." },
+            ] as FormulaCostCompareIssue[],
+          };
+        }
+      });
     },
   });
 

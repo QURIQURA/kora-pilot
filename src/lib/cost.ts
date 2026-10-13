@@ -68,6 +68,26 @@ export function computeLineCosts(rows: IngredientLine[]): LineCostResult {
   };
 }
 
+export interface BatchDiagnostics extends LineCostResult {
+  /** 재료 행이 하나도 없음(배치 자체가 비어있음) — 총 완성 중량을 알 수 없는 경우 */
+  isEmpty: boolean;
+  /** 사용량이 0보다 큰 재료가 있는데도 전부 g/kg/ml/l로 환산 불가능한 단위(예: "개")라
+   * 총중량(totalGrams)에 전혀 반영되지 못한 경우 — "단위 변환 오류"와 "중량 0"을 구분하기 위한 플래그. */
+  hasUnconvertibleUnit: boolean;
+}
+
+/**
+ * computeLineCosts에 "포뮬라 단가 비교"용 진단 정보를 더한 버전(2026-10-13).
+ * 기존 computeLineCosts의 동작/시그니처는 그대로 두고(다른 호출부 영향 없음), 추가로만 감지한다.
+ */
+export function analyzeBatch(rows: IngredientLine[]): BatchDiagnostics {
+  const base = computeLineCosts(rows);
+  const hasUnconvertibleUnit = rows.some(
+    (row) => Number(row.amount) > 0 && toGrams(Number(row.amount), row.unit) == null,
+  );
+  return { ...base, isEmpty: rows.length === 0, hasUnconvertibleUnit };
+}
+
 /**
  * FULL PRODUCTION COST(2026-09-23, "배치" 기준 → "케익(제품 단위) 개당" 기준으로 변경).
  * 케익 하나에 시트/필링/가나슈 등 Component가 몇 개 들어가는지에 따라 "배치" 횟수가 무한히

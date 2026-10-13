@@ -5,6 +5,7 @@ import { costDashboardQuery, type CostDashboardRow } from "@/lib/queries";
 import { fmtCurrency } from "@/lib/cost";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { SectionCard, selectClass } from "@/components/pilot/ui";
+import { FormulaCostCompareSection } from "@/components/pilot/FormulaCostCompareSection";
 
 export const Route = createFileRoute("/_authenticated/cost")({
   head: () => ({
@@ -73,6 +74,11 @@ function CostDashboardPage() {
           </select>
         </label>
       </div>
+
+      {/* 2026-10-13 사용자 요청: 배치 중량이 다른 포뮬라들을 같은 기준 중량으로 환산해서 비교 */}
+      <SectionCard title="포뮬라 단가 비교">
+        <FormulaCostCompareSection />
+      </SectionCard>
 
       <SectionCard title={`PRODUCT × SIZE (${sorted.length})`}>
         {dashboard.isLoading ? (
