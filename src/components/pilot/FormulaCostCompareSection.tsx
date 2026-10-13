@@ -26,6 +26,16 @@ import { Field, inputClass, primaryButtonClass, selectClass, StatusBadge } from 
  * 정확히 계량하려고 보는 게 아니니 재료는 회색 텍스트로, 가격 차이가 제일 큰 두 재료만 빨간색으로."
  * → 포뮬라를 열(컬럼)로, 재료를 행(로우)으로 나란히 두는 엑셀 스타일 표로 재구성.
  *
+ * 2026-10-13 추가 요청(같은 날 세 번째): "비교 시 배치 총중량을 1kg 기준으로 통일해서 계산
+ * 해달라. 1g/100g/1000g당 행은 지우고, 재료별 비용도 1kg 기준일 때의 비율(%)로 표시하고
+ * 그에 따른 비용도 같이 보여달라." →
+ * - 배치 총중량/총원가를 각 포뮬라의 실제 배치 크기가 아니라 전부 기준 중량(기본 1,000g)
+ *   하나로 통일해서 표시(실제 배치 중량은 참고용으로 작게 병기).
+ * - 1g당/100g당/1kg당 행 제거 — 이제 "기준 중량 총원가" 한 행으로 충분.
+ * - 재료별 비용 행은 "그 재료가 배치에서 차지하는 비율(%)"과 "그 비율을 기준 중량에 적용했을
+ *   때의 비용"을 같이 표시(scaledIngredientStat) — 재료 사용량(g)을 그대로 보여주면 배치
+ *   크기가 다른 포뮬라끼리 비교가 안 되기 때문에 전부 비율 기반으로 환산.
+ *
  * 기존 데이터(FORMULA/VERSION/재료 가격/원가 계산 로직)는 전혀 건드리지 않고 조회만 한다.
  * 선택 목록·기준 중량·추가 비용은 전부 이 화면 세션에서만 유지되는 로컬 상태(저장 안 함) —
  * 작업지시서 4번 "별도 저장 기능은 필요하지 않다"에 따름.
@@ -58,12 +68,30 @@ interface IngredientRowData {
   byFormula: Map<string, VersionIngredientRow>;
 }
 
-/** 재료 한 줄의 비용(원) — 가격 정보가 없으면 null(모른다는 뜻, 0이 아님) */
-function ingredientLineCost(cell: VersionIngredientRow | undefined): number | null {
-  if (!cell) return 0; // 그 포뮬라에는 아예 안 쓰임 → 비용 기여 0
+interface ScaledIngredientStat {
+  /** 배치 안에서 이 재료가 차지하는 비율(%) — 배치 크기와 무관하게 포뮬라 간 비교 가능 */
+  pct: number | null;
+  /** 그 비율을 기준 중량(baseWeightG)에 적용했을 때의 비용(원) — 가격 정보가 없으면 null */
+  cost: number | null;
+}
+
+/**
+ * 재료 한 줄을 "배치 크기와 무관한 비율 + 기준 중량 기준 비용"으로 환산(2026-10-13).
+ * 배치 중량 자체를 비교 기준(baseWeightG)으로 통일했기 때문에, 재료 사용량도 g 그대로가
+ * 아니라 "배치 대비 비율"로 봐야 포뮬라끼리 공정하게 비교할 수 있다.
+ */
+function scaledIngredientStat(
+  row: FormulaCostCompareRow,
+  baseWeightG: number,
+  cell: VersionIngredientRow | undefined,
+): ScaledIngredientStat | null {
+  if (!cell) return null; // 이 포뮬라에는 아예 안 쓰이는 재료
+  if (row.totalGrams <= 0) return { pct: null, cost: null };
   const grams = toGrams(Number(cell.amount), cell.unit) ?? 0;
+  const pct = (grams / row.totalGrams) * 100;
   const cpg = costPerGram(cell.ingredients);
-  return cpg != null ? grams * cpg : null;
+  const cost = cpg != null && baseWeightG > 0 ? (grams / row.totalGrams) * baseWeightG * cpg : null;
+  return { pct, cost };
 }
 
 export function FormulaCostCompareSection() {
@@ -197,7 +225,11 @@ export function FormulaCostCompareSection() {
   const topDiffIngredientIds = useMemo(() => {
     const diffs = ingredientRows.map((ir) => {
       const costs = selectedRows
-        .map((row) => ingredientLineCost(ir.byFormula.get(row.formulaId)))
+        .map((row) => {
+          const cell = ir.byFormula.get(row.formulaId);
+          if (!cell) return 0; // 그 포뮬라엔 아예 안 쓰임 → 비용 기여 0
+          return scaledIngredientStat(row, baseWeightG, cell)?.cost ?? null;
+        })
         .filter((c): c is number => c != null);
       const diff = costs.length > 0 ? Math.max(...costs) - Math.min(...costs) : 0;
       return { id: ir.ingredientId, diff };
@@ -209,7 +241,7 @@ export function FormulaCostCompareSection() {
         .slice(0, 2)
         .map((d) => d.id),
     );
-  }, [ingredientRows, selectedRows]);
+  }, [ingredientRows, selectedRows, baseWeightG]);
 
   const colCount = selectedRows.length;
   const visibleWidth = INGREDIENT_COL_WIDTH + Math.min(colCount, VISIBLE_FORMULA_COLS) * FORMULA_COL_WIDTH + 2;
@@ -374,41 +406,22 @@ export function FormulaCostCompareSection() {
                 </StatRow>
               )}
 
-              <StatRow label="배치 총중량">
-                {computed.map(({ row }) => (
-                  <ValueCell key={row.formulaId}>{row.totalGrams > 0 ? `${fmtNumber(row.totalGrams)}g` : "—"}</ValueCell>
-                ))}
-              </StatRow>
-
-              <StatRow label="배치 총원가">
+              {/* 2026-10-13 사용자 요청: 배치 총중량을 포뮬라별 실제값이 아니라 기준 중량(기본
+                  1kg) 하나로 통일 — 실제 배치 중량은 참고용으로 작게만 병기 */}
+              <StatRow label={`배치 총중량(${fmtNumber(baseWeightG)}g 기준 통일)`}>
                 {computed.map(({ row }) => (
                   <ValueCell key={row.formulaId}>
-                    {row.totalGrams > 0 && row.costPerGram != null ? fmtCurrency(row.totalCost) : "—"}
+                    {baseWeightG > 0 ? `${fmtNumber(baseWeightG)}g` : "—"}
+                    {row.totalGrams > 0 && (
+                      <span className="block text-[10px] font-normal text-muted-foreground">
+                        (실제 배치 {fmtNumber(row.totalGrams)}g)
+                      </span>
+                    )}
                   </ValueCell>
                 ))}
               </StatRow>
 
-              <StatRow label="1g당">
-                {computed.map(({ row }) => (
-                  <ValueCell key={row.formulaId}>{row.costPerGram != null ? fmtCurrency(row.costPerGram) : "—"}</ValueCell>
-                ))}
-              </StatRow>
-              <StatRow label="100g당">
-                {computed.map(({ row }) => (
-                  <ValueCell key={row.formulaId}>
-                    {row.costPerGram != null ? fmtCurrency(row.costPerGram * 100) : "—"}
-                  </ValueCell>
-                ))}
-              </StatRow>
-              <StatRow label="1kg당">
-                {computed.map(({ row }) => (
-                  <ValueCell key={row.formulaId}>
-                    {row.costPerGram != null ? fmtCurrency(row.costPerGram * 1000) : "—"}
-                  </ValueCell>
-                ))}
-              </StatRow>
-
-              <StatRow label={`${fmtNumber(baseWeightG)}g 환산`}>
+              <StatRow label={`총원가(${fmtNumber(baseWeightG)}g 기준)`}>
                 {computed.map(({ row, convertedCost }) => (
                   <ValueCell key={row.formulaId}>{convertedCost != null ? fmtCurrency(convertedCost) : "—"}</ValueCell>
                 ))}
@@ -459,8 +472,9 @@ export function FormulaCostCompareSection() {
                   colSpan={colCount + 1}
                   className="border-t-2 border-foreground bg-secondary/60 px-2 py-1.5 font-mono text-[10px] uppercase text-muted-foreground"
                 >
-                  재료별 비용(참고용 — 정확한 계량 확인용이 아니라, 어느 재료가 포뮬라 간 가격 차이를
-                  만드는지 보기 위한 것) · 가격 차이가 가장 큰 재료 2개는 빨간색
+                  재료별 비율·비용({fmtNumber(baseWeightG)}g 기준, 참고용 — 정확한 계량 확인용이
+                  아니라 어느 재료가 포뮬라 간 가격 차이를 만드는지 보기 위한 것) · 가격 차이가
+                  가장 큰 재료 2개는 빨간색
                 </td>
               </tr>
 
@@ -485,6 +499,7 @@ export function FormulaCostCompareSection() {
                       <td className={cn("px-2 py-1.5 font-mono text-[11px]", tone)}>{ir.name}</td>
                       {selectedRows.map((row) => {
                         const cell = ir.byFormula.get(row.formulaId);
+                        const stat = cell ? scaledIngredientStat(row, baseWeightG, cell) : null;
                         return (
                           <td
                             key={row.formulaId}
@@ -493,13 +508,16 @@ export function FormulaCostCompareSection() {
                               tone,
                             )}
                           >
-                            {cell ? (
-                              <>
-                                {fmtNumber(Number(cell.amount), 1)}
-                                {cell.unit}
-                              </>
-                            ) : (
+                            {!cell || stat?.pct == null ? (
                               "—"
+                            ) : (
+                              <>
+                                {stat.pct.toFixed(1)}%
+                                <span className="opacity-70">
+                                  {" "}
+                                  · {stat.cost != null ? fmtCurrency(stat.cost) : "가격없음"}
+                                </span>
+                              </>
                             )}
                           </td>
                         );
