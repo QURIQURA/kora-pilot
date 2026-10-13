@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, RotateCw, StickyNote, X } from "lucide-react";
+import { ImagePlus, Move, RotateCw, StickyNote, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { currentUserId, orderMoodboardItemsQuery, type OrderMoodboardItem } from "@/lib/queries";
 import { SectionCard, buttonClass } from "@/components/pilot/ui";
@@ -17,14 +17,24 @@ import { cn } from "@/lib/utils";
  * - 각 아이템은 드래그로 이동, 우하단 핸들로 리사이즈, 상단 중앙 핸들로 회전(틸트), 호버 시
  *   우상단 X로 삭제 — 2026-10-13 사용자 요청: "이미지 틸트 내가 조정할 수 있도록"(생성 시 랜덤으로
  *   주던 각도를 드래그로 직접 조절 가능하게).
- * - 메모(NOTE) 색상도 생성 시 랜덤 배정에서 끝나지 않고, 헤더의 프리셋 스와치 + 네이티브 컬러
- *   피커로 언제든 자유롭게 바꿀 수 있다(2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정").
+ * - 메모(NOTE) 색상은 생성 시 랜덤 배정 후, 헤더의 네이티브 컬러 피커로 언제든 자유롭게
+ *   바꿀 수 있다(2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정"). 2026-10-14 사용자
+ *   요청으로 프리셋 스와치 버튼은 제거했다 — "기본으로 주어진 색상들이 실수로 자꾸 눌려서
+ *   내가 정해둔 색상을 잃어버린다"는 피드백에 따라, 색상은 이제 컬러 피커로만 바꾼다
+ *   (NOTE_COLORS 배열은 생성 시 랜덤 초기값 용도로만 남아있고 더 이상 클릭 가능한 버튼이 아님).
  * - 메모(NOTE) 카드 모양(셰입)도 사각형/정사각형/원형/삼각형 중 헤더에서 언제든 바꿀 수 있다
  *   (2026-10-14 사용자 요청: "메모 카드에 셰입 선택 옵션 추가" → "사각 하나를 정사각으로 바꾸고
  *   삼각형도 추가"). 이미지 카드는 대상 아님. 정사각형 선택 시 현재 폭/높이 중 작은 쪽으로
  *   맞춰 즉시 1:1 비율로 리사이즈한다(그래야 "정사각"이라는 이름이 실제와 맞음).
  * - 메모 색상에 두 번째 컬러(color2)를 추가하면 단색 대신 135deg 그라데이션으로 표시된다
  *   (2026-10-14 사용자 요청: "메모 컬러 그라데이션 기능도 추가"). color2를 다시 비우면 단색으로 복귀.
+ * - 삼각형 등 셰입이 clip-path로 모서리를 잘라내면, 그 영역은 브라우저가 포인터 히트테스트
+ *   대상에서도 제외해버려서 헤더(이동 트리거)가 거기 있으면 드래그가 먹통이 된다(2026-10-14
+ *   사용자 리포트: "셰입에 따라 잘리면 활성화가 안 돼서 못 움직임"). 대책 C안(A+B 결합) 적용:
+ *   (A) 셰입으로 잘리는 박스 "뒤"에 잘리지 않는 전체 사각형 투명 레이어를 깔아 바운딩 박스
+ *       어디를 눌러도 최소한 이동은 되게 한다(보이는 부분은 그 위의 실제 콘텐츠가 그대로 받음).
+ *   (B) 회전 핸들처럼 셰입 밖(좌상단)에 항상 보이는 전용 "이동" 그립 아이콘을 추가해 셰입과
+ *       무관하게 확실한 그랩 지점을 제공한다.
  * - 드래그/리사이즈/회전 중에는 로컬 상태(livePos)만 갱신하고, 포인터를 뗄 때(pointerup)만 DB에
  *   커밋한다 — WorkflowTimeline.tsx의 드래그 패턴과 동일한 방식(과도한 쓰기 방지).
  */
@@ -459,6 +469,16 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 zIndex: item.z_index,
               }}
             >
+              {/* (A) 셰입 클리핑 사각지대 대책 — 잘리지 않는 전체 박스 투명 이동 레이어를
+                  셰입 박스보다 먼저(= 아래에) 둔다. 셰입이 그려진 부분은 그 위의 실제 헤더/
+                  텍스트가 클릭을 받고, clip-path로 잘려나간 모서리만 이 레이어가 받아 이동으로
+                  처리한다(2026-10-14 사용자 리포트 대응, C안). 이미지는 셰입 클리핑이 없어 불필요. */}
+              {item.kind === "note" && (
+                <div
+                  className="absolute inset-0 cursor-move"
+                  onPointerDown={(e) => beginDrag(e, item, "move")}
+                />
+              )}
               <div
                 className={cn(
                   "absolute inset-0 overflow-hidden border border-border bg-background shadow-sm",
@@ -487,22 +507,6 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                       className="flex shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5"
                       onPointerDown={(e) => beginDrag(e, item, "move")}
                     >
-                      {/* 프리셋 스와치 — 빠른 선택 */}
-                      <div
-                        className="flex items-center gap-1"
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        {NOTE_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            className="h-3 w-3 shrink-0 rounded-full border border-black/10"
-                            style={{ backgroundColor: c }}
-                            title="색상 변경"
-                            onClick={() => update.mutate({ id: item.id, patch: { color: c } })}
-                          />
-                        ))}
-                      </div>
                       {/* 셰입(모양) 선택 — 2026-10-14 사용자 요청: "메모 카드 모양을 동그라미 등으로 바꿀 수 있게" */}
                       <div
                         className="flex items-center gap-1"
@@ -629,6 +633,17 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
               >
                 <RotateCw className="h-3 w-3" />
               </div>
+              {/* (B) 전용 이동 그립 — 셰입(삼각형 등) 클리핑과 무관하게 항상 확실히 눌리는
+                  그랩 지점(2026-10-14 사용자 리포트 대응, C안). 메모 카드만 대상. */}
+              {item.kind === "note" && (
+                <div
+                  className="absolute -top-2 -left-2 hidden h-5 w-5 cursor-move items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex"
+                  onPointerDown={(e) => beginDrag(e, item, "move")}
+                  title="이동"
+                >
+                  <Move className="h-3 w-3" />
+                </div>
+              )}
               <div
                 className="absolute -right-1 -bottom-1 h-3 w-3 cursor-nwse-resize border border-border bg-background opacity-0 group-hover:opacity-100"
                 onPointerDown={(e) => beginDrag(e, item, "resize")}
