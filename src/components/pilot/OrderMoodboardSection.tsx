@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, StickyNote, X } from "lucide-react";
+import { ImagePlus, RotateCw, StickyNote, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { currentUserId, orderMoodboardItemsQuery, type OrderMoodboardItem } from "@/lib/queries";
 import { SectionCard, buttonClass } from "@/components/pilot/ui";
@@ -14,8 +14,12 @@ import { cn } from "@/lib/utils";
  * - + IMAGE로 파일 선택 업로드도 지원(Supabase Storage "order-moodboards" 버킷, product-images와
  *   동일한 공개읽기/소유자쓰기 패턴)
  * - + NOTE로 포스트잇 스타일 텍스트 메모 추가
- * - 각 아이템은 드래그로 이동, 우하단 핸들로 리사이즈, 호버 시 우상단 X로 삭제
- * - 드래그/리사이즈 중에는 로컬 상태(livePos)만 갱신하고, 포인터를 뗄 때(pointerup)만 DB에
+ * - 각 아이템은 드래그로 이동, 우하단 핸들로 리사이즈, 상단 중앙 핸들로 회전(틸트), 호버 시
+ *   우상단 X로 삭제 — 2026-10-13 사용자 요청: "이미지 틸트 내가 조정할 수 있도록"(생성 시 랜덤으로
+ *   주던 각도를 드래그로 직접 조절 가능하게).
+ * - 메모(NOTE) 색상도 생성 시 랜덤 배정에서 끝나지 않고, 헤더의 프리셋 스와치 + 네이티브 컬러
+ *   피커로 언제든 자유롭게 바꿀 수 있다(2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정").
+ * - 드래그/리사이즈/회전 중에는 로컬 상태(livePos)만 갱신하고, 포인터를 뗄 때(pointerup)만 DB에
  *   커밋한다 — WorkflowTimeline.tsx의 드래그 패턴과 동일한 방식(과도한 쓰기 방지).
  */
 const BOARD_HEIGHT = 440;
@@ -39,7 +43,7 @@ function readImageSize(file: File): Promise<{ width: number; height: number }> {
   });
 }
 
-type LivePos = { id: string; x: number; y: number; width: number; height: number };
+type LivePos = { id: string; x: number; y: number; width: number; height: number; rotation: number };
 
 export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   const queryClient = useQueryClient();
@@ -178,10 +182,14 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   // ── 드래그/리사이즈(WorkflowTimeline.tsx와 동일한 패턴: 로컬 미리보기 → pointerup에 커밋) ──
   const dragSession = useRef<{
     id: string;
-    mode: "move" | "resize";
+    mode: "move" | "resize" | "rotate";
     startX: number;
     startY: number;
-    orig: { x: number; y: number; width: number; height: number };
+    orig: { x: number; y: number; width: number; height: number; rotation: number };
+    // "rotate" 모드 전용 — 아이템 중심(뷰포트 좌표)과 드래그 시작 각도
+    centerX: number;
+    centerY: number;
+    startAngle: number;
   } | null>(null);
 
   const beginDrag = (e: React.PointerEvent, item: OrderMoodboardItem, mode: "move" | "resize") => {
@@ -192,9 +200,34 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       mode,
       startX: e.clientX,
       startY: e.clientY,
-      orig: { x: item.x, y: item.y, width: item.width, height: item.height },
+      orig: { x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation },
+      centerX: 0,
+      centerY: 0,
+      startAngle: 0,
     };
-    setLivePos({ id: item.id, x: item.x, y: item.y, width: item.width, height: item.height });
+    setLivePos({ id: item.id, x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation });
+  };
+
+  /** 상단 중앙 회전 핸들 — 아이템 중심에서 포인터까지의 각도 변화만큼 rotation을 더한다. */
+  const beginRotate = (e: React.PointerEvent, item: OrderMoodboardItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    bringToFront(item);
+    const rect = boardRef.current?.getBoundingClientRect();
+    const centerX = (rect?.left ?? 0) + item.x + item.width / 2;
+    const centerY = (rect?.top ?? 0) + item.y + item.height / 2;
+    const startAngle = (Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180) / Math.PI;
+    dragSession.current = {
+      id: item.id,
+      mode: "rotate",
+      startX: e.clientX,
+      startY: e.clientY,
+      orig: { x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation },
+      centerX,
+      centerY,
+      startAngle,
+    };
+    setLivePos({ id: item.id, x: item.x, y: item.y, width: item.width, height: item.height, rotation: item.rotation });
   };
 
   useEffect(() => {
@@ -214,8 +247,9 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
           y: Math.min(Math.max(0, s.orig.y + dy), maxY),
           width: s.orig.width,
           height: s.orig.height,
+          rotation: s.orig.rotation,
         });
-      } else {
+      } else if (s.mode === "resize") {
         const maxWidth = Math.max(60, boardWidth - s.orig.x);
         const maxHeight = Math.max(60, BOARD_HEIGHT - s.orig.y);
         setLivePos({
@@ -224,6 +258,17 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
           y: s.orig.y,
           width: Math.min(Math.max(60, s.orig.width + dx), maxWidth),
           height: Math.min(Math.max(60, s.orig.height + dy), maxHeight),
+          rotation: s.orig.rotation,
+        });
+      } else {
+        const currentAngle = (Math.atan2(e.clientY - s.centerY, e.clientX - s.centerX) * 180) / Math.PI;
+        setLivePos({
+          id: s.id,
+          x: s.orig.x,
+          y: s.orig.y,
+          width: s.orig.width,
+          height: s.orig.height,
+          rotation: s.orig.rotation + (currentAngle - s.startAngle),
         });
       }
     }
@@ -233,7 +278,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       if (!s) return;
       setLivePos((lp) => {
         if (lp && lp.id === s.id) {
-          update.mutate({ id: lp.id, patch: { x: lp.x, y: lp.y, width: lp.width, height: lp.height } });
+          update.mutate({
+            id: lp.id,
+            patch: { x: lp.x, y: lp.y, width: lp.width, height: lp.height, rotation: lp.rotation },
+          });
         }
         return null;
       });
@@ -301,7 +349,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 top: pos.y,
                 width: pos.width,
                 height: pos.height,
-                transform: `rotate(${item.rotation}deg)`,
+                transform: `rotate(${pos.rotation}deg)`,
                 zIndex: item.z_index,
               }}
             >
@@ -317,9 +365,37 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 ) : (
                   <div className="flex h-full flex-col" style={{ backgroundColor: item.color ?? "#fde68a" }}>
                     <div
-                      className="h-4 shrink-0 cursor-move"
+                      className="flex h-6 shrink-0 cursor-move items-center justify-between gap-1 px-1"
                       onPointerDown={(e) => beginDrag(e, item, "move")}
-                    />
+                    >
+                      {/* 프리셋 스와치 — 빠른 선택 */}
+                      <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                        {NOTE_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            className="h-3 w-3 shrink-0 rounded-full border border-black/10"
+                            style={{ backgroundColor: c }}
+                            title="색상 변경"
+                            onClick={() => update.mutate({ id: item.id, patch: { color: c } })}
+                          />
+                        ))}
+                      </div>
+                      {/* 자유 컬러 피커 — 2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정" */}
+                      <label
+                        className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
+                        style={{ backgroundColor: item.color ?? "#fde68a" }}
+                        title="자유 색상 선택"
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="color"
+                          value={item.color ?? "#fde68a"}
+                          onChange={(e) => update.mutate({ id: item.id, patch: { color: e.target.value } })}
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        />
+                      </label>
+                    </div>
                     <textarea
                       className="flex-1 resize-none border-0 bg-transparent p-2 text-xs font-mono text-foreground outline-none"
                       defaultValue={item.content ?? ""}
@@ -342,6 +418,14 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
               >
                 <X className="h-3 w-3" />
               </button>
+              {/* 회전(틸트) 핸들 — 상단 중앙, 드래그하면 아이템 중심 기준으로 회전 */}
+              <div
+                className="absolute -top-2 left-1/2 hidden h-5 w-5 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex active:cursor-grabbing"
+                onPointerDown={(e) => beginRotate(e, item)}
+                title="회전(틸트)"
+              >
+                <RotateCw className="h-3 w-3" />
+              </div>
               <div
                 className="absolute -right-1 -bottom-1 h-3 w-3 cursor-nwse-resize border border-border bg-background opacity-0 group-hover:opacity-100"
                 onPointerDown={(e) => beginDrag(e, item, "resize")}
