@@ -80,21 +80,26 @@ function CostDashboardPage() {
         <FormulaCostCompareSection />
       </SectionCard>
 
-      <SectionCard title={`PRODUCT × SIZE (${sorted.length})`}>
-        {dashboard.isLoading ? (
-          <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
-        ) : sorted.length === 0 ? (
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            등록된 사이즈가 없습니다. PRODUCT 상세 → SIZES에서 먼저 사이즈를 추가하세요.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border border border-border">
-            {sorted.map((row) => (
-              <CostDashboardRowItem key={row.sizeId} row={row} maxFullCost={maxFullCost} />
-            ))}
-          </ul>
-        )}
-      </SectionCard>
+      {/* 2026-10-13 사용자 요청: "포뮬라 단가비교랑 제품 순위가 섞여 보여서 혼동됨" — 실선으로
+          구역을 명확히 나눔(단순 여백만으로는 두 SectionCard가 시각적으로 이어져 보였음) */}
+      <div className="space-y-4 border-t-2 border-foreground pt-4">
+        <p className="label-caps text-xs text-muted-foreground">PRODUCT 원가 순위</p>
+        <SectionCard title={`PRODUCT × SIZE (${sorted.length})`}>
+          {dashboard.isLoading ? (
+            <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
+          ) : sorted.length === 0 ? (
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              등록된 사이즈가 없습니다. PRODUCT 상세 → SIZES에서 먼저 사이즈를 추가하세요.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border border border-border">
+              {sorted.map((row) => (
+                <CostDashboardRowItem key={row.sizeId} row={row} maxFullCost={maxFullCost} />
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+      </div>
     </div>
   );
 }
