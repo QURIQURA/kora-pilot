@@ -29,6 +29,7 @@ import {
   productComponentsQuery,
   techniqueCategoriesQuery,
   versionIngredientsBulkQuery,
+  versionIngredientsQuery,
   workSessionFormulaVersionsQuery,
   workSessionMultiplierHistoryQuery,
   workSessionProgressQuery,
@@ -43,10 +44,11 @@ import {
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
 import { resolveSlotGroup } from "@/lib/technique";
-import { fmtNumber, toGrams, versionLabel, type Mould } from "@/lib/formula";
+import { fmtNumber, toGrams, versionLabel, UNITS, type Mould } from "@/lib/formula";
 import { formatProductSizeLabel } from "@/lib/product-size";
 import { mouldBatchMultiplier } from "@/lib/formula-calc";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
+import { IngredientPicker } from "@/components/pilot/IngredientPicker";
 import { formatDateTime } from "@/lib/datetime";
 import {
   buildMultiplierSnapshot,
@@ -116,6 +118,10 @@ function WorkSessionPage() {
   const [adding, setAdding] = useState(false);
   // 2026-10-06: CORE(Sheet/Cream/Filling) 슬롯은 한 번에 하나씩만 추가 폼을 열 수 있게 슬롯별 상태로 관리
   const [addingSlot, setAddingSlot] = useState<CoreSlot | null>(null);
+  // 2026-10-14 사용자 요청: WEIGHING MATRIX에서 포뮬라 열별로 "EDIT" 버튼을 눌러 포뮬라 페이지로
+  // 이동하지 않고도 재료량을 조정/추가한 뒤 새 버전으로 저장할 수 있게 한다 — 열(선택) 하나를
+  // 가리키는 WeighingColumn을 담아두면 모달이 뜬다.
+  const [editingColumn, setEditingColumn] = useState<WeighingColumn | null>(null);
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -257,7 +263,10 @@ function WorkSessionPage() {
         .map((r) => ({
           selectionId: r.id,
           formulaVersionId: r.formula_version_id,
-          formulaName: r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name,
+          formulaId: r.formula_versions.formulas.id,
+          formulaName:
+            r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name,
+          versionNumber: r.formula_versions.version_number,
           multiplier: Number(r.multiplier),
           sortOrder: r.sort_order,
         })),
@@ -369,11 +378,7 @@ function WorkSessionPage() {
                     }}
                   />
                 ) : (
-                  <button
-                    type="button"
-                    className={buttonClass}
-                    onClick={() => setAddingSlot(slot)}
-                  >
+                  <button type="button" className={buttonClass} onClick={() => setAddingSlot(slot)}>
                     {`+ ADD ${CORE_SLOT_LABELS[slot].toUpperCase()}`}
                   </button>
                 )}
@@ -452,6 +457,7 @@ function WorkSessionPage() {
             groups={weighingGroups}
             columns={orderedSelections}
             onProgressChanged={invalidateProgress}
+            onEditColumn={setEditingColumn}
           />
         ) : (
           <FormulaView rows={rows} ingredientsByVersion={ingredientsByVersion} />
@@ -482,8 +488,18 @@ function WorkSessionPage() {
       </SectionCard>
 
       {/* 재고 반영은 작업이 끝난 뒤 하는 일이므로 시퀀스상 맨 마지막(NOTES 다음)에 둔다(2026-09-30). */}
-      {data.status === "COMPLETED" && (
-        <StockReflectSection sessionId={sessionId} rows={rows} />
+      {data.status === "COMPLETED" && <StockReflectSection sessionId={sessionId} rows={rows} />}
+
+      {editingColumn && (
+        <EditFormulaVersionModal
+          column={editingColumn}
+          onClose={() => setEditingColumn(null)}
+          onSaved={async () => {
+            setEditingColumn(null);
+            await invalidateSelections();
+            await invalidateProgress();
+          }}
+        />
       )}
     </div>
   );
@@ -523,7 +539,9 @@ function ProductionEfficiencyLinkSection({
 }) {
   const products = useQuery(productsQuery());
   const sizes = useQuery(productSizesQuery(productId ?? ""));
-  const [batchDraft, setBatchDraft] = useState(targetUnitCount != null ? String(targetUnitCount) : "");
+  const [batchDraft, setBatchDraft] = useState(
+    targetUnitCount != null ? String(targetUnitCount) : "",
+  );
   useEffect(() => {
     setBatchDraft(targetUnitCount != null ? String(targetUnitCount) : "");
   }, [targetUnitCount]);
@@ -535,9 +553,7 @@ function ProductionEfficiencyLinkSection({
           <select
             className={selectClass + " !w-56"}
             value={productId ?? ""}
-            onChange={(e) =>
-              onSave({ product_id: e.target.value || null, product_size_id: null })
-            }
+            onChange={(e) => onSave({ product_id: e.target.value || null, product_size_id: null })}
           >
             <option value="">— 연결 안 함(순수 계량 세션) —</option>
             {(products.data ?? []).map((p) => (
@@ -854,7 +870,12 @@ function AddFormulaVersionForm({
       <Field label={usingMould ? "몰드 + 개수" : "배수 ×N"}>
         {usingMould ? (
           <div className="flex flex-wrap items-center gap-2">
-            <MouldSelect className={`${selectClass} !w-40`} value={mouldId} onChange={setMouldId} emptyLabel="몰드 미지정" />
+            <MouldSelect
+              className={`${selectClass} !w-40`}
+              value={mouldId}
+              onChange={setMouldId}
+              emptyLabel="몰드 미지정"
+            />
             <span className="label-caps text-xs text-muted-foreground">×</span>
             <input
               type="number"
@@ -1000,7 +1021,8 @@ function FormulaVersionRow({
   }, [row.id, row.multiplier, row.mould_id, row.mould_qty, baseTotalGrams]);
 
   const usingMould = scalingMode === "MOULD" && !useManual;
-  const baseMould = moulds.data?.find((m) => m.id === row.formula_versions.default_mould_id) ?? null;
+  const baseMould =
+    moulds.data?.find((m) => m.id === row.formula_versions.default_mould_id) ?? null;
   const targetMould = moulds.data?.find((m) => m.id === mouldId) ?? null;
   const { multiplier: computedMultiplier, mismatch } = mouldBatchMultiplier(
     Number(mouldCount) || 1,
@@ -1009,7 +1031,11 @@ function FormulaVersionRow({
   );
 
   const applyBatch = useMutation({
-    mutationFn: async (next: { multiplier: number; mouldId: string | null; mouldQty: number | null }) => {
+    mutationFn: async (next: {
+      multiplier: number;
+      mouldId: string | null;
+      mouldQty: number | null;
+    }) => {
       const previous = Number(row.multiplier);
       if (
         next.multiplier === previous &&
@@ -1083,13 +1109,19 @@ function FormulaVersionRow({
                 onChange={(e) => setMouldCount(e.target.value)}
                 onBlur={(e) => {
                   const count = Number(e.target.value) || 1;
-                  applyBatch.mutate({ multiplier: computedMultiplier, mouldId: mouldId || null, mouldQty: count });
+                  applyBatch.mutate({
+                    multiplier: computedMultiplier,
+                    mouldId: mouldId || null,
+                    mouldQty: count,
+                  });
                 }}
               />
               <span className="font-mono text-xs text-muted-foreground">
                 = ×{fmtNumber(computedMultiplier, Number.isInteger(computedMultiplier) ? 0 : 2)}
               </span>
-              {mismatch && <span className="label-caps text-xs text-destructive">⚠ 기준중량 없음</span>}
+              {mismatch && (
+                <span className="label-caps text-xs text-destructive">⚠ 기준중량 없음</span>
+              )}
               <button
                 type="button"
                 className="label-caps text-xs text-muted-foreground hover:text-foreground"
@@ -1198,7 +1230,9 @@ type WeighingColumn = {
   /** work_session_formula_versions.id — 열의 고유 키(동일 FORMULA VERSION 중복 추가 시에도 구분됨) */
   selectionId: string;
   formulaVersionId: string;
+  formulaId: string;
   formulaName: string;
+  versionNumber: number;
   multiplier: number;
   sortOrder: number;
 };
@@ -1223,19 +1257,19 @@ function WeighingView({
   groups,
   columns,
   onProgressChanged,
+  onEditColumn,
 }: {
   sessionId: string;
   groups: ReturnType<typeof buildWeighingGroups>;
   columns: WeighingColumn[];
   onProgressChanged: () => void;
+  onEditColumn: (column: WeighingColumn) => void;
 }) {
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [rowOrder, setRowOrder] = useState<string[]>([]);
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
-  const [ingredientColWidth, setIngredientColWidth] = useState(
-    DEFAULT_MATRIX_INGREDIENT_COL_WIDTH,
-  );
+  const [ingredientColWidth, setIngredientColWidth] = useState(DEFAULT_MATRIX_INGREDIENT_COL_WIDTH);
 
   // 선택된 포뮬라 버전(열)/재료(행)이 바뀌면 순서 목록을 맞춰준다 — 기존 순서는 최대한
   // 유지하고, 새로 생긴 항목만 뒤에 붙이고 사라진 항목은 뺀다.
@@ -1284,8 +1318,12 @@ function WeighingView({
     return totals;
   }, [groups]);
 
-  const colSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-  const rowSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const colSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+  const rowSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
 
   const handleColumnDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -1362,7 +1400,10 @@ function WeighingView({
 
   const dataWidth =
     ingredientColWidth +
-    displayColumns.reduce((sum, c) => sum + (colWidths[c.selectionId] ?? DEFAULT_MATRIX_COL_WIDTH), 0);
+    displayColumns.reduce(
+      (sum, c) => sum + (colWidths[c.selectionId] ?? DEFAULT_MATRIX_COL_WIDTH),
+      0,
+    );
 
   return (
     <div className="max-h-[70vh] overflow-auto border border-border">
@@ -1380,7 +1421,11 @@ function WeighingView({
           ))}
           <col />
         </colgroup>
-        <DndContext sensors={colSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
+        <DndContext
+          sensors={colSensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleColumnDragEnd}
+        >
           <thead>
             <tr>
               <th className="label-caps sticky left-0 top-0 z-30 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
@@ -1404,14 +1449,22 @@ function WeighingView({
                     formulaName={col.formulaName}
                     multiplier={col.multiplier}
                     onResizeStart={(clientX) => startColumnResize(col.selectionId, clientX)}
+                    onEdit={() => onEditColumn(col)}
                   />
                 ))}
               </SortableContext>
-              <th key={MATRIX_FILLER_COL_ID} className="sticky top-0 z-20 border-b border-l border-border bg-secondary" />
+              <th
+                key={MATRIX_FILLER_COL_ID}
+                className="sticky top-0 z-20 border-b border-l border-border bg-secondary"
+              />
             </tr>
           </thead>
         </DndContext>
-        <DndContext sensors={rowSensors} collisionDetection={closestCenter} onDragEnd={handleRowDragEnd}>
+        <DndContext
+          sensors={rowSensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleRowDragEnd}
+        >
           <SortableContext items={rowOrder} strategy={verticalListSortingStrategy}>
             <tbody>
               {displayGroups.map((group) => (
@@ -1454,13 +1507,17 @@ function MatrixColumnHeader({
   formulaName,
   multiplier,
   onResizeStart,
+  onEdit,
 }: {
   id: string;
   formulaName: string;
   multiplier: number;
   onResizeStart: (clientX: number) => void;
+  onEdit: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
   return (
     <th
       ref={setNodeRef}
@@ -1480,12 +1537,22 @@ function MatrixColumnHeader({
         >
           <GripVertical className="h-3 w-3" />
         </button>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="whitespace-nowrap text-xs leading-tight">{formulaName}</p>
           <p className="label-caps whitespace-nowrap text-[11px] text-muted-foreground">
             ×{fmtNumber(multiplier, 0)}
           </p>
         </div>
+        {/* 2026-10-14 사용자 요청: "work session에서 재료 추가하고 추가된 재료로 새로운 버전
+            포뮬라 추가 하는버튼" — 포뮬라 페이지로 이동하지 않고 이 열의 레시피를 바로
+            수정/새 버전 저장할 수 있게 하는 진입점. */}
+        <button
+          type="button"
+          className="label-caps shrink-0 px-1 py-0.5 text-[10px] text-muted-foreground hover:border hover:border-border hover:text-foreground"
+          onClick={onEdit}
+        >
+          EDIT
+        </button>
       </div>
       {/* 열 너비 조절 손잡이 — 오른쪽 경계를 드래그 */}
       <div
@@ -1525,7 +1592,10 @@ function MatrixBodyRow({
     <tr
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, height }}
-      className={cn("relative border-b border-border align-middle", isDragging && "z-10 bg-background shadow-md")}
+      className={cn(
+        "relative border-b border-border align-middle",
+        isDragging && "z-10 bg-background shadow-md",
+      )}
     >
       <td
         className="sticky left-0 z-10 relative border-r border-border bg-background px-3 py-1.5 align-middle"
@@ -1746,6 +1816,320 @@ function FormulaView({
   );
 }
 
+type EditDraftRow = {
+  /** 안정적인 UI 키 — 기존 재료는 formula_version_ingredients.id, 새로 추가한 재료는 "new-…" */
+  key: string;
+  /** 기존 재료 라인이면 그 id, 새로 추가한 재료면 null(복사 안 하고 새로 insert) */
+  sourceId: string | null;
+  ingredientId: string;
+  ingredientName: string;
+  unit: string;
+  amount: string;
+  /** null이면 새로 추가한 재료 — amount_source를 "manual"로 고정한다 */
+  originalAmount: number | null;
+  note: string | null;
+  secondaryAmount: number | null;
+  secondaryUnit: string | null;
+  removed: boolean;
+};
+
+/** 2026-10-14 사용자 요청: "worksession에서 각 포뮬라별로 edit 기능 추가해서 포뮬라 버전 새로
+ * 생성하는 기능 만들어줘 ... 내가 포뮬라로 이동하지 않고도 work session에서 재료 추가하고
+ * 추가된 재료로 새로운 버전 포뮬라 추가 하는버튼이 있는거지" — WEIGHING MATRIX의 열(선택) 하나를
+ * 골라, 그 열이 쓰는 FORMULA VERSION의 재료량을 조정하거나 재료를 추가해서 새 DRAFT 버전으로
+ * 저장한다. $formulaId.tsx의 createVersion/addIngredient와 같은 패턴(새 formula_versions 행 +
+ * formula_version_ingredients 복사, amount_source는 안 바뀐 줄은 "copied" 바뀌거나 새로 추가한
+ * 줄은 "manual")을 그대로 재사용한다. 저장되면 이 WORK SESSION 선택(work_session_formula_versions
+ * 행)의 formula_version_id를 새 버전으로 바로 바꿔서, 화면 이동 없이 바로 새 레시피를 쓰게 한다.
+ * 재료 라인 id가 전부 새로 생기므로, 이 열에 쌓여있던 계량 진행상태(work_session_progress)는
+ * 더 이상 의미가 없어 같이 지운다(새 버전 기준으로 다시 체크하면 됨) — multiplier/sort_order는
+ * 그대로 유지. 새 버전은 다른 버전 생성과 동일하게 status "DRAFT"로 남고, CURRENT로 올리는 건
+ * 여전히 포뮬라 페이지에서 별도로 하는 결정으로 남겨둔다. */
+function EditFormulaVersionModal({
+  column,
+  onClose,
+  onSaved,
+}: {
+  column: WeighingColumn;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const baseIngredients = useQuery(versionIngredientsQuery(column.formulaVersionId));
+  const [draftRows, setDraftRows] = useState<EditDraftRow[]>([]);
+  const [seeded, setSeeded] = useState(false);
+  const [pickingIngredient, setPickingIngredient] = useState(false);
+  const [summary, setSummary] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  // 모달이 열릴 때 딱 한 번만 현재 버전의 재료 목록으로 초안을 채운다 — refetch가 와도 사용자가
+  // 고치고 있던 값을 덮어쓰지 않는다.
+  useEffect(() => {
+    if (seeded || !baseIngredients.data) return;
+    setDraftRows(
+      baseIngredients.data.map((row) => ({
+        key: row.id,
+        sourceId: row.id,
+        ingredientId: row.ingredient_id,
+        ingredientName: row.ingredients.name_en
+          ? `${row.ingredients.name} (${row.ingredients.name_en})`
+          : row.ingredients.name,
+        unit: row.unit,
+        amount: String(row.amount),
+        originalAmount: Number(row.amount),
+        note: row.note,
+        secondaryAmount: row.secondary_amount,
+        secondaryUnit: row.secondary_unit,
+        removed: false,
+      })),
+    );
+    setSeeded(true);
+  }, [seeded, baseIngredients.data]);
+
+  const patchRow = (key: string, patch: Partial<EditDraftRow>) => {
+    setDraftRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  };
+
+  const removeRow = (key: string) => {
+    setDraftRows((prev) => prev.map((r) => (r.key === key ? { ...r, removed: true } : r)));
+  };
+
+  const addIngredientRow = async (ingredientId: string, defaultUnit: string) => {
+    setPickingIngredient(false);
+    const tempKey = `new-${ingredientId}-${Date.now()}`;
+    setDraftRows((prev) => [
+      ...prev,
+      {
+        key: tempKey,
+        sourceId: null,
+        ingredientId,
+        ingredientName: "…",
+        unit: defaultUnit,
+        amount: "0",
+        originalAmount: null,
+        note: null,
+        secondaryAmount: null,
+        secondaryUnit: null,
+        removed: false,
+      },
+    ]);
+    const { data } = await supabase
+      .from("ingredients")
+      .select("name, name_en")
+      .eq("id", ingredientId)
+      .single();
+    if (data) {
+      patchRow(tempKey, {
+        ingredientName: data.name_en ? `${data.name} (${data.name_en})` : data.name,
+      });
+    }
+  };
+
+  const visibleRows = draftRows.filter((r) => !r.removed);
+
+  const createVersion = useMutation({
+    mutationFn: async () => {
+      const user_id = await currentUserId();
+
+      const { data: baseVersion, error: baseError } = await supabase
+        .from("formula_versions")
+        .select(
+          "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id",
+        )
+        .eq("id", column.formulaVersionId)
+        .single();
+      if (baseError) throw baseError;
+
+      const { data: existingVersions, error: versionsError } = await supabase
+        .from("formula_versions")
+        .select("version_number")
+        .eq("formula_id", column.formulaId);
+      if (versionsError) throw versionsError;
+      const nextNumber =
+        (existingVersions ?? []).reduce((max, v) => Math.max(max, v.version_number), 0) + 1;
+
+      const { data: newVersion, error: insertError } = await supabase
+        .from("formula_versions")
+        .insert({
+          user_id,
+          formula_id: column.formulaId,
+          version_number: nextNumber,
+          status: "DRAFT",
+          default_mould_id: baseVersion.default_mould_id,
+          default_base_weight_id: baseVersion.default_base_weight_id,
+          yield_quantity: baseVersion.yield_quantity,
+          change_summary: summary.trim() || null,
+          change_reason: reason.trim() || null,
+          bath_water_g: baseVersion.bath_water_g,
+          basis_overrides: baseVersion.basis_overrides ?? {},
+        })
+        .select("id")
+        .single();
+      if (insertError) throw insertError;
+
+      const rowsToInsert = visibleRows.map((row, index) => ({
+        user_id,
+        formula_version_id: newVersion.id,
+        ingredient_id: row.ingredientId,
+        amount: Number(row.amount) || 0,
+        unit: row.unit,
+        sort_order: index,
+        note: row.note,
+        secondary_amount: row.secondaryAmount,
+        secondary_unit: row.secondaryUnit,
+        amount_source:
+          row.originalAmount === null || Number(row.amount) !== row.originalAmount
+            ? "manual"
+            : "copied",
+      }));
+      if (rowsToInsert.length > 0) {
+        const { error: ingredientsError } = await supabase
+          .from("formula_version_ingredients")
+          .insert(rowsToInsert);
+        if (ingredientsError) throw ingredientsError;
+      }
+
+      // 이 WORK SESSION 선택(열)이 새 버전을 바로 쓰도록 전환 — multiplier/sort_order는 그대로 둔다.
+      const { error: selectionError } = await supabase
+        .from("work_session_formula_versions")
+        .update({ formula_version_id: newVersion.id })
+        .eq("id", column.selectionId);
+      if (selectionError) throw selectionError;
+
+      // 재료 라인 id가 전부 바뀌므로 이 열의 기존 계량 진행상태는 더 이상 의미가 없다 — 지운다.
+      const { error: progressError } = await supabase
+        .from("work_session_progress")
+        .delete()
+        .eq("work_session_formula_version_id", column.selectionId);
+      if (progressError) throw progressError;
+
+      return newVersion.id;
+    },
+    onSuccess: async () => {
+      setError(null);
+      await onSaved();
+    },
+    onError: (e: unknown) => {
+      setError(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-auto border border-border bg-background">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <span className="label-caps">EDIT {column.formulaName} — NEW VERSION</span>
+          <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
+            CLOSE
+          </button>
+        </div>
+
+        <div className="space-y-4 p-4">
+          <p className="font-mono text-xs uppercase text-muted-foreground">
+            현재 v{column.versionNumber}을 복사해서 새 DRAFT 버전을 만듭니다. 저장하면 이 WORK
+            SESSION의 이 열(×{fmtNumber(column.multiplier, 0)})이 바로 새 버전을 쓰게 됩니다.
+          </p>
+
+          {baseIngredients.isLoading && (
+            <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
+          )}
+
+          <ul className="divide-y divide-border border border-border">
+            {visibleRows.map((row) => (
+              <li key={row.key} className="flex items-center gap-2 px-3 py-2">
+                <span className="flex-1 text-sm">{row.ingredientName}</span>
+                <input
+                  className={`${inputClass} !w-24 text-right`}
+                  type="number"
+                  step="any"
+                  value={row.amount}
+                  onChange={(e) => patchRow(row.key, { amount: e.target.value })}
+                />
+                <select
+                  className={`${selectClass} !w-20`}
+                  value={row.unit}
+                  onChange={(e) => patchRow(row.key, { unit: e.target.value })}
+                >
+                  {UNITS.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="label-caps px-1 text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => removeRow(row.key)}
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+            {visibleRows.length === 0 && !baseIngredients.isLoading && (
+              <li className="px-3 py-3 font-mono text-xs uppercase text-muted-foreground">
+                NO INGREDIENTS
+              </li>
+            )}
+          </ul>
+
+          {pickingIngredient ? (
+            <div className="border border-dashed border-border p-3">
+              <IngredientPicker
+                onPick={(ingredientId, defaultUnit) => {
+                  void addIngredientRow(ingredientId, defaultUnit);
+                }}
+                onCancel={() => setPickingIngredient(false)}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => setPickingIngredient(true)}
+            >
+              + 재료 추가
+            </button>
+          )}
+
+          <Field label="CHANGE SUMMARY">
+            <input
+              className={inputClass}
+              required
+              placeholder="SUGAR 50g → 45g, + TREACLE SYRUP"
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+            />
+          </Field>
+          <Field label="CHANGE REASON (OPTIONAL)">
+            <textarea
+              rows={2}
+              className={inputClass}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </Field>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={createVersion.isPending || !summary.trim()}
+              onClick={() => createVersion.mutate()}
+            >
+              새 버전으로 저장
+            </button>
+            <button type="button" className={buttonClass} onClick={onClose}>
+              CANCEL
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** PRODUCTION 세션이 COMPLETED로 바뀌면 나타남 — 이 세션에서 만든 Component들을 냉동 재고/판매전환으로 즉시 반영 가능(선택) */
 function StockReflectSection({
   sessionId,
@@ -1801,10 +2185,17 @@ function StockReflectSection({
       </p>
       <ul className="space-y-3">
         {components.map((c) => {
-          const draft = drafts[c.id] ?? { qty: "", reason: "PRODUCTION_FREEZE" as StockReason, unit: "개" };
+          const draft = drafts[c.id] ?? {
+            qty: "",
+            reason: "PRODUCTION_FREEZE" as StockReason,
+            unit: "개",
+          };
           const done = reflected.has(c.id);
           return (
-            <li key={c.id} className="flex flex-wrap items-center gap-2 border-b border-dashed border-border pb-2">
+            <li
+              key={c.id}
+              className="flex flex-wrap items-center gap-2 border-b border-dashed border-border pb-2"
+            >
               <span className="min-w-[160px] text-sm">{c.name}</span>
               {done ? (
                 <span className="font-mono text-xs text-muted-foreground">반영 완료</span>
@@ -1836,7 +2227,9 @@ function StockReflectSection({
                       }))
                     }
                   >
-                    <option value="PRODUCTION_FREEZE">{STOCK_REASON_LABEL.PRODUCTION_FREEZE}</option>
+                    <option value="PRODUCTION_FREEZE">
+                      {STOCK_REASON_LABEL.PRODUCTION_FREEZE}
+                    </option>
                     <option value="PRODUCTION_SALE">{STOCK_REASON_LABEL.PRODUCTION_SALE}</option>
                   </select>
                   <button
