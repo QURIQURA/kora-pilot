@@ -49,8 +49,16 @@ import { cn } from "@/lib/utils";
  *   "무드보드에 이미지 배경지우는거 기능 추가할수있어?" → 서버 API 비용 없이 브라우저에서 바로
  *   처리하는 쪽을 선택). @imgly/background-removal(브라우저 WASM, API 키/서버 비용 없음)로 그
  *   자리에서 배경을 투명하게 만들고, 결과 PNG를 같은 Storage 버킷에 새 파일로 올린 뒤 그 아이템의
- *   image_url만 그걸로 바꾼다(원본 파일은 지운다) — 처리 중엔 그 카드에만 로딩 스피너를 보여주고,
- *   첫 호출 때 모델 파일(수십MB)을 내려받느라 다소 걸릴 수 있다.
+ *   image_url만 그걸로 바꾼다 — 처리 중엔 그 카드에만 로딩 스피너를 보여주고, 첫 호출 때 모델
+ *   파일(수십MB)을 내려받느라 다소 걸릴 수 있다.
+ * - 실행취소(2026-10-14 사용자 요청: "무드보드 액션 실행취소 할수있게 만들수있어? command+z누르면
+ *   돌아가게") — 보드에 포커스가 있을 때(클릭 후 Ctrl+V 하는 것과 동일한 포커스 조건) ⌘Z/Ctrl+Z를
+ *   누르면 바로 직전 액션(이동/리사이즈/회전/셰입/색상/그라데이션/메모 내용/배경 제거/추가/삭제)을
+ *   하나씩 되돌린다. 인메모리 스택(undoStackRef)이라 새로고침하면 비워진다 — 서버에 영구 저장할
+ *   만한 기능은 아니라고 판단했다. 삭제·배경 제거를 안전하게 되돌리려면 그 파일이 Storage에 그대로
+ *   남아있어야 하므로, 2026-10-14부터 아이템 삭제/배경 제거 시 이전 Storage 파일을 더 이상 지우지
+ *   않는다(약간의 스토리지 누적은 감수 — 완전한 되돌리기가 더 중요하다는 판단). 텍스트 박스 안에서
+ *   누른 ⌘Z/Ctrl+Z는 브라우저 기본 텍스트 되돌리기로 그대로 넘긴다(여기서 가로채지 않음).
  */
 const BOARD_HEIGHT = 440;
 const DEFAULT_IMAGE_WIDTH = 200;
@@ -111,15 +119,6 @@ function noteBackground(item: Pick<OrderMoodboardItem, "color" | "color2">): str
   return c1;
 }
 
-/** order-moodboards 버킷의 공개 URL에서 그 안의 파일 경로만 뽑아 지운다 — remove 뮤테이션과
- * handleRemoveBackground(배경 제거 후 원본 삭제) 둘 다 쓰는 공용 헬퍼(2026-10-14). */
-async function deleteMoodboardStorageFile(imageUrl: string): Promise<void> {
-  const marker = "/order-moodboards/";
-  const idx = imageUrl.indexOf(marker);
-  if (idx === -1) return;
-  await supabase.storage.from("order-moodboards").remove([imageUrl.slice(idx + marker.length)]);
-}
-
 function readImageSize(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
@@ -145,6 +144,15 @@ type LivePos = {
   rotation: number;
 };
 
+/** 실행취소(⌘Z) 스택 항목 — 2026-10-14. "update"는 바뀐 필드만 이전 값으로 되돌리고,
+ * "insert"는 방금 만든 아이템을 지우고, "delete"는 지워진 아이템을 그대로(같은 id로) 되살린다. */
+type UndoEntry =
+  | { type: "update"; id: string; before: Partial<OrderMoodboardItem> }
+  | { type: "insert"; id: string }
+  | { type: "delete"; item: OrderMoodboardItem };
+
+const MAX_UNDO_ENTRIES = 50;
+
 export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   const queryClient = useQueryClient();
   const items = useQuery(orderMoodboardItemsQuery(orderId));
@@ -154,6 +162,14 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   const [livePos, setLivePos] = useState<LivePos | null>(null);
   // 배경 제거 처리 중인 아이템 id — 한 번에 하나씩만 처리(2026-10-14)
   const [removingBgId, setRemovingBgId] = useState<string | null>(null);
+  // 실행취소(⌘Z) 스택 — 리렌더를 유발할 필요가 없어 ref로 둔다(2026-10-14)
+  const undoStackRef = useRef<UndoEntry[]>([]);
+  // 컬러 피커처럼 한 번의 "편집"이 onChange를 연속으로 여러 번 쏘는 입력을 하나의 되돌리기
+  // 단계로 묶기 위한 보류 타이머 — key별(보통 item.id + 필드명)로 "최초 이전값"만 유지하다가
+  // 잠깐(멈추면) 스택에 커밋한다.
+  const pendingUndoRef = useRef<
+    Map<string, { before: Partial<OrderMoodboardItem>; timer: ReturnType<typeof setTimeout> }>
+  >(new Map());
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["order_moodboard_items", orderId] });
@@ -161,6 +177,72 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
 
   const rows = items.data ?? [];
   const maxZ = rows.reduce((m, it) => Math.max(m, it.z_index), 0);
+
+  const pushUndo = (entry: UndoEntry) => {
+    undoStackRef.current.push(entry);
+    if (undoStackRef.current.length > MAX_UNDO_ENTRIES) undoStackRef.current.shift();
+  };
+
+  /** 드래그/색상피커처럼 짧은 시간에 여러 번 커밋되는 수정을 되돌리기 한 단계로 묶는다 —
+   * coalesceMs 안에 같은 key로 또 호출되면 새 되돌리기 항목을 쌓지 않고 타이머만 리셋한다. */
+  const commitUpdate = (
+    item: OrderMoodboardItem,
+    patch: Partial<OrderMoodboardItem>,
+    options?: { coalesceKey?: string; coalesceMs?: number },
+  ) => {
+    const key = options?.coalesceKey ?? item.id;
+    const existing = pendingUndoRef.current.get(key);
+    const before: Partial<OrderMoodboardItem> = existing
+      ? existing.before
+      : Object.fromEntries(
+          Object.keys(patch).map((k) => [k, (item as Record<string, unknown>)[k]]),
+        );
+    if (existing) clearTimeout(existing.timer);
+    const timer = setTimeout(() => {
+      pendingUndoRef.current.delete(key);
+      pushUndo({ type: "update", id: item.id, before });
+    }, options?.coalesceMs ?? 500);
+    pendingUndoRef.current.set(key, { before, timer });
+    update.mutate({ id: item.id, patch });
+  };
+
+  const undo = async () => {
+    const entry = undoStackRef.current.pop();
+    if (!entry) return;
+    try {
+      if (entry.type === "update") {
+        const { error: undoError } = await supabase
+          .from("order_moodboard_items")
+          .update(entry.before)
+          .eq("id", entry.id);
+        if (undoError) throw undoError;
+      } else if (entry.type === "insert") {
+        const { error: undoError } = await supabase
+          .from("order_moodboard_items")
+          .delete()
+          .eq("id", entry.id);
+        if (undoError) throw undoError;
+      } else {
+        const { error: undoError } = await supabase
+          .from("order_moodboard_items")
+          .insert(entry.item);
+        if (undoError) throw undoError;
+      }
+      await invalidate();
+    } catch (e) {
+      setError(`되돌리기 실패 — ${(e as Error).message}`);
+    }
+  };
+
+  /** 보드(canvas) 영역에 포커스가 있을 때만 ⌘Z/Ctrl+Z를 가로챈다 — 메모 텍스트 입력 중이면
+   * 브라우저 기본 텍스트 되돌리기를 그대로 둔다(2026-10-14). */
+  const handleBoardKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const isUndoShortcut = (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z";
+    if (!isUndoShortcut) return;
+    if ((e.target as HTMLElement | null)?.closest("input, textarea")) return;
+    e.preventDefault();
+    void undo();
+  };
 
   const insertImage = useMutation({
     mutationFn: async ({ file, x, y }: { file: File; x: number; y: number }) => {
@@ -175,24 +257,32 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       const dims = await readImageSize(file);
       const width = Math.min(dims.width || DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_WIDTH * 1.4);
       const height = dims.width ? (dims.height * width) / dims.width : DEFAULT_IMAGE_WIDTH;
-      const { error: insertError } = await supabase.from("order_moodboard_items").insert({
-        user_id: userId,
-        order_id: orderId,
-        kind: "image",
-        image_url: data.publicUrl,
-        x,
-        y,
-        width,
-        height,
-        // 2026-10-13 사용자 요청: "처음 추가할 땐 기본적으로 틸트하지 않고 정각으로" —
-        // 예전엔 랜덤 각도(-3~3도)로 자연스러운 스크랩북 느낌을 줬지만, 틸트를 직접
-        // 조정하는 핸들이 생겼으니 시작은 0도(정각)로 두고 조정은 사용자가 하게 한다.
-        rotation: 0,
-        z_index: maxZ + 1,
-      });
+      const { data: inserted, error: insertError } = await supabase
+        .from("order_moodboard_items")
+        .insert({
+          user_id: userId,
+          order_id: orderId,
+          kind: "image",
+          image_url: data.publicUrl,
+          x,
+          y,
+          width,
+          height,
+          // 2026-10-13 사용자 요청: "처음 추가할 땐 기본적으로 틸트하지 않고 정각으로" —
+          // 예전엔 랜덤 각도(-3~3도)로 자연스러운 스크랩북 느낌을 줬지만, 틸트를 직접
+          // 조정하는 핸들이 생겼으니 시작은 0도(정각)로 두고 조정은 사용자가 하게 한다.
+          rotation: 0,
+          z_index: maxZ + 1,
+        })
+        .select("id")
+        .single();
       if (insertError) throw insertError;
+      return inserted;
     },
-    onSuccess: invalidate,
+    onSuccess: (inserted) => {
+      pushUndo({ type: "insert", id: inserted.id });
+      return invalidate();
+    },
     onError: (e) => setError((e as Error).message),
   });
 
@@ -200,22 +290,30 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
     mutationFn: async ({ x, y }: { x: number; y: number }) => {
       const userId = await currentUserId();
       const color = NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)] ?? NOTE_COLORS[0]!;
-      const { error: insertError } = await supabase.from("order_moodboard_items").insert({
-        user_id: userId,
-        order_id: orderId,
-        kind: "note",
-        content: "",
-        x,
-        y,
-        width: DEFAULT_NOTE_SIZE.width,
-        height: DEFAULT_NOTE_SIZE.height,
-        rotation: 0, // 2026-10-13 사용자 요청: 처음엔 정각으로, 틸트는 핸들로 직접 조정
-        z_index: maxZ + 1,
-        color,
-      });
+      const { data: inserted, error: insertError } = await supabase
+        .from("order_moodboard_items")
+        .insert({
+          user_id: userId,
+          order_id: orderId,
+          kind: "note",
+          content: "",
+          x,
+          y,
+          width: DEFAULT_NOTE_SIZE.width,
+          height: DEFAULT_NOTE_SIZE.height,
+          rotation: 0, // 2026-10-13 사용자 요청: 처음엔 정각으로, 틸트는 핸들로 직접 조정
+          z_index: maxZ + 1,
+          color,
+        })
+        .select("id")
+        .single();
       if (insertError) throw insertError;
+      return inserted;
     },
-    onSuccess: invalidate,
+    onSuccess: (inserted) => {
+      pushUndo({ type: "insert", id: inserted.id });
+      return invalidate();
+    },
     onError: (e) => setError((e as Error).message),
   });
 
@@ -231,31 +329,35 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   });
 
   const remove = useMutation({
+    // 2026-10-14 사용자 요청으로 실행취소를 지원하게 되면서, 삭제해도 Storage의 이미지 파일은
+    // 더 이상 지우지 않는다 — 지워버리면 되돌리기(재삽입) 했을 때 image_url이 깨진 링크가 된다.
     mutationFn: async (item: OrderMoodboardItem) => {
-      if (item.kind === "image" && item.image_url) {
-        await deleteMoodboardStorageFile(item.image_url);
-      }
       const { error: deleteError } = await supabase
         .from("order_moodboard_items")
         .delete()
         .eq("id", item.id);
       if (deleteError) throw deleteError;
+      return item;
     },
-    onSuccess: invalidate,
+    onSuccess: (item) => {
+      pushUndo({ type: "delete", item });
+      return invalidate();
+    },
   });
 
   /**
    * 2026-10-14 사용자 요청: "무드보드에 이미지 배경지우는거 기능 추가할수있어?" — API 비용/키 없이
    * 브라우저에서 바로 처리하는 방식을 택했다(@imgly/background-removal, WASM 기반). 결과 PNG를
-   * 같은 Storage 버킷에 새 파일로 올리고 그 아이템의 image_url만 교체 — 재료/포뮬라처럼 되돌리기
-   * 개념 없이 바로 반영되는 이 앱의 다른 편집들과 동일한 패턴. 원본 파일은 교체 후 지운다.
+   * 같은 Storage 버킷에 새 파일로 올리고 그 아이템의 image_url만 교체한다. 원본 파일은 지우지
+   * 않고 그대로 둔다 — 실행취소(⌘Z)로 되돌리면 image_url이 원본으로 다시 가리켜야 하기 때문.
    */
   const handleRemoveBackground = async (item: OrderMoodboardItem) => {
     if (!item.image_url || removingBgId) return;
+    const originalUrl = item.image_url;
     setRemovingBgId(item.id);
     setError(null);
     try {
-      const sourceRes = await fetch(item.image_url);
+      const sourceRes = await fetch(originalUrl);
       if (!sourceRes.ok) throw new Error(`이미지를 불러오지 못했습니다 (${sourceRes.status})`);
       const sourceBlob = await sourceRes.blob();
       const resultBlob = await removeBackground(sourceBlob);
@@ -274,7 +376,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
         .eq("id", item.id);
       if (updateError) throw updateError;
 
-      await deleteMoodboardStorageFile(item.image_url);
+      pushUndo({ type: "update", id: item.id, before: { image_url: originalUrl } });
       await invalidate();
     } catch (e) {
       setError(`배경 제거 실패 — ${(e as Error).message}`);
@@ -448,10 +550,26 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       if (!s) return;
       setLivePos((lp) => {
         if (lp && lp.id === s.id) {
-          update.mutate({
-            id: lp.id,
-            patch: { x: lp.x, y: lp.y, width: lp.width, height: lp.height, rotation: lp.rotation },
-          });
+          const patch = {
+            x: lp.x,
+            y: lp.y,
+            width: lp.width,
+            height: lp.height,
+            rotation: lp.rotation,
+          };
+          // 실제로 움직/크기/각도가 바뀐 경우에만 되돌리기 항목을 남긴다 — 그냥 클릭만 해서
+          // 드래그가 시작·종료된 경우(이동량 0)까지 스택에 쌓이면 ⌘Z가 아무 변화 없는 단계를
+          // 건너뛰어야 해서 거슬린다.
+          const changed =
+            patch.x !== s.orig.x ||
+            patch.y !== s.orig.y ||
+            patch.width !== s.orig.width ||
+            patch.height !== s.orig.height ||
+            patch.rotation !== s.orig.rotation;
+          if (changed) {
+            pushUndo({ type: "update", id: lp.id, before: s.orig });
+            update.mutate({ id: lp.id, patch });
+          }
         }
         return null;
       });
@@ -504,6 +622,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
         ref={boardRef}
         tabIndex={0}
         onPaste={handlePaste}
+        onKeyDown={handleBoardKeyDown}
         className="relative overflow-hidden border border-dashed border-border bg-secondary/30 outline-none focus:border-foreground"
         style={{ height: BOARD_HEIGHT }}
       >
@@ -584,11 +703,25 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                               // 현재 폭/높이 중 작은 쪽으로 맞춰 리사이즈한다.
                               if (s.forceSquare) {
                                 const side = Math.min(item.width, item.height);
+                                pushUndo({
+                                  type: "update",
+                                  id: item.id,
+                                  before: {
+                                    shape: item.shape ?? "rect",
+                                    width: item.width,
+                                    height: item.height,
+                                  },
+                                });
                                 update.mutate({
                                   id: item.id,
                                   patch: { shape: s.value, width: side, height: side },
                                 });
                               } else {
+                                pushUndo({
+                                  type: "update",
+                                  id: item.id,
+                                  before: { shape: item.shape ?? "rect" },
+                                });
                                 update.mutate({ id: item.id, patch: { shape: s.value } });
                               }
                             }}
@@ -616,9 +749,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                         <input
                           type="color"
                           value={item.color ?? "#fde68a"}
-                          onChange={(e) =>
-                            update.mutate({ id: item.id, patch: { color: e.target.value } })
-                          }
+                          onChange={(e) => commitUpdate(item, { color: e.target.value })}
                           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         />
                       </label>
@@ -631,12 +762,17 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                         <button
                           type="button"
                           title={item.color2 ? "그라데이션 끄기(단색으로)" : "그라데이션 켜기"}
-                          onClick={() =>
+                          onClick={() => {
+                            pushUndo({
+                              type: "update",
+                              id: item.id,
+                              before: { color2: item.color2 ?? null },
+                            });
                             update.mutate({
                               id: item.id,
                               patch: { color2: item.color2 ? null : "#ffffff" },
-                            })
-                          }
+                            });
+                          }}
                           className={cn(
                             "h-3.5 w-3.5 shrink-0 rounded-full border",
                             item.color2 ? "border-foreground" : "border-black/30",
@@ -656,9 +792,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                             <input
                               type="color"
                               value={item.color2}
-                              onChange={(e) =>
-                                update.mutate({ id: item.id, patch: { color2: e.target.value } })
-                              }
+                              onChange={(e) => commitUpdate(item, { color2: e.target.value })}
                               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                             />
                           </label>
@@ -675,6 +809,11 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                       onPointerDown={(e) => e.stopPropagation()}
                       onBlur={(e) => {
                         if (e.target.value !== (item.content ?? "")) {
+                          pushUndo({
+                            type: "update",
+                            id: item.id,
+                            before: { content: item.content ?? "" },
+                          });
                           update.mutate({ id: item.id, patch: { content: e.target.value } });
                         }
                       }}
