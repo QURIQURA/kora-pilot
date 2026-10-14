@@ -1206,6 +1206,7 @@ export type Database = {
           google_calendar_event_id: string | null
           has_allergies: boolean
           id: string
+          is_in_progress: boolean
           maker_notes: string | null
           maker_satisfaction: number | null
           notes: string | null
@@ -1258,6 +1259,7 @@ export type Database = {
           google_calendar_event_id?: string | null
           has_allergies?: boolean
           id?: string
+          is_in_progress?: boolean
           maker_notes?: string | null
           maker_satisfaction?: number | null
           notes?: string | null
@@ -1310,6 +1312,7 @@ export type Database = {
           google_calendar_event_id?: string | null
           has_allergies?: boolean
           id?: string
+          is_in_progress?: boolean
           maker_notes?: string | null
           maker_satisfaction?: number | null
           notes?: string | null

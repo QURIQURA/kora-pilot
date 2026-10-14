@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { GripVertical } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
+import { GripVertical, Flame } from "lucide-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,13 +22,11 @@ import {
 import { toLocalDateString, koreanWeekdayShort } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader, primaryButtonClass, buttonClass, selectClass } from "@/components/pilot/ui";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/orders/")({
   head: () => ({
-    meta: [
-      { title: "PILOT — Orders" },
-      { name: "description", content: "SHCS orders" },
-    ],
+    meta: [{ title: "PILOT — Orders" }, { name: "description", content: "SHCS orders" }],
   }),
   component: OrdersPage,
 });
@@ -30,7 +34,8 @@ export const Route = createFileRoute("/_authenticated/orders/")({
 function OrdersPage() {
   const orders = useQuery(ordersQuery());
   const settings = useQuery(pilotSettingsQuery());
-  const statusColors = (settings.data?.order_status_colors as Record<string, string> | null) ?? null;
+  const statusColors =
+    (settings.data?.order_status_colors as Record<string, string> | null) ?? null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"LIST" | "CALENDAR">("LIST");
@@ -59,7 +64,8 @@ function OrdersPage() {
   // 그걸, 없으면 event_date, 둘 다 없으면 맨 뒤로(날짜 없는 건 역순 기준이 없으므로 그대로 둠).
   const rows = useMemo(() => {
     const list = [...(orders.data ?? [])];
-    const keyOf = (o: OrderListRow) => o.pickup_at ?? (o.event_date ? `${o.event_date}T00:00:00` : null);
+    const keyOf = (o: OrderListRow) =>
+      o.pickup_at ?? (o.event_date ? `${o.event_date}T00:00:00` : null);
     list.sort((a, b) => {
       const ka = keyOf(a);
       const kb = keyOf(b);
@@ -113,7 +119,8 @@ function OrdersPage() {
   );
 }
 
-type ColumnKey = "order" | "customer" | "recipient" | "occasion" | "date" | "product" | "cake_size" | "status";
+type ColumnKey =
+  "order" | "customer" | "recipient" | "occasion" | "date" | "product" | "cake_size" | "status";
 
 // 2026-10-06 사용자 요청: 열 간격을 내용 길이에 맞춰 재배분 — ORDER는 짧으니 줄이고,
 // DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. STATUS도 "FINAL TOUCH"처럼
@@ -164,7 +171,9 @@ function loadColumnOrder(): ColumnKey[] {
     const parsed = JSON.parse(raw) as string[];
     // 저장된 값에 알 수 없는 키가 섞여있거나(과거 버전) 새 컬럼이 추가된 경우를 대비해,
     // DEFAULT_COLUMN_ORDER와 대조해서 유효한 키만 남기고 빠진 키는 뒤에 보충한다.
-    const valid = parsed.filter((k): k is ColumnKey => (DEFAULT_COLUMN_ORDER as string[]).includes(k));
+    const valid = parsed.filter((k): k is ColumnKey =>
+      (DEFAULT_COLUMN_ORDER as string[]).includes(k),
+    );
     const missing = DEFAULT_COLUMN_ORDER.filter((k) => !valid.includes(k));
     return [...valid, ...missing];
   } catch {
@@ -360,8 +369,12 @@ function OrdersTable({
 // 2026-10-06 사용자 재요청: 목록에서 STATUS를 색상 배지로만 보여주면 바꾸려고 누를 때마다
 // 매번 ORDER DETAIL로 들어가야 했음(행 전체가 Link라 배지를 눌러도 그냥 이동만 됨) — 이제
 // 목록에서 바로 드롭다운으로 상태를 바꿀 수 있다. 행 전체를 <a>로 감싸면 그 안에 <select>를
-// 넣는 게 유효하지 않은 HTML이라(클릭 버블링도 꼬임), 행을 Link 대신 onClick 네비게이션으로
+// 넣는 게 유효하지 않은 HTML이라(클릭 버블링도 꼬였다), 행을 Link 대신 onClick 네비게이션으로
 // 바꾸고 STATUS 드롭다운 쪽만 stopPropagation으로 분리했다.
+// 2026-10-15 사용자 요청: "지금 진행중인 오더를 하이라이트" — STATUS 값(DESIGN/PRODUCTION
+// 등)으로 자동 판정하지 않고, "리스트에서 직접 선택할 수 있게" 해달라는 사용자 피드백에 따라
+// orders.is_in_progress 불리언 컬럼을 추가해 ORDER 번호 옆 불꽃 아이콘을 클릭하면 수동으로
+// on/off 토글한다. 켜진 행은 왼쪽 강조 바 + 은은한 배경 틴트로 다른 오더와 구분된다.
 function OrderRow({
   order: o,
   statusColors,
@@ -384,8 +397,40 @@ function OrderRow({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
   });
 
+  const toggleInProgress = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("orders")
+        .update({ is_in_progress: !o.is_in_progress })
+        .eq("id", o.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
+  });
+
   const cells: Record<ColumnKey, ReactNode> = {
-    order: <span className="truncate font-mono text-sm">{o.order_number}</span>,
+    order: (
+      <span className="flex items-center gap-1.5">
+        <button
+          type="button"
+          title={o.is_in_progress ? "진행중 표시 해제" : "진행중으로 표시"}
+          disabled={toggleInProgress.isPending}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleInProgress.mutate();
+          }}
+          className={cn(
+            "shrink-0 rounded-full p-0.5 transition-colors",
+            o.is_in_progress
+              ? "text-amber-500"
+              : "text-muted-foreground/25 hover:text-muted-foreground",
+          )}
+        >
+          <Flame size={13} fill={o.is_in_progress ? "currentColor" : "none"} />
+        </button>
+        <span className="truncate font-mono text-sm">{o.order_number}</span>
+      </span>
+    ),
     customer: <span className="text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>,
     recipient: <span className="text-sm">{o.recipient || "—"}</span>,
     occasion: <span className="text-sm text-muted-foreground">{o.occasion || "—"}</span>,
@@ -393,8 +438,11 @@ function OrderRow({
       <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
         {o.pickup_at ? (
           <>
-            {new Date(o.pickup_at).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })}
-            {" "}
+            {new Date(o.pickup_at).toLocaleString("en-AU", {
+              timeZone: "Australia/Sydney",
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}{" "}
             ({koreanWeekdayShort(toLocalDateString(new Date(o.pickup_at)))})
           </>
         ) : o.event_date ? (
@@ -448,9 +496,15 @@ function OrderRow({
         tabIndex={0}
         onClick={() => void navigate({ to: "/orders/$orderId", params: { orderId: o.id } })}
         onKeyDown={(e) => {
-          if (e.key === "Enter") void navigate({ to: "/orders/$orderId", params: { orderId: o.id } });
+          if (e.key === "Enter")
+            void navigate({ to: "/orders/$orderId", params: { orderId: o.id } });
         }}
-        className="grid grid-cols-1 gap-1 px-3 py-3 hover:bg-secondary cursor-pointer md:items-center md:gap-x-4 md:gap-y-1"
+        className={cn(
+          "grid grid-cols-1 gap-1 border-l-4 px-3 py-3 cursor-pointer md:items-center md:gap-x-4 md:gap-y-1",
+          o.is_in_progress
+            ? "border-l-amber-400 bg-amber-50 hover:bg-amber-100"
+            : "border-l-transparent hover:bg-secondary",
+        )}
         style={{ gridTemplateColumns }}
       >
         {columnOrder.map((key) => (
