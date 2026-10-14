@@ -1185,6 +1185,44 @@ export type Database = {
           },
         ]
       }
+      order_result_photos: {
+        Row: {
+          caption: string | null
+          created_at: string
+          id: string
+          image_url: string
+          order_id: string
+          sort_order: number
+          user_id: string
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          id?: string
+          image_url: string
+          order_id: string
+          sort_order?: number
+          user_id?: string
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string
+          order_id?: string
+          sort_order?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_result_photos_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           allergy_notes: string | null

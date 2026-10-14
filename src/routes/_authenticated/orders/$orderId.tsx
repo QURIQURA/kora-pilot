@@ -39,6 +39,7 @@ import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
 import { OrderMoodboardSection } from "@/components/pilot/OrderMoodboardSection";
+import { OrderResultPhotosSection } from "@/components/pilot/OrderResultPhotosSection";
 import {
   Field,
   SectionCard,
@@ -114,13 +115,7 @@ const SATISFACTION_LABELS: Record<number, string> = {
 };
 
 /** Maker/Customer Satisfaction 공용 별점 입력 — value가 ""(미입력/미수집)이면 별이 전부 빈 상태. */
-function StarRating({
-  value,
-  onChange,
-}: {
-  value: number | "";
-  onChange: (v: number) => void;
-}) {
+function StarRating({ value, onChange }: { value: number | ""; onChange: (v: number) => void }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-0.5">
@@ -154,7 +149,8 @@ function OrderDetailPage() {
   const pilotSettings = useQuery(pilotSettingsQuery());
   const workSession = useQuery(workSessionByOrderQuery(orderId));
   const formulas = useQuery(formulasQuery());
-  const statusColors = (pilotSettings.data?.order_status_colors as Record<string, string> | null) ?? null;
+  const statusColors =
+    (pilotSettings.data?.order_status_colors as Record<string, string> | null) ?? null;
   // 2026-10-12 사용자 요청: SHEET/CREAM/FILLING 각 칸에는 TECHNIQUE CATEGORIES에서 그 슬롯으로
   // 분류된(또는 상속된) COMPONENT의 FORMULA만 뜨도록 — 이름으로 추측하지 않고 명시적 분류 기준으로.
   const techniqueCategories = useQuery(techniqueCategoriesQuery());
@@ -171,11 +167,17 @@ function OrderDetailPage() {
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extracted, setExtracted] = useState<ExtractedOrderInfo | null>(null);
   const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set());
+  // 2026-10-15 사용자 요청: "무드보드 아래에 결과물사진 업로드할수있게... 근데 복잡해지니까
+  // 탭으로 이미지용 공간 구분하자" — 무드보드 + 결과물 사진(VISUALS)과 기존 입력 폼들
+  // (ORDER DETAIL)을 탭으로 분리. SAVE/DELETE 바는 둘 다에 적용되므로 탭 밖(페이지 하단)에 둔다.
+  const [activeTab, setActiveTab] = useState<"ORDER DETAIL" | "VISUALS">("ORDER DETAIL");
 
   const [orderNumber, setOrderNumber] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [recipient, setRecipient] = useState("");
-  const [recipientRelationship, setRecipientRelationship] = useState<OrderRecipientRelationship | "">("");
+  const [recipientRelationship, setRecipientRelationship] = useState<
+    OrderRecipientRelationship | ""
+  >("");
   const [recipientRelationshipOtherNote, setRecipientRelationshipOtherNote] = useState("");
   const [occasion, setOccasion] = useState<OrderOccasion | "">("");
   const [occasionOtherNote, setOccasionOtherNote] = useState("");
@@ -331,14 +333,15 @@ function OrderDetailPage() {
     if (!order.data) return;
     hydrateFromOrder(order.data);
     setSavedSnapshot(buildRowSnapshot(order.data, order.data.extracted_json ?? null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.data]);
 
   // currentSnapshot: 지금 화면(로컬 state) 기준 — savedSnapshot과 다르면 "변경사항 있음".
   const currentSnapshot = JSON.stringify({
     orderNumber,
     dmText,
-    extractedJson: extracted ? (extracted as unknown as Json) : (order.data?.extracted_json ?? null),
+    extractedJson: extracted
+      ? (extracted as unknown as Json)
+      : (order.data?.extracted_json ?? null),
     customerId,
     recipient,
     recipientRelationship,
@@ -459,12 +462,16 @@ function OrderDetailPage() {
         .update({
           order_number: trimmedOrderNumber,
           raw_dm_text: dmText.trim() || null,
-          extracted_json: extracted ? (extracted as unknown as Json) : order.data?.extracted_json ?? null,
+          extracted_json: extracted
+            ? (extracted as unknown as Json)
+            : (order.data?.extracted_json ?? null),
           customer_id: customerId || null,
           recipient: recipient.trim() || null,
           recipient_relationship: recipientRelationship || null,
           recipient_relationship_other_note:
-            recipientRelationship === "Other" ? recipientRelationshipOtherNote.trim() || null : null,
+            recipientRelationship === "Other"
+              ? recipientRelationshipOtherNote.trim() || null
+              : null,
           occasion: occasion || null,
           occasion_other_note: occasion === "Other" ? occasionOtherNote.trim() || null : null,
           product_line: productLine || null,
@@ -472,7 +479,8 @@ function OrderDetailPage() {
           pickup_at: datetimeLocalToIso(pickupAt),
           cake_size: cakeSize || null,
           custom_size: cakeSize === "Custom" ? customSize.trim() || null : null,
-          custom_size_cm: cakeSize === "Custom" && customSizeCm.trim() ? Number(customSizeCm) : null,
+          custom_size_cm:
+            cakeSize === "Custom" && customSizeCm.trim() ? Number(customSizeCm) : null,
           quantity: quantity.trim() ? Number(quantity) : null,
           servings: servings.trim() ? Number(servings) : null,
           price: price.trim() ? Number(price) : null,
@@ -538,7 +546,9 @@ function OrderDetailPage() {
       // 넘겨서(work_sessions.product_size_id) PRODUCT SIZE 기준 자동 배수 계산에 바로 쓰일 수 있게.
       const effectiveProductSizeId = productSizeId || o.product_size_id || null;
       const baseName =
-        products.data?.find((p) => p.id === effectiveProductId)?.name || o.recipient || o.order_number;
+        products.data?.find((p) => p.id === effectiveProductId)?.name ||
+        o.recipient ||
+        o.order_number;
       const userId = await currentUserId();
       const { data: session, error } = await supabase
         .from("work_sessions")
@@ -582,7 +592,9 @@ function OrderDetailPage() {
         ];
       });
       if (coreRows.length > 0) {
-        const { error: rowsError } = await supabase.from("work_session_formula_versions").insert(coreRows);
+        const { error: rowsError } = await supabase
+          .from("work_session_formula_versions")
+          .insert(coreRows);
         if (rowsError) throw rowsError;
       }
       return session.id;
@@ -624,7 +636,10 @@ function OrderDetailPage() {
             component_id: r.formula_versions?.formulas?.component_id ?? null,
             formula_version_id: r.formula_version_id,
           }))
-          .filter((el): el is { component_id: string; formula_version_id: string } => el.component_id != null);
+          .filter(
+            (el): el is { component_id: string; formula_version_id: string } =>
+              el.component_id != null,
+          );
         if (elements.length > 0) {
           const { error: insertError } = await supabase.from("product_components").insert(
             elements.map((el, i) => ({
@@ -639,7 +654,10 @@ function OrderDetailPage() {
         }
       }
 
-      const { error: linkError } = await supabase.from("orders").update({ product_id: product.id }).eq("id", orderId);
+      const { error: linkError } = await supabase
+        .from("orders")
+        .update({ product_id: product.id })
+        .eq("id", orderId);
       if (linkError) throw linkError;
       return product.id;
     },
@@ -667,7 +685,10 @@ function OrderDetailPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
         <div className="space-y-1">
-          <Link to="/orders" className="label-caps text-xs text-muted-foreground hover:text-foreground">
+          <Link
+            to="/orders"
+            className="label-caps text-xs text-muted-foreground hover:text-foreground"
+          >
             ← ORDERS
           </Link>
           <input
@@ -702,482 +723,527 @@ function OrderDetailPage() {
         </div>
       </div>
 
-      {/* 2026-10-13 사용자 요청: "오더마다 무드보드를 만들고싶은데, 디자인 아이디어 구상용으로.
-          피그마 ppt 처럼 이미지를 스크랩해서 바로 붙여넣기할수 있는 보드" — 상세페이지 맨 위에
-          배치해달라고 함. */}
-      <OrderMoodboardSection orderId={order.data.id} />
-
-      <SectionCard title="INSTAGRAM DM">
-        <p className="mb-2 font-mono text-[11px] text-muted-foreground">
-          DM 대화 전체를 그대로 붙여넣고 "AI로 추출"을 누르세요. AI는 텍스트에 없는 정보는 추측하지
-          않고 비워 둡니다 — 추출 결과는 바로 저장되지 않고, 아래에서 하나씩(또는 전체) "적용"해야
-          폼에 채워지고, 그 후 SAVE를 눌러야 실제로 저장됩니다.
-        </p>
-        <textarea
-          rows={6}
-          className={inputClass}
-          placeholder="여기에 DM 대화를 붙여넣으세요…"
-          value={dmText}
-          onChange={(e) => setDmText(e.target.value)}
-        />
-        <div className="mt-2 flex items-center gap-2">
+      <div className="flex items-center gap-2 border-b border-border">
+        {(["ORDER DETAIL", "VISUALS"] as const).map((tab) => (
           <button
+            key={tab}
             type="button"
-            className={buttonClass}
-            disabled={extracting || !dmText.trim()}
-            onClick={runExtraction}
+            onClick={() => setActiveTab(tab)}
+            className={`label-caps -mb-px border-b-2 px-3 py-2 text-xs transition-colors ${
+              activeTab === tab
+                ? "border-foreground text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
           >
-            {extracting ? "추출 중…" : "AI로 추출"}
+            {tab}
           </button>
-          {extractError && (
-            <span className="font-mono text-xs uppercase text-destructive">{extractError}</span>
-          )}
-        </div>
+        ))}
+      </div>
 
-        {extracted && (
-          <div className="mt-3 border border-dashed border-border p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="label-caps text-xs text-muted-foreground">AI 추출 결과 (확인 후 적용)</span>
-              {extractedEntries.length > 0 && (
-                <button type="button" className={buttonClass} onClick={applyAll}>
-                  모두 적용
-                </button>
+      {activeTab === "VISUALS" ? (
+        <div className="space-y-4">
+          {/* 2026-10-13 사용자 요청: "오더마다 무드보드를 만들고싶은데, 디자인 아이디어 구상용으로.
+              피그마 ppt 처럼 이미지를 스크랩해서 바로 붙여넣기할수 있는 보드" */}
+          <OrderMoodboardSection orderId={order.data.id} />
+          {/* 2026-10-15 사용자 요청: "무드보드 아래에 결과물사진 업로드할수있게 이미지 박스만들어줘" */}
+          <OrderResultPhotosSection orderId={order.data.id} />
+        </div>
+      ) : (
+        <>
+          <SectionCard title="INSTAGRAM DM">
+            <p className="mb-2 font-mono text-[11px] text-muted-foreground">
+              DM 대화 전체를 그대로 붙여넣고 "AI로 추출"을 누르세요. AI는 텍스트에 없는 정보는
+              추측하지 않고 비워 둡니다 — 추출 결과는 바로 저장되지 않고, 아래에서 하나씩(또는 전체)
+              "적용"해야 폼에 채워지고, 그 후 SAVE를 눌러야 실제로 저장됩니다.
+            </p>
+            <textarea
+              rows={6}
+              className={inputClass}
+              placeholder="여기에 DM 대화를 붙여넣으세요…"
+              value={dmText}
+              onChange={(e) => setDmText(e.target.value)}
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                className={buttonClass}
+                disabled={extracting || !dmText.trim()}
+                onClick={runExtraction}
+              >
+                {extracting ? "추출 중…" : "AI로 추출"}
+              </button>
+              {extractError && (
+                <span className="font-mono text-xs uppercase text-destructive">{extractError}</span>
               )}
             </div>
-            {extractedEntries.length === 0 ? (
-              <p className="font-mono text-xs text-muted-foreground">
-                텍스트에서 확실하게 뽑을 수 있는 정보가 없었습니다 — 직접 입력해주세요.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {extractedEntries.map((k) => (
-                  <li key={k} className="flex items-center justify-between gap-2 py-1.5">
-                    <span className="text-sm">
-                      <span className="text-muted-foreground">{FIELD_LABELS[k]}: </span>
-                      {String(extracted[k])}
-                    </span>
-                    <button
-                      type="button"
-                      className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => applyField(k)}
-                    >
-                      {appliedKeys.has(k) ? "적용됨" : "적용"}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {(extracted.customer_name || extracted.instagram_handle || extracted.phone || extracted.email) && (
-              <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-                고객 연락처 정보(이름/인스타/전화/이메일)는 아래 CUSTOMER에서 "+ NEW CUSTOMER"로
-                직접 만들어 연결하세요.
-              </p>
-            )}
-          </div>
-        )}
-      </SectionCard>
 
-      <SectionCard title="주문 정보">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="CUSTOMER (= 요청자/구매자)">
-            <CustomerSelect
-              value={customerId}
-              onChange={setCustomerId}
-              initialNameForCreate={extracted?.customer_name ?? ""}
-            />
-          </Field>
-          <Field label="PRODUCT">
-            <ProductSelect
-              value={productId}
-              onChange={(next) => {
-                setProductId(next);
-                setProductSizeId("");
-              }}
-              emptyLabel="TBD — 아직 미정"
-            />
-          </Field>
-          {productId && (productSizes.data ?? []).length > 0 && (
-            <Field label="최종 사이즈 (PRODUCT SIZE)">
-              <select
-                className={selectClass}
-                value={productSizeId}
-                onChange={(e) => setProductSizeId(e.target.value)}
-              >
-                <option value="">— 미지정 —</option>
-                {(productSizes.data ?? []).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {formatProductSizeLabel(s)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-          <Field label="RECIPIENT (받는 사람)">
-            <input className={inputClass} value={recipient} onChange={(e) => setRecipient(e.target.value)} />
-          </Field>
-          <Field label="RECIPIENT RELATIONSHIP">
-            <select
-              className={selectClass}
-              value={recipientRelationship}
-              onChange={(e) => setRecipientRelationship(e.target.value as OrderRecipientRelationship | "")}
-            >
-              <option value="">— 선택 —</option>
-              {ORDER_RECIPIENT_RELATIONSHIPS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            {recipientRelationship === "Other" && (
-              <input
-                className={inputClass + " mt-1"}
-                placeholder="직접 입력"
-                value={recipientRelationshipOtherNote}
-                onChange={(e) => setRecipientRelationshipOtherNote(e.target.value)}
-              />
-            )}
-          </Field>
-          <Field label="OCCASION">
-            <select
-              className={selectClass}
-              value={occasion}
-              onChange={(e) => setOccasion(e.target.value as OrderOccasion | "")}
-            >
-              <option value="">— 선택 —</option>
-              {ORDER_OCCASIONS.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-            {occasion === "Other" && (
-              <input
-                className={inputClass + " mt-1"}
-                placeholder="직접 입력"
-                value={occasionOtherNote}
-                onChange={(e) => setOccasionOtherNote(e.target.value)}
-              />
-            )}
-          </Field>
-          <Field label="PRODUCT LINE">
-            <select
-              className={selectClass}
-              value={productLine}
-              onChange={(e) => setProductLine(e.target.value as OrderProductLineKey | "")}
-            >
-              <option value="">— 선택 —</option>
-              {ORDER_PRODUCT_LINES.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가 생성/동기화됩니다.
-            </p>
-          </Field>
-          <Field label="EVENT DATE">
-            <input type="date" className={inputClass} value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
-          </Field>
-          <Field label="PICKUP / DELIVERY AT">
-            <input
-              type="datetime-local"
-              className={inputClass}
-              value={pickupAt}
-              onChange={(e) => setPickupAt(e.target.value)}
-            />
-          </Field>
-          <Field label="CAKE SIZE">
-            <select
-              className={selectClass}
-              value={cakeSize}
-              onChange={(e) => setCakeSize(e.target.value as OrderCakeSize | "")}
-            >
-              <option value="">— 선택 —</option>
-              {ORDER_CAKE_SIZES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            {cakeSize === "Custom" && (
-              <div className="mt-1 flex flex-wrap gap-2">
-                <input
-                  className={inputClass + " !w-40"}
-                  placeholder="커스텀 사이즈 (예: 10인치 하트)"
-                  value={customSize}
-                  onChange={(e) => setCustomSize(e.target.value)}
-                />
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  className={inputClass + " !w-28"}
-                  placeholder="cm (선택)"
-                  value={customSizeCm}
-                  onChange={(e) => setCustomSizeCm(e.target.value)}
-                />
+            {extracted && (
+              <div className="mt-3 border border-dashed border-border p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="label-caps text-xs text-muted-foreground">
+                    AI 추출 결과 (확인 후 적용)
+                  </span>
+                  {extractedEntries.length > 0 && (
+                    <button type="button" className={buttonClass} onClick={applyAll}>
+                      모두 적용
+                    </button>
+                  )}
+                </div>
+                {extractedEntries.length === 0 ? (
+                  <p className="font-mono text-xs text-muted-foreground">
+                    텍스트에서 확실하게 뽑을 수 있는 정보가 없었습니다 — 직접 입력해주세요.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {extractedEntries.map((k) => (
+                      <li key={k} className="flex items-center justify-between gap-2 py-1.5">
+                        <span className="text-sm">
+                          <span className="text-muted-foreground">{FIELD_LABELS[k]}: </span>
+                          {String(extracted[k])}
+                        </span>
+                        <button
+                          type="button"
+                          className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => applyField(k)}
+                        >
+                          {appliedKeys.has(k) ? "적용됨" : "적용"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {(extracted.customer_name ||
+                  extracted.instagram_handle ||
+                  extracted.phone ||
+                  extracted.email) && (
+                  <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+                    고객 연락처 정보(이름/인스타/전화/이메일)는 아래 CUSTOMER에서 "+ NEW CUSTOMER"로
+                    직접 만들어 연결하세요.
+                  </p>
+                )}
               </div>
             )}
-          </Field>
-          <Field label="QUANTITY">
-            <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              className={inputClass}
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-            />
-          </Field>
-          <Field label="SERVINGS (인분)">
-            <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              className={inputClass}
-              placeholder="예: 10"
-              value={servings}
-              onChange={(e) => setServings(e.target.value)}
-            />
-          </Field>
-          <Field label="PRICE (AUD)">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={inputClass}
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
-          </Field>
-          <Field label="PAYMENT STATUS">
-            <select
-              className={selectClass}
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value as OrderPaymentStatus | "")}
-            >
-              <option value="">— 선택 —</option>
-              {ORDER_PAYMENT_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        {/* 2026-10-06 사용자 요청: 메모를 목적별로 분리 — 섞어 쓰지 않는다. */}
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Field label="FLAVORING NOTE — Sheet/Cream/Filling 등 맛 밸런스 (내부용)">
-            <textarea
-              rows={4}
-              className={inputClass}
-              placeholder="예: 코코아 시트 + 바나나 필링, 전체적으로 덜 달게"
-              value={flavoringNote}
-              onChange={(e) => setFlavoringNote(e.target.value)}
-            />
-            {/* 2026-10-06 사용자 재확인: 자유 텍스트만으론 부족 — Sheet/Cream/Filling 각각 실제
-                FORMULA까지 링크할 수 있어야 한다. FORMULA VERSION은 아직 안 정함 — WORK SESSION
-                생성 시 pickEffectiveFormulaVersion으로 시작값만 자동 채우고, 그 뒤엔 WORK SESSION
-                쪽에서 바꾼다. */}
-            <div className="mt-2 grid grid-cols-1 gap-1.5">
-              {(
-                [
-                  ["SHEET", flavoringSheetFormulaId, setFlavoringSheetFormulaId],
-                  ["CREAM", flavoringCreamFormulaId, setFlavoringCreamFormulaId],
-                  ["FILLING", flavoringFillingFormulaId, setFlavoringFillingFormulaId],
-                ] as const
-              ).map(([slot, value, setValue]) => (
-                <label key={slot} className="flex items-center gap-2">
-                  <span className="label-caps w-32 shrink-0 text-[10px] text-muted-foreground">
-                    {CORE_SLOT_LABELS[slot]}
-                  </span>
+          </SectionCard>
+
+          <SectionCard title="주문 정보">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="CUSTOMER (= 요청자/구매자)">
+                <CustomerSelect
+                  value={customerId}
+                  onChange={setCustomerId}
+                  initialNameForCreate={extracted?.customer_name ?? ""}
+                />
+              </Field>
+              <Field label="PRODUCT">
+                <ProductSelect
+                  value={productId}
+                  onChange={(next) => {
+                    setProductId(next);
+                    setProductSizeId("");
+                  }}
+                  emptyLabel="TBD — 아직 미정"
+                />
+              </Field>
+              {productId && (productSizes.data ?? []).length > 0 && (
+                <Field label="최종 사이즈 (PRODUCT SIZE)">
                   <select
                     className={selectClass}
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
+                    value={productSizeId}
+                    onChange={(e) => setProductSizeId(e.target.value)}
                   >
-                    <option value="">— FORMULA 링크 안 함 —</option>
-                    {formulasForSlot(slot, value).map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.components?.name ?? f.name}
+                    <option value="">— 미지정 —</option>
+                    {(productSizes.data ?? []).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {formatProductSizeLabel(s)}
                       </option>
                     ))}
                   </select>
-                </label>
-              ))}
+                </Field>
+              )}
+              <Field label="RECIPIENT (받는 사람)">
+                <input
+                  className={inputClass}
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                />
+              </Field>
+              <Field label="RECIPIENT RELATIONSHIP">
+                <select
+                  className={selectClass}
+                  value={recipientRelationship}
+                  onChange={(e) =>
+                    setRecipientRelationship(e.target.value as OrderRecipientRelationship | "")
+                  }
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_RECIPIENT_RELATIONSHIPS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+                {recipientRelationship === "Other" && (
+                  <input
+                    className={inputClass + " mt-1"}
+                    placeholder="직접 입력"
+                    value={recipientRelationshipOtherNote}
+                    onChange={(e) => setRecipientRelationshipOtherNote(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="OCCASION">
+                <select
+                  className={selectClass}
+                  value={occasion}
+                  onChange={(e) => setOccasion(e.target.value as OrderOccasion | "")}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_OCCASIONS.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+                {occasion === "Other" && (
+                  <input
+                    className={inputClass + " mt-1"}
+                    placeholder="직접 입력"
+                    value={occasionOtherNote}
+                    onChange={(e) => setOccasionOtherNote(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="PRODUCT LINE">
+                <select
+                  className={selectClass}
+                  value={productLine}
+                  onChange={(e) => setProductLine(e.target.value as OrderProductLineKey | "")}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_PRODUCT_LINES.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가
+                  생성/동기화됩니다.
+                </p>
+              </Field>
+              <Field label="EVENT DATE">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={eventDate}
+                  onChange={(e) => setEventDate(e.target.value)}
+                />
+              </Field>
+              <Field label="PICKUP / DELIVERY AT">
+                <input
+                  type="datetime-local"
+                  className={inputClass}
+                  value={pickupAt}
+                  onChange={(e) => setPickupAt(e.target.value)}
+                />
+              </Field>
+              <Field label="CAKE SIZE">
+                <select
+                  className={selectClass}
+                  value={cakeSize}
+                  onChange={(e) => setCakeSize(e.target.value as OrderCakeSize | "")}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_CAKE_SIZES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                {cakeSize === "Custom" && (
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <input
+                      className={inputClass + " !w-40"}
+                      placeholder="커스텀 사이즈 (예: 10인치 하트)"
+                      value={customSize}
+                      onChange={(e) => setCustomSize(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      className={inputClass + " !w-28"}
+                      placeholder="cm (선택)"
+                      value={customSizeCm}
+                      onChange={(e) => setCustomSizeCm(e.target.value)}
+                    />
+                  </div>
+                )}
+              </Field>
+              <Field label="QUANTITY">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  className={inputClass}
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                />
+              </Field>
+              <Field label="SERVINGS (인분)">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  className={inputClass}
+                  placeholder="예: 10"
+                  value={servings}
+                  onChange={(e) => setServings(e.target.value)}
+                />
+              </Field>
+              <Field label="PRICE (AUD)">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  className={inputClass}
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </Field>
+              <Field label="PAYMENT STATUS">
+                <select
+                  className={selectClass}
+                  value={paymentStatus}
+                  onChange={(e) => setPaymentStatus(e.target.value as OrderPaymentStatus | "")}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_PAYMENT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </div>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              각 칸에는 SETTINGS → TECHNIQUE CATEGORIES에서 해당 슬롯으로 분류된 COMPONENT의 FORMULA만
-              표시됩니다.
-            </p>
-            {/* 2026-10-12 사용자 요청: 기존 PRODUCT를 링크한 경우에만 그 PRODUCT의 현재 레시피를
+            {/* 2026-10-06 사용자 요청: 메모를 목적별로 분리 — 섞어 쓰지 않는다. */}
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Field label="FLAVORING NOTE — Sheet/Cream/Filling 등 맛 밸런스 (내부용)">
+                <textarea
+                  rows={4}
+                  className={inputClass}
+                  placeholder="예: 코코아 시트 + 바나나 필링, 전체적으로 덜 달게"
+                  value={flavoringNote}
+                  onChange={(e) => setFlavoringNote(e.target.value)}
+                />
+                {/* 2026-10-06 사용자 재확인: 자유 텍스트만으론 부족 — Sheet/Cream/Filling 각각 실제
+                FORMULA까지 링크할 수 있어야 한다. FORMULA VERSION은 아직 안 정함 — WORK SESSION
+                생성 시 pickEffectiveFormulaVersion으로 시작값만 자동 채우고, 그 뒤엔 WORK SESSION
+                쪽에서 바꾼다. */}
+                <div className="mt-2 grid grid-cols-1 gap-1.5">
+                  {(
+                    [
+                      ["SHEET", flavoringSheetFormulaId, setFlavoringSheetFormulaId],
+                      ["CREAM", flavoringCreamFormulaId, setFlavoringCreamFormulaId],
+                      ["FILLING", flavoringFillingFormulaId, setFlavoringFillingFormulaId],
+                    ] as const
+                  ).map(([slot, value, setValue]) => (
+                    <label key={slot} className="flex items-center gap-2">
+                      <span className="label-caps w-32 shrink-0 text-[10px] text-muted-foreground">
+                        {CORE_SLOT_LABELS[slot]}
+                      </span>
+                      <select
+                        className={selectClass}
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                      >
+                        <option value="">— FORMULA 링크 안 함 —</option>
+                        {formulasForSlot(slot, value).map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.components?.name ?? f.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  각 칸에는 SETTINGS → TECHNIQUE CATEGORIES에서 해당 슬롯으로 분류된 COMPONENT의
+                  FORMULA만 표시됩니다.
+                </p>
+                {/* 2026-10-12 사용자 요청: 기존 PRODUCT를 링크한 경우에만 그 PRODUCT의 현재 레시피를
                 보여주고, 버튼 한 번으로 SHEET/CREAM/FILLING에 적용할 수 있게 한다 — FLAVORING NOTE를
                 먼저 채워서 나중에 UPGRADE TO PRODUCT 하는 기획 단계 주문에는 이 시점에 PRODUCT가
                 없으므로 영향 없다. */}
-            {productId && productRecipeFormulas.length > 0 && (
-              <div className="mt-3 border border-dashed border-border p-2">
-                <p className="label-caps mb-1.5 text-[10px] text-muted-foreground">
-                  연결된 PRODUCT의 현재 레시피 — 버튼으로 바로 적용
-                </p>
-                <ul className="space-y-1">
-                  {productRecipeFormulas.map((r) => (
-                    <li
-                      key={r.formulaId}
-                      className="flex flex-wrap items-center justify-between gap-2 text-xs"
-                    >
-                      <span>
-                        {r.componentName}{" "}
-                        <span className="text-muted-foreground">
-                          — {r.formulaName} v{r.versionNumber}
-                        </span>
-                      </span>
-                      <span className="flex gap-1">
-                        <button
-                          type="button"
-                          className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
-                          onClick={() => setFlavoringSheetFormulaId(r.formulaId)}
+                {productId && productRecipeFormulas.length > 0 && (
+                  <div className="mt-3 border border-dashed border-border p-2">
+                    <p className="label-caps mb-1.5 text-[10px] text-muted-foreground">
+                      연결된 PRODUCT의 현재 레시피 — 버튼으로 바로 적용
+                    </p>
+                    <ul className="space-y-1">
+                      {productRecipeFormulas.map((r) => (
+                        <li
+                          key={r.formulaId}
+                          className="flex flex-wrap items-center justify-between gap-2 text-xs"
                         >
-                          SHEET로
-                        </button>
-                        <button
-                          type="button"
-                          className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
-                          onClick={() => setFlavoringCreamFormulaId(r.formulaId)}
-                        >
-                          CREAM으로
-                        </button>
-                        <button
-                          type="button"
-                          className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
-                          onClick={() => setFlavoringFillingFormulaId(r.formulaId)}
-                        >
-                          FILLING으로
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </Field>
-          <Field label="DESIGN NOTE — 디자인/구조/조립">
-            <textarea
-              rows={4}
-              className={inputClass}
-              placeholder="예: 2단 구조, 초콜릿 튀일 장식은 배송 직전 부착"
-              value={designNote}
-              onChange={(e) => setDesignNote(e.target.value)}
-            />
-          </Field>
-          <Field label="ORDER NOTE — 고객 요청/배송 등">
-            <textarea
-              rows={4}
-              className={inputClass}
-              placeholder="예: 오후 3시 이후 픽업 희망"
-              value={orderNote}
-              onChange={(e) => setOrderNote(e.target.value)}
-            />
-          </Field>
-        </div>
-      </SectionCard>
+                          <span>
+                            {r.componentName}{" "}
+                            <span className="text-muted-foreground">
+                              — {r.formulaName} v{r.versionNumber}
+                            </span>
+                          </span>
+                          <span className="flex gap-1">
+                            <button
+                              type="button"
+                              className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
+                              onClick={() => setFlavoringSheetFormulaId(r.formulaId)}
+                            >
+                              SHEET로
+                            </button>
+                            <button
+                              type="button"
+                              className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
+                              onClick={() => setFlavoringCreamFormulaId(r.formulaId)}
+                            >
+                              CREAM으로
+                            </button>
+                            <button
+                              type="button"
+                              className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
+                              onClick={() => setFlavoringFillingFormulaId(r.formulaId)}
+                            >
+                              FILLING으로
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Field>
+              <Field label="DESIGN NOTE — 디자인/구조/조립">
+                <textarea
+                  rows={4}
+                  className={inputClass}
+                  placeholder="예: 2단 구조, 초콜릿 튀일 장식은 배송 직전 부착"
+                  value={designNote}
+                  onChange={(e) => setDesignNote(e.target.value)}
+                />
+              </Field>
+              <Field label="ORDER NOTE — 고객 요청/배송 등">
+                <textarea
+                  rows={4}
+                  className={inputClass}
+                  placeholder="예: 오후 3시 이후 픽업 희망"
+                  value={orderNote}
+                  onChange={(e) => setOrderNote(e.target.value)}
+                />
+              </Field>
+            </div>
+          </SectionCard>
 
-      {/* 2026-10-06 사용자 요청: Satisfaction — Status(진행 단계)와는 별개 개념이라 별도 섹션으로
+          {/* 2026-10-06 사용자 요청: Satisfaction — Status(진행 단계)와는 별개 개념이라 별도 섹션으로
           분리. Maker/Customer Satisfaction을 각각 독립 필드로 관리(향후 둘을 비교 분석하기 위함).
           SAVE/DELETE 버튼은 기존과 동일하게 이 페이지 전체(주문 정보 + Satisfaction)에 공통 적용. */}
-      <SectionCard title="SATISFACTION">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field label="MAKER SATISFACTION — 내가 이 주문에 얼마나 만족했는가">
-            <StarRating value={makerSatisfaction} onChange={setMakerSatisfaction} />
-          </Field>
-          <Field label="CUSTOMER SATISFACTION — 고객이 이 주문에 얼마나 만족했는가">
-            <div className="space-y-1">
-              <StarRating value={customerSatisfaction} onChange={setCustomerSatisfaction} />
-              <button
-                type="button"
-                className="label-caps text-[10px] text-muted-foreground hover:text-foreground"
-                onClick={() => setCustomerSatisfaction("")}
-              >
-                {customerSatisfaction === "" ? "— NOT YET COLLECTED" : "✕ 미수집으로 되돌리기 (NOT YET COLLECTED)"}
-              </button>
+          <SectionCard title="SATISFACTION">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field label="MAKER SATISFACTION — 내가 이 주문에 얼마나 만족했는가">
+                <StarRating value={makerSatisfaction} onChange={setMakerSatisfaction} />
+              </Field>
+              <Field label="CUSTOMER SATISFACTION — 고객이 이 주문에 얼마나 만족했는가">
+                <div className="space-y-1">
+                  <StarRating value={customerSatisfaction} onChange={setCustomerSatisfaction} />
+                  <button
+                    type="button"
+                    className="label-caps text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={() => setCustomerSatisfaction("")}
+                  >
+                    {customerSatisfaction === ""
+                      ? "— NOT YET COLLECTED"
+                      : "✕ 미수집으로 되돌리기 (NOT YET COLLECTED)"}
+                  </button>
+                </div>
+              </Field>
             </div>
-          </Field>
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Field label="CUSTOMER FEEDBACK — 고객의 실제 반응 (고객에게 노출되지 않음, 내부 기록용)">
-            <textarea
-              rows={3}
-              className={inputClass}
-              placeholder='예: "She absolutely loved the surprise!"'
-              value={customerFeedback}
-              onChange={(e) => setCustomerFeedback(e.target.value)}
-            />
-          </Field>
-          <Field label="MAKER NOTES — 제작자 내부 평가 (고객에게 노출되지 않음)">
-            <textarea
-              rows={3}
-              className={inputClass}
-              placeholder='예: "Result was beautiful but production took too long."'
-              value={makerNotes}
-              onChange={(e) => setMakerNotes(e.target.value)}
-            />
-          </Field>
-        </div>
-      </SectionCard>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="CUSTOMER FEEDBACK — 고객의 실제 반응 (고객에게 노출되지 않음, 내부 기록용)">
+                <textarea
+                  rows={3}
+                  className={inputClass}
+                  placeholder='예: "She absolutely loved the surprise!"'
+                  value={customerFeedback}
+                  onChange={(e) => setCustomerFeedback(e.target.value)}
+                />
+              </Field>
+              <Field label="MAKER NOTES — 제작자 내부 평가 (고객에게 노출되지 않음)">
+                <textarea
+                  rows={3}
+                  className={inputClass}
+                  placeholder='예: "Result was beautiful but production took too long."'
+                  value={makerNotes}
+                  onChange={(e) => setMakerNotes(e.target.value)}
+                />
+              </Field>
+            </div>
+          </SectionCard>
 
-      {/* 2026-10-06 사용자 정정: "PRODUCTION PLAN"이라는 별도 개념이 아니라 기존 PRODUCTION
+          {/* 2026-10-06 사용자 정정: "PRODUCTION PLAN"이라는 별도 개념이 아니라 기존 PRODUCTION
           (work_sessions) 화면으로 바로 연결된다. 이미 연결된 Work Session/Product가 있으면
           "생성"이 아니라 "열기"로 바뀐다(중복 생성 금지). */}
-      <SectionCard title="PRODUCTION / PRODUCT">
-        <div className="flex flex-wrap items-center gap-2">
-          {workSession.data ? (
-            <Link
-              to="/production/$sessionId"
-              params={{ sessionId: workSession.data.id }}
-              className={buttonClass}
-            >
-              OPEN WORK SESSION{workSession.data.name ? ` — ${workSession.data.name}` : ""}
-            </Link>
-          ) : (
-            <button
-              type="button"
-              className={buttonClass}
-              disabled={createWorkSession.isPending}
-              onClick={() => createWorkSession.mutate()}
-            >
-              {createWorkSession.isPending ? "생성 중…" : "+ CREATE WORK SESSION"}
-            </button>
-          )}
-          {order.data.product_id ? (
-            <Link
-              to="/products/$productId"
-              params={{ productId: order.data.product_id }}
-              className={buttonClass}
-            >
-              OPEN PRODUCT
-            </Link>
-          ) : (
-            <button
-              type="button"
-              className={buttonClass}
-              disabled={upgradeToProduct.isPending}
-              onClick={() => upgradeToProduct.mutate()}
-            >
-              {upgradeToProduct.isPending ? "승격 중…" : "↑ UPGRADE TO PRODUCT"}
-            </button>
-          )}
-        </div>
-        {(createWorkSession.isError || upgradeToProduct.isError) && (
-          <p className="mt-2 font-mono text-xs uppercase text-destructive">
-            {((createWorkSession.error ?? upgradeToProduct.error) as Error).message}
-          </p>
-        )}
-      </SectionCard>
+          <SectionCard title="PRODUCTION / PRODUCT">
+            <div className="flex flex-wrap items-center gap-2">
+              {workSession.data ? (
+                <Link
+                  to="/production/$sessionId"
+                  params={{ sessionId: workSession.data.id }}
+                  className={buttonClass}
+                >
+                  OPEN WORK SESSION{workSession.data.name ? ` — ${workSession.data.name}` : ""}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={createWorkSession.isPending}
+                  onClick={() => createWorkSession.mutate()}
+                >
+                  {createWorkSession.isPending ? "생성 중…" : "+ CREATE WORK SESSION"}
+                </button>
+              )}
+              {order.data.product_id ? (
+                <Link
+                  to="/products/$productId"
+                  params={{ productId: order.data.product_id }}
+                  className={buttonClass}
+                >
+                  OPEN PRODUCT
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={upgradeToProduct.isPending}
+                  onClick={() => upgradeToProduct.mutate()}
+                >
+                  {upgradeToProduct.isPending ? "승격 중…" : "↑ UPGRADE TO PRODUCT"}
+                </button>
+              )}
+            </div>
+            {(createWorkSession.isError || upgradeToProduct.isError) && (
+              <p className="mt-2 font-mono text-xs uppercase text-destructive">
+                {((createWorkSession.error ?? upgradeToProduct.error) as Error).message}
+              </p>
+            )}
+          </SectionCard>
+        </>
+      )}
 
       <div className="border border-border bg-card p-4">
         {save.isError && (
-          <p className="mb-2 font-mono text-xs uppercase text-destructive">{(save.error as Error).message}</p>
+          <p className="mb-2 font-mono text-xs uppercase text-destructive">
+            {(save.error as Error).message}
+          </p>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -1189,12 +1255,20 @@ function OrderDetailPage() {
             {save.isPending ? "SAVING…" : "SAVE"}
           </button>
           {isDirty && (
-            <button type="button" className={buttonClass} onClick={() => order.data && hydrateFromOrder(order.data)}>
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => order.data && hydrateFromOrder(order.data)}
+            >
               되돌리기
             </button>
           )}
           <span className="label-caps text-[10px] text-muted-foreground">
-            {save.isPending ? "저장 중…" : isDirty ? "변경 사항이 있습니다 — 저장하려면 SAVE" : "✓ SAVED"}
+            {save.isPending
+              ? "저장 중…"
+              : isDirty
+                ? "변경 사항이 있습니다 — 저장하려면 SAVE"
+                : "✓ SAVED"}
           </span>
           <button
             type="button"

@@ -1,7 +1,13 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
-import { analyzeBatch, computeLineCosts, costPerGram, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
+import {
+  analyzeBatch,
+  computeLineCosts,
+  costPerGram,
+  overheadPerUnit,
+  sumCostItemAssignments,
+} from "@/lib/cost";
 import type {
   Category,
   Component,
@@ -240,7 +246,8 @@ export const componentUsageQuery = (componentId: string | null) =>
       // 사이즈별 사용량 행이 여러 개면 같은 Product가 중복으로 뜰 수 있어 Product 기준으로 합친다.
       const byProductId = new Map<string, ComponentUsageRow>();
       for (const row of rows) {
-        if (row.products && !byProductId.has(row.products.id)) byProductId.set(row.products.id, row);
+        if (row.products && !byProductId.has(row.products.id))
+          byProductId.set(row.products.id, row);
       }
       return [...byProductId.values()];
     },
@@ -472,7 +479,8 @@ export const mouldUsageQuery = () =>
   });
 
 /** 몰드가 아닌 제품군(가나슈/필링/크림 등)의 기준 배치 중량(g) 프리셋 — moulds와 대응 */
-export type BaseWeightPreset = import("@/integrations/supabase/types").Tables<"base_weight_presets">;
+export type BaseWeightPreset =
+  import("@/integrations/supabase/types").Tables<"base_weight_presets">;
 
 export const baseWeightsQuery = () =>
   queryOptions({
@@ -486,9 +494,7 @@ export const baseWeightUsageQuery = () =>
   queryOptions({
     queryKey: ["base_weight_usage"],
     queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(
-        await supabase.from("formula_versions").select("default_base_weight_id"),
-      );
+      const rows = unwrap(await supabase.from("formula_versions").select("default_base_weight_id"));
       const map: Record<string, number> = {};
       for (const row of rows) {
         if (row.default_base_weight_id)
@@ -558,7 +564,12 @@ export const formulaVersionsQuery = (formulaId: string | null) =>
 /** 배수 프리셋 열에 몰드를 연결한 경우 — 그 몰드의 기준중량까지 같이 가져와서
  * 배수를 "몰드 ×개수" 기준으로 자동 계산할 수 있게 한다(2026-09-24). */
 export interface FormulaVersionBatchRow extends FormulaVersionBatch {
-  moulds: { id: string; name: string; shape_size: string | null; reference_weight_g: number | null } | null;
+  moulds: {
+    id: string;
+    name: string;
+    shape_size: string | null;
+    reference_weight_g: number | null;
+  } | null;
 }
 
 /** Formula Version마다 저장된, 이름 붙인 배수 프리셋 (예: ×2 → "8인치 시폰몰드") */
@@ -1140,7 +1151,9 @@ export const workSessionTaskPredecessorsQuery = (sessionId: string) =>
       const rows = unwrap(
         await supabase
           .from("work_session_task_predecessors")
-          .select("task_id, predecessor_task_id, predecessor:work_session_tasks!predecessor_task_id(task_name)")
+          .select(
+            "task_id, predecessor_task_id, predecessor:work_session_tasks!predecessor_task_id(task_name)",
+          )
           .eq("work_session_id", sessionId),
       ) as unknown as {
         task_id: string;
@@ -1157,7 +1170,6 @@ export const workSessionTaskPredecessorsQuery = (sessionId: string) =>
       return map;
     },
   });
-
 
 /* ── PRODUCTION COST — cost_items / component/product 배정 / SETTINGS (2026-09-23) ── */
 
@@ -1336,28 +1348,64 @@ export function orderStatusColor(
   colors: Record<string, string> | null | undefined,
   status: string,
 ): string {
-  return (colors && colors[status]) || DEFAULT_ORDER_STATUS_COLORS[status as OrderStatus] || "#9ca3af";
+  return (
+    (colors && colors[status]) || DEFAULT_ORDER_STATUS_COLORS[status as OrderStatus] || "#9ca3af"
+  );
 }
 
 // ── ORDERS 필드 정형화(2026-10-06, 사용자 요청: 통계/분석 가능한 구조) ──────────
 // Occasion = 왜 주문하는가, Recipient Relationship = 누구에게 주는가 — 반드시 분리 관리.
 // 스펠링/대소문자는 사용자가 지정한 목록을 그대로 쓴다(DB enum과 1:1 일치).
 export const ORDER_OCCASIONS = [
-  "Birthday", "Anniversary", "Wedding", "Engagement", "Graduation", "Promotion",
-  "Retirement", "Achievement", "New Baby", "Housewarming", "Thank You",
-  "Congratulations", "Farewell", "Corporate Event", "Client Gift", "Team Celebration",
-  "Mother's Day", "Father's Day", "Valentine's Day", "Christmas", "Easter",
-  "Lunar New Year", "Just Because", "Other",
+  "Birthday",
+  "Anniversary",
+  "Wedding",
+  "Engagement",
+  "Graduation",
+  "Promotion",
+  "Retirement",
+  "Achievement",
+  "New Baby",
+  "Housewarming",
+  "Thank You",
+  "Congratulations",
+  "Farewell",
+  "Corporate Event",
+  "Client Gift",
+  "Team Celebration",
+  "Mother's Day",
+  "Father's Day",
+  "Valentine's Day",
+  "Christmas",
+  "Easter",
+  "Lunar New Year",
+  "Just Because",
+  "Other",
 ] as const;
 export type OrderOccasion = (typeof ORDER_OCCASIONS)[number];
 
 export const ORDER_RECIPIENT_RELATIONSHIPS = [
-  "Self", "Partner", "Spouse", "Family", "Friend", "Colleague", "Client", "Customer",
-  "Team / Coworkers", "Business / Organisation", "Other",
+  "Self",
+  "Partner",
+  "Spouse",
+  "Family",
+  "Friend",
+  "Colleague",
+  "Client",
+  "Customer",
+  "Team / Coworkers",
+  "Business / Organisation",
+  "Other",
 ] as const;
 export type OrderRecipientRelationship = (typeof ORDER_RECIPIENT_RELATIONSHIPS)[number];
 
-export const ORDER_CAKE_SIZES = ['6" Round', '8" Round', '6" Square', '8" Square', "Custom"] as const;
+export const ORDER_CAKE_SIZES = [
+  '6" Round',
+  '8" Round',
+  '6" Square',
+  '8" Square',
+  "Custom",
+] as const;
 export type OrderCakeSize = (typeof ORDER_CAKE_SIZES)[number];
 
 export const ORDER_PAYMENT_STATUSES = ["Unpaid", "Deposit Paid", "Paid in Full"] as const;
@@ -1431,6 +1479,21 @@ export const orderMoodboardItemsQuery = (orderId: string) =>
           .select("*")
           .eq("order_id", orderId)
           .order("z_index"),
+      ),
+  });
+
+/** ORDER 상세 VISUALS 탭 — 결과물(완성작) 사진 갤러리(2026-10-15). sort_order 기준 정렬. */
+export type OrderResultPhoto = Tables<"order_result_photos">;
+export const orderResultPhotosQuery = (orderId: string) =>
+  queryOptions({
+    queryKey: ["order_result_photos", orderId],
+    queryFn: async (): Promise<OrderResultPhoto[]> =>
+      unwrap(
+        await supabase
+          .from("order_result_photos")
+          .select("*")
+          .eq("order_id", orderId)
+          .order("sort_order"),
       ),
   });
 
@@ -1517,7 +1580,9 @@ export const customerLastOrderInfoQuery = () =>
 
       const result: Record<string, CustomerLastOrderInfo> = {};
       for (const [customerId, { key, row }] of Object.entries(best)) {
-        const label = [slugPart(row.recipient_relationship), slugPart(row.occasion)].filter(Boolean).join("-");
+        const label = [slugPart(row.recipient_relationship), slugPart(row.occasion)]
+          .filter(Boolean)
+          .join("-");
         result[customerId] = { lastDeliveryDate: key, eventLabel: label || "—" };
       }
       return result;
@@ -1587,7 +1652,10 @@ export const costDashboardQuery = () =>
       const componentIds = [
         ...new Set(links.map((l) => l.component_id).filter((id): id is string => id != null)),
       ];
-      const costsByComponent: Record<string, { costPerGram: number | null; hasMissingPrice: boolean }> = {};
+      const costsByComponent: Record<
+        string,
+        { costPerGram: number | null; hasMissingPrice: boolean }
+      > = {};
       if (componentIds.length > 0) {
         const { data: formulaData, error: formulaError } = await supabase
           .from("formulas")
@@ -1626,7 +1694,10 @@ export const costDashboardQuery = () =>
 
       const overheadPerCake = overheadPerUnit(settingsRes.data) ?? 0;
 
-      const costItemsByProduct: Record<string, { quantity: number; cost_items: { unit_cost: number } }[]> = {};
+      const costItemsByProduct: Record<
+        string,
+        { quantity: number; cost_items: { unit_cost: number } }[]
+      > = {};
       for (const row of (costItemsRes.data ?? []) as unknown as {
         product_id: string;
         quantity: number;
@@ -1707,11 +1778,7 @@ export const costDashboardQuery = () =>
  * 재료 원가·배치 중량 등 원본 데이터는 전혀 변경하지 않고 조회만 한다.
  */
 export type FormulaCostCompareIssueCode =
-  | "NO_VERSION"
-  | "ZERO_WEIGHT"
-  | "UNIT_CONVERSION"
-  | "MISSING_PRICE"
-  | "CALC_ERROR";
+  "NO_VERSION" | "ZERO_WEIGHT" | "UNIT_CONVERSION" | "MISSING_PRICE" | "CALC_ERROR";
 
 export interface FormulaCostCompareIssue {
   code: FormulaCostCompareIssueCode;
@@ -1803,14 +1870,21 @@ export const formulaCostCompareQuery = (formulaIds: string[]) =>
           } else if (diag.totalGrams <= 0) {
             issues.push(
               diag.hasUnconvertibleUnit
-                ? { code: "UNIT_CONVERSION", message: "재료의 단위를 g 기준으로 환산할 수 없습니다." }
-                : { code: "ZERO_WEIGHT", message: "배치 중량이 0g 이하이므로 단가를 계산할 수 없습니다." },
+                ? {
+                    code: "UNIT_CONVERSION",
+                    message: "재료의 단위를 g 기준으로 환산할 수 없습니다.",
+                  }
+                : {
+                    code: "ZERO_WEIGHT",
+                    message: "배치 중량이 0g 이하이므로 단가를 계산할 수 없습니다.",
+                  },
             );
           }
           if (diag.hasMissingPrice) {
             issues.push({
               code: "MISSING_PRICE",
-              message: "가격이 등록되지 않은 재료가 있습니다 — 원가가 실제보다 낮게 계산될 수 있습니다.",
+              message:
+                "가격이 등록되지 않은 재료가 있습니다 — 원가가 실제보다 낮게 계산될 수 있습니다.",
             });
           }
           return {
@@ -1918,9 +1992,11 @@ export const stockCandidatesQuery = () =>
       const usedComponentIds = new Set(
         (existingRes.data ?? []).map((r) => r.component_id).filter(Boolean),
       );
-      const sizes = (sizesRes.data as unknown as Array<
-        ProductSize & { products: { id: string; name: string } | null }
-      >)
+      const sizes = (
+        sizesRes.data as unknown as Array<
+          ProductSize & { products: { id: string; name: string } | null }
+        >
+      )
         .filter((s) => !usedSizeIds.has(s.id))
         .map((s) => ({
           id: s.id,
@@ -2108,5 +2184,7 @@ export const workSessionByOrderQuery = (orderId: string) =>
   queryOptions({
     queryKey: ["work_sessions", "by_order", orderId],
     queryFn: async (): Promise<WorkSession | null> =>
-      unwrap(await supabase.from("work_sessions").select("*").eq("order_id", orderId).maybeSingle()),
+      unwrap(
+        await supabase.from("work_sessions").select("*").eq("order_id", orderId).maybeSingle(),
+      ),
   });
