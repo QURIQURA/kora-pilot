@@ -615,7 +615,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                       </div>
                     </div>
                     <textarea
-                      className="flex-1 resize-none border-0 bg-transparent p-2 text-xs font-mono text-foreground outline-none"
+                      // 2026-10-14 사용자 요청: "마찬가지로 '메모' 플레이스홀더도 커서(호버) 뜨면
+                      // 뜨도록" — 헤더처럼 "메모…" 안내문구도 평소엔 숨기고 호버했을 때만 보이게
+                      // 한다(실제로 입력된 내용은 호버 여부와 무관하게 항상 보임).
+                      className="flex-1 resize-none border-0 bg-transparent p-2 text-xs font-mono text-foreground outline-none placeholder:opacity-0 group-hover:placeholder:opacity-100"
                       defaultValue={item.content ?? ""}
                       placeholder="메모…"
                       onPointerDown={(e) => e.stopPropagation()}
