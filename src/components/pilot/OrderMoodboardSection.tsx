@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, Move, RotateCw, StickyNote, X } from "lucide-react";
+import { Eraser, ImagePlus, Move, RotateCw, StickyNote, X } from "lucide-react";
+import { removeBackground } from "@imgly/background-removal";
 import { supabase } from "@/integrations/supabase/client";
 import { currentUserId, orderMoodboardItemsQuery, type OrderMoodboardItem } from "@/lib/queries";
 import { SectionCard, buttonClass } from "@/components/pilot/ui";
@@ -44,6 +45,12 @@ import { cn } from "@/lib/utils";
  *   요소를 클릭해도 항상 맨 앞으로 온다).
  * - 드래그/리사이즈/회전 중에는 로컬 상태(livePos)만 갱신하고, 포인터를 뗄 때(pointerup)만 DB에
  *   커밋한다 — WorkflowTimeline.tsx의 드래그 패턴과 동일한 방식(과도한 쓰기 방지).
+ * - 이미지 카드는 호버 시 좌상단에 지우개 아이콘("배경 제거")이 뜬다(2026-10-14 사용자 요청:
+ *   "무드보드에 이미지 배경지우는거 기능 추가할수있어?" → 서버 API 비용 없이 브라우저에서 바로
+ *   처리하는 쪽을 선택). @imgly/background-removal(브라우저 WASM, API 키/서버 비용 없음)로 그
+ *   자리에서 배경을 투명하게 만들고, 결과 PNG를 같은 Storage 버킷에 새 파일로 올린 뒤 그 아이템의
+ *   image_url만 그걸로 바꾼다(원본 파일은 지운다) — 처리 중엔 그 카드에만 로딩 스피너를 보여주고,
+ *   첫 호출 때 모델 파일(수십MB)을 내려받느라 다소 걸릴 수 있다.
  */
 const BOARD_HEIGHT = 440;
 const DEFAULT_IMAGE_WIDTH = 200;
@@ -104,6 +111,15 @@ function noteBackground(item: Pick<OrderMoodboardItem, "color" | "color2">): str
   return c1;
 }
 
+/** order-moodboards 버킷의 공개 URL에서 그 안의 파일 경로만 뽑아 지운다 — remove 뮤테이션과
+ * handleRemoveBackground(배경 제거 후 원본 삭제) 둘 다 쓰는 공용 헬퍼(2026-10-14). */
+async function deleteMoodboardStorageFile(imageUrl: string): Promise<void> {
+  const marker = "/order-moodboards/";
+  const idx = imageUrl.indexOf(marker);
+  if (idx === -1) return;
+  await supabase.storage.from("order-moodboards").remove([imageUrl.slice(idx + marker.length)]);
+}
+
 function readImageSize(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
@@ -136,6 +152,8 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [livePos, setLivePos] = useState<LivePos | null>(null);
+  // 배경 제거 처리 중인 아이템 id — 한 번에 하나씩만 처리(2026-10-14)
+  const [removingBgId, setRemovingBgId] = useState<string | null>(null);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["order_moodboard_items", orderId] });
@@ -215,13 +233,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   const remove = useMutation({
     mutationFn: async (item: OrderMoodboardItem) => {
       if (item.kind === "image" && item.image_url) {
-        const marker = "/order-moodboards/";
-        const idx = item.image_url.indexOf(marker);
-        if (idx !== -1) {
-          await supabase.storage
-            .from("order-moodboards")
-            .remove([item.image_url.slice(idx + marker.length)]);
-        }
+        await deleteMoodboardStorageFile(item.image_url);
       }
       const { error: deleteError } = await supabase
         .from("order_moodboard_items")
@@ -231,6 +243,45 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
     },
     onSuccess: invalidate,
   });
+
+  /**
+   * 2026-10-14 사용자 요청: "무드보드에 이미지 배경지우는거 기능 추가할수있어?" — API 비용/키 없이
+   * 브라우저에서 바로 처리하는 방식을 택했다(@imgly/background-removal, WASM 기반). 결과 PNG를
+   * 같은 Storage 버킷에 새 파일로 올리고 그 아이템의 image_url만 교체 — 재료/포뮬라처럼 되돌리기
+   * 개념 없이 바로 반영되는 이 앱의 다른 편집들과 동일한 패턴. 원본 파일은 교체 후 지운다.
+   */
+  const handleRemoveBackground = async (item: OrderMoodboardItem) => {
+    if (!item.image_url || removingBgId) return;
+    setRemovingBgId(item.id);
+    setError(null);
+    try {
+      const sourceRes = await fetch(item.image_url);
+      if (!sourceRes.ok) throw new Error(`이미지를 불러오지 못했습니다 (${sourceRes.status})`);
+      const sourceBlob = await sourceRes.blob();
+      const resultBlob = await removeBackground(sourceBlob);
+
+      const userId = await currentUserId();
+      const path = `${userId}/${orderId}/${Date.now()}-${Math.random().toString(36).slice(2)}-nobg.png`;
+      const { error: uploadError } = await supabase.storage
+        .from("order-moodboards")
+        .upload(path, resultBlob, { contentType: "image/png" });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("order-moodboards").getPublicUrl(path);
+
+      const { error: updateError } = await supabase
+        .from("order_moodboard_items")
+        .update({ image_url: data.publicUrl })
+        .eq("id", item.id);
+      if (updateError) throw updateError;
+
+      await deleteMoodboardStorageFile(item.image_url);
+      await invalidate();
+    } catch (e) {
+      setError(`배경 제거 실패 — ${(e as Error).message}`);
+    } finally {
+      setRemovingBgId(null);
+    }
+  };
 
   const bringToFront = (item: OrderMoodboardItem) => {
     if (item.z_index === maxZ) return;
@@ -657,6 +708,29 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 >
                   <Move className="h-3 w-3" />
                 </div>
+              )}
+              {/* 2026-10-14 사용자 요청: "무드보드에 이미지 배경지우는거 기능 추가할수있어?" —
+                  이미지 카드 좌상단에 호버하면 나타나는 지우개 버튼. 처리 중엔 스피너로 바뀌고
+                  다른 아이템의 버튼은 비활성화된다(동시에 하나씩만). */}
+              {item.kind === "image" && (
+                <button
+                  type="button"
+                  className={cn(
+                    "absolute -top-2 -left-2 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground",
+                    removingBgId === item.id ? "flex" : "hidden group-hover:flex",
+                    removingBgId && removingBgId !== item.id && "pointer-events-none opacity-40",
+                  )}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => void handleRemoveBackground(item)}
+                  disabled={Boolean(removingBgId)}
+                  title="배경 제거"
+                >
+                  {removingBgId === item.id ? (
+                    <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                  ) : (
+                    <Eraser className="h-3 w-3" />
+                  )}
+                </button>
               )}
               <div
                 className="absolute -right-1 -bottom-1 h-3 w-3 cursor-nwse-resize border border-border bg-background opacity-0 group-hover:opacity-100"
