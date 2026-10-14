@@ -1825,8 +1825,9 @@ type EditDraftRow = {
   ingredientName: string;
   unit: string;
   amount: string;
-  /** null이면 새로 추가한 재료 — amount_source를 "manual"로 고정한다 */
+  /** null이면 새로 추가한 재료 — amount_source를 "manual"로 고정하고, 자동 요약에서 "+"로 표시 */
   originalAmount: number | null;
+  originalUnit: string | null;
   note: string | null;
   secondaryAmount: number | null;
   secondaryUnit: string | null;
@@ -1845,6 +1846,28 @@ type EditDraftRow = {
  * 더 이상 의미가 없어 같이 지운다(새 버전 기준으로 다시 체크하면 됨) — multiplier/sort_order는
  * 그대로 유지. 새 버전은 다른 버전 생성과 동일하게 status "DRAFT"로 남고, CURRENT로 올리는 건
  * 여전히 포뮬라 페이지에서 별도로 하는 결정으로 남겨둔다. */
+/** 변경 요약을 사용자가 손으로 적지 않고, 초안(draftRows) vs 원본을 비교해서 자동으로
+ * 문구를 만든다(2026-10-14 사용자 요청: "서머리도 내가 적는게 아니고 자동으로 적어줘
+ * 바뀐부분"). 양이 바뀐 재료는 "원래양 → 새양", 새로 추가한 재료는 "+ 이름 양", 지운 재료는
+ * "- 이름" 형태로 모아 쉼표로 이어붙인다. */
+function buildAutoSummary(rows: EditDraftRow[]): string {
+  const parts: string[] = [];
+  for (const row of rows) {
+    if (row.removed) continue;
+    if (row.originalAmount === null) {
+      parts.push(`+ ${row.ingredientName} ${row.amount}${row.unit}`);
+    } else if (Number(row.amount) !== row.originalAmount || row.unit !== row.originalUnit) {
+      parts.push(
+        `${row.ingredientName} ${fmtNumber(row.originalAmount, 0)}${row.originalUnit} → ${row.amount}${row.unit}`,
+      );
+    }
+  }
+  for (const row of rows) {
+    if (row.removed && row.sourceId) parts.push(`- ${row.ingredientName}`);
+  }
+  return parts.length > 0 ? parts.join(", ") : "변경 없음";
+}
+
 function EditFormulaVersionModal({
   column,
   onClose,
@@ -1858,7 +1881,11 @@ function EditFormulaVersionModal({
   const [draftRows, setDraftRows] = useState<EditDraftRow[]>([]);
   const [seeded, setSeeded] = useState(false);
   const [pickingIngredient, setPickingIngredient] = useState(false);
-  const [summary, setSummary] = useState("");
+  // 2026-10-14 사용자 요청: "new 버전으로 저장할지 아니면 덮어쓸지도 선택할수 있게" — NEW는
+  // 지금 버전을 복사한 새 DRAFT 버전을 만들고 이 WORK SESSION만 거기로 옮긴다(기존 버전/다른
+  // SESSION은 안 건드림). OVERWRITE는 지금 버전 자체를 고쳐서, 이 버전을 쓰는 모든 곳에 바로
+  // 반영되고 계량 체크 상태도 바뀌지 않은 재료는 그대로 유지된다.
+  const [saveMode, setSaveMode] = useState<"new" | "overwrite">("new");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -1877,6 +1904,7 @@ function EditFormulaVersionModal({
         unit: row.unit,
         amount: String(row.amount),
         originalAmount: Number(row.amount),
+        originalUnit: row.unit,
         note: row.note,
         secondaryAmount: row.secondary_amount,
         secondaryUnit: row.secondary_unit,
@@ -1891,7 +1919,14 @@ function EditFormulaVersionModal({
   };
 
   const removeRow = (key: string) => {
-    setDraftRows((prev) => prev.map((r) => (r.key === key ? { ...r, removed: true } : r)));
+    setDraftRows((prev) => {
+      const row = prev.find((r) => r.key === key);
+      if (!row) return prev;
+      // 아직 저장된 적 없는(이번에 새로 추가한) 재료는 목록에서 바로 빼고, 원래 있던 재료는
+      // "지움" 표시만 해둔다 — 자동 요약에 "- 이름"으로 나타나고, 저장할 때 실제로 제외/삭제된다.
+      if (row.sourceId === null) return prev.filter((r) => r.key !== key);
+      return prev.map((r) => (r.key === key ? { ...r, removed: true } : r));
+    });
   };
 
   const addIngredientRow = async (ingredientId: string, defaultUnit: string) => {
@@ -1907,6 +1942,7 @@ function EditFormulaVersionModal({
         unit: defaultUnit,
         amount: "0",
         originalAmount: null,
+        originalUnit: null,
         note: null,
         secondaryAmount: null,
         secondaryUnit: null,
@@ -1926,84 +1962,155 @@ function EditFormulaVersionModal({
   };
 
   const visibleRows = draftRows.filter((r) => !r.removed);
+  const autoSummary = useMemo(() => buildAutoSummary(draftRows), [draftRows]);
+  const hasChanges = autoSummary !== "변경 없음";
 
-  const createVersion = useMutation({
+  const saveChanges = useMutation({
     mutationFn: async () => {
       const user_id = await currentUserId();
 
-      const { data: baseVersion, error: baseError } = await supabase
-        .from("formula_versions")
-        .select(
-          "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id",
-        )
-        .eq("id", column.formulaVersionId)
-        .single();
-      if (baseError) throw baseError;
+      if (saveMode === "new") {
+        // NEW — 지금 버전을 복사한 새 DRAFT 버전을 만들고, 이 WORK SESSION 선택만 그쪽으로
+        // 옮긴다. 다른 WORK SESSION이나 포뮬라 페이지의 "현재 버전"은 그대로 안전하게 남는다.
+        const { data: baseVersion, error: baseError } = await supabase
+          .from("formula_versions")
+          .select(
+            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id",
+          )
+          .eq("id", column.formulaVersionId)
+          .single();
+        if (baseError) throw baseError;
 
-      const { data: existingVersions, error: versionsError } = await supabase
-        .from("formula_versions")
-        .select("version_number")
-        .eq("formula_id", column.formulaId);
-      if (versionsError) throw versionsError;
-      const nextNumber =
-        (existingVersions ?? []).reduce((max, v) => Math.max(max, v.version_number), 0) + 1;
+        const { data: existingVersions, error: versionsError } = await supabase
+          .from("formula_versions")
+          .select("version_number")
+          .eq("formula_id", column.formulaId);
+        if (versionsError) throw versionsError;
+        const nextNumber =
+          (existingVersions ?? []).reduce((max, v) => Math.max(max, v.version_number), 0) + 1;
 
-      const { data: newVersion, error: insertError } = await supabase
-        .from("formula_versions")
-        .insert({
+        const { data: newVersion, error: insertError } = await supabase
+          .from("formula_versions")
+          .insert({
+            user_id,
+            formula_id: column.formulaId,
+            version_number: nextNumber,
+            status: "DRAFT",
+            default_mould_id: baseVersion.default_mould_id,
+            default_base_weight_id: baseVersion.default_base_weight_id,
+            yield_quantity: baseVersion.yield_quantity,
+            change_summary: autoSummary,
+            change_reason: reason.trim() || null,
+            bath_water_g: baseVersion.bath_water_g,
+            basis_overrides: baseVersion.basis_overrides ?? {},
+          })
+          .select("id")
+          .single();
+        if (insertError) throw insertError;
+
+        const rowsToInsert = visibleRows.map((row, index) => ({
           user_id,
-          formula_id: column.formulaId,
-          version_number: nextNumber,
-          status: "DRAFT",
-          default_mould_id: baseVersion.default_mould_id,
-          default_base_weight_id: baseVersion.default_base_weight_id,
-          yield_quantity: baseVersion.yield_quantity,
-          change_summary: summary.trim() || null,
-          change_reason: reason.trim() || null,
-          bath_water_g: baseVersion.bath_water_g,
-          basis_overrides: baseVersion.basis_overrides ?? {},
-        })
-        .select("id")
-        .single();
-      if (insertError) throw insertError;
+          formula_version_id: newVersion.id,
+          ingredient_id: row.ingredientId,
+          amount: Number(row.amount) || 0,
+          unit: row.unit,
+          sort_order: index,
+          note: row.note,
+          secondary_amount: row.secondaryAmount,
+          secondary_unit: row.secondaryUnit,
+          amount_source:
+            row.originalAmount === null ||
+            Number(row.amount) !== row.originalAmount ||
+            row.unit !== row.originalUnit
+              ? "manual"
+              : "copied",
+        }));
+        if (rowsToInsert.length > 0) {
+          const { error: ingredientsError } = await supabase
+            .from("formula_version_ingredients")
+            .insert(rowsToInsert);
+          if (ingredientsError) throw ingredientsError;
+        }
 
-      const rowsToInsert = visibleRows.map((row, index) => ({
-        user_id,
-        formula_version_id: newVersion.id,
-        ingredient_id: row.ingredientId,
-        amount: Number(row.amount) || 0,
-        unit: row.unit,
-        sort_order: index,
-        note: row.note,
-        secondary_amount: row.secondaryAmount,
-        secondary_unit: row.secondaryUnit,
-        amount_source:
-          row.originalAmount === null || Number(row.amount) !== row.originalAmount
-            ? "manual"
-            : "copied",
-      }));
-      if (rowsToInsert.length > 0) {
-        const { error: ingredientsError } = await supabase
-          .from("formula_version_ingredients")
-          .insert(rowsToInsert);
-        if (ingredientsError) throw ingredientsError;
+        // 이 WORK SESSION 선택(열)이 새 버전을 바로 쓰도록 전환 — multiplier/sort_order는 그대로 둔다.
+        const { error: selectionError } = await supabase
+          .from("work_session_formula_versions")
+          .update({ formula_version_id: newVersion.id })
+          .eq("id", column.selectionId);
+        if (selectionError) throw selectionError;
+
+        // 재료 라인 id가 전부 바뀌므로 이 열의 기존 계량 진행상태는 더 이상 의미가 없다 — 지운다.
+        const { error: progressError } = await supabase
+          .from("work_session_progress")
+          .delete()
+          .eq("work_session_formula_version_id", column.selectionId);
+        if (progressError) throw progressError;
+
+        return newVersion.id;
       }
 
-      // 이 WORK SESSION 선택(열)이 새 버전을 바로 쓰도록 전환 — multiplier/sort_order는 그대로 둔다.
-      const { error: selectionError } = await supabase
-        .from("work_session_formula_versions")
-        .update({ formula_version_id: newVersion.id })
-        .eq("id", column.selectionId);
-      if (selectionError) throw selectionError;
+      // OVERWRITE — 지금 버전 자체를 고친다. 이 버전을 쓰는 다른 WORK SESSION/포뮬라 화면에도
+      // 바로 반영되고, work_session_formula_versions는 건드리지 않는다. 양/단위가 안 바뀐
+      // 재료는 라인 id가 그대로라서 그 재료의 계량 체크 상태도 그대로 유지된다 — 지운 재료만
+      // 그 재료의 계량 진행상태를 같이 지운다.
+      const removedRows = draftRows.filter((r) => r.removed && r.sourceId);
+      for (const row of removedRows) {
+        const { error: progressError } = await supabase
+          .from("work_session_progress")
+          .delete()
+          .eq("formula_version_ingredient_id", row.sourceId as string);
+        if (progressError) throw progressError;
+        const { error: deleteError } = await supabase
+          .from("formula_version_ingredients")
+          .delete()
+          .eq("id", row.sourceId as string);
+        if (deleteError) throw deleteError;
+      }
 
-      // 재료 라인 id가 전부 바뀌므로 이 열의 기존 계량 진행상태는 더 이상 의미가 없다 — 지운다.
-      const { error: progressError } = await supabase
-        .from("work_session_progress")
-        .delete()
-        .eq("work_session_formula_version_id", column.selectionId);
-      if (progressError) throw progressError;
+      const changedRows = visibleRows.filter(
+        (row) =>
+          row.sourceId !== null &&
+          (Number(row.amount) !== row.originalAmount || row.unit !== row.originalUnit),
+      );
+      for (const row of changedRows) {
+        const { error: updateError } = await supabase
+          .from("formula_version_ingredients")
+          .update({ amount: Number(row.amount) || 0, unit: row.unit, amount_source: "manual" })
+          .eq("id", row.sourceId as string);
+        if (updateError) throw updateError;
+      }
 
-      return newVersion.id;
+      const newRows = visibleRows.filter((row) => row.sourceId === null);
+      if (newRows.length > 0) {
+        const maxSortOrder = (baseIngredients.data ?? []).reduce(
+          (max, r) => Math.max(max, r.sort_order),
+          -1,
+        );
+        const { error: insertError } = await supabase.from("formula_version_ingredients").insert(
+          newRows.map((row, index) => ({
+            user_id,
+            formula_version_id: column.formulaVersionId,
+            ingredient_id: row.ingredientId,
+            amount: Number(row.amount) || 0,
+            unit: row.unit,
+            sort_order: maxSortOrder + 1 + index,
+            note: row.note,
+            secondary_amount: row.secondaryAmount,
+            secondary_unit: row.secondaryUnit,
+            amount_source: "manual",
+          })),
+        );
+        if (insertError) throw insertError;
+      }
+
+      // 이 버전의 변경요약/메모도 최신 수정 내용으로 갱신한다.
+      const { error: versionError } = await supabase
+        .from("formula_versions")
+        .update({ change_summary: autoSummary, change_reason: reason.trim() || null })
+        .eq("id", column.formulaVersionId);
+      if (versionError) throw versionError;
+
+      return column.formulaVersionId;
     },
     onSuccess: async () => {
       setError(null);
@@ -2018,17 +2125,40 @@ function EditFormulaVersionModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-auto border border-border bg-background">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="label-caps">EDIT {column.formulaName} — NEW VERSION</span>
+          <span className="label-caps">
+            EDIT {column.formulaName} (v{column.versionNumber})
+          </span>
           <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
             CLOSE
           </button>
         </div>
 
         <div className="space-y-4 p-4">
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            현재 v{column.versionNumber}을 복사해서 새 DRAFT 버전을 만듭니다. 저장하면 이 WORK
-            SESSION의 이 열(×{fmtNumber(column.multiplier, 0)})이 바로 새 버전을 쓰게 됩니다.
-          </p>
+          {/* 2026-10-14 사용자 요청: "new 버전으로 저장할지 아니면 덮어쓸지도 선택할수 있게" */}
+          <div className="space-y-1">
+            <p className="label-caps text-xs text-muted-foreground">저장 방식</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={saveMode === "new" ? primaryButtonClass : buttonClass}
+                onClick={() => setSaveMode("new")}
+              >
+                새 버전으로 저장
+              </button>
+              <button
+                type="button"
+                className={saveMode === "overwrite" ? primaryButtonClass : buttonClass}
+                onClick={() => setSaveMode("overwrite")}
+              >
+                현재 버전에 덮어쓰기
+              </button>
+            </div>
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              {saveMode === "new"
+                ? `현재 v${column.versionNumber}을 복사해서 새 DRAFT 버전을 만듭니다. 저장하면 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 바로 새 버전을 쓰게 되고, 계량 체크는 초기화됩니다.`
+                : `v${column.versionNumber} 자체를 고칩니다. 이 버전을 쓰는 다른 WORK SESSION/포뮬라에도 바로 반영되고, 양이 안 바뀐 재료의 계량 체크는 그대로 남습니다.`}
+            </p>
+          </div>
 
           {baseIngredients.isLoading && (
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
@@ -2091,16 +2221,13 @@ function EditFormulaVersionModal({
             </button>
           )}
 
-          <Field label="CHANGE SUMMARY">
-            <input
-              className={inputClass}
-              required
-              placeholder="SUGAR 50g → 45g, + TREACLE SYRUP"
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-            />
+          {/* 2026-10-14 사용자 요청: "서머리도 내가 적는게 아니고 자동으로 적어줘 바뀐부분" —
+              직접 입력하는 CHANGE SUMMARY 칸을 없애고, 초안과 원본을 비교해서 자동으로 만든
+              문구를 그대로 보여준다. */}
+          <Field label="변경 요약 (자동)">
+            <p className={`${inputClass} min-h-[2.25rem] text-sm leading-snug`}>{autoSummary}</p>
           </Field>
-          <Field label="CHANGE REASON (OPTIONAL)">
+          <Field label="메모 (선택)">
             <textarea
               rows={2}
               className={inputClass}
@@ -2115,10 +2242,10 @@ function EditFormulaVersionModal({
             <button
               type="button"
               className={primaryButtonClass}
-              disabled={createVersion.isPending || !summary.trim()}
-              onClick={() => createVersion.mutate()}
+              disabled={saveChanges.isPending || !hasChanges}
+              onClick={() => saveChanges.mutate()}
             >
-              새 버전으로 저장
+              {saveMode === "new" ? "새 버전으로 저장" : "덮어쓰기"}
             </button>
             <button type="button" className={buttonClass} onClick={onClose}>
               CANCEL
