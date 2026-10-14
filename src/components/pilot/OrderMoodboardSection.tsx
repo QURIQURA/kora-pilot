@@ -110,13 +110,65 @@ function shapeClipPath(shape: string | null | undefined): string | undefined {
 }
 
 /**
- * 메모 배경 — color2가 있으면 그라데이션, 없으면 단색(2026-10-14 사용자 요청: "메모 컬러
- * 그라데이션 기능도 추가"). `background` 단축 속성은 단색에도 그대로 쓸 수 있어 분기 없이 적용.
+ * 메모 패턴(배경 꾸미기) 옵션 — 2026-10-15 사용자 요청: "메모도형 컬러 그라데이션이랑
+ * 패턴-물결패턴지그재그패턴(두가지색상선택) 기능 추가". 기존 그라데이션 토글을 4가지 선택지로
+ * 확장: 단색/그라데이션/물결/지그재그. 물결·지그재그도 그라데이션처럼 두 번째 컬러(color2)를 쓴다.
  */
-function noteBackground(item: Pick<OrderMoodboardItem, "color" | "color2">): string {
+const NOTE_PATTERNS = [
+  { value: "solid", label: "단색" },
+  { value: "gradient", label: "그라데이션" },
+  { value: "wave", label: "물결 패턴" },
+  { value: "zigzag", label: "지그재그 패턴" },
+] as const;
+
+type NotePatternValue = (typeof NOTE_PATTERNS)[number]["value"];
+
+/** 물결 패턴용 SVG 타일(data URI) — 두 컬러로 가로 물결 띠를 반복시킨다. */
+function wavePatternDataUri(c1: string, c2: string): string {
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'>` +
+    `<rect width='40' height='20' fill='${c2}'/>` +
+    `<path d='M0 12 Q10 2 20 12 T40 12 V20 H0 Z' fill='${c1}'/>` +
+    `</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+/**
+ * 메모 배경 — pattern 값에 따라 단색/그라데이션/물결/지그재그 중 하나로 그린다. 과거 데이터
+ * 호환: pattern 컬럼이 없던 시절 color2만으로 그라데이션을 표시하던 아이템은 마이그레이션 때
+ * pattern="gradient"로 채워뒀으므로 별도 분기 없이 pattern 값만 보면 된다.
+ */
+function noteBackgroundStyle(
+  item: Pick<OrderMoodboardItem, "color" | "color2" | "pattern">,
+): React.CSSProperties {
   const c1 = item.color ?? "#fde68a";
-  if (item.color2) return `linear-gradient(135deg, ${c1} 0%, ${item.color2} 100%)`;
-  return c1;
+  const c2 = item.color2 ?? "#ffffff";
+  const pattern = (item.pattern ?? "solid") as NotePatternValue;
+  if (pattern === "gradient") {
+    return { background: `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)` };
+  }
+  if (pattern === "wave") {
+    return {
+      backgroundColor: c2,
+      backgroundImage: wavePatternDataUri(c1, c2),
+      backgroundRepeat: "repeat",
+      backgroundSize: "40px 20px",
+    };
+  }
+  if (pattern === "zigzag") {
+    return {
+      backgroundColor: c2,
+      backgroundImage: [
+        `linear-gradient(135deg, ${c1} 25%, transparent 25%)`,
+        `linear-gradient(225deg, ${c1} 25%, transparent 25%)`,
+        `linear-gradient(315deg, ${c1} 25%, transparent 25%)`,
+        `linear-gradient(45deg, ${c1} 25%, transparent 25%)`,
+      ].join(", "),
+      backgroundPosition: "10px 0, 10px 0, 0 0, 0 0",
+      backgroundSize: "20px 20px",
+    };
+  }
+  return { background: c1 };
 }
 
 function readImageSize(file: File): Promise<{ width: number; height: number }> {
@@ -680,10 +732,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                     onPointerDown={(e) => beginDrag(e, item, "move")}
                   />
                 ) : (
-                  <div
-                    className="flex h-full flex-col"
-                    style={{ background: noteBackground(item) }}
-                  >
+                  <div className="flex h-full flex-col" style={noteBackgroundStyle(item)}>
                     <div
                       className="hidden shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5 group-hover:flex"
                       onPointerDown={(e) => beginDrag(e, item, "move")}
@@ -753,41 +802,56 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         />
                       </label>
-                      {/* 그라데이션 — 2026-10-14 사용자 요청: "메모 컬러 그라데이션 기능도 추가".
-                          원형 스와치 클릭으로 on/off 토글, 켜지면 2번째 색상 피커가 나타난다. */}
+                      {/* 패턴(배경 꾸미기) — 단색/그라데이션/물결/지그재그 중 선택
+                          (2026-10-15 사용자 요청: "메모도형 컬러 그라데이션이랑 패턴-물결패턴
+                          지그재그패턴(두가지색상선택) 기능 추가"). 단색이 아닌 패턴을 고르면 2번째
+                          색상 피커가 나타난다 — 아직 color2가 없으면 흰색을 기본값으로 채워준다. */}
                       <div
                         className="flex items-center gap-1"
                         onPointerDown={(e) => e.stopPropagation()}
                       >
-                        <button
-                          type="button"
-                          title={item.color2 ? "그라데이션 끄기(단색으로)" : "그라데이션 켜기"}
-                          onClick={() => {
-                            pushUndo({
-                              type: "update",
-                              id: item.id,
-                              before: { color2: item.color2 ?? null },
-                            });
-                            update.mutate({
-                              id: item.id,
-                              patch: { color2: item.color2 ? null : "#ffffff" },
-                            });
-                          }}
-                          className={cn(
-                            "h-3.5 w-3.5 shrink-0 rounded-full border",
-                            item.color2 ? "border-foreground" : "border-black/30",
-                          )}
-                          style={{
-                            background: `linear-gradient(135deg, ${item.color ?? "#fde68a"} 0%, ${
-                              item.color2 ?? "#ffffff"
-                            } 100%)`,
-                          }}
-                        />
-                        {item.color2 && (
+                        {NOTE_PATTERNS.map((p) => (
+                          <button
+                            key={p.value}
+                            type="button"
+                            title={p.label}
+                            onClick={() => {
+                              pushUndo({
+                                type: "update",
+                                id: item.id,
+                                before: {
+                                  pattern: item.pattern ?? "solid",
+                                  color2: item.color2 ?? null,
+                                },
+                              });
+                              update.mutate({
+                                id: item.id,
+                                patch: {
+                                  pattern: p.value,
+                                  ...(p.value !== "solid" && !item.color2
+                                    ? { color2: "#ffffff" }
+                                    : {}),
+                                },
+                              });
+                            }}
+                            className={cn(
+                              "h-3.5 w-3.5 shrink-0 rounded-full border",
+                              (item.pattern ?? "solid") === p.value
+                                ? "border-foreground"
+                                : "border-black/30",
+                            )}
+                            style={noteBackgroundStyle({
+                              color: item.color,
+                              color2: item.color2 ?? "#ffffff",
+                              pattern: p.value,
+                            })}
+                          />
+                        ))}
+                        {(item.pattern ?? "solid") !== "solid" && item.color2 && (
                           <label
                             className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
                             style={{ backgroundColor: item.color2 }}
-                            title="그라데이션 2번째 색상"
+                            title="두 번째 색상"
                           >
                             <input
                               type="color"

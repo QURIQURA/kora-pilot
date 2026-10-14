@@ -1086,6 +1086,7 @@ export type Database = {
           image_url: string | null
           kind: string
           order_id: string
+          pattern: string
           rotation: number
           shape: string
           updated_at: string
@@ -1105,6 +1106,7 @@ export type Database = {
           image_url?: string | null
           kind?: string
           order_id: string
+          pattern?: string
           rotation?: number
           shape?: string
           updated_at?: string
@@ -1124,6 +1126,7 @@ export type Database = {
           image_url?: string | null
           kind?: string
           order_id?: string
+          pattern?: string
           rotation?: number
           shape?: string
           updated_at?: string
