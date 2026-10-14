@@ -108,7 +108,8 @@ export function WorkflowView({
   // TASK TYPE 이름(소문자) → 사용자가 고른 color_class. 없으면 taskTypeColorClass()가 해시 기본색을 쓴다.
   const colorOverrides = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const row of taskTypeColors.data ?? []) map[taskTypeColorKey(row.task_type)] = row.color_class;
+    for (const row of taskTypeColors.data ?? [])
+      map[taskTypeColorKey(row.task_type)] = row.color_class;
     return map;
   }, [taskTypeColors.data]);
 
@@ -167,7 +168,12 @@ export function WorkflowView({
     if (!task.actual_started_at) return;
     const originalStartMs = new Date(task.actual_started_at).getTime();
     const originalEndMs = task.completed_at ? new Date(task.completed_at).getTime() : null;
-    dragSessionRef.current = { taskId: task.id, startClientY: clientY, originalStartMs, originalEndMs };
+    dragSessionRef.current = {
+      taskId: task.id,
+      startClientY: clientY,
+      originalStartMs,
+      originalEndMs,
+    };
     setDragPreview({ taskId: task.id, startedAtMs: originalStartMs, completedAtMs: originalEndMs });
   }
 
@@ -193,7 +199,8 @@ export function WorkflowView({
       setDragPreview({
         taskId: session.taskId,
         startedAtMs: session.originalStartMs + snapped * 60000,
-        completedAtMs: session.originalEndMs != null ? session.originalEndMs + snapped * 60000 : null,
+        completedAtMs:
+          session.originalEndMs != null ? session.originalEndMs + snapped * 60000 : null,
       });
     }
     function onUp() {
@@ -225,7 +232,9 @@ export function WorkflowView({
             ...t,
             actual_started_at: new Date(dragPreview.startedAtMs).toISOString(),
             completed_at:
-              dragPreview.completedAtMs != null ? new Date(dragPreview.completedAtMs).toISOString() : null,
+              dragPreview.completedAtMs != null
+                ? new Date(dragPreview.completedAtMs).toISOString()
+                : null,
           }
         : t,
     );
@@ -248,7 +257,8 @@ export function WorkflowView({
 
   // id → task — LOCKED/READY 판정에 선행 TASK의 현재 status가 필요하다(2026-09-24).
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
-  const predecessorIdsOf = (taskId: string) => (taskPredecessors?.[taskId] ?? []).map((p) => p.taskId);
+  const predecessorIdsOf = (taskId: string) =>
+    (taskPredecessors?.[taskId] ?? []).map((p) => p.taskId);
   const phaseOf = (task: WorkSessionTask): TaskPhase =>
     computeTaskPhase(task, predecessorIdsOf(task.id), tasksById);
 
@@ -271,7 +281,25 @@ export function WorkflowView({
 
   function columnLabelOf(formulaVersionId: string | null): string {
     if (!formulaVersionId) return "GENERAL";
-    return formulaOptions.find((f) => f.formulaVersionId === formulaVersionId)?.formulaName ?? "GENERAL";
+    return (
+      formulaOptions.find((f) => f.formulaVersionId === formulaVersionId)?.formulaName ?? "GENERAL"
+    );
+  }
+
+  /** 2026-10-14 사용자 요청: "workflow에 step 별 어떤 component인지 제목에 같이 적어줘
+   * CHIFFON CACAO-YOLK MIXTURE 이렇게" — TASK LIST처럼 여러 FORMULA의 TASK가 한 화면에
+   * 섞여 보이는 곳에서, 어느 FORMULA의 단계인지 제목만 보고 바로 알 수 있게 "포뮬라명-TASK명"
+   * 으로 붙여서 보여준다. GENERAL(어느 FORMULA에도 안 묶인) TASK는 그대로 TASK명만. 타임라인
+   * 본문/포커스 모드는 이미 열 헤더·상단에 FORMULA명을 따로 보여주고 있어서(columnLabelOf) 거기
+   * 까지 또 붙이면 중복이라 그대로 둔다. */
+  function taskDisplayTitle(
+    task: Pick<WorkSessionTask, "task_name" | "formula_version_id">,
+  ): string {
+    if (!task.formula_version_id) return task.task_name;
+    const formulaName = formulaOptions.find(
+      (f) => f.formulaVersionId === task.formula_version_id,
+    )?.formulaName;
+    return formulaName ? `${formulaName}-${task.task_name}` : task.task_name;
   }
 
   /** READY → START: 실제 시작 시각 기록, IN_PROGRESS로 전환 */
@@ -369,7 +397,10 @@ export function WorkflowView({
       >
     >,
   ) {
-    const { error: updateError } = await supabase.from("work_session_tasks").update(patch).eq("id", task.id);
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update(patch)
+      .eq("id", task.id);
     if (updateError) setError(`관찰값 저장 실패 — ${updateError.message}`);
     await onTasksChanged();
   }
@@ -378,9 +409,14 @@ export function WorkflowView({
    * Minutes/Unit 계산의 원재료이므로, 입력 안 하면 그냥 null로 둔다(강제 아님). */
   async function setEfficiencyField(
     task: WorkSessionTask,
-    patch: Partial<Pick<WorkSessionTask, "active_labour_minutes" | "output_quantity" | "output_unit">>,
+    patch: Partial<
+      Pick<WorkSessionTask, "active_labour_minutes" | "output_quantity" | "output_unit">
+    >,
   ) {
-    const { error: updateError } = await supabase.from("work_session_tasks").update(patch).eq("id", task.id);
+    const { error: updateError } = await supabase
+      .from("work_session_tasks")
+      .update(patch)
+      .eq("id", task.id);
     if (updateError) setError(`효율 데이터 저장 실패 — ${updateError.message}`);
     await onTasksChanged();
   }
@@ -396,7 +432,6 @@ export function WorkflowView({
     await onTasksChanged();
   }
 
-
   // 마운트 시 현재 시각(또는 진행중 Task) 근처로 자동 스크롤
   useEffect(() => {
     if (autoScrolled.current || !scrollRef.current) return;
@@ -408,9 +443,6 @@ export function WorkflowView({
     const top = Math.max(0, (anchorMinute - range.startMinute) * PX_PER_MINUTE - ROW_HEIGHT * 2);
     scrollRef.current.scrollTop = top;
   }, [tasks, range, nowTop]);
-
-
-
 
   async function removeTask(task: WorkSessionTask) {
     const { error: deleteError } = await supabase
@@ -440,8 +472,6 @@ export function WorkflowView({
     if (insertError) setError(`TASK 추가 실패 — ${insertError.message}`);
     await onTasksChanged();
   }
-
-
 
   return (
     <div className="space-y-6">
@@ -478,7 +508,8 @@ export function WorkflowView({
                   </div>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                      시작 {task.actual_started_at ? formatTime(task.actual_started_at) : "--:--"} · 경과{" "}
+                      시작 {task.actual_started_at ? formatTime(task.actual_started_at) : "--:--"} ·
+                      경과{" "}
                       {timerMin != null && remainSec !== null && remainSec > 0
                         ? `남은 ${formatDuration(remainSec)}`
                         : formatDuration(elapsedSec)}
@@ -497,8 +528,6 @@ export function WorkflowView({
           </ul>
         </div>
       )}
-
-
 
       {tasks.length === 0 ? (
         <div className="border border-border p-6 text-center text-xs tracking-wider text-muted-foreground">
@@ -647,7 +676,9 @@ export function WorkflowView({
                           const startLabel = task.actual_started_at
                             ? formatTime(task.actual_started_at)
                             : "--:--";
-                          const endLabel = task.completed_at ? formatTime(task.completed_at) : "--:--";
+                          const endLabel = task.completed_at
+                            ? formatTime(task.completed_at)
+                            : "--:--";
                           const isDone = task.status === "DONE";
                           const isSkipped = task.status === "SKIPPED";
                           const isInProgress = task.status === "IN_PROGRESS";
@@ -720,7 +751,6 @@ export function WorkflowView({
             </div>
           </div>
 
-
           {/* ── TASK 수동 추가(2026-10-12) — Component에 기본 WORKFLOW TEMPLATE/자동 적용이
               없으면 TASK가 자동으로 안 생기므로, 여기서 바로 하나 추가할 수 있게 한다. ── */}
           <AddTaskForm columns={columns} onAdd={createTask} />
@@ -734,7 +764,6 @@ export function WorkflowView({
                   : null;
               const linkedIngredients = taskIngredients?.[task.id] ?? [];
 
-
               return (
                 <div
                   key={task.id}
@@ -742,7 +771,7 @@ export function WorkflowView({
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm text-foreground">
-                      {task.task_name}
+                      {taskDisplayTitle(task)}
                       {task.task_type ? (
                         <span
                           className={`ml-2 rounded-sm border px-1.5 py-0.5 text-[10px] tracking-wider ${taskTypeColorClass(task.task_type, colorOverrides)}`}
@@ -776,7 +805,9 @@ export function WorkflowView({
                         onBlur={(e) => setTaskEnd(task, e.target.value)}
                       />
                       {actualDuration !== null ? (
-                        <span className="text-muted-foreground">· {Math.round(actualDuration)} MIN</span>
+                        <span className="text-muted-foreground">
+                          · {Math.round(actualDuration)} MIN
+                        </span>
                       ) : null}
                     </div>
                     {hasObservationFields(task.task_type, observationOverrides) && (
@@ -788,7 +819,9 @@ export function WorkflowView({
                           className="h-6 w-16 border border-border bg-background px-1 text-[11px]"
                           defaultValue={task.observation_status ?? ""}
                           onBlur={(e) =>
-                            setObservationField(task, { observation_status: e.target.value.trim() || null })
+                            setObservationField(task, {
+                              observation_status: e.target.value.trim() || null,
+                            })
                           }
                         />
                         <input
@@ -798,7 +831,9 @@ export function WorkflowView({
                           defaultValue={task.observation_height_start_mm ?? ""}
                           onBlur={(e) =>
                             setObservationField(task, {
-                              observation_height_start_mm: e.target.value.trim() ? Number(e.target.value) : null,
+                              observation_height_start_mm: e.target.value.trim()
+                                ? Number(e.target.value)
+                                : null,
                             })
                           }
                         />
@@ -810,7 +845,9 @@ export function WorkflowView({
                           defaultValue={task.observation_height_mid_mm ?? ""}
                           onBlur={(e) =>
                             setObservationField(task, {
-                              observation_height_mid_mm: e.target.value.trim() ? Number(e.target.value) : null,
+                              observation_height_mid_mm: e.target.value.trim()
+                                ? Number(e.target.value)
+                                : null,
                             })
                           }
                         />
@@ -822,7 +859,9 @@ export function WorkflowView({
                           defaultValue={task.observation_height_end_mm ?? ""}
                           onBlur={(e) =>
                             setObservationField(task, {
-                              observation_height_end_mm: e.target.value.trim() ? Number(e.target.value) : null,
+                              observation_height_end_mm: e.target.value.trim()
+                                ? Number(e.target.value)
+                                : null,
                             })
                           }
                         />
@@ -833,7 +872,9 @@ export function WorkflowView({
                           defaultValue={task.observation_temperature_c ?? ""}
                           onBlur={(e) =>
                             setObservationField(task, {
-                              observation_temperature_c: e.target.value.trim() ? Number(e.target.value) : null,
+                              observation_temperature_c: e.target.value.trim()
+                                ? Number(e.target.value)
+                                : null,
                             })
                           }
                         />
@@ -849,7 +890,9 @@ export function WorkflowView({
                           defaultValue={task.active_labour_minutes ?? ""}
                           onBlur={(e) =>
                             setEfficiencyField(task, {
-                              active_labour_minutes: e.target.value.trim() ? Number(e.target.value) : null,
+                              active_labour_minutes: e.target.value.trim()
+                                ? Number(e.target.value)
+                                : null,
                             })
                           }
                         />
@@ -861,7 +904,9 @@ export function WorkflowView({
                           defaultValue={task.output_quantity ?? ""}
                           onBlur={(e) =>
                             setEfficiencyField(task, {
-                              output_quantity: e.target.value.trim() ? Number(e.target.value) : null,
+                              output_quantity: e.target.value.trim()
+                                ? Number(e.target.value)
+                                : null,
                             })
                           }
                         />
@@ -876,20 +921,24 @@ export function WorkflowView({
                         />
                       </div>
                     )}
-                    {task.checklist_items != null && (task.checklist_items as unknown as ChecklistItem[]).length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-                        {(task.checklist_items as unknown as ChecklistItem[]).map((item, idx) => (
-                          <label key={idx} className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              checked={item.done}
-                              onChange={() => toggleChecklistItem(task, idx)}
-                            />
-                            <span className={item.done ? "line-through" : ""}>{item.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
+                    {task.checklist_items != null &&
+                      (task.checklist_items as unknown as ChecklistItem[]).length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                          {(task.checklist_items as unknown as ChecklistItem[]).map((item, idx) => (
+                            <label
+                              key={idx}
+                              className="flex items-center gap-1 text-[11px] text-muted-foreground"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={item.done}
+                                onChange={() => toggleChecklistItem(task, idx)}
+                              />
+                              <span className={item.done ? "line-through" : ""}>{item.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
                   </div>
                   <div className="flex items-center gap-2">
                     {(() => {
