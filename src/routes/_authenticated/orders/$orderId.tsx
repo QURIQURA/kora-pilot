@@ -170,7 +170,9 @@ function OrderDetailPage() {
   // 2026-10-15 사용자 요청: "무드보드 아래에 결과물사진 업로드할수있게... 근데 복잡해지니까
   // 탭으로 이미지용 공간 구분하자" — 무드보드 + 결과물 사진(VISUALS)과 기존 입력 폼들
   // (ORDER DETAIL)을 탭으로 분리. SAVE/DELETE 바는 둘 다에 적용되므로 탭 밖(페이지 하단)에 둔다.
-  const [activeTab, setActiveTab] = useState<"ORDER DETAIL" | "VISUALS">("ORDER DETAIL");
+  // 2026-10-15 사용자 재요청: "visuals가 먼저 뜨게해줘" — 탭 순서도 VISUALS를 앞으로, 페이지
+  // 진입 시 기본 선택 탭도 VISUALS로.
+  const [activeTab, setActiveTab] = useState<"ORDER DETAIL" | "VISUALS">("VISUALS");
 
   const [orderNumber, setOrderNumber] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -724,7 +726,7 @@ function OrderDetailPage() {
       </div>
 
       <div className="flex items-center gap-2 border-b border-border">
-        {(["ORDER DETAIL", "VISUALS"] as const).map((tab) => (
+        {(["VISUALS", "ORDER DETAIL"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
