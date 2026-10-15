@@ -29,8 +29,10 @@ import {
   componentsQuery,
   techniqueCategoriesQuery,
   methodsQuery,
+  ingredientGroupsQuery,
   type VersionIngredientRow,
 } from "@/lib/queries";
+import { resortFormulaVersionIngredientsByGroup } from "@/lib/ingredient-group";
 import { methodLabel } from "@/lib/method";
 import {
   SECONDARY_UNITS,
@@ -163,6 +165,7 @@ function FormulaDetailPage() {
   const components = useQuery(componentsQuery());
   const techniqueCategories = useQuery(techniqueCategoriesQuery());
   const methods = useQuery(methodsQuery());
+  const ingredientGroups = useQuery(ingredientGroupsQuery());
 
   const versionList = useMemo(() => versions.data ?? [], [versions.data]);
   const [versionId, setVersionId] = useState<string | null>(null);
@@ -206,7 +209,8 @@ function FormulaDetailPage() {
   // 것과 동일한 동작) — 그렇지 않으면 바꿔도 SAVE 전까지 재료량 칸이 안 바뀌어 "적용 안 됨"처럼 보임.
   // 몰드가 연결된 열은 "몰드 개수"를 배수로 자동 환산한다(mouldBatchMultiplier, 2026-09-24).
   const effectiveBatchPresets = useMemo(() => {
-    const baseMould = (moulds.data ?? []).find((m) => m.id === (version?.default_mould_id ?? "")) ?? null;
+    const baseMould =
+      (moulds.data ?? []).find((m) => m.id === (version?.default_mould_id ?? "")) ?? null;
     return batchPresets.map((preset) => {
       const d = draft?.batches[preset.id];
       if (!d) return { ...preset, mismatch: false };
@@ -237,9 +241,7 @@ function FormulaDetailPage() {
 
   // 이 Formula가 속한 Component — 브레드크럼/상단 링크에서 "어디서 왔는지"가 바로 보이도록.
   // Component 없는 기준 배합(라이브러리)은 여전히 FORMULAS로 표시.
-  const linkedComponent = (components.data ?? []).find(
-    (c) => c.id === formula.data?.component_id,
-  );
+  const linkedComponent = (components.data ?? []).find((c) => c.id === formula.data?.component_id);
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -384,7 +386,12 @@ function FormulaDetailPage() {
   const patchBatchDraft = (batchId: string, patch: Partial<BatchDraft>) => {
     setDraft((d) => {
       if (!d) return d;
-      const current = d.batches[batchId] ?? { label: "", multiplier: "1", mouldId: "", mouldCount: "1" };
+      const current = d.batches[batchId] ?? {
+        label: "",
+        multiplier: "1",
+        mouldId: "",
+        mouldCount: "1",
+      };
       return { ...d, batches: { ...d.batches, [batchId]: { ...current, ...patch } } };
     });
   };
@@ -401,6 +408,18 @@ function FormulaDetailPage() {
     onSuccess: invalidate,
   });
 
+  // 2026-10-15 사용자 요청: "가루는 가루끼리 액체는 액체끼리" — 재료를 추가/삭제할 때마다
+  // INGREDIENT GROUP 순서 기준으로 자동 재정렬해서, 매번 손으로 끌어서 옮기지 않아도 WORK
+  // SESSION 계량 화면에 그룹별로 모여서 뜨도록 한다("포뮤라 재료 추가/수정할 때마다 자동").
+  const resortByGroup = async () => {
+    if (!versionId) return;
+    const { error } = await resortFormulaVersionIngredientsByGroup(
+      versionId,
+      ingredientGroups.data ?? [],
+    );
+    if (error) console.error("재료 그룹 자동 정렬 실패", error);
+  };
+
   const addIngredient = useMutation({
     mutationFn: async ({ id, unit }: { id: string; unit: string }) => {
       if (!versionId) return;
@@ -415,6 +434,7 @@ function FormulaDetailPage() {
         amount_source: "manual",
       });
       if (error) throw error;
+      await resortByGroup();
     },
     onSuccess: invalidate,
   });
@@ -423,7 +443,15 @@ function FormulaDetailPage() {
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("formula_version_ingredients").delete().eq("id", id);
       if (error) throw error;
+      await resortByGroup();
     },
+    onSuccess: invalidate,
+  });
+
+  /** SETTINGS에서 재료 그룹을 새로 만들거나 기존 재료의 그룹을 바꾼 뒤, 이미 추가되어 있던
+   * 재료들에도 바로 적용하고 싶을 때 쓰는 수동 버튼. */
+  const resortIngredientsByGroup = useMutation({
+    mutationFn: resortByGroup,
     onSuccess: invalidate,
   });
 
@@ -465,9 +493,7 @@ function FormulaDetailPage() {
     },
   });
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const handleIngredientDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -619,7 +645,9 @@ function FormulaDetailPage() {
         if (d.unit !== row.unit) patch.unit = d.unit;
         const nextNote = d.note.trim() || null;
         if (nextNote !== (row.note ?? null)) patch.note = nextNote;
-        const nextSecondaryAmount = d.secondaryAmount.trim() ? parseNumber(d.secondaryAmount) : null;
+        const nextSecondaryAmount = d.secondaryAmount.trim()
+          ? parseNumber(d.secondaryAmount)
+          : null;
         if (nextSecondaryAmount !== (row.secondary_amount ?? null))
           patch.secondary_amount = nextSecondaryAmount;
         const nextSecondaryUnit = d.secondaryUnit.trim() || null;
@@ -796,9 +824,7 @@ function FormulaDetailPage() {
             className="w-full max-w-lg border border-transparent bg-transparent px-0 py-1 text-lg text-foreground outline-none hover:border-border focus:border-foreground disabled:cursor-not-allowed disabled:opacity-70"
             value={editing ? (draft?.name ?? "") : formula.data.name}
             disabled={fieldsDisabled}
-            onChange={(e) =>
-              setDraft((d) => (d ? { ...d, name: e.target.value } : d))
-            }
+            onChange={(e) => setDraft((d) => (d ? { ...d, name: e.target.value } : d))}
           />
           {technique && (
             <div className="flex flex-wrap items-center gap-2">
@@ -914,7 +940,11 @@ function FormulaDetailPage() {
             ARCHIVE
           </option>
         </select>
-        <button type="button" className={compactButtonClass} onClick={() => setCreatingVersion(true)}>
+        <button
+          type="button"
+          className={compactButtonClass}
+          onClick={() => setCreatingVersion(true)}
+        >
           + NEW VERSION
         </button>
 
@@ -930,7 +960,11 @@ function FormulaDetailPage() {
               {saveAll.isPending ? "SAVING…" : "SAVE"}
             </button>
             {isDirty && (
-              <button type="button" className={compactButtonClass} onClick={() => setDraft(buildDraft())}>
+              <button
+                type="button"
+                className={compactButtonClass}
+                onClick={() => setDraft(buildDraft())}
+              >
                 되돌리기
               </button>
             )}
@@ -976,13 +1010,12 @@ function FormulaDetailPage() {
             inputMode="decimal"
             className={`${compactSelectClass} !w-24`}
             placeholder="g"
-            value={editing ? (draft?.yieldQuantity ?? "") : (yieldQty || "")}
+            value={editing ? (draft?.yieldQuantity ?? "") : yieldQty || ""}
             disabled={fieldsDisabled}
             onChange={(e) => setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))}
           />
         </label>
       </div>
-
 
       {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
       {processCautions.length > 0 && (
@@ -1025,7 +1058,9 @@ function FormulaDetailPage() {
                 type="button"
                 className="label-caps px-2 py-2 text-xs hover:bg-secondary"
                 onClick={() => {
-                  setNewBatchMouldId(scalingMode === "MOULD" ? (version?.default_mould_id ?? "") : "");
+                  setNewBatchMouldId(
+                    scalingMode === "MOULD" ? (version?.default_mould_id ?? "") : "",
+                  );
                   setNewBatchCount("1");
                   setNewBatchManualMultiplier("2");
                   setNewBatchLabel("");
@@ -1035,6 +1070,15 @@ function FormulaDetailPage() {
                 + ADD BATCH
               </button>
             )}
+            <button
+              type="button"
+              className="label-caps px-2 py-2 text-xs hover:bg-secondary disabled:opacity-40"
+              title="재료 그룹(가루류/액체류 등) 순서로 다시 정렬합니다"
+              disabled={resortIngredientsByGroup.isPending || rows.length === 0}
+              onClick={() => resortIngredientsByGroup.mutate()}
+            >
+              GROUP SORT
+            </button>
             <button
               type="button"
               className="label-caps px-2 py-2 text-xs hover:bg-secondary"
@@ -1071,9 +1115,7 @@ function FormulaDetailPage() {
               <thead>
                 <tr className="border-b border-border text-left">
                   <th className="w-8 px-1 py-2" aria-label="공정 순서 드래그" />
-                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">
-                    INGREDIENT
-                  </th>
+                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">INGREDIENT</th>
                   <th className="label-caps border-r border-border bg-secondary/40 px-2 py-2 text-xs text-muted-foreground">
                     BASE ×1
                   </th>
@@ -1126,9 +1168,7 @@ function FormulaDetailPage() {
                     );
                   })}
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground">UNIT</th>
-                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">
-                    %  / RATE
-                  </th>
+                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">% / RATE</th>
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground">FUNCTION</th>
                   <th className="label-caps px-2 py-2 text-xs text-muted-foreground" />
                 </tr>
@@ -1211,9 +1251,12 @@ function FormulaDetailPage() {
         />
       </SectionCard>
 
-
       {/* HISTORY */}
-      <VersionHistory formulaId={formulaId} versions={versionList} onOpen={(id) => setVersionId(id)} />
+      <VersionHistory
+        formulaId={formulaId}
+        versions={versionList}
+        onOpen={(id) => setVersionId(id)}
+      />
 
       <button
         type="button"
@@ -1235,7 +1278,11 @@ function FormulaDetailPage() {
           <div className="w-full max-w-md border border-border bg-background">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <span className="label-caps">ADD INGREDIENT</span>
-              <button type="button" className="label-caps px-2 py-2" onClick={() => setAdding(false)}>
+              <button
+                type="button"
+                className="label-caps px-2 py-2"
+                onClick={() => setAdding(false)}
+              >
                 CLOSE
               </button>
             </div>
@@ -1288,12 +1335,17 @@ function FormulaDetailPage() {
                   {newBatchMouldId ? (
                     (() => {
                       const baseMould =
-                        (moulds.data ?? []).find((m) => m.id === (version?.default_mould_id ?? "")) ??
-                        null;
+                        (moulds.data ?? []).find(
+                          (m) => m.id === (version?.default_mould_id ?? ""),
+                        ) ?? null;
                       const targetMould =
                         (moulds.data ?? []).find((m) => m.id === newBatchMouldId) ?? null;
                       const count = parseNumber(newBatchCount) || 1;
-                      const { multiplier, mismatch } = mouldBatchMultiplier(count, targetMould, baseMould);
+                      const { multiplier, mismatch } = mouldBatchMultiplier(
+                        count,
+                        targetMould,
+                        baseMould,
+                      );
                       return (
                         <>
                           <div className="flex items-center gap-2">
@@ -1315,9 +1367,9 @@ function FormulaDetailPage() {
                           </div>
                           {mismatch && (
                             <p className="font-mono text-[10px] text-muted-foreground">
-                              ⚠ 두 몰드의 기준중량이 등록되어 있지 않아 정확한 환산이 불가능해서 개수를
-                              그대로 배수로 씁니다 — MOULDS 설정에서 기준중량(g)을 등록하면 자동
-                              환산됩니다.
+                              ⚠ 두 몰드의 기준중량이 등록되어 있지 않아 정확한 환산이 불가능해서
+                              개수를 그대로 배수로 씁니다 — MOULDS 설정에서 기준중량(g)을 등록하면
+                              자동 환산됩니다.
                             </p>
                           )}
                         </>
@@ -1341,7 +1393,9 @@ function FormulaDetailPage() {
                 </>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">배수</span>
+                  <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">
+                    배수
+                  </span>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -1353,11 +1407,7 @@ function FormulaDetailPage() {
                 </div>
               )}
               <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  className={buttonClass}
-                  onClick={() => setAddingBatch(false)}
-                >
+                <button type="button" className={buttonClass} onClick={() => setAddingBatch(false)}>
                   취소
                 </button>
                 <button
@@ -1368,8 +1418,9 @@ function FormulaDetailPage() {
                     const label = newBatchLabel.trim() || null;
                     if (scalingMode === "MOULD" && newBatchMouldId) {
                       const baseMould =
-                        (moulds.data ?? []).find((m) => m.id === (version?.default_mould_id ?? "")) ??
-                        null;
+                        (moulds.data ?? []).find(
+                          (m) => m.id === (version?.default_mould_id ?? ""),
+                        ) ?? null;
                       const targetMould =
                         (moulds.data ?? []).find((m) => m.id === newBatchMouldId) ?? null;
                       const count = parseNumber(newBatchCount) || 1;
@@ -1416,7 +1467,9 @@ function FormulaDetailPage() {
                 onChange={(e) => setEditBatchLabel(e.target.value)}
               />
               <div className="flex items-center gap-2">
-                <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">배수</span>
+                <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">
+                  배수
+                </span>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -1445,7 +1498,11 @@ function FormulaDetailPage() {
                   삭제
                 </button>
                 <div className="flex gap-2">
-                  <button type="button" className={buttonClass} onClick={() => setEditingBatchId(null)}>
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    onClick={() => setEditingBatchId(null)}
+                  >
                     취소
                   </button>
                   <button
@@ -1458,7 +1515,9 @@ function FormulaDetailPage() {
                       const label = editBatchLabel.trim() || null;
                       const nextMultiplier = parseNumber(editBatchMultiplier);
                       const eff = effectiveBatchPresets.find((p) => p.id === editingBatchId);
-                      const currentMultiplier = eff ? Number(eff.multiplier) : Number(preset.multiplier);
+                      const currentMultiplier = eff
+                        ? Number(eff.multiplier)
+                        : Number(preset.multiplier);
                       const multiplierChanged = Math.abs(nextMultiplier - currentMultiplier) > 1e-9;
                       updateBatchPreset.mutate({
                         id: editingBatchId,
@@ -1485,7 +1544,6 @@ function FormulaDetailPage() {
           onCreate={(summary, reason) => createVersion.mutate({ summary, reason })}
         />
       )}
-
     </div>
   );
 }
@@ -1698,9 +1756,10 @@ function UnifiedIngredientRow({
               <option value="">단위</option>
               {/* 예전에 자유 텍스트로 저장된 값이 이 목록에 없으면(예: 커스텀 단위) 선택지에서
                   사라지지 않도록 맨 위에 그대로 끼워 넣는다(2026-09-30, 텍스트 입력 → 드롭다운 전환). */}
-              {draft?.secondaryUnit && !SECONDARY_UNITS.includes(draft.secondaryUnit as (typeof SECONDARY_UNITS)[number]) && (
-                <option value={draft.secondaryUnit}>{draft.secondaryUnit}</option>
-              )}
+              {draft?.secondaryUnit &&
+                !SECONDARY_UNITS.includes(
+                  draft.secondaryUnit as (typeof SECONDARY_UNITS)[number],
+                ) && <option value={draft.secondaryUnit}>{draft.secondaryUnit}</option>}
               {SECONDARY_UNITS.map((u) => (
                 <option key={u} value={u}>
                   {u}

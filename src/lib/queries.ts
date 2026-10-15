@@ -14,6 +14,7 @@ import type {
   FlavourFamily,
   Ingredient,
   IngredientFunction,
+  IngredientGroup,
   Product,
 } from "@/lib/pilot";
 import { formatProductSizeLabel, type ProductSize } from "@/lib/product-size";
@@ -291,10 +292,11 @@ export interface IngredientRow extends Ingredient {
     ingredient_functions: IngredientFunction;
   }[];
   flavour_families: Pick<FlavourFamily, "id" | "name" | "name_en" | "color"> | null;
+  ingredient_groups: Pick<IngredientGroup, "id" | "name" | "name_en" | "color"> | null;
 }
 
 const INGREDIENT_SELECT =
-  "*, flavour_families(id, name, name_en, color), ingredient_function_links(function_id, ingredient_functions(*))";
+  "*, flavour_families(id, name, name_en, color), ingredient_groups(id, name, name_en, color), ingredient_function_links(function_id, ingredient_functions(*))";
 
 export const ingredientsQuery = () =>
   queryOptions({
@@ -363,6 +365,35 @@ export const ingredientFunctionUsageQuery = () =>
       const rows = unwrap(await supabase.from("ingredient_function_links").select("function_id"));
       const map: Record<string, number> = {};
       for (const row of rows) map[row.function_id] = (map[row.function_id] ?? 0) + 1;
+      return map;
+    },
+  });
+
+export const ingredientGroupsQuery = () =>
+  queryOptions({
+    queryKey: ["ingredient_groups"],
+    queryFn: async (): Promise<IngredientGroup[]> =>
+      unwrap(
+        await supabase
+          .from("ingredient_groups")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true }),
+      ),
+  });
+
+/** 재료 그룹(INGREDIENT GROUP)별 사용 재료 수 */
+export const ingredientGroupUsageQuery = () =>
+  queryOptions({
+    queryKey: ["ingredient_group_usage"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const rows = unwrap(
+        await supabase.from("ingredients").select("group_id").not("group_id", "is", null),
+      );
+      const map: Record<string, number> = {};
+      for (const row of rows) {
+        if (row.group_id) map[row.group_id] = (map[row.group_id] ?? 0) + 1;
+      }
       return map;
     },
   });

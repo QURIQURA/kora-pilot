@@ -9,6 +9,7 @@ import {
   currentUserId,
   formulasByIngredientQuery,
   ingredientFunctionsQuery,
+  ingredientGroupsQuery,
   ingredientQuery,
 } from "@/lib/queries";
 import {
@@ -61,6 +62,7 @@ function IngredientDetailPage() {
   const usedInFormulas = useQuery(formulasByIngredientQuery(ingredientId));
   const categories = useQuery(categoriesQuery());
   const functions = useQuery(ingredientFunctionsQuery());
+  const groups = useQuery(ingredientGroupsQuery());
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, ingredient.data?.category_id ?? null);
@@ -199,12 +201,28 @@ function IngredientDetailPage() {
             UPDATED {formatDateTime(data.updated_at)}
           </p>
         </div>
-        <CategorySelect
-          className={selectClass + " w-auto"}
-          value={data.category_id ?? ""}
-          onChange={(id) => update.mutate({ category_id: id || null })}
-          emptyLabel="NO CATEGORY"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <CategorySelect
+            className={selectClass + " w-auto"}
+            value={data.category_id ?? ""}
+            onChange={(id) => update.mutate({ category_id: id || null })}
+            emptyLabel="NO CATEGORY"
+          />
+          {/* 2026-10-15 사용자 요청: 가루/액체 등 공정별 분류 — WORK SESSION 재료 자동 정렬 기준 */}
+          <select
+            className={selectClass + " w-auto"}
+            aria-label="INGREDIENT GROUP"
+            value={data.group_id ?? ""}
+            onChange={(e) => update.mutate({ group_id: e.target.value || null })}
+          >
+            <option value="">GROUP — 미분류</option>
+            {(groups.data ?? []).map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name_en || g.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* 기본 */}
@@ -277,8 +295,8 @@ function IngredientDetailPage() {
           </Field>
         </div>
         <p className="mt-3 font-mono text-xs text-muted-foreground">
-          예: 설탕 20kg에 $32.00(AUD)이면 구입가 32 / 구입량 20 / 단위 kg → 자동으로 g당
-          단가가 계산됩니다.
+          예: 설탕 20kg에 $32.00(AUD)이면 구입가 32 / 구입량 20 / 단위 kg → 자동으로 g당 단가가
+          계산됩니다.
         </p>
       </CollapsibleSection>
 

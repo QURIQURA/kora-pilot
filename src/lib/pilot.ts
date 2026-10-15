@@ -8,22 +8,16 @@ export type Product = Tables<"products">;
 export type Component = Tables<"components">;
 export type Ingredient = Tables<"ingredients">;
 export type IngredientFunction = Tables<"ingredient_functions">;
+/** 재료 그룹(2026-10-15 사용자 요청) — 공정상 성질별 분류(가루류/액체류/유지류 등). WORK SESSION
+ * 재료 행이 이 순서대로 자동 정렬되도록 하는 기준. */
+export type IngredientGroup = Tables<"ingredient_groups">;
 
-export const PRODUCT_STATUSES = [
-  "IDEA",
-  "ACTIVE",
-  "TESTING",
-  "STABLE",
-  "ARCHIVED",
-] as const;
+export const PRODUCT_STATUSES = ["IDEA", "ACTIVE", "TESTING", "STABLE", "ARCHIVED"] as const;
 
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 
 /** 카테고리 id -> 루트부터의 경로 배열 */
-export function categoryPath(
-  categories: Category[],
-  id: string | null | undefined
-): Category[] {
+export function categoryPath(categories: Category[], id: string | null | undefined): Category[] {
   if (!id) return [];
   const byId = new Map(categories.map((c) => [c.id, c]));
   const path: Category[] = [];
@@ -37,18 +31,13 @@ export function categoryPath(
   return path;
 }
 
-export function categoryPathLabel(
-  categories: Category[],
-  id: string | null | undefined
-): string {
+export function categoryPathLabel(categories: Category[], id: string | null | undefined): string {
   const path = categoryPath(categories, id);
   return path.length ? path.map((c) => c.name).join(" / ") : "—";
 }
 
 /** 계층 순서대로 평탄화 (depth 포함) */
-export function flattenCategories(
-  categories: Category[]
-): { category: Category; depth: number }[] {
+export function flattenCategories(categories: Category[]): { category: Category; depth: number }[] {
   const byParent = new Map<string | null, Category[]>();
   for (const category of categories) {
     const key = category.parent_id;
@@ -57,9 +46,7 @@ export function flattenCategories(
     byParent.set(key, list);
   }
   for (const list of byParent.values()) {
-    list.sort(
-      (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)
-    );
+    list.sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
   }
 
   const out: { category: Category; depth: number }[] = [];
@@ -74,20 +61,13 @@ export function flattenCategories(
 }
 
 /** 카테고리와 그 하위 카테고리 id 전부 */
-export function categoryWithDescendants(
-  categories: Category[],
-  id: string
-): string[] {
+export function categoryWithDescendants(categories: Category[], id: string): string[] {
   const ids = [id];
   let added = true;
   while (added) {
     added = false;
     for (const category of categories) {
-      if (
-        category.parent_id &&
-        ids.includes(category.parent_id) &&
-        !ids.includes(category.id)
-      ) {
+      if (category.parent_id && ids.includes(category.parent_id) && !ids.includes(category.id)) {
         ids.push(category.id);
         added = true;
       }
@@ -101,9 +81,7 @@ export function categoryWithDescendants(
 export type FlavourFamily = Tables<"flavour_families">;
 
 /** 재료 표시명 — 이름이 나오는 모든 곳에서 "한글명 (English)" 병기 */
-export function ingredientDisplayName(
-  ingredient: Pick<Ingredient, "name" | "name_en">
-): string {
+export function ingredientDisplayName(ingredient: Pick<Ingredient, "name" | "name_en">): string {
   const en = ingredient.name_en?.trim();
   return en ? `${ingredient.name} (${en})` : ingredient.name;
 }
@@ -118,26 +96,20 @@ export interface FunctionDisplayParts {
 }
 
 export function functionDisplayParts(
-  fn: Pick<IngredientFunction, "name" | "name_en">
+  fn: Pick<IngredientFunction, "name" | "name_en">,
 ): FunctionDisplayParts {
   const en = fn.name_en?.trim();
-  return en
-    ? { primary: en, secondary: fn.name }
-    : { primary: fn.name, secondary: null };
+  return en ? { primary: en, secondary: fn.name } : { primary: fn.name, secondary: null };
 }
 
 /** 한 줄 표시용 — "STARCH (전분)" */
-export function functionDisplayName(
-  fn: Pick<IngredientFunction, "name" | "name_en">
-): string {
+export function functionDisplayName(fn: Pick<IngredientFunction, "name" | "name_en">): string {
   const { primary, secondary } = functionDisplayParts(fn);
   return secondary ? `${primary} (${secondary})` : primary;
 }
 
 /** 여러 기능을 짧게 나열할 때 — 영문만, 없으면 한글. "STARCH / STRUCTURE" */
-export function functionShortName(
-  fn: Pick<IngredientFunction, "name" | "name_en">
-): string {
+export function functionShortName(fn: Pick<IngredientFunction, "name" | "name_en">): string {
   return fn.name_en?.trim() || fn.name;
 }
 
@@ -192,9 +164,7 @@ export const COMPOSITION_FIELDS = [
 export type CompositionKey = (typeof COMPOSITION_FIELDS)[number]["key"];
 
 /** 조성 합계 — 전부 비어 있으면 null */
-export function compositionSum(
-  ingredient: Pick<Ingredient, CompositionKey>
-): number | null {
+export function compositionSum(ingredient: Pick<Ingredient, CompositionKey>): number | null {
   let sum = 0;
   let any = false;
   for (const { key } of COMPOSITION_FIELDS) {
@@ -208,9 +178,7 @@ export function compositionSum(
 }
 
 /** 조성이 하나라도 입력됐는지 */
-export function hasComposition(
-  ingredient: Pick<Ingredient, CompositionKey>
-): boolean {
+export function hasComposition(ingredient: Pick<Ingredient, CompositionKey>): boolean {
   return compositionSum(ingredient) !== null;
 }
 
@@ -237,13 +205,7 @@ export const BALANCE_ROLES = [
  * 시스템이 기준량 자동 집계에 쓰는 기능의 내부 키.
  * 표시 이름은 바뀔 수 있지만 이 키는 유지된다.
  */
-export const SYSTEM_FUNCTION_KEYS = [
-  "structure",
-  "starch",
-  "water",
-  "fat",
-  "sweetener",
-] as const;
+export const SYSTEM_FUNCTION_KEYS = ["structure", "starch", "water", "fat", "sweetener"] as const;
 
 /* ── 아로마 태그 ─────────────────────────────────────────── */
 

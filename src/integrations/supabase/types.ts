@@ -711,6 +711,39 @@ export type Database = {
         }
         Relationships: []
       }
+      ingredient_groups: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          name_en: string | null
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          name_en?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          name_en?: string | null
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ingredients: {
         Row: {
           aroma_notes: string[] | null
@@ -730,6 +763,7 @@ export type Database = {
           flavour_family_id: string | null
           flavour_intensity: number | null
           flavour_note: string | null
+          group_id: string | null
           id: string
           ingredient_declaration: string | null
           ingredient_type: string
@@ -782,6 +816,7 @@ export type Database = {
           flavour_family_id?: string | null
           flavour_intensity?: number | null
           flavour_note?: string | null
+          group_id?: string | null
           id?: string
           ingredient_declaration?: string | null
           ingredient_type?: string
@@ -834,6 +869,7 @@ export type Database = {
           flavour_family_id?: string | null
           flavour_intensity?: number | null
           flavour_note?: string | null
+          group_id?: string | null
           id?: string
           ingredient_declaration?: string | null
           ingredient_type?: string
@@ -881,6 +917,13 @@ export type Database = {
             columns: ["flavour_family_id"]
             isOneToOne: false
             referencedRelation: "flavour_families"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredients_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_groups"
             referencedColumns: ["id"]
           },
         ]
@@ -2086,6 +2129,48 @@ export type Database = {
           {
             foreignKeyName: "technique_categories_parent_id_fkey"
             columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "technique_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      technique_category_ingredient_group_order: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          sort_order: number
+          technique_category_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          sort_order?: number
+          technique_category_id: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          sort_order?: number
+          technique_category_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technique_category_ingredient_group_order_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "technique_category_ingredient_group_order_technique_categ_fkey"
+            columns: ["technique_category_id"]
             isOneToOne: false
             referencedRelation: "technique_categories"
             referencedColumns: ["id"]
