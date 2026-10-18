@@ -1907,6 +1907,7 @@ function EditFormulaVersionModal({
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
+  const queryClient = useQueryClient();
   const baseIngredients = useQuery(versionIngredientsQuery(column.formulaVersionId));
   const [draftRows, setDraftRows] = useState<EditDraftRow[]>([]);
   const [seeded, setSeeded] = useState(false);
@@ -1915,7 +1916,11 @@ function EditFormulaVersionModal({
   // 지금 버전을 복사한 새 DRAFT 버전을 만들고 이 WORK SESSION만 거기로 옮긴다(기존 버전/다른
   // SESSION은 안 건드림). OVERWRITE는 지금 버전 자체를 고쳐서, 이 버전을 쓰는 모든 곳에 바로
   // 반영되고 계량 체크 상태도 바뀌지 않은 재료는 그대로 유지된다.
-  const [saveMode, setSaveMode] = useState<"new" | "overwrite">("new");
+  // 2026-10-18 사용자 요청: "기존 formula말고 새로운 formula 생성이랑 이름도 바로 정할수
+  // 있게해줘" — NEW_FORMULA는 기존 포뮬라와 완전히 분리된 새 포뮬라(+버전 1개)를 만들고,
+  // 이 WORK SESSION의 이 열만 거기로 옮긴다. 이름을 바로 이 자리에서 정한다.
+  const [saveMode, setSaveMode] = useState<"new" | "overwrite" | "new_formula">("new");
+  const [newFormulaName, setNewFormulaName] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -2079,6 +2084,103 @@ function EditFormulaVersionModal({
         return newVersion.id;
       }
 
+      if (saveMode === "new_formula") {
+        // NEW_FORMULA — 기존 포뮬라는 전혀 건드리지 않고, 완전히 새로운 포뮬라 + 버전 1개를
+        // 만든다. 같은 COMPONENT/TECHNIQUE CATEGORY/METHOD에 연결해서 포뮬라 목록/계산에서
+        // 바로 보이도록 하고, derived_from_formula_id로 "어디서 갈라져 나왔는지"만 남긴다.
+        const name = newFormulaName.trim();
+        if (!name) throw new Error("새 포뮬라 이름을 입력해주세요");
+
+        const { data: baseFormula, error: baseFormulaError } = await supabase
+          .from("formulas")
+          .select("component_id, technique_category_id, method_id")
+          .eq("id", column.formulaId)
+          .single();
+        if (baseFormulaError) throw baseFormulaError;
+
+        const { data: baseVersion, error: baseError } = await supabase
+          .from("formula_versions")
+          .select(
+            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id",
+          )
+          .eq("id", column.formulaVersionId)
+          .single();
+        if (baseError) throw baseError;
+
+        const { data: newFormula, error: formulaError } = await supabase
+          .from("formulas")
+          .insert({
+            user_id,
+            name,
+            component_id: baseFormula.component_id,
+            technique_category_id: baseFormula.technique_category_id,
+            method_id: baseFormula.method_id,
+            derived_from_formula_id: column.formulaId,
+          })
+          .select("id")
+          .single();
+        if (formulaError) throw formulaError;
+
+        const { data: newVersion, error: insertError } = await supabase
+          .from("formula_versions")
+          .insert({
+            user_id,
+            formula_id: newFormula.id,
+            version_number: 1,
+            status: "CURRENT",
+            default_mould_id: baseVersion.default_mould_id,
+            default_base_weight_id: baseVersion.default_base_weight_id,
+            yield_quantity: baseVersion.yield_quantity,
+            change_summary: autoSummary,
+            change_reason: reason.trim() || null,
+            bath_water_g: baseVersion.bath_water_g,
+            basis_overrides: baseVersion.basis_overrides ?? {},
+          })
+          .select("id")
+          .single();
+        if (insertError) throw insertError;
+
+        const rowsToInsert = visibleRows.map((row, index) => ({
+          user_id,
+          formula_version_id: newVersion.id,
+          ingredient_id: row.ingredientId,
+          amount: Number(row.amount) || 0,
+          unit: row.unit,
+          sort_order: index,
+          note: row.note,
+          secondary_amount: row.secondaryAmount,
+          secondary_unit: row.secondaryUnit,
+          amount_source:
+            row.originalAmount === null ||
+            Number(row.amount) !== row.originalAmount ||
+            row.unit !== row.originalUnit
+              ? "manual"
+              : "copied",
+        }));
+        if (rowsToInsert.length > 0) {
+          const { error: ingredientsError } = await supabase
+            .from("formula_version_ingredients")
+            .insert(rowsToInsert);
+          if (ingredientsError) throw ingredientsError;
+        }
+
+        // 이 WORK SESSION 선택(열)이 새 포뮬라의 새 버전을 바로 쓰도록 전환.
+        const { error: selectionError } = await supabase
+          .from("work_session_formula_versions")
+          .update({ formula_version_id: newVersion.id })
+          .eq("id", column.selectionId);
+        if (selectionError) throw selectionError;
+
+        // 재료 라인 id가 전부 바뀌므로 이 열의 기존 계량 진행상태는 더 이상 의미가 없다 — 지운다.
+        const { error: progressError } = await supabase
+          .from("work_session_progress")
+          .delete()
+          .eq("work_session_formula_version_id", column.selectionId);
+        if (progressError) throw progressError;
+
+        return newVersion.id;
+      }
+
       // OVERWRITE — 지금 버전 자체를 고친다. 이 버전을 쓰는 다른 WORK SESSION/포뮬라 화면에도
       // 바로 반영되고, work_session_formula_versions는 건드리지 않는다. 양/단위가 안 바뀐
       // 재료는 라인 id가 그대로라서 그 재료의 계량 체크 상태도 그대로 유지된다 — 지운 재료만
@@ -2144,6 +2246,12 @@ function EditFormulaVersionModal({
     },
     onSuccess: async () => {
       setError(null);
+      // NEW_FORMULA는 완전히 새 포뮬라를 만든 것이므로, FORMULAS 목록/해당 COMPONENT의
+      // 포뮬라 목록 캐시도 갱신해야 다른 화면에서 바로 보인다.
+      if (saveMode === "new_formula") {
+        await queryClient.invalidateQueries({ queryKey: ["formulas"] });
+        await queryClient.invalidateQueries({ queryKey: ["formulas_by_component"] });
+      }
       await onSaved();
     },
     onError: (e: unknown) => {
@@ -2164,10 +2272,12 @@ function EditFormulaVersionModal({
         </div>
 
         <div className="space-y-4 p-4">
-          {/* 2026-10-14 사용자 요청: "new 버전으로 저장할지 아니면 덮어쓸지도 선택할수 있게" */}
+          {/* 2026-10-14 사용자 요청: "new 버전으로 저장할지 아니면 덮어쓸지도 선택할수 있게"
+              2026-10-18 사용자 요청: "기존 formula말고 새로운 formula 생성이랑 이름도 바로
+              정할수 있게해줘" — 세 번째 선택지로 완전히 새로운 포뮬라를 만드는 옵션을 추가. */}
           <div className="space-y-1">
             <p className="label-caps text-xs text-muted-foreground">저장 방식</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 className={saveMode === "new" ? primaryButtonClass : buttonClass}
@@ -2182,12 +2292,36 @@ function EditFormulaVersionModal({
               >
                 현재 버전에 덮어쓰기
               </button>
+              <button
+                type="button"
+                className={saveMode === "new_formula" ? primaryButtonClass : buttonClass}
+                onClick={() => {
+                  setSaveMode("new_formula");
+                  if (!newFormulaName.trim()) setNewFormulaName(`${column.formulaName} 사본`);
+                }}
+              >
+                새 포뮬라로 저장
+              </button>
             </div>
             <p className="font-mono text-xs uppercase text-muted-foreground">
-              {saveMode === "new"
-                ? `현재 v${column.versionNumber}을 복사해서 새 DRAFT 버전을 만듭니다. 저장하면 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 바로 새 버전을 쓰게 되고, 계량 체크는 초기화됩니다.`
-                : `v${column.versionNumber} 자체를 고칩니다. 이 버전을 쓰는 다른 WORK SESSION/포뮬라에도 바로 반영되고, 양이 안 바뀐 재료의 계량 체크는 그대로 남습니다.`}
+              {saveMode === "new" &&
+                `현재 v${column.versionNumber}을 복사해서 새 DRAFT 버전을 만듭니다. 저장하면 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 바로 새 버전을 쓰게 되고, 계량 체크는 초기화됩니다.`}
+              {saveMode === "overwrite" &&
+                `v${column.versionNumber} 자체를 고칩니다. 이 버전을 쓰는 다른 WORK SESSION/포뮬라에도 바로 반영되고, 양이 안 바뀐 재료의 계량 체크는 그대로 남습니다.`}
+              {saveMode === "new_formula" &&
+                `"${column.formulaName}"과 완전히 분리된 새 포뮬라를 만듭니다. 기존 포뮬라는 그대로 남고, 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 새 포뮬라로 전환됩니다.`}
             </p>
+            {saveMode === "new_formula" && (
+              <Field label="새 포뮬라 이름">
+                <input
+                  className={inputClass}
+                  autoFocus
+                  value={newFormulaName}
+                  onChange={(e) => setNewFormulaName(e.target.value)}
+                  placeholder="예: 당근케익 (저당 버전)"
+                />
+              </Field>
+            )}
           </div>
 
           {baseIngredients.isLoading && (
@@ -2272,10 +2406,17 @@ function EditFormulaVersionModal({
             <button
               type="button"
               className={primaryButtonClass}
-              disabled={saveChanges.isPending || !hasChanges}
+              disabled={
+                saveChanges.isPending ||
+                // NEW_FORMULA는 포뮬라를 새로 만드는 행위 자체가 목적이라, 재료를 아직 안
+                // 고쳤어도(hasChanges===false) 이름만 정했으면 저장할 수 있게 한다.
+                (saveMode === "new_formula" ? !newFormulaName.trim() : !hasChanges)
+              }
               onClick={() => saveChanges.mutate()}
             >
-              {saveMode === "new" ? "새 버전으로 저장" : "덮어쓰기"}
+              {saveMode === "new" && "새 버전으로 저장"}
+              {saveMode === "overwrite" && "덮어쓰기"}
+              {saveMode === "new_formula" && "새 포뮬라로 저장"}
             </button>
             <button type="button" className={buttonClass} onClick={onClose}>
               CANCEL
