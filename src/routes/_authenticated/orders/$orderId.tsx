@@ -34,6 +34,7 @@ import {
 } from "@/lib/queries";
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { resolveSlotGroup } from "@/lib/technique";
+import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
 import { formatProductSizeLabel } from "@/lib/product-size";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
@@ -571,33 +572,57 @@ function OrderDetailPage() {
         CREAM: flavoringCreamFormulaId,
         FILLING: flavoringFillingFormulaId,
       };
+      // 2026-10-21 사용자 요청("시폰 레시피 task 기본꺼 왜 안떠?") — 여기서 CORE 재료 행을
+      // Supabase에 직접 insert하고 끝나서, $sessionId.tsx의 "+ ADD SHEET/CREAM/FILLING"에서만
+      // 돌던 기본 WORKFLOW 적용 로직을 한 번도 안 거치는 게 원인이었다. coreRows를 만들 때
+      // 그 Formula도 같이 들고 있다가, insert 성공 뒤 각 행마다 applyDefaultWorkflowForFormulaVersion을
+      // 호출해서 $sessionId.tsx와 똑같이 템플릿(또는 기본 TASK 1개)이 깔리도록 한다.
       const coreRows = CORE_SLOTS.flatMap((slot) => {
         const formulaId = slotFormulaIds[slot];
         if (!formulaId) return [];
         const formula = formulas.data?.find((f) => f.id === formulaId);
         const version = formula ? pickEffectiveFormulaVersion(formula.formula_versions) : null;
-        if (!version) return [];
+        if (!version || !formula) return [];
         return [
           {
-            user_id: userId,
-            work_session_id: session.id,
-            formula_version_id: version.id,
-            kind: "CORE" as const,
-            slot,
-            multiplier: 1,
-            mould_id: null,
-            mould_qty: null,
-            base_weight_id: null,
-            base_weight_qty: null,
-            sort_order: CORE_SLOTS.indexOf(slot),
+            formula,
+            row: {
+              user_id: userId,
+              work_session_id: session.id,
+              formula_version_id: version.id,
+              kind: "CORE" as const,
+              slot,
+              multiplier: 1,
+              mould_id: null,
+              mould_qty: null,
+              base_weight_id: null,
+              base_weight_qty: null,
+              sort_order: CORE_SLOTS.indexOf(slot),
+            },
           },
         ];
       });
       if (coreRows.length > 0) {
         const { error: rowsError } = await supabase
           .from("work_session_formula_versions")
-          .insert(coreRows);
+          .insert(coreRows.map((r) => r.row));
         if (rowsError) throw rowsError;
+
+        for (const { formula, row } of coreRows) {
+          const { error: workflowError } = await applyDefaultWorkflowForFormulaVersion({
+            sessionId: session.id,
+            userId,
+            formulaVersionId: row.formula_version_id,
+            component: formula.components ?? null,
+            formulaTechniqueCategoryId: formula.technique_category_id ?? null,
+            techniqueCategories: techniqueCategories.data ?? [],
+          });
+          if (workflowError) {
+            // 세션/재료 연결 자체는 이미 성공했으니, 기본 워크플로 적용 실패는 콘솔에만 남기고
+            // 세션 생성 흐름은 막지 않는다 ($sessionId.tsx의 add mutation과 동일한 방침).
+            console.error("기본 워크플로 자동 적용 실패:", workflowError);
+          }
+        }
       }
       return session.id;
     },

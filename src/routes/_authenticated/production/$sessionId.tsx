@@ -62,7 +62,7 @@ import {
 } from "@/lib/work-session";
 import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
 import { adjustStock, STOCK_REASON_LABEL, type StockReason } from "@/lib/stock";
-import { applyWorkflowTemplate } from "@/lib/workflow-template";
+import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import {
@@ -805,49 +805,20 @@ function AddFormulaVersionForm({
       if (error) throw error;
       // Component에 기본 WORKFLOW TEMPLATE이 등록돼 있고 "자동 적용"이 켜져 있으면, 이 Formula
       // Version(=열/품목)에 바로 TASK를 깔아준다(2026-09-24) — 매번 수동으로 템플릿 불러오기를
-      // 반복하지 않도록.
-      const comp = formula?.components;
-      if (comp?.auto_apply_default_workflow && comp.default_workflow_template_id) {
-        const { error: templateError } = await applyWorkflowTemplate({
-          templateId: comp.default_workflow_template_id,
-          sessionId,
-          userId: user_id,
-          formulaVersionId: versionId,
-        });
-        if (templateError) {
-          // 선택 자체는 이미 성공했으니 템플릿 적용 실패는 조용히 콘솔에만 남기고 흐름을 막지 않는다.
-          console.error("기본 워크플로 자동 적용 실패:", templateError);
-        }
-      } else {
-        // 2026-10-14 사용자 요청: "TECHNIQUE CATEGORY 별 workflow template 이 없는 경우
-        // 기본적으로 각 포뮬라별 하나씩 task 가 생성되도록해줘" — 템플릿이 없거나 자동 적용이
-        // 꺼져있는 Formula는 WORKFLOW가 "NO TASKS YET"로 영영 비어있지 않도록, 이 Formula
-        // Version(=열)에 기본 TASK를 하나 자동으로 깔아준다. 굽는 포뮬라(SHEET 슬롯 —
-        // Pastry Base 계열)는 BAKE 타입(관찰값 입력칸 포함)으로, 그 외(CREAM/FILLING 등
-        // 안 굽는 포뮬라)는 타입 없이 관찰값도 없는 기본 TASK 하나만 만든다. 제목에 포뮬라
-        // 이름이 같이 보이는 건 WorkflowTimeline의 TASK 제목 표시(formula_version_id 기준
-        // 자동 접두사)가 알아서 해준다.
-        const catId =
-          formula?.components?.technique_category_id ?? formula?.technique_category_id ?? null;
-        const isBaked = resolveSlotGroup(techniqueCategories.data ?? [], catId) === "SHEET";
-        const { data: existingTasks, error: existingError } = await supabase
-          .from("work_session_tasks")
-          .select("sort_order")
-          .eq("work_session_id", sessionId);
-        if (existingError) {
-          console.error("기본 TASK 자동 생성 실패(기존 TASK 조회):", existingError.message);
-        } else {
-          const maxSort = (existingTasks ?? []).reduce((acc, t) => Math.max(acc, t.sort_order), -1);
-          const { error: taskError } = await supabase.from("work_session_tasks").insert({
-            user_id,
-            work_session_id: sessionId,
-            formula_version_id: versionId,
-            task_name: isBaked ? "BAKE" : "PREPARE",
-            task_type: isBaked ? "Bake" : null,
-            sort_order: maxSort + 1,
-          });
-          if (taskError) console.error("기본 TASK 자동 생성 실패:", taskError.message);
-        }
+      // 반복하지 않도록. 템플릿이 없거나 꺼져있으면 기본 TASK 1개를 만든다(2026-10-14).
+      // 2026-10-21: ORDER 페이지의 "work session 생성"에서도 같은 로직을 써야 해서
+      // applyDefaultWorkflowForFormulaVersion()으로 공용화했다.
+      const { error: templateError } = await applyDefaultWorkflowForFormulaVersion({
+        sessionId,
+        userId: user_id,
+        formulaVersionId: versionId,
+        component: formula?.components ?? null,
+        formulaTechniqueCategoryId: formula?.technique_category_id ?? null,
+        techniqueCategories: techniqueCategories.data ?? [],
+      });
+      if (templateError) {
+        // 선택 자체는 이미 성공했으니 기본 워크플로 적용 실패는 조용히 콘솔에만 남기고 흐름을 막지 않는다.
+        console.error("기본 워크플로 자동 적용 실패:", templateError);
       }
     },
     onSuccess: onDone,
