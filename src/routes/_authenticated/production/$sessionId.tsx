@@ -794,8 +794,13 @@ function AddFormulaVersionForm({
         work_session_id: sessionId,
         formula_version_id: versionId,
         multiplier: finalMultiplier,
-        mould_id: usingMould ? mouldId || null : null,
-        mould_qty: usingMould ? Number(mouldCount) || null : null,
+        // 2026-10-27 사용자 요청("몰드·용량 시스템 통합 개선안" 3단계 선반영): PRODUCT SIZE
+        // 기반으로 배수를 자동 계산(useManual=true)하는 경로여도 scaling_mode가 MOULD인
+        // Component라면 몰드 정체성(mould_id)은 계속 채워 넣는다. 예전에는 usingMould가 false가
+        // 되는 순간 mould_id/mould_qty를 통째로 null로 지웠는데, 그러면 사이즈 기준으로 만든
+        // 행은 어떤 몰드를 썼는지 화면에서 보이지 않고 SETTINGS 몰드 사용 현황에서도 빠졌다.
+        mould_id: scalingMode === "MOULD" ? mouldId || null : null,
+        mould_qty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
         base_weight_id: null,
         base_weight_qty: null,
         sort_order: nextSort,
@@ -1146,7 +1151,13 @@ function FormulaVersionRow({
                   onBlur={(e) => {
                     const next = Number(e.target.value);
                     if (!Number.isFinite(next) || next <= 0) return;
-                    applyBatch.mutate({ multiplier: next, mouldId: null, mouldQty: null });
+                    // 2026-10-27: "개수(배수) 직접입력" 모드여도 MOULD Component라면 몰드
+                    // 정체성은 유지한다(추가 폼과 동일 원칙 — 위 add 참고).
+                    applyBatch.mutate({
+                      multiplier: next,
+                      mouldId: scalingMode === "MOULD" ? mouldId || null : null,
+                      mouldQty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
+                    });
                     if (baseTotalGrams > 0) setTargetGrams(fmtNumber(baseTotalGrams * next, 0));
                   }}
                 />
@@ -1168,7 +1179,11 @@ function FormulaVersionRow({
                       const next = suggestedMultiplierFromTarget(grams, 1, baseTotalGrams);
                       if (next == null) return;
                       setManualMultiplier(fmtNumber(next, 2));
-                      applyBatch.mutate({ multiplier: next, mouldId: null, mouldQty: null });
+                      applyBatch.mutate({
+                        multiplier: next,
+                        mouldId: scalingMode === "MOULD" ? mouldId || null : null,
+                        mouldQty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
+                      });
                     }}
                   />
                 </label>
@@ -2057,8 +2072,13 @@ function EditFormulaVersionModal({
 
       if (saveMode === "new_formula") {
         // NEW_FORMULA — 기존 포뮬라는 전혀 건드리지 않고, 완전히 새로운 포뮬라 + 버전 1개를
-        // 만든다. 같은 COMPONENT/TECHNIQUE CATEGORY/METHOD에 연결해서 포뮬라 목록/계산에서
-        // 바로 보이도록 하고, derived_from_formula_id로 "어디서 갈라져 나왔는지"만 남긴다.
+        // 만든다. derived_from_formula_id로 "어디서 갈라져 나왔는지"만 남긴다.
+        // 2026-10-21 사용자 요청: "포뮬라만 새로 만들뿐아니라, 컴포넌트도 새로 만들어서
+        // 연결해야해" — COMPONENT를 원래 포뮬라와 공유하면 한 COMPONENT 아래 포뮬라가 2개가
+        // 되어 "이 컴포넌트의 현재 포뮬라"가 모호해진다(CurrentFormulaPanel 등은 컴포넌트당
+        // 포뮬라 1개를 전제로 가장 최근 것만 고른다). 그래서 원래 컴포넌트의 설정(계량 기준/
+        // TECHNIQUE CATEGORY/기본 워크플로)을 그대로 복사한 새 COMPONENT를 만들고, 새
+        // 포뮬라를 거기에 연결한다 — 원래 컴포넌트는 기존 포뮬라만 그대로 쓴다.
         const name = newFormulaName.trim();
         if (!name) throw new Error("새 포뮬라 이름을 입력해주세요");
 
@@ -2068,6 +2088,33 @@ function EditFormulaVersionModal({
           .eq("id", column.formulaId)
           .single();
         if (baseFormulaError) throw baseFormulaError;
+
+        let newComponentId: string | null = null;
+        if (baseFormula.component_id) {
+          const { data: baseComponent, error: baseComponentError } = await supabase
+            .from("components")
+            .select(
+              "scaling_mode, technique_category_id, default_workflow_template_id, auto_apply_default_workflow",
+            )
+            .eq("id", baseFormula.component_id)
+            .single();
+          if (baseComponentError) throw baseComponentError;
+
+          const { data: newComponent, error: componentError } = await supabase
+            .from("components")
+            .insert({
+              user_id,
+              name,
+              scaling_mode: baseComponent.scaling_mode,
+              technique_category_id: baseComponent.technique_category_id,
+              default_workflow_template_id: baseComponent.default_workflow_template_id,
+              auto_apply_default_workflow: baseComponent.auto_apply_default_workflow,
+            })
+            .select("id")
+            .single();
+          if (componentError) throw componentError;
+          newComponentId = newComponent.id;
+        }
 
         const { data: baseVersion, error: baseError } = await supabase
           .from("formula_versions")
@@ -2083,7 +2130,7 @@ function EditFormulaVersionModal({
           .insert({
             user_id,
             name,
-            component_id: baseFormula.component_id,
+            component_id: newComponentId,
             technique_category_id: baseFormula.technique_category_id,
             method_id: baseFormula.method_id,
             derived_from_formula_id: column.formulaId,
@@ -2217,11 +2264,12 @@ function EditFormulaVersionModal({
     },
     onSuccess: async () => {
       setError(null);
-      // NEW_FORMULA는 완전히 새 포뮬라를 만든 것이므로, FORMULAS 목록/해당 COMPONENT의
-      // 포뮬라 목록 캐시도 갱신해야 다른 화면에서 바로 보인다.
+      // NEW_FORMULA는 완전히 새 포뮬라 + 새 COMPONENT를 만든 것이므로, FORMULAS 목록/
+      // COMPONENTS 목록/해당 COMPONENT의 포뮬라 목록 캐시도 갱신해야 다른 화면에서 바로 보인다.
       if (saveMode === "new_formula") {
         await queryClient.invalidateQueries({ queryKey: ["formulas"] });
         await queryClient.invalidateQueries({ queryKey: ["formulas_by_component"] });
+        await queryClient.invalidateQueries({ queryKey: ["components"] });
       }
       await onSaved();
     },
@@ -2280,7 +2328,7 @@ function EditFormulaVersionModal({
               {saveMode === "overwrite" &&
                 `v${column.versionNumber} 자체를 고칩니다. 이 버전을 쓰는 다른 WORK SESSION/포뮬라에도 바로 반영되고, 양이 안 바뀐 재료의 계량 체크는 그대로 남습니다.`}
               {saveMode === "new_formula" &&
-                `"${column.formulaName}"과 완전히 분리된 새 포뮬라를 만듭니다. 기존 포뮬라는 그대로 남고, 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 새 포뮬라로 전환됩니다.`}
+                `"${column.formulaName}"과 완전히 분리된 새 포뮬라 + 새 COMPONENT를 만듭니다. 기존 포뮬라/COMPONENT는 그대로 남고, 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 새 포뮬라로 전환됩니다.`}
             </p>
             {saveMode === "new_formula" && (
               <Field label="새 포뮬라 이름">

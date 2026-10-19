@@ -35,6 +35,7 @@ import {
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { resolveSlotGroup } from "@/lib/technique";
 import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
+import { suggestedMultiplierFromTarget } from "@/lib/work-session";
 import { formatProductSizeLabel } from "@/lib/product-size";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
@@ -577,12 +578,64 @@ function OrderDetailPage() {
       // 돌던 기본 WORKFLOW 적용 로직을 한 번도 안 거치는 게 원인이었다. coreRows를 만들 때
       // 그 Formula도 같이 들고 있다가, insert 성공 뒤 각 행마다 applyDefaultWorkflowForFormulaVersion을
       // 호출해서 $sessionId.tsx와 똑같이 템플릿(또는 기본 TASK 1개)이 깔리도록 한다.
+      //
+      // 2026-10-27 사용자 요청("몰드·용량 시스템 통합 개선안" 3단계를 전체 통합 전에 먼저 적용):
+      // 이전에는 여기서 CORE 행을 만들 때 multiplier=1, mould_id/mould_qty=null로 고정해버려서,
+      // ORDER에 PRODUCT SIZE가 이미 연결돼 있어도 생성 직후 WORK SESSION에서 매번 손으로 몰드·배수를
+      // 다시 맞춰야 했다(문제 7). $sessionId.tsx의 "+ ADD" 폼과 같은 로직으로 PRODUCT SIZE의
+      // product_components.quantity_g를 읽어 배수를 역산하고, scaling_mode가 MOULD인 Component는
+      // 사이즈 기준으로 만들어도 몰드 정체성(mould_id)을 항상 같이 채워 넣는다(문제 6과 같은 원인).
+      let productComponentRows: {
+        component_id: string | null;
+        quantity_g: number | null;
+        product_size_id: string | null;
+      }[] = [];
+      if (effectiveProductId) {
+        const { data: pcData, error: pcError } = await supabase
+          .from("product_components")
+          .select("component_id, quantity_g, product_size_id")
+          .eq("product_id", effectiveProductId);
+        if (pcError) throw pcError;
+        productComponentRows = pcData ?? [];
+      }
+
+      const coreVersionIds = CORE_SLOTS.flatMap((slot) => {
+        const formula = formulas.data?.find((f) => f.id === slotFormulaIds[slot]);
+        const version = formula ? pickEffectiveFormulaVersion(formula.formula_versions) : null;
+        return version ? [version.id] : [];
+      });
+      const baseGramsByVersion: Record<string, number> = {};
+      if (coreVersionIds.length > 0) {
+        const { data: ingredientRows, error: ingError } = await supabase
+          .from("formula_version_ingredients")
+          .select("formula_version_id, amount")
+          .in("formula_version_id", coreVersionIds);
+        if (ingError) throw ingError;
+        for (const row of ingredientRows ?? []) {
+          baseGramsByVersion[row.formula_version_id] =
+            (baseGramsByVersion[row.formula_version_id] ?? 0) + Number(row.amount);
+        }
+      }
+
       const coreRows = CORE_SLOTS.flatMap((slot) => {
         const formulaId = slotFormulaIds[slot];
         if (!formulaId) return [];
         const formula = formulas.data?.find((f) => f.id === formulaId);
         const version = formula ? pickEffectiveFormulaVersion(formula.formula_versions) : null;
         if (!version || !formula) return [];
+
+        const isMould = (formula.components?.scaling_mode ?? null) === "MOULD";
+        const sizeMatch = formula.components?.id
+          ? productComponentRows.find(
+              (pc) =>
+                pc.component_id === formula.components!.id &&
+                pc.product_size_id === effectiveProductSizeId,
+            )
+          : undefined;
+        const sizeTargetGrams = sizeMatch?.quantity_g != null ? Number(sizeMatch.quantity_g) : null;
+        const baseTotalGrams = baseGramsByVersion[version.id] ?? 0;
+        const suggested = suggestedMultiplierFromTarget(sizeTargetGrams, 1, baseTotalGrams);
+
         return [
           {
             formula,
@@ -592,9 +645,9 @@ function OrderDetailPage() {
               formula_version_id: version.id,
               kind: "CORE" as const,
               slot,
-              multiplier: 1,
-              mould_id: null,
-              mould_qty: null,
+              multiplier: suggested ?? 1,
+              mould_id: isMould ? (version.default_mould_id ?? null) : null,
+              mould_qty: isMould ? 1 : null,
               base_weight_id: null,
               base_weight_qty: null,
               sort_order: CORE_SLOTS.indexOf(slot),
