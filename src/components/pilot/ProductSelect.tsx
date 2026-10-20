@@ -113,7 +113,7 @@ export function ProductSelect({
                 )}
                 <div className="flex gap-2">
                   <button type="submit" className={primaryButtonClass} disabled={create.isPending}>
-                    {create.isPending ? "생성 중…" : "CREATE"}
+                    {create.isPending ? "CREATING…" : "CREATE"}
                   </button>
                   <button
                     type="button"

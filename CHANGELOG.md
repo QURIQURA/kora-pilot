@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-10-20 — ORDER DETAIL 화면의 한글 문구를 모두 영어로 변경
+
+주문 상세 페이지(필드 라벨, 안내문, 플레이스홀더, 버튼 문구)와 그 안에서 쓰는 CUSTOMER/MOULD/PRODUCT SIZE
+선택칸, 무드보드, 결과물 사진 영역의 화면 문구를 영어로 바꿨습니다. 기능 변화는 없습니다.
+
+---
+
 ## 2026-10-20 — ORDER DETAIL 필드를 2열 기준으로 재배치 + SATISFACTION 한글 설명 삭제
 
 CUSTOMER DETAILS는 (CUSTOMER·ORDER NUMBER) → (RECIPIENT·RELATIONSHIP) → (OCCASION·ENJOYED BY) →

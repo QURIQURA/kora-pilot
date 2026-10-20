@@ -40,7 +40,7 @@ export function CustomerSelect({
         <option value="">{emptyLabel}</option>
         {(customers.data ?? []).map((c) => (
           <option key={c.id} value={c.id}>
-            {c.name || c.instagram_handle || "(이름 없음)"}
+            {c.name || c.instagram_handle || "(no name)"}
           </option>
         ))}
         <option value={NEW_VALUE}>+ NEW CUSTOMER</option>

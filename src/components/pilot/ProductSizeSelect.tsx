@@ -16,7 +16,7 @@ export function ProductSizeSelect({
   productId,
   value,
   onChange,
-  emptyLabel = "— 미지정 —",
+  emptyLabel = "— UNSET —",
   className,
   disabled,
 }: {

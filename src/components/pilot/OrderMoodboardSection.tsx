@@ -73,28 +73,28 @@ const NOTE_COLORS = ["#fde68a", "#fecaca", "#bbf7d0", "#bfdbfe", "#e9d5ff"];
 const NOTE_SHAPES = [
   {
     value: "rect",
-    label: "사각형",
+    label: "Rectangle",
     radiusClass: "rounded-none",
     clipPath: null,
     forceSquare: false,
   },
   {
     value: "square",
-    label: "정사각형",
+    label: "Square",
     radiusClass: "rounded-none",
     clipPath: null,
     forceSquare: true,
   },
   {
     value: "circle",
-    label: "원형",
+    label: "Circle",
     radiusClass: "rounded-full",
     clipPath: null,
     forceSquare: false,
   },
   {
     value: "triangle",
-    label: "삼각형",
+    label: "Triangle",
     radiusClass: "rounded-none",
     clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)",
     forceSquare: false,
@@ -115,10 +115,10 @@ function shapeClipPath(shape: string | null | undefined): string | undefined {
  * 확장: 단색/그라데이션/물결/지그재그. 물결·지그재그도 그라데이션처럼 두 번째 컬러(color2)를 쓴다.
  */
 const NOTE_PATTERNS = [
-  { value: "solid", label: "단색" },
-  { value: "gradient", label: "그라데이션" },
-  { value: "wave", label: "물결 패턴" },
-  { value: "zigzag", label: "지그재그 패턴" },
+  { value: "solid", label: "Solid" },
+  { value: "gradient", label: "Gradient" },
+  { value: "wave", label: "Wave" },
+  { value: "zigzag", label: "Zigzag" },
 ] as const;
 
 type NotePatternValue = (typeof NOTE_PATTERNS)[number]["value"];
@@ -282,7 +282,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       }
       await invalidate();
     } catch (e) {
-      setError(`되돌리기 실패 — ${(e as Error).message}`);
+      setError(`Undo failed — ${(e as Error).message}`);
     }
   };
 
@@ -410,7 +410,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
     setError(null);
     try {
       const sourceRes = await fetch(originalUrl);
-      if (!sourceRes.ok) throw new Error(`이미지를 불러오지 못했습니다 (${sourceRes.status})`);
+      if (!sourceRes.ok) throw new Error(`Could not load image (${sourceRes.status})`);
       const sourceBlob = await sourceRes.blob();
       const resultBlob = await removeBackground(sourceBlob);
 
@@ -431,7 +431,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       pushUndo({ type: "update", id: item.id, before: { image_url: originalUrl } });
       await invalidate();
     } catch (e) {
-      setError(`배경 제거 실패 — ${(e as Error).message}`);
+      setError(`Background removal failed — ${(e as Error).message}`);
     } finally {
       setRemovingBgId(null);
     }
@@ -680,7 +680,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       >
         {rows.length === 0 && (
           <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-xs uppercase text-muted-foreground">
-            여기를 클릭한 뒤 이미지를 붙여넣으세요(Ctrl+V) · 또는 IMAGE / NOTE 버튼
+            Click here, then paste an image (Ctrl+V) · or use the IMAGE / NOTE buttons
           </p>
         )}
         {rows.map((item) => {
@@ -792,7 +792,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                       <label
                         className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
                         style={{ backgroundColor: item.color ?? "#fde68a" }}
-                        title="자유 색상 선택"
+                        title="Pick any colour"
                         onPointerDown={(e) => e.stopPropagation()}
                       >
                         <input
@@ -851,7 +851,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                           <label
                             className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
                             style={{ backgroundColor: item.color2 }}
-                            title="두 번째 색상"
+                            title="Second colour"
                           >
                             <input
                               type="color"
@@ -869,7 +869,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                       // 한다(실제로 입력된 내용은 호버 여부와 무관하게 항상 보임).
                       className="flex-1 resize-none border-0 bg-transparent p-2 text-xs font-mono text-foreground outline-none placeholder:opacity-0 group-hover:placeholder:opacity-100"
                       defaultValue={item.content ?? ""}
-                      placeholder="메모…"
+                      placeholder="Note…"
                       onPointerDown={(e) => e.stopPropagation()}
                       onBlur={(e) => {
                         if (e.target.value !== (item.content ?? "")) {
@@ -889,7 +889,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 type="button"
                 className="absolute -top-2 -right-2 hidden h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex hover:text-destructive"
                 onClick={() => remove.mutate(item)}
-                title="삭제"
+                title="Delete"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -897,7 +897,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
               <div
                 className="absolute -top-2 left-1/2 hidden h-5 w-5 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex active:cursor-grabbing"
                 onPointerDown={(e) => beginRotate(e, item)}
-                title="회전(틸트)"
+                title="Rotate"
               >
                 <RotateCw className="h-3 w-3" />
               </div>
@@ -907,7 +907,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 <div
                   className="absolute -top-2 -left-2 hidden h-5 w-5 cursor-move items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex"
                   onPointerDown={(e) => beginDrag(e, item, "move")}
-                  title="이동"
+                  title="Move"
                 >
                   <Move className="h-3 w-3" />
                 </div>
@@ -926,7 +926,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={() => void handleRemoveBackground(item)}
                   disabled={Boolean(removingBgId)}
-                  title="배경 제거"
+                  title="Remove background"
                 >
                   {removingBgId === item.id ? (
                     <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />

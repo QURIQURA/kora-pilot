@@ -68,7 +68,7 @@ export function OrderResultPhotosSection({ orderId }: { orderId: string }) {
           onClick={() => fileInputRef.current?.click()}
         >
           <ImagePlus size={13} className="mr-1 inline" aria-hidden />
-          {upload.isPending ? "업로드 중…" : "+ ADD PHOTO"}
+          {upload.isPending ? "UPLOADING…" : "+ ADD PHOTO"}
         </button>
       }
     >
@@ -91,7 +91,7 @@ export function OrderResultPhotosSection({ orderId }: { orderId: string }) {
       )}
       {(photos.data ?? []).length === 0 ? (
         <p className="font-mono text-xs uppercase text-muted-foreground">
-          완성 사진이 없습니다 — + ADD PHOTO로 업로드하세요.
+          No result photos yet — upload with + ADD PHOTO.
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
@@ -105,7 +105,7 @@ export function OrderResultPhotosSection({ orderId }: { orderId: string }) {
               </a>
               <button
                 type="button"
-                title="삭제"
+                title="Delete"
                 onClick={() => remove.mutate(p.id)}
                 className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-background/80 text-foreground group-hover:flex"
               >

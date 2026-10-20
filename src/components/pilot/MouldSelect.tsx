@@ -16,7 +16,7 @@ export function mouldOptionLabel(mould: Pick<Mould, "name" | "shape_size" | "ref
   const parts = [mould.name];
   if (mould.shape_size) parts.push(mould.shape_size);
   const label = parts.join(" · ");
-  return mould.reference_weight_g != null ? `${label} (${mould.reference_weight_g}g 기준)` : label;
+  return mould.reference_weight_g != null ? `${label} (ref. ${mould.reference_weight_g}g)` : label;
 }
 
 /** 몰드 선택 드롭다운. 맨 아래 "+ NEW MOULD"로 즉석 생성 후 자동 선택. */

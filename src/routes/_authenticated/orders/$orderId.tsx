@@ -98,7 +98,7 @@ function StarRating({ value, onChange }: { value: number | ""; onChange: (v: num
             type="button"
             onClick={() => onChange(n)}
             className="px-0.5 text-xl leading-none text-border hover:text-foreground"
-            aria-label={`${n}점 — ${SATISFACTION_LABELS[n]}`}
+            aria-label={`${n} — ${SATISFACTION_LABELS[n]}`}
           >
             <span className={value !== "" && n <= value ? "text-foreground" : ""}>
               {value !== "" && n <= value ? "★" : "☆"}
@@ -603,7 +603,7 @@ function OrderDetailPage() {
           if (workflowError) {
             // 세션/재료 연결 자체는 이미 성공했으니, 기본 워크플로 적용 실패는 콘솔에만 남기고
             // 세션 생성 흐름은 막지 않는다 ($sessionId.tsx의 add mutation과 동일한 방침).
-            console.error("기본 워크플로 자동 적용 실패:", workflowError);
+            console.error("Default workflow auto-apply failed:", workflowError);
           }
         }
       }
@@ -751,11 +751,11 @@ function OrderDetailPage() {
           {/* 2026-10-20 사용자 요청: DESIGN NOTE를 ORDER DETAIL에서 VISUALS(사진들 아래)로 이동.
               SAVE 바는 탭 밖이라 여기서 수정해도 그대로 저장된다. */}
           <SectionCard title="DESIGN NOTE">
-            <Field label="디자인/구조/조립">
+            <Field label="DESIGN / STRUCTURE / ASSEMBLY">
               <textarea
                 rows={4}
                 className={inputClass}
-                placeholder="예: 2단 구조, 초콜릿 튀일 장식은 배송 직전 부착"
+                placeholder="e.g. 2 tiers, chocolate tuile decoration attached just before delivery"
                 value={designNote}
                 onChange={(e) => setDesignNote(e.target.value)}
               />
@@ -767,7 +767,7 @@ function OrderDetailPage() {
           <SectionCard title="CUSTOMER DETAILS">
             {/* 2026-10-20 사용자 요청: 2열 기준 필드 순서 재배치 */}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="CUSTOMER (= 요청자/구매자)">
+              <Field label="CUSTOMER">
                 <CustomerSelect value={customerId} onChange={setCustomerId} />
               </Field>
               <Field label="ORDER NUMBER">
@@ -777,7 +777,7 @@ function OrderDetailPage() {
                   onChange={(e) => setOrderNumber(e.target.value)}
                 />
               </Field>
-              <Field label="RECIPIENT (받는 사람)">
+              <Field label="RECIPIENT">
                 <input
                   className={inputClass}
                   value={recipient}
@@ -792,7 +792,7 @@ function OrderDetailPage() {
                     setRecipientRelationship(e.target.value as OrderRecipientRelationship | "")
                   }
                 >
-                  <option value="">— 선택 —</option>
+                  <option value="">— SELECT —</option>
                   {ORDER_RECIPIENT_RELATIONSHIP_OPTIONS.map((r) => (
                     <option key={r.value} value={r.value}>
                       {r.label}
@@ -803,14 +803,14 @@ function OrderDetailPage() {
                       (r) => r.value === recipientRelationship,
                     ) && (
                       <option value={recipientRelationship}>
-                        {recipientRelationship} (이전 값)
+                        {recipientRelationship} (previous value)
                       </option>
                     )}
                 </select>
                 {recipientRelationship === "Other" && (
                   <input
                     className={inputClass + " mt-1"}
-                    placeholder="직접 입력"
+                    placeholder="Enter manually"
                     value={recipientRelationshipOtherNote}
                     onChange={(e) => setRecipientRelationshipOtherNote(e.target.value)}
                   />
@@ -847,7 +847,7 @@ function OrderDetailPage() {
                       value={occasion}
                       onChange={(e) => setOccasion(e.target.value as OrderOccasion | "")}
                     >
-                      <option value="">— 선택 —</option>
+                      <option value="">— SELECT —</option>
                       {ORDER_OCCASIONS.filter(
                         (o) => o === "Other" || ORDER_OCCASION_CATEGORY_MAP[o] === occasionCategory,
                       ).map((o) => (
@@ -859,7 +859,7 @@ function OrderDetailPage() {
                     {occasion === "Other" && (
                       <input
                         className={inputClass + " mt-1"}
-                        placeholder="직접 입력"
+                        placeholder="Enter manually"
                         value={occasionOtherNote}
                         onChange={(e) => setOccasionOtherNote(e.target.value)}
                       />
@@ -867,13 +867,13 @@ function OrderDetailPage() {
                   </div>
                 </div>
               </Field>
-              <Field label="ENJOYED BY (먹는 사람)">
+              <Field label="ENJOYED BY">
                 <select
                   className={selectClass}
                   value={audience}
                   onChange={(e) => setAudience(e.target.value)}
                 >
-                  <option value="">— 선택 —</option>
+                  <option value="">— SELECT —</option>
                   {ORDER_AUDIENCES.map((a) => (
                     <option key={a} value={a}>
                       {a}
@@ -911,17 +911,17 @@ function OrderDetailPage() {
               <Field label="DELIVERY ADDRESS">
                 <input
                   className={inputClass}
-                  placeholder="픽업이면 비워두기"
+                  placeholder="Leave empty for pickup"
                   value={deliveryAddress}
                   onChange={(e) => setDeliveryAddress(e.target.value)}
                 />
               </Field>
               <div className="md:col-span-2">
-                <Field label="DIETARY REQUIREMENTS — 알레르기/식이">
+                <Field label="DIETARY REQUIREMENTS">
                   <textarea
                     rows={2}
                     className={inputClass}
-                    placeholder="예: Nut free, Halal friendly"
+                    placeholder="e.g. Nut free, Halal friendly"
                     value={dietaryRequirements}
                     onChange={(e) => setDietaryRequirements(e.target.value)}
                   />
@@ -933,7 +933,7 @@ function OrderDetailPage() {
                   value={paymentStatus}
                   onChange={(e) => setPaymentStatus(e.target.value as OrderPaymentStatus | "")}
                 >
-                  <option value="">— 선택 —</option>
+                  <option value="">— SELECT —</option>
                   {ORDER_PAYMENT_STATUSES.map((s) => (
                     <option key={s} value={s}>
                       {s}
@@ -942,11 +942,11 @@ function OrderDetailPage() {
                 </select>
               </Field>
               <div className="md:col-span-2">
-                <Field label="ORDER NOTE — 고객 요청/배송 등">
+                <Field label="ORDER NOTE">
                   <textarea
                     rows={3}
                     className={inputClass}
-                    placeholder="예: 오후 3시 이후 픽업 희망"
+                    placeholder="e.g. Prefer pickup after 3pm"
                     value={orderNote}
                     onChange={(e) => setOrderNote(e.target.value)}
                   />
@@ -967,7 +967,7 @@ function OrderDetailPage() {
                   value={productLine}
                   onChange={(e) => setProductLine(e.target.value as OrderProductLineKey | "")}
                 >
-                  <option value="">— 선택 —</option>
+                  <option value="">— SELECT —</option>
                   {ORDER_PRODUCT_LINES.map((p) => (
                     <option key={p.key} value={p.key}>
                       {p.label}
@@ -975,8 +975,7 @@ function OrderDetailPage() {
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가
-                  생성/동기화됩니다.
+                  On CONFIRMED, a project is created/synced to this product line in the WANN Weekly OS calendar.
                 </p>
               </Field>
               <div className="hidden md:block" aria-hidden />
@@ -987,11 +986,11 @@ function OrderDetailPage() {
                     setProductId(next);
                     setProductSizeId("");
                   }}
-                  emptyLabel="TBD — 아직 미정"
+                  emptyLabel="TBD"
                 />
               </Field>
               {productId && (
-                <Field label="최종 사이즈 (PRODUCT SIZE)">
+                <Field label="PRODUCT SIZE">
                   <ProductSizeSelect
                     productId={productId}
                     value={productSizeId}
@@ -1005,7 +1004,7 @@ function OrderDetailPage() {
                   value={cakeSize}
                   onChange={(e) => setCakeSize(e.target.value as OrderCakeSize | "")}
                 >
-                  <option value="">— 선택 —</option>
+                  <option value="">— SELECT —</option>
                   {ORDER_CAKE_SIZES.map((s) => (
                     <option key={s} value={s}>
                       {s}
@@ -1016,7 +1015,7 @@ function OrderDetailPage() {
                   <div className="mt-1 flex flex-wrap gap-2">
                     <input
                       className={inputClass + " !w-40"}
-                      placeholder="커스텀 사이즈 (예: 10인치 하트)"
+                      placeholder="Custom size (e.g. 10-inch heart)"
                       value={customSize}
                       onChange={(e) => setCustomSize(e.target.value)}
                     />
@@ -1025,33 +1024,32 @@ function OrderDetailPage() {
                       inputMode="decimal"
                       min="0"
                       className={inputClass + " !w-28"}
-                      placeholder="cm (선택)"
+                      placeholder="cm (optional)"
                       value={customSizeCm}
                       onChange={(e) => setCustomSizeCm(e.target.value)}
                     />
                   </div>
                 )}
               </Field>
-              <Field label="SERVINGS (인분)">
+              <Field label="SERVINGS">
                 <input
                   type="number"
                   inputMode="numeric"
                   min="0"
                   className={inputClass}
-                  placeholder="예: 10"
+                  placeholder="e.g. 10"
                   value={servings}
                   onChange={(e) => setServings(e.target.value)}
                 />
               </Field>
-              <Field label="시트 사이즈 (WORK SESSION 자동계산용)">
+              <Field label="SHEET SIZE">
                 <MouldSelect
                   value={sheetMouldId}
                   onChange={setSheetMouldId}
-                  emptyLabel="— 미지정 —"
+                  emptyLabel="— UNSET —"
                 />
                 <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                  위 CAKE SIZE/PRODUCT SIZE와 별개 — 단가계산에는 쓰이지 않고, WORK SESSION 생성 시
-                  이 몰드 기준으로 배수를 자동 계산한다. PRODUCT SIZE가 골라져 있으면 그쪽이 우선.
+                  Separate from CAKE SIZE / PRODUCT SIZE. Not used for costing; the WORK SESSION multiplier is calculated from this mould (PRODUCT SIZE takes priority if set).
                 </p>
               </Field>
             </div>
@@ -1078,7 +1076,7 @@ function OrderDetailPage() {
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
                       >
-                        <option value="">— FORMULA 링크 안 함 —</option>
+                        <option value="">— NO FORMULA LINKED —</option>
                         {formulasForSlot(slot, value).map((f) => (
                           <option key={f.id} value={f.id}>
                             {f.components?.name ?? f.name}
@@ -1089,8 +1087,7 @@ function OrderDetailPage() {
                   ))}
                 </div>
                 <p className="mt-1 text-[10px] text-muted-foreground">
-                  각 칸에는 SETTINGS → TECHNIQUE CATEGORIES에서 해당 슬롯으로 분류된 COMPONENT의
-                  FORMULA만 표시됩니다.
+                  Each dropdown lists FORMULAs of COMPONENTs classified into that slot under SETTINGS → TECHNIQUE CATEGORIES.
                 </p>
                 {/* 2026-10-12 사용자 요청: 기존 PRODUCT를 링크한 경우에만 그 PRODUCT의 현재 레시피를
                 보여주고, 버튼 한 번으로 SHEET/CREAM/FILLING에 적용할 수 있게 한다 — FLAVORING NOTE를
@@ -1099,7 +1096,7 @@ function OrderDetailPage() {
                 {productId && productRecipeFormulas.length > 0 && (
                   <div className="mt-3 border border-dashed border-border p-2">
                     <p className="label-caps mb-1.5 text-[10px] text-muted-foreground">
-                      연결된 PRODUCT의 현재 레시피 — 버튼으로 바로 적용
+                      Linked PRODUCT current recipe — apply with one click
                     </p>
                     <ul className="space-y-1">
                       {productRecipeFormulas.map((r) => (
@@ -1119,21 +1116,21 @@ function OrderDetailPage() {
                               className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
                               onClick={() => setFlavoringSheetFormulaId(r.formulaId)}
                             >
-                              SHEET로
+                              TO SHEET
                             </button>
                             <button
                               type="button"
                               className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
                               onClick={() => setFlavoringCreamFormulaId(r.formulaId)}
                             >
-                              CREAM으로
+                              TO CREAM
                             </button>
                             <button
                               type="button"
                               className="label-caps border border-border px-1.5 py-0.5 text-[10px] hover:bg-secondary"
                               onClick={() => setFlavoringFillingFormulaId(r.formulaId)}
                             >
-                              FILLING으로
+                              TO FILLING
                             </button>
                           </span>
                         </li>
@@ -1163,7 +1160,7 @@ function OrderDetailPage() {
                   >
                     {customerSatisfaction === ""
                       ? "— NOT YET COLLECTED"
-                      : "✕ 미수집으로 되돌리기 (NOT YET COLLECTED)"}
+                      : "✕ RESET TO NOT YET COLLECTED"}
                   </button>
                 </div>
               </Field>
@@ -1173,7 +1170,7 @@ function OrderDetailPage() {
                 <textarea
                   rows={3}
                   className={inputClass}
-                  placeholder='예: "She absolutely loved the surprise!"'
+                  placeholder='e.g. "She absolutely loved the surprise!"'
                   value={customerFeedback}
                   onChange={(e) => setCustomerFeedback(e.target.value)}
                 />
@@ -1182,7 +1179,7 @@ function OrderDetailPage() {
                 <textarea
                   rows={3}
                   className={inputClass}
-                  placeholder='예: "Result was beautiful but production took too long."'
+                  placeholder='e.g. "Result was beautiful but production took too long."'
                   value={makerNotes}
                   onChange={(e) => setMakerNotes(e.target.value)}
                 />
@@ -1210,7 +1207,7 @@ function OrderDetailPage() {
                   disabled={createWorkSession.isPending}
                   onClick={() => createWorkSession.mutate()}
                 >
-                  {createWorkSession.isPending ? "생성 중…" : "+ CREATE WORK SESSION"}
+                  {createWorkSession.isPending ? "CREATING…" : "+ CREATE WORK SESSION"}
                 </button>
               )}
               {order.data.product_id ? (
@@ -1228,7 +1225,7 @@ function OrderDetailPage() {
                   disabled={upgradeToProduct.isPending}
                   onClick={() => upgradeToProduct.mutate()}
                 >
-                  {upgradeToProduct.isPending ? "승격 중…" : "↑ UPGRADE TO PRODUCT"}
+                  {upgradeToProduct.isPending ? "UPGRADING…" : "↑ UPGRADE TO PRODUCT"}
                 </button>
               )}
             </div>
@@ -1262,14 +1259,14 @@ function OrderDetailPage() {
               className={buttonClass}
               onClick={() => order.data && hydrateFromOrder(order.data)}
             >
-              되돌리기
+              REVERT
             </button>
           )}
           <span className="label-caps text-[10px] text-muted-foreground">
             {save.isPending
-              ? "저장 중…"
+              ? "SAVING…"
               : isDirty
-                ? "변경 사항이 있습니다 — 저장하려면 SAVE"
+                ? "UNSAVED CHANGES — press SAVE"
                 : "✓ SAVED"}
           </span>
           <button
