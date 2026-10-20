@@ -56,6 +56,9 @@ import {
   selectClass,
 } from "@/components/pilot/ui";
 
+// orders.audience check constraint values (2026-10-20).
+const ORDER_AUDIENCES = ["Adults", "Adults + children", "Children"] as const;
+
 export const Route = createFileRoute("/_authenticated/orders/$orderId")({
   head: () => ({
     meta: [{ title: "PILOT — Order" }, { name: "description", content: "Order detail" }],
@@ -232,6 +235,8 @@ function OrderDetailPage() {
   const [makerNotes, setMakerNotes] = useState("");
   // 2026-10-20 사용자 요청: 웹 주문서의 알레르기/식이 요구사항을 PILOT 주문에서도 보이게.
   const [dietaryRequirements, setDietaryRequirements] = useState("");
+  // 2026-10-20 사용자 요청: 웹 주문서 "Who will be enjoying the cake?" 답을 PILOT에서도 보이게.
+  const [audience, setAudience] = useState("");
 
   // 수정사항 저장 여부를 시각적으로 보여주기 위한 "저장된 상태" 스냅샷(2026-10-06, 사용자
   // 요청 — SAVE 누르면 다시 수정하기 전까지 버튼이 비활성화되고 "✓ SAVED"로 보이게 함.
@@ -267,6 +272,7 @@ function OrderDetailPage() {
       designNote: o.design_notes ?? "",
       orderNote: o.notes ?? "",
       dietaryRequirements: o.dietary_requirements ?? "",
+      audience: o.audience ?? "",
       makerSatisfaction: o.maker_satisfaction ?? "",
       customerSatisfaction: o.customer_satisfaction ?? "",
       customerFeedback: o.customer_feedback ?? "",
@@ -307,6 +313,7 @@ function OrderDetailPage() {
     setDesignNote(o.design_notes ?? "");
     setOrderNote(o.notes ?? "");
     setDietaryRequirements(o.dietary_requirements ?? "");
+    setAudience(o.audience ?? "");
     setMakerSatisfaction(o.maker_satisfaction ?? "");
     setCustomerSatisfaction(o.customer_satisfaction ?? "");
     setCustomerFeedback(o.customer_feedback ?? "");
@@ -351,6 +358,7 @@ function OrderDetailPage() {
     designNote,
     orderNote,
     dietaryRequirements,
+    audience,
     makerSatisfaction,
     customerSatisfaction,
     customerFeedback,
@@ -399,6 +407,7 @@ function OrderDetailPage() {
           design_notes: designNote.trim() || null,
           notes: orderNote.trim() || null,
           dietary_requirements: dietaryRequirements.trim() || null,
+          audience: audience || null,
           maker_satisfaction: makerSatisfaction === "" ? null : makerSatisfaction,
           customer_satisfaction: customerSatisfaction === "" ? null : customerSatisfaction,
           customer_feedback: customerFeedback.trim() || null,
@@ -787,6 +796,20 @@ function OrderDetailPage() {
                     onChange={(e) => setRecipientRelationshipOtherNote(e.target.value)}
                   />
                 )}
+              </Field>
+              <Field label="ENJOYED BY (먹는 사람)">
+                <select
+                  className={selectClass}
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_AUDIENCES.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="OCCASION">
                 <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">

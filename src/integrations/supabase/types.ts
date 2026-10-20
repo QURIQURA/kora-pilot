@@ -1323,6 +1323,7 @@ export type Database = {
           customer_feedback: string | null;
           customer_id: string | null;
           customer_satisfaction: number | null;
+          audience: string | null;
           design_notes: string | null;
           dietary_requirements: string | null;
           event_date: string | null;
@@ -1375,6 +1376,7 @@ export type Database = {
           customer_feedback?: string | null;
           customer_id?: string | null;
           customer_satisfaction?: number | null;
+          audience?: string | null;
           design_notes?: string | null;
           dietary_requirements?: string | null;
           event_date?: string | null;
@@ -1427,6 +1429,7 @@ export type Database = {
           customer_feedback?: string | null;
           customer_id?: string | null;
           customer_satisfaction?: number | null;
+          audience?: string | null;
           design_notes?: string | null;
           dietary_requirements?: string | null;
           event_date?: string | null;
