@@ -11,6 +11,7 @@ import {
   pilotSettingsQuery,
   workSessionByOrderQuery,
   formulasQuery,
+  mouldsQuery,
   techniqueCategoriesQuery,
   currentUserId,
   ORDER_STATUSES,
@@ -36,7 +37,9 @@ import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { resolveSlotGroup } from "@/lib/technique";
 import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
 import { suggestedMultiplierFromTarget } from "@/lib/work-session";
+import { mouldBatchMultiplier } from "@/lib/formula-calc";
 import { formatProductSizeLabel } from "@/lib/product-size";
+import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
@@ -207,6 +210,11 @@ function OrderDetailPage() {
     ...productSizesQuery(productId),
     enabled: Boolean(productId),
   });
+  // 2026-10-20 사용자 요청: "최종 케익 사이즈"(위 product_size_id — PRODUCT에 연결, 단가계산용)와는
+  // 별개로 "시트 사이즈"를 따로 관리한다 — PRODUCT SIZE 데이터가 없는 제품/커스텀 사이즈 주문이라도
+  // 이 몰드만 골라두면 WORK SESSION 생성 시 그 몰드 기준으로 자동 배수 계산이 가능해진다.
+  const [sheetMouldId, setSheetMouldId] = useState("");
+  const moulds = useQuery(mouldsQuery());
   // 2026-10-06 사용자 요청: Order의 메모는 성격이 다른 세 가지로 분리 관리한다 — 섞어서 쓰지 않음.
   // - Flavoring Note: Sheet/Cream/Filling 등 전체 맛 밸런스(내부용, 새 flavoring_note 컬럼)
   // - Design Note: 디자인/구조/조립(기존에 있었지만 UI에 없던 design_notes 컬럼 재사용)
@@ -285,6 +293,7 @@ function OrderDetailPage() {
       status: (o.status as OrderStatus) ?? "INTAKE",
       productId: o.product_id ?? "",
       productSizeId: o.product_size_id ?? "",
+      sheetMouldId: o.sheet_mould_id ?? "",
       flavoringNote: o.flavoring_note ?? "",
       flavoringSheetFormulaId: o.flavoring_sheet_formula_id ?? "",
       flavoringCreamFormulaId: o.flavoring_cream_formula_id ?? "",
@@ -321,6 +330,7 @@ function OrderDetailPage() {
     setStatus((o.status as OrderStatus) ?? "INTAKE");
     setProductId(o.product_id ?? "");
     setProductSizeId(o.product_size_id ?? "");
+    setSheetMouldId(o.sheet_mould_id ?? "");
     setFlavoringNote(o.flavoring_note ?? "");
     setFlavoringSheetFormulaId(o.flavoring_sheet_formula_id ?? "");
     setFlavoringCreamFormulaId(o.flavoring_cream_formula_id ?? "");
@@ -364,6 +374,10 @@ function OrderDetailPage() {
     paymentStatus,
     status,
     productId,
+    // 2026-10-20: productSizeId/sheetMouldId가 그동안 여기 빠져있어서 그 값만 바꾸고 저장해도
+    // "저장되지 않은 변경사항" 표시가 안 뜨던 기존 버그를 같이 고쳤다.
+    productSizeId,
+    sheetMouldId,
     flavoringNote,
     flavoringSheetFormulaId,
     flavoringCreamFormulaId,
@@ -492,6 +506,7 @@ function OrderDetailPage() {
           status,
           product_id: productId || null,
           product_size_id: productSizeId || null,
+          sheet_mould_id: sheetMouldId || null,
           flavoring_note: flavoringNote.trim() || null,
           flavoring_sheet_formula_id: flavoringSheetFormulaId || null,
           flavoring_cream_formula_id: flavoringCreamFormulaId || null,
@@ -549,6 +564,11 @@ function OrderDetailPage() {
       // 2026-10-12 사용자 요청: ORDER에 PRODUCT SIZE가 골라져 있으면 WORK SESSION 생성 시 그대로
       // 넘겨서(work_sessions.product_size_id) PRODUCT SIZE 기준 자동 배수 계산에 바로 쓰일 수 있게.
       const effectiveProductSizeId = productSizeId || o.product_size_id || null;
+      // 2026-10-20 사용자 요청: PRODUCT SIZE 기준 계산(product_components.quantity_g)이 가능한
+      // 경우(위) 그게 우선이지만, PRODUCT SIZE 데이터가 아예 없는 제품/커스텀 사이즈 주문도
+      // "시트 사이즈"(몰드)만 골라져 있으면 그 몰드 기준으로 자동 배수 계산이 가능해야 한다.
+      const effectiveSheetMouldId = sheetMouldId || o.sheet_mould_id || null;
+      const mouldsById = new Map((moulds.data ?? []).map((m) => [m.id, m]));
       const baseName =
         products.data?.find((p) => p.id === effectiveProductId)?.name ||
         o.recipient ||
@@ -634,7 +654,24 @@ function OrderDetailPage() {
           : undefined;
         const sizeTargetGrams = sizeMatch?.quantity_g != null ? Number(sizeMatch.quantity_g) : null;
         const baseTotalGrams = baseGramsByVersion[version.id] ?? 0;
-        const suggested = suggestedMultiplierFromTarget(sizeTargetGrams, 1, baseTotalGrams);
+        const suggestedFromSize = suggestedMultiplierFromTarget(sizeTargetGrams, 1, baseTotalGrams);
+
+        // PRODUCT SIZE 기준 타깃이 없고(이 제품에 사이즈 데이터가 없거나, 주문이 커스텀 사이즈라
+        // 어차피 매칭이 안 됨) MOULD 기준 Component라면, "시트 사이즈"로 골라둔 몰드를 기준으로
+        // 배수를 역산한다 — version의 기본 몰드(1배 기준) 대비 목표 몰드의 기준중량 비율.
+        let suggested = suggestedFromSize;
+        let resolvedMouldId = isMould ? (version.default_mould_id ?? null) : null;
+        if (suggestedFromSize == null && isMould && effectiveSheetMouldId) {
+          const targetMould = mouldsById.get(effectiveSheetMouldId) ?? null;
+          const baseMould = version.default_mould_id
+            ? (mouldsById.get(version.default_mould_id) ?? null)
+            : null;
+          const { multiplier, mismatch } = mouldBatchMultiplier(1, targetMould, baseMould);
+          if (!mismatch) {
+            suggested = multiplier;
+            resolvedMouldId = effectiveSheetMouldId;
+          }
+        }
 
         return [
           {
@@ -646,12 +683,12 @@ function OrderDetailPage() {
               kind: "CORE" as const,
               slot,
               multiplier: suggested ?? 1,
-              mould_id: isMould ? (version.default_mould_id ?? null) : null,
+              mould_id: resolvedMouldId,
               mould_qty: isMould ? 1 : null,
               base_weight_id: null,
               base_weight_qty: null,
               // 2026-10-19 "테이블 통합" 1단계: 통합 capacity_id/capacity_qty도 함께 채운다(dual-write).
-              capacity_id: isMould ? (version.default_mould_id ?? null) : null,
+              capacity_id: resolvedMouldId,
               capacity_qty: isMould ? 1 : null,
               sort_order: CORE_SLOTS.indexOf(slot),
             },
@@ -943,6 +980,17 @@ function OrderDetailPage() {
                   </select>
                 </Field>
               )}
+              <Field label="시트 사이즈 (WORK SESSION 자동계산용)">
+                <MouldSelect
+                  value={sheetMouldId}
+                  onChange={setSheetMouldId}
+                  emptyLabel="— 미지정 —"
+                />
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                  위 PRODUCT SIZE와 별개 — 단가계산에는 쓰이지 않고, WORK SESSION 생성 시 이 몰드
+                  기준으로 배수를 자동 계산한다. PRODUCT SIZE가 골라져 있으면 그쪽이 우선.
+                </p>
+              </Field>
               <Field label="RECIPIENT (받는 사람)">
                 <input
                   className={inputClass}

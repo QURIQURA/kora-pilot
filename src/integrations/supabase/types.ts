@@ -1356,6 +1356,7 @@ export type Database = {
           recipient_relationship_other_note: string | null;
           requester_legacy: string | null;
           servings: number | null;
+          sheet_mould_id: string | null;
           status: string;
           updated_at: string;
           user_id: string;
@@ -1406,6 +1407,7 @@ export type Database = {
           recipient_relationship_other_note?: string | null;
           requester_legacy?: string | null;
           servings?: number | null;
+          sheet_mould_id?: string | null;
           status?: string;
           updated_at?: string;
           user_id?: string;
@@ -1456,6 +1458,7 @@ export type Database = {
           recipient_relationship_other_note?: string | null;
           requester_legacy?: string | null;
           servings?: number | null;
+          sheet_mould_id?: string | null;
           status?: string;
           updated_at?: string;
           user_id?: string;
@@ -1504,6 +1507,13 @@ export type Database = {
             columns: ["product_size_id"];
             isOneToOne: false;
             referencedRelation: "product_sizes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_sheet_mould_id_fkey";
+            columns: ["sheet_mould_id"];
+            isOneToOne: false;
+            referencedRelation: "moulds";
             referencedColumns: ["id"];
           },
         ];
@@ -1956,6 +1966,44 @@ export type Database = {
             columns: ["technique_category_id"];
             isOneToOne: false;
             referencedRelation: "technique_categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      shco_email_log: {
+        Row: {
+          created_at: string;
+          error: string | null;
+          id: string;
+          kind: string;
+          recipients: string[];
+          request_id: string | null;
+          status: string;
+        };
+        Insert: {
+          created_at?: string;
+          error?: string | null;
+          id?: string;
+          kind: string;
+          recipients?: string[];
+          request_id?: string | null;
+          status: string;
+        };
+        Update: {
+          created_at?: string;
+          error?: string | null;
+          id?: string;
+          kind?: string;
+          recipients?: string[];
+          request_id?: string | null;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "shco_email_log_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "shco_order_requests";
             referencedColumns: ["id"];
           },
         ];
@@ -3075,6 +3123,7 @@ export type Database = {
         Args: { p_order_type: string; p_pax?: number };
         Returns: Json;
       };
+      shco_verify_hook_secret: { Args: { p_secret: string }; Returns: boolean };
       submit_order_request: {
         Args: { p_password: string; p_request: Json };
         Returns: Json;
