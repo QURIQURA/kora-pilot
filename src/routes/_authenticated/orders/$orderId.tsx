@@ -945,7 +945,7 @@ function OrderDetailPage() {
             )}
           </SectionCard>
 
-          <SectionCard title="주문 정보">
+          <SectionCard title="CUSTOMER DETAILS">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="CUSTOMER (= 요청자/구매자)">
                 <CustomerSelect
@@ -954,25 +954,6 @@ function OrderDetailPage() {
                   initialNameForCreate={extracted?.customer_name ?? ""}
                 />
               </Field>
-              <Field label="PRODUCT">
-                <ProductSelect
-                  value={productId}
-                  onChange={(next) => {
-                    setProductId(next);
-                    setProductSizeId("");
-                  }}
-                  emptyLabel="TBD — 아직 미정"
-                />
-              </Field>
-              {productId && (
-                <Field label="최종 사이즈 (PRODUCT SIZE)">
-                  <ProductSizeSelect
-                    productId={productId}
-                    value={productSizeId}
-                    onChange={setProductSizeId}
-                  />
-                </Field>
-              )}
               <Field label="RECIPIENT (받는 사람)">
                 <input
                   className={inputClass}
@@ -1026,6 +1007,86 @@ function OrderDetailPage() {
                   />
                 )}
               </Field>
+              <Field label="EVENT DATE">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={eventDate}
+                  onChange={(e) => setEventDate(e.target.value)}
+                />
+              </Field>
+              <Field label="PICKUP / DELIVERY AT">
+                <input
+                  type="datetime-local"
+                  className={inputClass}
+                  value={pickupAt}
+                  onChange={(e) => setPickupAt(e.target.value)}
+                />
+              </Field>
+              <Field label="PRICE (AUD)">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  className={inputClass}
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </Field>
+              <Field label="PAYMENT STATUS">
+                <select
+                  className={selectClass}
+                  value={paymentStatus}
+                  onChange={(e) => setPaymentStatus(e.target.value as OrderPaymentStatus | "")}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_PAYMENT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            {/* 2026-10-06 사용자 요청: 메모를 목적별로 분리 — 섞어 쓰지 않는다. */}
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-1">
+              <Field label="ORDER NOTE — 고객 요청/배송 등">
+                <textarea
+                  rows={3}
+                  className={inputClass}
+                  placeholder="예: 오후 3시 이후 픽업 희망"
+                  value={orderNote}
+                  onChange={(e) => setOrderNote(e.target.value)}
+                />
+              </Field>
+            </div>
+          </SectionCard>
+
+          {/* 2026-10-20 사용자 요청: "손님디테일은 디테일대로, 생산관련 디테일은... 분류해줘 박스자체를
+          분류해서 보기쉽게" — 기존 단일 "주문 정보" 박스를 CUSTOMER DETAILS / PRODUCTION DETAILS
+          두 박스로 분리. */}
+          <SectionCard title="PRODUCTION DETAILS">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="PRODUCT">
+                <ProductSelect
+                  value={productId}
+                  onChange={(next) => {
+                    setProductId(next);
+                    setProductSizeId("");
+                  }}
+                  emptyLabel="TBD — 아직 미정"
+                />
+              </Field>
+              {productId && (
+                <Field label="최종 사이즈 (PRODUCT SIZE)">
+                  <ProductSizeSelect
+                    productId={productId}
+                    value={productSizeId}
+                    onChange={setProductSizeId}
+                  />
+                </Field>
+              )}
               <Field label="PRODUCT LINE">
                 <select
                   className={selectClass}
@@ -1043,22 +1104,6 @@ function OrderDetailPage() {
                   CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가
                   생성/동기화됩니다.
                 </p>
-              </Field>
-              <Field label="EVENT DATE">
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={eventDate}
-                  onChange={(e) => setEventDate(e.target.value)}
-                />
-              </Field>
-              <Field label="PICKUP / DELIVERY AT">
-                <input
-                  type="datetime-local"
-                  className={inputClass}
-                  value={pickupAt}
-                  onChange={(e) => setPickupAt(e.target.value)}
-                />
               </Field>
               <Field label="CAKE SIZE">
                 <select
@@ -1125,34 +1170,9 @@ function OrderDetailPage() {
                   onChange={(e) => setServings(e.target.value)}
                 />
               </Field>
-              <Field label="PRICE (AUD)">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  className={inputClass}
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
-              </Field>
-              <Field label="PAYMENT STATUS">
-                <select
-                  className={selectClass}
-                  value={paymentStatus}
-                  onChange={(e) => setPaymentStatus(e.target.value as OrderPaymentStatus | "")}
-                >
-                  <option value="">— 선택 —</option>
-                  {ORDER_PAYMENT_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </Field>
             </div>
             {/* 2026-10-06 사용자 요청: 메모를 목적별로 분리 — 섞어 쓰지 않는다. */}
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="FLAVORING NOTE — Sheet/Cream/Filling 등 맛 밸런스 (내부용)">
                 <textarea
                   rows={4}
@@ -1253,15 +1273,6 @@ function OrderDetailPage() {
                   placeholder="예: 2단 구조, 초콜릿 튀일 장식은 배송 직전 부착"
                   value={designNote}
                   onChange={(e) => setDesignNote(e.target.value)}
-                />
-              </Field>
-              <Field label="ORDER NOTE — 고객 요청/배송 등">
-                <textarea
-                  rows={4}
-                  className={inputClass}
-                  placeholder="예: 오후 3시 이후 픽업 희망"
-                  value={orderNote}
-                  onChange={(e) => setOrderNote(e.target.value)}
                 />
               </Field>
             </div>

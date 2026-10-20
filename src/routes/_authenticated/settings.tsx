@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
+import { ProductSizeManager } from "@/components/pilot/ProductSizeManager";
 import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
@@ -107,8 +108,11 @@ function SettingsPage() {
         <SettingsSection title="CATEGORIES" defaultOpen>
           <CategoryManager />
         </SettingsSection>
-        <SettingsSection title="MOULDS (사이즈)">
+        <SettingsSection title="MOULDS (시트 사이즈)">
           <MouldManager />
+        </SettingsSection>
+        <SettingsSection title="PRODUCT SIZES (최종 케익 사이즈)">
+          <ProductSizeManager />
         </SettingsSection>
         <SettingsSection title="TECHNIQUE CATEGORIES">
           <TechniqueCategoryManager />

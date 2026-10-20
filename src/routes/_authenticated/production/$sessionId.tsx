@@ -129,13 +129,23 @@ function WorkSessionPage() {
     { label: (session.data?.name ?? "…").toUpperCase() },
   ]);
 
-  // 2026-10-20 사용자 요청: "work session 단독 task로 생성되는기능 지워줘" — 이전에는 Work
-  // Session에 작업일정을 입력하면 WANN Weekly OS(Planner)에 이 세션을 "단독 TASK"(어느
-  // 프로젝트에도 속하지 않는 독립 항목)로 자동 생성했는데(sync-work-session-to-planner Edge
-  // Function 호출), 이게 ORDER가 CONFIRMED 전환 시 만드는 WANN 프로젝트와는 별개로 떠서
-  // 프로젝트 밖에 중복 TASK가 쌓이는 문제였다. 제거 — 이미 만들어졌던 단독 TASK들은 WANN OS
-  // 쪽에서 직접 정리했다. (ORDER의 프로젝트 하위에 시트/크림 등 TASK를 붙이는 방식은 별도로
-  // 다시 설계할 예정 — 그 전까지는 WORK SESSION → Planner 자동 연동 자체가 없다.)
+  // 2026-10-20 사용자 요청으로 "단독 TASK" 생성 방식은 제거했었고(ORDER가 CONFIRMED될 때 만드는
+  // WANN 프로젝트와 별개로 떠서 중복이 쌓이는 문제), 대신 이 WORK SESSION이 연결된 ORDER의 WANN
+  // 프로젝트 하위에 CORE ELEMENT(SHEET/CREAM/FILLING)별로 TASK를 생성하는 방식으로 재설계했다
+  // ("시트/크림을 task 이름으로 해서 생성"). ORDER에 연결 안 된 세션이거나 그 ORDER에 아직 WANN
+  // 프로젝트가 없으면(CONFIRMED 전환 전) 아무것도 만들지 않는다 — Edge Function이 조건을 직접
+  // 체크해서 알아서 skip/정리한다. 실패해도 조용히 무시(네트워크 문제로 WORK SESSION 저장 자체가
+  // 막히면 안 됨).
+  const syncPlanner = async () => {
+    try {
+      await supabase.functions.invoke("sync-work-session-to-planner", {
+        body: { work_session_id: sessionId },
+      });
+    } catch {
+      // ignore — Planner 동기화는 best-effort
+    }
+  };
+
   const invalidateSession = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
     await queryClient.invalidateQueries({ queryKey: ["work_sessions", sessionId] });
@@ -162,8 +172,20 @@ function WorkSessionPage() {
     mutationFn: async (patch: TablesUpdate<"work_sessions">) => {
       const { error } = await supabase.from("work_sessions").update(patch).eq("id", sessionId);
       if (error) throw error;
+      return patch;
     },
-    onSuccess: invalidateSession,
+    onSuccess: async (patch) => {
+      await invalidateSession();
+      // 작업일정(날짜/시간)이 바뀐 경우에만 Planner 재동기화 — 다른 필드(상태 전환 등) 변경 시
+      // 불필요한 호출을 피한다.
+      if (
+        "scheduled_date" in patch ||
+        "scheduled_start_time" in patch ||
+        "scheduled_end_time" in patch
+      ) {
+        await syncPlanner();
+      }
+    },
   });
 
   const setStatus = (nextStatus: string) => {
@@ -221,10 +243,12 @@ function WorkSessionPage() {
         .eq("id", row.id);
       if (error) throw error;
     },
-    onSuccess: async () => {
+    onSuccess: async (_void, row) => {
       await invalidateSelections();
       await invalidateProgress();
       await invalidateTasks();
+      // CORE(SHEET/CREAM/FILLING) 행을 지운 경우 Planner의 해당 TASK도 정리.
+      if (row.kind === "CORE") await syncPlanner();
     },
   });
 
@@ -362,6 +386,7 @@ function WorkSessionPage() {
                       setAddingSlot(null);
                       await invalidateSelections();
                       await invalidateTasks();
+                      await syncPlanner();
                     }}
                   />
                 ) : (
@@ -595,9 +620,10 @@ function ProductionEfficiencyLinkSection({
  * 작업 일정(2026-10-13 사용자 요청) — 이 Work Session을 언제 작업할지 계획하는 DATE/START/END
  * TIME 입력. 실제 작업 시작(started_at, START WORK 버튼)과는 별개 개념 — 이건 "계획"이고 그건
  * "실제"다.
- * 2026-10-20 사용자 요청으로 WANN Weekly OS(Planner) 자동 연동(단독 TASK 생성)은 제거했다 —
- * ORDER의 프로젝트 하위에 붙이는 방식으로 다시 설계할 예정, 그 전까지 이 DATE/TIME은 KORA
- * 안에서만 쓰이는 순수 계획값이다.
+ * 2026-10-20 재설계: 이 세션이 ORDER에 연결되어 있고 그 ORDER에 WANN 프로젝트가 있으면, 여기서
+ * 날짜/시간을 입력/변경할 때마다 CORE ELEMENT(SHEET/CREAM/FILLING) TASK가 그 프로젝트 하위에
+ * 자동 생성/갱신된다(sync-work-session-to-planner). ORDER 미연결 세션은 KORA 안에서만 쓰이는
+ * 순수 계획값으로 남는다.
  */
 function WorkScheduleSection({
   scheduledDate,

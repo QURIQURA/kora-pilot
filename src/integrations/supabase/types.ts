@@ -2049,6 +2049,8 @@ export type Database = {
           customer_id: string | null;
           customer_name: string;
           customer_phone: string;
+          customisation_notes: string | null;
+          customised: boolean;
           decided_at: string | null;
           decline_reason: string | null;
           delivery_address: string | null;
@@ -2083,6 +2085,8 @@ export type Database = {
           customer_id?: string | null;
           customer_name: string;
           customer_phone: string;
+          customisation_notes?: string | null;
+          customised?: boolean;
           decided_at?: string | null;
           decline_reason?: string | null;
           delivery_address?: string | null;
@@ -2117,6 +2121,8 @@ export type Database = {
           customer_id?: string | null;
           customer_name?: string;
           customer_phone?: string;
+          customisation_notes?: string | null;
+          customised?: boolean;
           decided_at?: string | null;
           decline_reason?: string | null;
           delivery_address?: string | null;
@@ -2160,6 +2166,7 @@ export type Database = {
       };
       shco_settings: {
         Row: {
+          function_custom_per_person: number;
           function_max_pax: number;
           function_min_pax: number;
           gift_price: number;
@@ -2170,6 +2177,7 @@ export type Database = {
           wedding_enabled: boolean;
         };
         Insert: {
+          function_custom_per_person?: number;
           function_max_pax?: number;
           function_min_pax?: number;
           gift_price?: number;
@@ -2180,6 +2188,7 @@ export type Database = {
           wedding_enabled?: boolean;
         };
         Update: {
+          function_custom_per_person?: number;
           function_max_pax?: number;
           function_min_pax?: number;
           gift_price?: number;
@@ -2458,6 +2467,7 @@ export type Database = {
           mould_id: string | null;
           mould_qty: number | null;
           multiplier: number;
+          planner_task_id: string | null;
           slot: string | null;
           sort_order: number;
           updated_at: string;
@@ -2476,6 +2486,7 @@ export type Database = {
           mould_id?: string | null;
           mould_qty?: number | null;
           multiplier?: number;
+          planner_task_id?: string | null;
           slot?: string | null;
           sort_order?: number;
           updated_at?: string;
@@ -2494,6 +2505,7 @@ export type Database = {
           mould_id?: string | null;
           mould_qty?: number | null;
           multiplier?: number;
+          planner_task_id?: string | null;
           slot?: string | null;
           sort_order?: number;
           updated_at?: string;
@@ -3119,6 +3131,10 @@ export type Database = {
       };
       shco_check_password: { Args: { p_password: string }; Returns: boolean };
       shco_function_quote: { Args: { p_pax: number }; Returns: Json };
+      shco_price: {
+        Args: { p_customised: boolean; p_order_type: string; p_pax: number };
+        Returns: Json;
+      };
       shco_quote: {
         Args: { p_order_type: string; p_pax?: number };
         Returns: Json;
