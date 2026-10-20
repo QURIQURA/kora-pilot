@@ -7,6 +7,8 @@ import {
   productsQuery,
   productSizesQuery,
   productComponentsQuery,
+  dietaryTagsQuery,
+  orderDietaryTagLinksQuery,
   pilotSettingsQuery,
   workSessionByOrderQuery,
   formulasQuery,
@@ -274,6 +276,18 @@ function OrderDetailPage() {
   const [makerNotes, setMakerNotes] = useState("");
   // 2026-10-20 사용자 요청: 웹 주문서의 알레르기/식이 요구사항을 PILOT 주문에서도 보이게.
   const [dietaryRequirements, setDietaryRequirements] = useState("");
+  // 2026-10-21: DIETARY REQUIREMENTS 태그(복수 선택, SETTINGS > DIETARY TAGS). null = 아직 손대지 않음(서버 값 사용).
+  const dietaryTags = useQuery(dietaryTagsQuery());
+  const dietaryLinks = useQuery(orderDietaryTagLinksQuery());
+  const [dietaryTagIds, setDietaryTagIds] = useState<string[] | null>(null);
+  const [dietaryOtherOpen, setDietaryOtherOpen] = useState(false);
+  const serverDietaryTagIds = (dietaryLinks.data ?? [])
+    .filter((l) => l.order_id === orderId)
+    .map((l) => l.dietary_tag_id);
+  const selectedDietaryTagIds = dietaryTagIds ?? serverDietaryTagIds;
+  const dietaryTagsDirty =
+    dietaryTagIds !== null &&
+    [...dietaryTagIds].sort().join(",") !== [...serverDietaryTagIds].sort().join(",");
   // 2026-10-20 사용자 요청: 웹 주문서 "Who will be enjoying the cake?" 답을 PILOT에서도 보이게.
   const [audience, setAudience] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -404,7 +418,7 @@ function OrderDetailPage() {
     customerFeedback,
     makerNotes,
   });
-  const isDirty = Boolean(order.data) && currentSnapshot !== savedSnapshot;
+  const isDirty = Boolean(order.data) && (currentSnapshot !== savedSnapshot || dietaryTagsDirty);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -454,8 +468,30 @@ function OrderDetailPage() {
         })
         .eq("id", orderId);
       if (error) throw error;
+
+      // DIETARY 태그 연결: 서버 값과 비교해 빠진 것만 지우고 새로 고른 것만 추가한다.
+      if (dietaryTagIds !== null) {
+        const toRemove = serverDietaryTagIds.filter((id) => !dietaryTagIds.includes(id));
+        const toAdd = dietaryTagIds.filter((id) => !serverDietaryTagIds.includes(id));
+        if (toRemove.length > 0) {
+          const { error: delError } = await supabase
+            .from("order_dietary_tags")
+            .delete()
+            .eq("order_id", orderId)
+            .in("dietary_tag_id", toRemove);
+          if (delError) throw delError;
+        }
+        if (toAdd.length > 0) {
+          const { error: addError } = await supabase
+            .from("order_dietary_tags")
+            .insert(toAdd.map((dietary_tag_id) => ({ order_id: orderId, dietary_tag_id })));
+          if (addError) throw addError;
+        }
+      }
     },
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["order_dietary_tags"] });
+      setDietaryTagIds(null);
       await queryClient.invalidateQueries({ queryKey: ["orders"] });
       await queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
     },
@@ -987,13 +1023,62 @@ function OrderDetailPage() {
               </Field>
               <div className="md:col-span-2">
                 <Field label="DIETARY REQUIREMENTS">
-                  <AutoGrowTextarea
-                    rows={2}
-                    className={inputClass}
-                    placeholder="e.g. Nut free, Halal friendly"
-                    value={dietaryRequirements}
-                    onChange={(e) => setDietaryRequirements(e.target.value)}
-                  />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(dietaryTags.data ?? []).map((t) => {
+                      const on = selectedDietaryTagIds.includes(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          aria-pressed={on}
+                          className={
+                            "label-caps border px-2 py-1 text-[11px] " +
+                            (on
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-input bg-background text-foreground hover:border-foreground")
+                          }
+                          onClick={() =>
+                            setDietaryTagIds(
+                              on
+                                ? selectedDietaryTagIds.filter((id) => id !== t.id)
+                                : [...selectedDietaryTagIds, t.id],
+                            )
+                          }
+                        >
+                          {t.name}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      aria-pressed={dietaryOtherOpen || dietaryRequirements.trim() !== ""}
+                      className={
+                        "label-caps border px-2 py-1 text-[11px] " +
+                        (dietaryOtherOpen || dietaryRequirements.trim() !== ""
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-input bg-background text-foreground hover:border-foreground")
+                      }
+                      onClick={() => setDietaryOtherOpen((v) => !v)}
+                    >
+                      Other
+                    </button>
+                    {(dietaryTags.data ?? []).length === 0 && (
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        Add tags in SETTINGS &gt; DIETARY TAGS
+                      </span>
+                    )}
+                  </div>
+                  {(dietaryOtherOpen || dietaryRequirements.trim() !== "") && (
+                    <AutoGrowTextarea
+                      rows={2}
+                      className={inputClass + " mt-1.5"}
+                      placeholder={
+                        dietaryOtherOpen ? "Enter manually" : "Customer memo"
+                      }
+                      value={dietaryRequirements}
+                      onChange={(e) => setDietaryRequirements(e.target.value)}
+                    />
+                  )}
                 </Field>
               </div>
               <Field label="PAYMENT STATUS">

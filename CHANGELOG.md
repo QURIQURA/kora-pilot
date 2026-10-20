@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-10-21 — DIETARY 태그: SETTINGS 관리 + 주문 상세 복수 선택 + 주문 목록 열
+
+- SETTINGS > ORDERS > DIETARY TAGS: 식이 분류를 추가/이름변경/순서(▲▼)/삭제. 비어 있으면 "ADD DEFAULT TAGS"로 Lactose free, Gluten free, Egg free, Nut free, Vegan, Halal friendly를 한 번에 추가합니다.
+- 주문 상세 DIETARY REQUIREMENTS: 태그를 눌러 복수 선택(저장은 SAVE 때). "Other"를 누르면 메모칸이 열리고, 기존 고객 메시지(텍스트)는 그대로 메모로 남습니다.
+- ORDERS 목록에 DIETARY REQUIREMENT 열이 생겼고 선택한 태그가 칩으로 보입니다. 메모만 있는 주문은 점선 "Other" 칩이 보입니다.
+- 기존 주문의 식이 텍스트/알레르기 값은 자동으로 태그로 바꾸지 않았습니다(직접 선택하셔야 저장됩니다).
+
+확인 방법: SETTINGS에서 태그 추가 → 주문 상세에서 태그 2개 선택 후 SAVE → 목록에서 칩 확인 → 태그를 해제하고 SAVE → 칩 사라짐 확인.
+
+---
+
 ## 2026-10-21 — 주문 상세: OCCASION / 관계 메모칸 자동 높이
 
 - 고객이 남긴 OCCASION 메모(그리고 RECIPIENT RELATIONSHIP 메모)가 길어도 잘리지 않고, 글자 수만큼 칸이 아래로 늘어납니다.

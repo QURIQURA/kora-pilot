@@ -13,6 +13,8 @@ import {
   currentUserId,
   ordersQuery,
   cakeSizesQuery,
+  dietaryTagsQuery,
+  orderDietaryTagLinksQuery,
   pilotSettingsQuery,
   orderStatusLabel,
   orderStatusColor,
@@ -121,7 +123,7 @@ function OrdersPage() {
 }
 
 type ColumnKey =
-  "order" | "customer" | "recipient" | "occasion" | "date" | "product" | "cake_size" | "status";
+  "order" | "customer" | "recipient" | "occasion" | "dietary" | "date" | "product" | "cake_size" | "status";
 
 // 2026-10-06 사용자 요청: 열 간격을 내용 길이에 맞춰 재배분 — ORDER는 짧으니 줄이고,
 // DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. STATUS도 "FINAL TOUCH"처럼
@@ -136,6 +138,7 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   customer: "CUSTOMER",
   recipient: "RECIPIENT",
   occasion: "OCCASION",
+  dietary: "DIETARY REQUIREMENT",
   date: "DATE",
   product: "PRODUCT",
   cake_size: "CAKE SIZE",
@@ -146,6 +149,7 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
   customer: 150,
   recipient: 110,
   occasion: 100,
+  dietary: 170,
   date: 190,
   product: 150,
   cake_size: 100,
@@ -157,6 +161,7 @@ const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
   "customer",
   "recipient",
   "occasion",
+  "dietary",
   "date",
   "product",
   "cake_size",
@@ -409,6 +414,16 @@ function OrderRow({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
   });
 
+  const dietaryTags = useQuery(dietaryTagsQuery());
+  const dietaryLinks = useQuery(orderDietaryTagLinksQuery());
+  const orderTagNames = (dietaryLinks.data ?? [])
+    .filter((l) => l.order_id === o.id)
+    .map((l) => (dietaryTags.data ?? []).find((t) => t.id === l.dietary_tag_id))
+    .filter((t): t is NonNullable<typeof t> => Boolean(t))
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((t) => t.name);
+  const hasDietaryMemo = Boolean(o.dietary_requirements?.trim());
+
   const cakeSizes = useQuery(cakeSizesQuery());
   const cakeSizeName = o.cake_size_id
     ? (cakeSizes.data ?? []).find((c) => c.id === o.cake_size_id)?.name
@@ -471,6 +486,29 @@ function OrderRow({
         )}
       </span>
     ),
+    dietary:
+      orderTagNames.length === 0 && !hasDietaryMemo ? (
+        <span className="text-sm text-muted-foreground">—</span>
+      ) : (
+        <span className="flex flex-wrap gap-1">
+          {orderTagNames.map((n) => (
+            <span
+              key={n}
+              className="label-caps border border-foreground px-1.5 py-0.5 text-[10px] text-foreground"
+            >
+              {n}
+            </span>
+          ))}
+          {hasDietaryMemo && (
+            <span
+              className="label-caps border border-dashed border-muted-foreground px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              title={o.dietary_requirements ?? undefined}
+            >
+              Other
+            </span>
+          )}
+        </span>
+      ),
     cake_size: <span className="text-sm text-muted-foreground">{cakeSizeName || o.cake_size || "—"}</span>,
     status: (
       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>

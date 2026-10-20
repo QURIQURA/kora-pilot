@@ -431,6 +431,75 @@ export type Database = {
         };
         Relationships: [];
       };
+      dietary_tags: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string;
+          notes: string | null;
+          sort_order: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          name: string;
+          notes?: string | null;
+          sort_order?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string;
+          notes?: string | null;
+          sort_order?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      order_dietary_tags: {
+        Row: {
+          created_at: string;
+          dietary_tag_id: string;
+          id: string;
+          order_id: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          dietary_tag_id: string;
+          id?: string;
+          order_id: string;
+          user_id?: string;
+        };
+        Update: {
+          created_at?: string;
+          dietary_tag_id?: string;
+          id?: string;
+          order_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_dietary_tags_dietary_tag_id_fkey";
+            columns: ["dietary_tag_id"];
+            isOneToOne: false;
+            referencedRelation: "dietary_tags";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_dietary_tags_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       flavour_families: {
         Row: {
           color: string;

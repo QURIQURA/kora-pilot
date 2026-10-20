@@ -2285,3 +2285,23 @@ export const cakeSizesQuery = () =>
           .order("name"),
       ),
   });
+
+
+// 2026-10-21: DIETARY TAGS — SETTINGS에서 관리하는 전역 식이 분류(복수 선택). 주문은 order_dietary_tags로 연결한다.
+export type DietaryTag = Tables<"dietary_tags">;
+export type OrderDietaryTagLink = Tables<"order_dietary_tags">;
+
+export const dietaryTagsQuery = () =>
+  queryOptions({
+    queryKey: ["dietary_tags"],
+    queryFn: async (): Promise<DietaryTag[]> =>
+      unwrap(await supabase.from("dietary_tags").select("*").order("sort_order").order("name")),
+  });
+
+/** 모든 주문의 태그 연결 — 목록과 상세가 같은 쿼리를 공유한다(데이터가 작아 한 번에 읽는다). */
+export const orderDietaryTagLinksQuery = () =>
+  queryOptions({
+    queryKey: ["order_dietary_tags"],
+    queryFn: async (): Promise<OrderDietaryTagLink[]> =>
+      unwrap(await supabase.from("order_dietary_tags").select("*")),
+  });

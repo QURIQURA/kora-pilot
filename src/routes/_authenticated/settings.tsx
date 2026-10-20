@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { CakeSizeManager } from "@/components/pilot/CakeSizeManager";
+import { DietaryTagManager } from "@/components/pilot/DietaryTagManager";
 import { ProductSizeManager } from "@/components/pilot/ProductSizeManager";
 import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
@@ -102,6 +103,9 @@ function SettingsPage() {
         </SettingsSection>
         <SettingsSection title="CAKE SIZES" defaultOpen>
           <CakeSizeManager />
+        </SettingsSection>
+        <SettingsSection title="DIETARY TAGS" defaultOpen>
+          <DietaryTagManager />
         </SettingsSection>
         <SettingsSection title="ORDER STATUS COLORS" defaultOpen>
           <OrderStatusColorsSettings />
