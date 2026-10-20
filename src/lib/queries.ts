@@ -2269,3 +2269,19 @@ export const workSessionByOrderQuery = (orderId: string) =>
         await supabase.from("work_sessions").select("*").eq("order_id", orderId).maybeSingle(),
       ),
   });
+
+// 2026-10-20: 전역 CAKE SIZES 목록(SETTINGS) — 주문이 이 중 하나를 골라 인분/시트 몰드를 참조한다.
+export type CakeSize = Tables<"cake_sizes">;
+
+export const cakeSizesQuery = () =>
+  queryOptions({
+    queryKey: ["cake_sizes"],
+    queryFn: async (): Promise<CakeSize[]> =>
+      unwrap(
+        await supabase
+          .from("cake_sizes")
+          .select("*")
+          .order("sort_order")
+          .order("name"),
+      ),
+  });

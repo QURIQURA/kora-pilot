@@ -35,7 +35,7 @@ import type { TablesUpdate } from "@/integrations/supabase/types";
 import { formatDateTime, koreanWeekdayShort, toLocalDateString } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
-import { ProductSizesSection } from "@/components/pilot/ProductSizesSection";
+import { ProductOrderSizesSection } from "@/components/pilot/ProductOrderSizesSection";
 import { ProductDesignSection } from "@/components/pilot/ProductDesignSection";
 import { ProductImagesSection } from "@/components/pilot/ProductImagesSection";
 import { ProductEfficiencySection } from "@/components/pilot/ProductEfficiencySection";
@@ -552,14 +552,7 @@ function ProductDetailPage() {
           IMAGES: <ProductImagesSection productId={productId} product={data} />,
           DESIGN: <ProductDesignSection productId={productId} product={data} />,
           EFFICIENCY: <ProductEfficiencySection productId={productId} />,
-          SIZES: (
-            <ProductSizesSection
-              productId={productId}
-              usageTotals={sumUsageBySize(links.data ?? [])}
-              costTotals={sumCostBySize(links.data ?? [], costsByComponent)}
-              perCakeExtras={perCakeExtras}
-            />
-          ),
+          SIZES: <ProductOrderSizesSection orders={sortedProductOrders} />,
           ORDERS: (
             <SectionCard
               title="ORDERS"

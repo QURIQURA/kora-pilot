@@ -71,6 +71,65 @@ export type Database = {
         };
         Relationships: [];
       };
+      cake_sizes: {
+        Row: {
+          created_at: string;
+          diameter_mm: number | null;
+          height_mm: number | null;
+          id: string;
+          length_mm: number | null;
+          name: string;
+          notes: string | null;
+          servings: number | null;
+          shape: string | null;
+          sheet_mould_id: string | null;
+          sort_order: number;
+          updated_at: string;
+          user_id: string;
+          width_mm: number | null;
+        };
+        Insert: {
+          created_at?: string;
+          diameter_mm?: number | null;
+          height_mm?: number | null;
+          id?: string;
+          length_mm?: number | null;
+          name: string;
+          notes?: string | null;
+          servings?: number | null;
+          shape?: string | null;
+          sheet_mould_id?: string | null;
+          sort_order?: number;
+          updated_at?: string;
+          user_id?: string;
+          width_mm?: number | null;
+        };
+        Update: {
+          created_at?: string;
+          diameter_mm?: number | null;
+          height_mm?: number | null;
+          id?: string;
+          length_mm?: number | null;
+          name?: string;
+          notes?: string | null;
+          servings?: number | null;
+          shape?: string | null;
+          sheet_mould_id?: string | null;
+          sort_order?: number;
+          updated_at?: string;
+          user_id?: string;
+          width_mm?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "cake_sizes_sheet_mould_id_fkey";
+            columns: ["sheet_mould_id"];
+            isOneToOne: false;
+            referencedRelation: "moulds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       capacities: {
         Row: {
           created_at: string;
@@ -1315,7 +1374,9 @@ export type Database = {
       orders: {
         Row: {
           allergy_notes: string | null;
+          audience: string | null;
           cake_size: Database["public"]["Enums"]["order_cake_size"] | null;
+          cake_size_id: string | null;
           cake_size_legacy: string | null;
           created_at: string;
           custom_size: string | null;
@@ -1323,9 +1384,8 @@ export type Database = {
           customer_feedback: string | null;
           customer_id: string | null;
           customer_satisfaction: number | null;
-          audience: string | null;
-          design_notes: string | null;
           delivery_address: string | null;
+          design_notes: string | null;
           dietary_requirements: string | null;
           event_date: string | null;
           extracted_json: Json | null;
@@ -1369,7 +1429,9 @@ export type Database = {
         };
         Insert: {
           allergy_notes?: string | null;
+          audience?: string | null;
           cake_size?: Database["public"]["Enums"]["order_cake_size"] | null;
+          cake_size_id?: string | null;
           cake_size_legacy?: string | null;
           created_at?: string;
           custom_size?: string | null;
@@ -1377,9 +1439,8 @@ export type Database = {
           customer_feedback?: string | null;
           customer_id?: string | null;
           customer_satisfaction?: number | null;
-          audience?: string | null;
-          design_notes?: string | null;
           delivery_address?: string | null;
+          design_notes?: string | null;
           dietary_requirements?: string | null;
           event_date?: string | null;
           extracted_json?: Json | null;
@@ -1423,7 +1484,9 @@ export type Database = {
         };
         Update: {
           allergy_notes?: string | null;
+          audience?: string | null;
           cake_size?: Database["public"]["Enums"]["order_cake_size"] | null;
+          cake_size_id?: string | null;
           cake_size_legacy?: string | null;
           created_at?: string;
           custom_size?: string | null;
@@ -1431,9 +1494,8 @@ export type Database = {
           customer_feedback?: string | null;
           customer_id?: string | null;
           customer_satisfaction?: number | null;
-          audience?: string | null;
-          design_notes?: string | null;
           delivery_address?: string | null;
+          design_notes?: string | null;
           dietary_requirements?: string | null;
           event_date?: string | null;
           extracted_json?: Json | null;
@@ -1476,6 +1538,13 @@ export type Database = {
           wann_project_id?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "orders_cake_size_id_fkey";
+            columns: ["cake_size_id"];
+            isOneToOne: false;
+            referencedRelation: "cake_sizes";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "orders_customer_id_fkey";
             columns: ["customer_id"];
@@ -1979,6 +2048,24 @@ export type Database = {
           },
         ];
       };
+      shco_admins: {
+        Row: {
+          created_at: string;
+          email: string | null;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          email?: string | null;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          email?: string | null;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       shco_email_log: {
         Row: {
           created_at: string;
@@ -2053,6 +2140,9 @@ export type Database = {
           admin_notes: string | null;
           allergy_notes: string | null;
           audience: string | null;
+          card_brand: string | null;
+          card_last4: string | null;
+          card_status: string;
           created_at: string;
           customer_email: string;
           customer_id: string | null;
@@ -2066,6 +2156,7 @@ export type Database = {
           excluded_ingredients: string[];
           excluded_other_note: string | null;
           function_description: string | null;
+          google_calendar_event_id: string | null;
           has_allergies: boolean;
           id: string;
           occasion: string | null;
@@ -2073,14 +2164,18 @@ export type Database = {
           order_type: string;
           paid_at: string | null;
           pax: number | null;
+          payment_error: string | null;
           payment_provider_ref: string | null;
           payment_url: string | null;
           price: number;
           price_breakdown: Json;
           recipient_name: string | null;
+          recipient_relationship: string | null;
           request_number: string;
           required_at: string | null;
           status: string;
+          stripe_customer_id: string | null;
+          stripe_payment_method_id: string | null;
           updated_at: string;
           user_id: string;
         };
@@ -2089,6 +2184,9 @@ export type Database = {
           admin_notes?: string | null;
           allergy_notes?: string | null;
           audience?: string | null;
+          card_brand?: string | null;
+          card_last4?: string | null;
+          card_status?: string;
           created_at?: string;
           customer_email: string;
           customer_id?: string | null;
@@ -2102,6 +2200,7 @@ export type Database = {
           excluded_ingredients?: string[];
           excluded_other_note?: string | null;
           function_description?: string | null;
+          google_calendar_event_id?: string | null;
           has_allergies?: boolean;
           id?: string;
           occasion?: string | null;
@@ -2109,14 +2208,18 @@ export type Database = {
           order_type: string;
           paid_at?: string | null;
           pax?: number | null;
+          payment_error?: string | null;
           payment_provider_ref?: string | null;
           payment_url?: string | null;
           price: number;
           price_breakdown?: Json;
           recipient_name?: string | null;
+          recipient_relationship?: string | null;
           request_number?: string;
           required_at?: string | null;
           status?: string;
+          stripe_customer_id?: string | null;
+          stripe_payment_method_id?: string | null;
           updated_at?: string;
           user_id: string;
         };
@@ -2125,6 +2228,9 @@ export type Database = {
           admin_notes?: string | null;
           allergy_notes?: string | null;
           audience?: string | null;
+          card_brand?: string | null;
+          card_last4?: string | null;
+          card_status?: string;
           created_at?: string;
           customer_email?: string;
           customer_id?: string | null;
@@ -2138,6 +2244,7 @@ export type Database = {
           excluded_ingredients?: string[];
           excluded_other_note?: string | null;
           function_description?: string | null;
+          google_calendar_event_id?: string | null;
           has_allergies?: boolean;
           id?: string;
           occasion?: string | null;
@@ -2145,14 +2252,18 @@ export type Database = {
           order_type?: string;
           paid_at?: string | null;
           pax?: number | null;
+          payment_error?: string | null;
           payment_provider_ref?: string | null;
           payment_url?: string | null;
           price?: number;
           price_breakdown?: Json;
           recipient_name?: string | null;
+          recipient_relationship?: string | null;
           request_number?: string;
           required_at?: string | null;
           status?: string;
+          stripe_customer_id?: string | null;
+          stripe_payment_method_id?: string | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -2175,33 +2286,39 @@ export type Database = {
       };
       shco_settings: {
         Row: {
+          calendar_id: string | null;
           function_custom_per_person: number;
           function_max_pax: number;
           function_min_pax: number;
           gift_price: number;
           order_password_hash: string;
+          stripe_enabled: boolean;
           timezone: string;
           updated_at: string;
           user_id: string;
           wedding_enabled: boolean;
         };
         Insert: {
+          calendar_id?: string | null;
           function_custom_per_person?: number;
           function_max_pax?: number;
           function_min_pax?: number;
           gift_price?: number;
           order_password_hash: string;
+          stripe_enabled?: boolean;
           timezone?: string;
           updated_at?: string;
           user_id?: string;
           wedding_enabled?: boolean;
         };
         Update: {
+          calendar_id?: string | null;
           function_custom_per_person?: number;
           function_max_pax?: number;
           function_min_pax?: number;
           gift_price?: number;
           order_password_hash?: string;
+          stripe_enabled?: boolean;
           timezone?: string;
           updated_at?: string;
           user_id?: string;
@@ -3138,8 +3255,25 @@ export type Database = {
         Args: { p_user_id: string };
         Returns: undefined;
       };
+      shco_audience_label: { Args: { p: string }; Returns: string };
+      shco_card_required: { Args: never; Returns: boolean };
       shco_check_password: { Args: { p_password: string }; Returns: boolean };
+      shco_dietary_text: {
+        Args: { r: Database["public"]["Tables"]["shco_order_requests"]["Row"] };
+        Returns: string;
+      };
       shco_function_quote: { Args: { p_pax: number }; Returns: Json };
+      shco_is_admin: { Args: never; Returns: boolean };
+      shco_link_customer: {
+        Args: { r: Database["public"]["Tables"]["shco_order_requests"]["Row"] };
+        Returns: string;
+      };
+      shco_order_note: {
+        Args: { r: Database["public"]["Tables"]["shco_order_requests"]["Row"] };
+        Returns: string;
+      };
+      shco_owner_id: { Args: never; Returns: string };
+      shco_phone_key: { Args: { p: string }; Returns: string };
       shco_price: {
         Args: { p_customised: boolean; p_order_type: string; p_pax: number };
         Returns: Json;

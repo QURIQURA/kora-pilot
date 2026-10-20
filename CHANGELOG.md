@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-10-20 — CAKE SIZE를 SETTINGS 목록 + 주문 선택 방식으로 변경 (PRODUCT 최종 케익 사이즈 대체)
+
+- **SETTINGS → ORDERS → CAKE SIZES**: 사이즈를 한 번만 등록합니다(이름·모양·완성 치수 cm·인분·시트 몰드).
+- **주문 상세**: CAKE SIZE가 이 목록에서 고르는 드롭다운이 되었습니다. 고르면 SERVINGS가 자동으로 채워지고(직접 수정 가능),
+  아래 줄에 인분·시트 몰드가 표시됩니다. WORK SESSION 만들기는 이 사이즈의 시트 몰드 기준으로 배수를 계산합니다.
+  기존 PRODUCT SIZE / SHEET SIZE 칸은 주문 화면에서 사라졌습니다(DB 값은 보존). 이전에 입력했던 값(예: Custom)은 "Previously entered"로 표시됩니다.
+- **PRODUCT 상세 SIZES**: 이제 이 제품이 들어간 주문 리스트와 각 주문에서 쓴 사이즈를 보여줍니다(사이즈별 횟수 요약 포함).
+  PRODUCT에서 사이즈를 직접 등록하던 기능은 이 화면에서 없어졌습니다(기존 product_sizes 데이터와 SETTINGS의 PRODUCT SIZES는 그대로).
+- 기존 주문의 6"/8" 사이즈는 이름만으로 CAKE SIZES에 자동 등록·연결했습니다 — 치수/인분/몰드는 직접 채워주세요.
+
+확인 방법: SETTINGS → CAKE SIZES에서 사이즈의 인분과 시트 몰드 입력 → 주문 상세에서 CAKE SIZE 선택 → SERVINGS 자동 입력 확인 →
+해당 제품 상세의 SIZES에 주문과 사이즈가 뜨는지 확인.
+
+---
+
 ## 2026-10-20 — ORDER DETAIL 화면의 한글 문구를 모두 영어로 변경
 
 주문 상세 페이지(필드 라벨, 안내문, 플레이스홀더, 버튼 문구)와 그 안에서 쓰는 CUSTOMER/MOULD/PRODUCT SIZE

@@ -11,6 +11,7 @@ import {
   workSessionByOrderQuery,
   formulasQuery,
   mouldsQuery,
+  cakeSizesQuery,
   techniqueCategoriesQuery,
   currentUserId,
   ORDER_STATUSES,
@@ -18,7 +19,6 @@ import {
   ORDER_OCCASION_CATEGORIES,
   ORDER_OCCASION_CATEGORY_MAP,
   ORDER_RECIPIENT_RELATIONSHIP_OPTIONS,
-  ORDER_CAKE_SIZES,
   ORDER_PAYMENT_STATUSES,
   ORDER_PRODUCT_LINES,
   CORE_SLOTS,
@@ -40,8 +40,7 @@ import { resolveSlotGroup } from "@/lib/technique";
 import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
 import { suggestedMultiplierFromTarget } from "@/lib/work-session";
 import { mouldBatchMultiplier } from "@/lib/formula-calc";
-import { MouldSelect } from "@/components/pilot/MouldSelect";
-import { ProductSizeSelect } from "@/components/pilot/ProductSizeSelect";
+import { mouldOptionLabel } from "@/components/pilot/MouldSelect";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
@@ -176,6 +175,9 @@ function OrderDetailPage() {
   const [eventDate, setEventDate] = useState("");
   const [pickupAt, setPickupAt] = useState("");
   const [cakeSize, setCakeSize] = useState<OrderCakeSize | "">("");
+  // 2026-10-20: 주문의 CAKE SIZE = SETTINGS > CAKE SIZES 목록에서 고른 값(기존 enum cakeSize는 legacy로 보존만).
+  const [cakeSizeId, setCakeSizeId] = useState("");
+  const cakeSizes = useQuery(cakeSizesQuery());
   const [customSize, setCustomSize] = useState("");
   const [customSizeCm, setCustomSizeCm] = useState("");
   const [servings, setServings] = useState("");
@@ -267,6 +269,7 @@ function OrderDetailPage() {
       eventDate: o.event_date ?? "",
       pickupAt: isoToDatetimeLocal(o.pickup_at),
       cakeSize: o.cake_size ?? "",
+      cakeSizeId: o.cake_size_id ?? "",
       customSize: o.custom_size ?? "",
       customSizeCm: o.custom_size_cm != null ? String(o.custom_size_cm) : "",
       servings: o.servings != null ? String(o.servings) : "",
@@ -314,6 +317,7 @@ function OrderDetailPage() {
     setPaymentStatus(o.payment_status ?? "");
     setStatus((o.status as OrderStatus) ?? "INTAKE");
     setProductId(o.product_id ?? "");
+    setCakeSizeId(o.cake_size_id ?? "");
     setProductSizeId(o.product_size_id ?? "");
     setSheetMouldId(o.sheet_mould_id ?? "");
     setFlavoringSheetFormulaId(o.flavoring_sheet_formula_id ?? "");
@@ -349,6 +353,7 @@ function OrderDetailPage() {
     eventDate,
     pickupAt,
     cakeSize,
+    cakeSizeId,
     customSize,
     customSizeCm,
     servings,
@@ -398,6 +403,7 @@ function OrderDetailPage() {
           event_date: eventDate || null,
           pickup_at: datetimeLocalToIso(pickupAt),
           cake_size: cakeSize || null,
+          cake_size_id: cakeSizeId || null,
           custom_size: cakeSize === "Custom" ? customSize.trim() || null : null,
           custom_size_cm:
             cakeSize === "Custom" && customSizeCm.trim() ? Number(customSizeCm) : null,
@@ -470,7 +476,9 @@ function OrderDetailPage() {
       // 2026-10-20 사용자 요청: PRODUCT SIZE 기준 계산(product_components.quantity_g)이 가능한
       // 경우(위) 그게 우선이지만, PRODUCT SIZE 데이터가 아예 없는 제품/커스텀 사이즈 주문도
       // "시트 사이즈"(몰드)만 골라져 있으면 그 몰드 기준으로 자동 배수 계산이 가능해야 한다.
-      const effectiveSheetMouldId = sheetMouldId || o.sheet_mould_id || null;
+      const selectedCakeSize = (cakeSizes.data ?? []).find((c) => c.id === cakeSizeId);
+      const effectiveSheetMouldId =
+        selectedCakeSize?.sheet_mould_id || sheetMouldId || o.sheet_mould_id || null;
       const mouldsById = new Map((moulds.data ?? []).map((m) => [m.id, m]));
       const baseName =
         products.data?.find((p) => p.id === effectiveProductId)?.name ||
@@ -1008,47 +1016,48 @@ function OrderDetailPage() {
                   emptyLabel="TBD"
                 />
               </Field>
-              {productId && (
-                <Field label="PRODUCT SIZE">
-                  <ProductSizeSelect
-                    productId={productId}
-                    value={productSizeId}
-                    onChange={setProductSizeId}
-                  />
-                </Field>
-              )}
               <Field label="CAKE SIZE">
                 <select
                   className={selectClass}
-                  value={cakeSize}
-                  onChange={(e) => setCakeSize(e.target.value as OrderCakeSize | "")}
+                  value={cakeSizeId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setCakeSizeId(id);
+                    const picked = (cakeSizes.data ?? []).find((c) => c.id === id);
+                    if (picked?.servings != null) setServings(String(picked.servings));
+                  }}
                 >
                   <option value="">— SELECT —</option>
-                  {ORDER_CAKE_SIZES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  {(cakeSizes.data ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
                 </select>
-                {cakeSize === "Custom" && (
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    <input
-                      className={inputClass + " !w-40"}
-                      placeholder="Custom size (e.g. 10-inch heart)"
-                      value={customSize}
-                      onChange={(e) => setCustomSize(e.target.value)}
-                    />
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      className={inputClass + " !w-28"}
-                      placeholder="cm (optional)"
-                      value={customSizeCm}
-                      onChange={(e) => setCustomSizeCm(e.target.value)}
-                    />
-                  </div>
-                )}
+                {(() => {
+                  const picked = (cakeSizes.data ?? []).find((c) => c.id === cakeSizeId);
+                  const mould = picked?.sheet_mould_id
+                    ? (moulds.data ?? []).find((m) => m.id === picked.sheet_mould_id)
+                    : undefined;
+                  if (picked) {
+                    return (
+                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                        {picked.servings != null ? `${picked.servings} servings` : "servings not set"} ·{" "}
+                        {mould ? `sheet: ${mouldOptionLabel(mould)}` : "no sheet mould set"} (edit in
+                        SETTINGS → CAKE SIZES)
+                      </p>
+                    );
+                  }
+                  if (cakeSize) {
+                    return (
+                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                        Previously entered: {cakeSize}
+                        {cakeSize === "Custom" && customSize ? ` — ${customSize}` : ""}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </Field>
               <Field label="SERVINGS">
                 <input
@@ -1060,16 +1069,6 @@ function OrderDetailPage() {
                   value={servings}
                   onChange={(e) => setServings(e.target.value)}
                 />
-              </Field>
-              <Field label="SHEET SIZE">
-                <MouldSelect
-                  value={sheetMouldId}
-                  onChange={setSheetMouldId}
-                  emptyLabel="— UNSET —"
-                />
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                  Separate from CAKE SIZE / PRODUCT SIZE. Not used for costing; the WORK SESSION multiplier is calculated from this mould (PRODUCT SIZE takes priority if set).
-                </p>
               </Field>
             </div>
             <div className="mt-3">
