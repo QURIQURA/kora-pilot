@@ -1325,6 +1325,7 @@ export type Database = {
           customer_satisfaction: number | null;
           audience: string | null;
           design_notes: string | null;
+          delivery_address: string | null;
           dietary_requirements: string | null;
           event_date: string | null;
           extracted_json: Json | null;
@@ -1378,6 +1379,7 @@ export type Database = {
           customer_satisfaction?: number | null;
           audience?: string | null;
           design_notes?: string | null;
+          delivery_address?: string | null;
           dietary_requirements?: string | null;
           event_date?: string | null;
           extracted_json?: Json | null;
@@ -1431,6 +1433,7 @@ export type Database = {
           customer_satisfaction?: number | null;
           audience?: string | null;
           design_notes?: string | null;
+          delivery_address?: string | null;
           dietary_requirements?: string | null;
           event_date?: string | null;
           extracted_json?: Json | null;
