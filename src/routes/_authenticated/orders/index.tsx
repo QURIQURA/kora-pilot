@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
   ordersQuery,
+  cakeSizesQuery,
   pilotSettingsQuery,
   orderStatusLabel,
   orderStatusColor,
@@ -408,6 +409,11 @@ function OrderRow({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
   });
 
+  const cakeSizes = useQuery(cakeSizesQuery());
+  const cakeSizeName = o.cake_size_id
+    ? (cakeSizes.data ?? []).find((c) => c.id === o.cake_size_id)?.name
+    : undefined;
+
   const cells: Record<ColumnKey, ReactNode> = {
     order: (
       <span className="flex items-center gap-1.5">
@@ -465,7 +471,7 @@ function OrderRow({
         )}
       </span>
     ),
-    cake_size: <span className="text-sm text-muted-foreground">{o.cake_size || "—"}</span>,
+    cake_size: <span className="text-sm text-muted-foreground">{cakeSizeName || o.cake_size || "—"}</span>,
     status: (
       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
         <span
