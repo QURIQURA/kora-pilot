@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-10-20 — ORDER DETAIL 필드를 2열 기준으로 재배치 + SATISFACTION 한글 설명 삭제
+
+CUSTOMER DETAILS는 (CUSTOMER·ORDER NUMBER) → (RECIPIENT·RELATIONSHIP) → (OCCASION·ENJOYED BY) →
+(EVENT DATE·PICKUP/DELIVERY AT) → (PRICE·DELIVERY ADDRESS) → DIETARY REQUIREMENTS 순서입니다.
+ORDER NUMBER 수정은 페이지 맨 위에서 이 칸으로 옮겼습니다(위쪽은 표시만). PAYMENT STATUS와 ORDER NOTE는
+그 아래에 있습니다. PRODUCTION DETAILS는 PRODUCT LINE → PRODUCT → (CAKE SIZE·SERVINGS) → 시트 사이즈 순이고,
+Pastry Base/Cream/Filling FORMULA 드롭다운 3개는 그 아래 행에 3열로 있습니다. SATISFACTION의 한글 설명
+문구(내가 이 주문에 얼마나…, 고객의 실제 반응…, 제작자 내부 평가…)는 모두 지웠습니다.
+
+확인 방법: 주문 상세 → ORDER DETAIL 탭에서 위 순서대로 배치됐는지, ORDER NUMBER를 고쳐 SAVE되는지 확인.
+
+---
+
 ## 2026-10-20 — ORDER DETAIL 정리: QUANTITY·FLAVORING NOTE 삭제, DESIGN NOTE는 VISUALS로 이동
 
 ORDER DETAIL 탭에서 QUANTITY 칸과 FLAVORING NOTE(자유 텍스트)를 없앴습니다. Sheet/Cream/Filling

@@ -697,12 +697,7 @@ function OrderDetailPage() {
           >
             ← ORDERS
           </Link>
-          <input
-            className="label-caps w-full max-w-[16rem] border-0 bg-transparent p-0 text-lg text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            value={orderNumber}
-            onChange={(e) => setOrderNumber(e.target.value)}
-            aria-label="ORDER NUMBER"
-          />
+          <p className="label-caps text-lg text-foreground">{orderNumber}</p>
           <p className="font-mono text-xs uppercase text-muted-foreground">
             CREATED {formatDateTime(order.data.created_at)}
           </p>
@@ -770,9 +765,17 @@ function OrderDetailPage() {
       ) : (
         <>
           <SectionCard title="CUSTOMER DETAILS">
+            {/* 2026-10-20 사용자 요청: 2열 기준 필드 순서 재배치 */}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="CUSTOMER (= 요청자/구매자)">
                 <CustomerSelect value={customerId} onChange={setCustomerId} />
+              </Field>
+              <Field label="ORDER NUMBER">
+                <input
+                  className={inputClass}
+                  value={orderNumber}
+                  onChange={(e) => setOrderNumber(e.target.value)}
+                />
               </Field>
               <Field label="RECIPIENT (받는 사람)">
                 <input
@@ -812,20 +815,6 @@ function OrderDetailPage() {
                     onChange={(e) => setRecipientRelationshipOtherNote(e.target.value)}
                   />
                 )}
-              </Field>
-              <Field label="ENJOYED BY (먹는 사람)">
-                <select
-                  className={selectClass}
-                  value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
-                >
-                  <option value="">— 선택 —</option>
-                  {ORDER_AUDIENCES.map((a) => (
-                    <option key={a} value={a}>
-                      {a}
-                    </option>
-                  ))}
-                </select>
               </Field>
               <Field label="OCCASION">
                 <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">
@@ -878,6 +867,20 @@ function OrderDetailPage() {
                   </div>
                 </div>
               </Field>
+              <Field label="ENJOYED BY (먹는 사람)">
+                <select
+                  className={selectClass}
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_AUDIENCES.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="EVENT DATE">
                 <input
                   type="date"
@@ -886,25 +889,14 @@ function OrderDetailPage() {
                   onChange={(e) => setEventDate(e.target.value)}
                 />
               </Field>
-              {/* 2026-10-20 사용자 요청: 배송 주소를 DELIVERY AT 바로 아래에. */}
-              <div className="space-y-3">
-                <Field label="PICKUP / DELIVERY AT">
-                  <input
-                    type="datetime-local"
-                    className={inputClass}
-                    value={pickupAt}
-                    onChange={(e) => setPickupAt(e.target.value)}
-                  />
-                </Field>
-                <Field label="DELIVERY ADDRESS">
-                  <input
-                    className={inputClass}
-                    placeholder="픽업이면 비워두기"
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                  />
-                </Field>
-              </div>
+              <Field label="PICKUP / DELIVERY AT">
+                <input
+                  type="datetime-local"
+                  className={inputClass}
+                  value={pickupAt}
+                  onChange={(e) => setPickupAt(e.target.value)}
+                />
+              </Field>
               <Field label="PRICE (AUD)">
                 <input
                   type="number"
@@ -916,6 +908,25 @@ function OrderDetailPage() {
                   onChange={(e) => setPrice(e.target.value)}
                 />
               </Field>
+              <Field label="DELIVERY ADDRESS">
+                <input
+                  className={inputClass}
+                  placeholder="픽업이면 비워두기"
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                />
+              </Field>
+              <div className="md:col-span-2">
+                <Field label="DIETARY REQUIREMENTS — 알레르기/식이">
+                  <textarea
+                    rows={2}
+                    className={inputClass}
+                    placeholder="예: Nut free, Halal friendly"
+                    value={dietaryRequirements}
+                    onChange={(e) => setDietaryRequirements(e.target.value)}
+                  />
+                </Field>
+              </div>
               <Field label="PAYMENT STATUS">
                 <select
                   className={selectClass}
@@ -930,27 +941,17 @@ function OrderDetailPage() {
                   ))}
                 </select>
               </Field>
-            </div>
-            {/* 2026-10-06 사용자 요청: 메모를 목적별로 분리 — 섞어 쓰지 않는다. */}
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-1">
-              <Field label="DIETARY REQUIREMENTS — 알레르기/식이">
-                <textarea
-                  rows={2}
-                  className={inputClass}
-                  placeholder="예: Nut free, Halal friendly"
-                  value={dietaryRequirements}
-                  onChange={(e) => setDietaryRequirements(e.target.value)}
-                />
-              </Field>
-              <Field label="ORDER NOTE — 고객 요청/배송 등">
-                <textarea
-                  rows={3}
-                  className={inputClass}
-                  placeholder="예: 오후 3시 이후 픽업 희망"
-                  value={orderNote}
-                  onChange={(e) => setOrderNote(e.target.value)}
-                />
-              </Field>
+              <div className="md:col-span-2">
+                <Field label="ORDER NOTE — 고객 요청/배송 등">
+                  <textarea
+                    rows={3}
+                    className={inputClass}
+                    placeholder="예: 오후 3시 이후 픽업 희망"
+                    value={orderNote}
+                    onChange={(e) => setOrderNote(e.target.value)}
+                  />
+                </Field>
+              </div>
             </div>
           </SectionCard>
 
@@ -958,7 +959,27 @@ function OrderDetailPage() {
           분류해서 보기쉽게" — 기존 단일 "주문 정보" 박스를 CUSTOMER DETAILS / PRODUCTION DETAILS
           두 박스로 분리. */}
           <SectionCard title="PRODUCTION DETAILS">
+            {/* 2026-10-20 사용자 요청: 2열 기준 필드 순서 재배치, FORMULA 드롭다운 3개는 아래 행에 3열 */}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="PRODUCT LINE">
+                <select
+                  className={selectClass}
+                  value={productLine}
+                  onChange={(e) => setProductLine(e.target.value as OrderProductLineKey | "")}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_PRODUCT_LINES.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가
+                  생성/동기화됩니다.
+                </p>
+              </Field>
+              <div className="hidden md:block" aria-hidden />
               <Field label="PRODUCT">
                 <ProductSelect
                   value={productId}
@@ -1011,17 +1032,6 @@ function OrderDetailPage() {
                   </div>
                 )}
               </Field>
-              <Field label="시트 사이즈 (WORK SESSION 자동계산용)">
-                <MouldSelect
-                  value={sheetMouldId}
-                  onChange={setSheetMouldId}
-                  emptyLabel="— 미지정 —"
-                />
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                  위 CAKE SIZE/PRODUCT SIZE와 별개 — 단가계산에는 쓰이지 않고, WORK SESSION 생성 시
-                  이 몰드 기준으로 배수를 자동 계산한다. PRODUCT SIZE가 골라져 있으면 그쪽이 우선.
-                </p>
-              </Field>
               <Field label="SERVINGS (인분)">
                 <input
                   type="number"
@@ -1033,33 +1043,25 @@ function OrderDetailPage() {
                   onChange={(e) => setServings(e.target.value)}
                 />
               </Field>
-            </div>
-            {/* 2026-10-20 사용자 요청: PRODUCT LINE과 SHEET/CREAM/FILLING FORMULA 드롭다운을 한곳에 묶어 배치. */}
-            <div className="mt-3 grid grid-cols-1 gap-3">
-              <Field label="PRODUCT LINE">
-                <select
-                  className={selectClass}
-                  value={productLine}
-                  onChange={(e) => setProductLine(e.target.value as OrderProductLineKey | "")}
-                >
-                  <option value="">— 선택 —</option>
-                  {ORDER_PRODUCT_LINES.map((p) => (
-                    <option key={p.key} value={p.key}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가
-                  생성/동기화됩니다.
+              <Field label="시트 사이즈 (WORK SESSION 자동계산용)">
+                <MouldSelect
+                  value={sheetMouldId}
+                  onChange={setSheetMouldId}
+                  emptyLabel="— 미지정 —"
+                />
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                  위 CAKE SIZE/PRODUCT SIZE와 별개 — 단가계산에는 쓰이지 않고, WORK SESSION 생성 시
+                  이 몰드 기준으로 배수를 자동 계산한다. PRODUCT SIZE가 골라져 있으면 그쪽이 우선.
                 </p>
               </Field>
-              <Field label="FLAVORING FORMULAS — Sheet/Cream/Filling">
+            </div>
+            <div className="mt-3">
+              <Field label="FLAVORING FORMULAS">
                 {/* 2026-10-06 사용자 재확인: 자유 텍스트만으론 부족 — Sheet/Cream/Filling 각각 실제
                 FORMULA까지 링크할 수 있어야 한다. FORMULA VERSION은 아직 안 정함 — WORK SESSION
                 생성 시 pickEffectiveFormulaVersion으로 시작값만 자동 채우고, 그 뒤엔 WORK SESSION
                 쪽에서 바꾼다. */}
-                <div className="mt-2 grid grid-cols-1 gap-1.5">
+                <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
                   {(
                     [
                       ["SHEET", flavoringSheetFormulaId, setFlavoringSheetFormulaId],
@@ -1067,8 +1069,8 @@ function OrderDetailPage() {
                       ["FILLING", flavoringFillingFormulaId, setFlavoringFillingFormulaId],
                     ] as const
                   ).map(([slot, value, setValue]) => (
-                    <label key={slot} className="flex items-center gap-2">
-                      <span className="label-caps w-32 shrink-0 text-[10px] text-muted-foreground">
+                    <label key={slot} className="flex flex-col gap-1">
+                      <span className="label-caps text-[10px] text-muted-foreground">
                         {CORE_SLOT_LABELS[slot]}
                       </span>
                       <select
@@ -1148,10 +1150,10 @@ function OrderDetailPage() {
           SAVE/DELETE 버튼은 기존과 동일하게 이 페이지 전체(주문 정보 + Satisfaction)에 공통 적용. */}
           <SectionCard title="SATISFACTION">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="MAKER SATISFACTION — 내가 이 주문에 얼마나 만족했는가">
+              <Field label="MAKER SATISFACTION">
                 <StarRating value={makerSatisfaction} onChange={setMakerSatisfaction} />
               </Field>
-              <Field label="CUSTOMER SATISFACTION — 고객이 이 주문에 얼마나 만족했는가">
+              <Field label="CUSTOMER SATISFACTION">
                 <div className="space-y-1">
                   <StarRating value={customerSatisfaction} onChange={setCustomerSatisfaction} />
                   <button
@@ -1167,7 +1169,7 @@ function OrderDetailPage() {
               </Field>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="CUSTOMER FEEDBACK — 고객의 실제 반응 (고객에게 노출되지 않음, 내부 기록용)">
+              <Field label="CUSTOMER FEEDBACK">
                 <textarea
                   rows={3}
                   className={inputClass}
@@ -1176,7 +1178,7 @@ function OrderDetailPage() {
                   onChange={(e) => setCustomerFeedback(e.target.value)}
                 />
               </Field>
-              <Field label="MAKER NOTES — 제작자 내부 평가 (고객에게 노출되지 않음)">
+              <Field label="MAKER NOTES">
                 <textarea
                   rows={3}
                   className={inputClass}
