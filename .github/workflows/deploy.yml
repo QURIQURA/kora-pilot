@@ -1,0 +1,37 @@
+# 2026-10-20 사용자 요청: Lovable의 "push → 자동 빌드/배포" 대신, 이 레포 자체에서 push할 때마다
+# Cloudflare Workers로 직접 빌드+배포한다("러버블 통하는거 번거로워.. 자동화 세팅하자").
+# 빌드는 nitro(이 프로젝트의 cloudflare-module preset)가 .output/server/wrangler.json을
+# 자동 생성하고, 그 워커 이름은 git remote(QURIQURA/kora-pilot)에서 결정적으로 도출되므로
+# ("quriqura-kora-pilot") 매번 같은 워커를 갱신한다.
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run build
+        env:
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+
+      - run: bunx wrangler deploy --config .output/server/wrangler.json
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
