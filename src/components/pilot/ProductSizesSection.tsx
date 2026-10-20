@@ -140,9 +140,7 @@ export function ProductSizesSection({
                           DEFAULT
                         </span>
                       )}
-                      <span className="label-caps text-xs text-muted-foreground">
-                        {size.shape}
-                      </span>
+                      <span className="label-caps text-xs text-muted-foreground">{size.shape}</span>
                       <span className="text-sm">{formatProductSizeLabel(size)}</span>
                     </div>
                     {(() => {
@@ -201,7 +199,9 @@ export function ProductSizesSection({
                           {monthlyCount != null && (
                             <p className="font-mono text-xs text-muted-foreground">
                               월 예상 생산 {monthlyCount}개
-                              {monthlyCost != null ? ` · 월 예상 원가 ${fmtCurrency(monthlyCost)}` : ""}
+                              {monthlyCost != null
+                                ? ` · 월 예상 원가 ${fmtCurrency(monthlyCost)}`
+                                : ""}
                             </p>
                           )}
                         </>
@@ -255,17 +255,24 @@ export function ProductSizesSection({
   );
 }
 
-function ProductSizeForm({
+// 2026-10-20 사용자 요청: ORDER 상세의 "최종 사이즈" 드롭다운도 MouldSelect처럼 그 자리에서
+// "+ NEW SIZE"로 바로 만들 수 있어야 한다(ProductSizeSelect.tsx가 이 폼을 재사용) — 새로
+// 만든 경우에만 onCreated로 새 id를 알려줘서 드롭다운이 바로 그 사이즈를 선택하게 한다.
+export function ProductSizeForm({
   productId,
   existing,
   onDone,
+  onCreated,
 }: {
   productId: string;
   existing?: ProductSize;
   onDone: () => void;
+  onCreated?: (id: string) => void;
 }) {
   const queryClient = useQueryClient();
-  const [shape, setShape] = useState<ProductSizeShape>((existing?.shape as ProductSizeShape) ?? "ROUND");
+  const [shape, setShape] = useState<ProductSizeShape>(
+    (existing?.shape as ProductSizeShape) ?? "ROUND",
+  );
   const [diameterCm, setDiameterCm] = useState(
     existing?.diameter_mm != null ? String(mmToCm(existing.diameter_mm)) : "",
   );
@@ -314,8 +321,12 @@ function ProductSizeForm({
             .eq("is_default", true);
           if (clearError) throw clearError;
         }
-        const { error } = await supabase.from("product_sizes").update(payload).eq("id", existing.id);
+        const { error } = await supabase
+          .from("product_sizes")
+          .update(payload)
+          .eq("id", existing.id);
         if (error) throw error;
+        return existing.id;
       } else {
         if (isDefault) {
           const { error: clearError } = await supabase
@@ -325,16 +336,22 @@ function ProductSizeForm({
             .eq("is_default", true);
           if (clearError) throw clearError;
         }
-        const { error } = await supabase.from("product_sizes").insert({
-          user_id: userId,
-          product_id: productId,
-          ...payload,
-        });
+        const { data, error } = await supabase
+          .from("product_sizes")
+          .insert({
+            user_id: userId,
+            product_id: productId,
+            ...payload,
+          })
+          .select("id")
+          .single();
         if (error) throw error;
+        return data.id;
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (id) => {
       await queryClient.invalidateQueries({ queryKey: ["product_sizes", productId] });
+      if (!existing) onCreated?.(id);
       onDone();
     },
   });
@@ -478,11 +495,7 @@ function ProductSizeForm({
       </label>
 
       <Field label="NOTES (OPTIONAL)">
-        <input
-          className={inputClass}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-        />
+        <input className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
 
       {save.isError && (

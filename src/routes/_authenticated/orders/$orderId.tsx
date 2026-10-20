@@ -38,8 +38,8 @@ import { resolveSlotGroup } from "@/lib/technique";
 import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
 import { suggestedMultiplierFromTarget } from "@/lib/work-session";
 import { mouldBatchMultiplier } from "@/lib/formula-calc";
-import { formatProductSizeLabel } from "@/lib/product-size";
 import { MouldSelect } from "@/components/pilot/MouldSelect";
+import { ProductSizeSelect } from "@/components/pilot/ProductSizeSelect";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
@@ -964,33 +964,15 @@ function OrderDetailPage() {
                   emptyLabel="TBD — 아직 미정"
                 />
               </Field>
-              {productId && (productSizes.data ?? []).length > 0 && (
+              {productId && (
                 <Field label="최종 사이즈 (PRODUCT SIZE)">
-                  <select
-                    className={selectClass}
+                  <ProductSizeSelect
+                    productId={productId}
                     value={productSizeId}
-                    onChange={(e) => setProductSizeId(e.target.value)}
-                  >
-                    <option value="">— 미지정 —</option>
-                    {(productSizes.data ?? []).map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {formatProductSizeLabel(s)}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setProductSizeId}
+                  />
                 </Field>
               )}
-              <Field label="시트 사이즈 (WORK SESSION 자동계산용)">
-                <MouldSelect
-                  value={sheetMouldId}
-                  onChange={setSheetMouldId}
-                  emptyLabel="— 미지정 —"
-                />
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                  위 PRODUCT SIZE와 별개 — 단가계산에는 쓰이지 않고, WORK SESSION 생성 시 이 몰드
-                  기준으로 배수를 자동 계산한다. PRODUCT SIZE가 골라져 있으면 그쪽이 우선.
-                </p>
-              </Field>
               <Field label="RECIPIENT (받는 사람)">
                 <input
                   className={inputClass}
@@ -1110,6 +1092,17 @@ function OrderDetailPage() {
                     />
                   </div>
                 )}
+              </Field>
+              <Field label="시트 사이즈 (WORK SESSION 자동계산용)">
+                <MouldSelect
+                  value={sheetMouldId}
+                  onChange={setSheetMouldId}
+                  emptyLabel="— 미지정 —"
+                />
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                  위 CAKE SIZE/PRODUCT SIZE와 별개 — 단가계산에는 쓰이지 않고, WORK SESSION 생성 시
+                  이 몰드 기준으로 배수를 자동 계산한다. PRODUCT SIZE가 골라져 있으면 그쪽이 우선.
+                </p>
               </Field>
               <Field label="QUANTITY">
                 <input
