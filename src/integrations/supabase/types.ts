@@ -1324,6 +1324,7 @@ export type Database = {
           customer_id: string | null;
           customer_satisfaction: number | null;
           design_notes: string | null;
+          dietary_requirements: string | null;
           event_date: string | null;
           extracted_json: Json | null;
           flavoring_cream_formula_id: string | null;
@@ -1375,6 +1376,7 @@ export type Database = {
           customer_id?: string | null;
           customer_satisfaction?: number | null;
           design_notes?: string | null;
+          dietary_requirements?: string | null;
           event_date?: string | null;
           extracted_json?: Json | null;
           flavoring_cream_formula_id?: string | null;
@@ -1426,6 +1428,7 @@ export type Database = {
           customer_id?: string | null;
           customer_satisfaction?: number | null;
           design_notes?: string | null;
+          dietary_requirements?: string | null;
           event_date?: string | null;
           extracted_json?: Json | null;
           flavoring_cream_formula_id?: string | null;

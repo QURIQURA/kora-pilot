@@ -230,6 +230,8 @@ function OrderDetailPage() {
   const [customerSatisfaction, setCustomerSatisfaction] = useState<number | "">("");
   const [customerFeedback, setCustomerFeedback] = useState("");
   const [makerNotes, setMakerNotes] = useState("");
+  // 2026-10-20 사용자 요청: 웹 주문서의 알레르기/식이 요구사항을 PILOT 주문에서도 보이게.
+  const [dietaryRequirements, setDietaryRequirements] = useState("");
 
   // 수정사항 저장 여부를 시각적으로 보여주기 위한 "저장된 상태" 스냅샷(2026-10-06, 사용자
   // 요청 — SAVE 누르면 다시 수정하기 전까지 버튼이 비활성화되고 "✓ SAVED"로 보이게 함.
@@ -264,6 +266,7 @@ function OrderDetailPage() {
       flavoringFillingFormulaId: o.flavoring_filling_formula_id ?? "",
       designNote: o.design_notes ?? "",
       orderNote: o.notes ?? "",
+      dietaryRequirements: o.dietary_requirements ?? "",
       makerSatisfaction: o.maker_satisfaction ?? "",
       customerSatisfaction: o.customer_satisfaction ?? "",
       customerFeedback: o.customer_feedback ?? "",
@@ -303,6 +306,7 @@ function OrderDetailPage() {
     setFlavoringFillingFormulaId(o.flavoring_filling_formula_id ?? "");
     setDesignNote(o.design_notes ?? "");
     setOrderNote(o.notes ?? "");
+    setDietaryRequirements(o.dietary_requirements ?? "");
     setMakerSatisfaction(o.maker_satisfaction ?? "");
     setCustomerSatisfaction(o.customer_satisfaction ?? "");
     setCustomerFeedback(o.customer_feedback ?? "");
@@ -346,6 +350,7 @@ function OrderDetailPage() {
     flavoringFillingFormulaId,
     designNote,
     orderNote,
+    dietaryRequirements,
     makerSatisfaction,
     customerSatisfaction,
     customerFeedback,
@@ -393,6 +398,7 @@ function OrderDetailPage() {
           flavoring_filling_formula_id: flavoringFillingFormulaId || null,
           design_notes: designNote.trim() || null,
           notes: orderNote.trim() || null,
+          dietary_requirements: dietaryRequirements.trim() || null,
           maker_satisfaction: makerSatisfaction === "" ? null : makerSatisfaction,
           customer_satisfaction: customerSatisfaction === "" ? null : customerSatisfaction,
           customer_feedback: customerFeedback.trim() || null,
@@ -877,6 +883,15 @@ function OrderDetailPage() {
             </div>
             {/* 2026-10-06 사용자 요청: 메모를 목적별로 분리 — 섞어 쓰지 않는다. */}
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-1">
+              <Field label="DIETARY REQUIREMENTS — 알레르기/식이">
+                <textarea
+                  rows={2}
+                  className={inputClass}
+                  placeholder="예: Nut free, Halal friendly"
+                  value={dietaryRequirements}
+                  onChange={(e) => setDietaryRequirements(e.target.value)}
+                />
+              </Field>
               <Field label="ORDER NOTE — 고객 요청/배송 등">
                 <textarea
                   rows={3}
