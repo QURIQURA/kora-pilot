@@ -129,28 +129,16 @@ function WorkSessionPage() {
     { label: (session.data?.name ?? "…").toUpperCase() },
   ]);
 
-  // 2026-10-13 사용자 요청: Work Session에 "작업일정(날짜/시작-종료시간)"을 입력하면 WANN Weekly
-  // OS(Planner, 별도 Supabase 프로젝트)에 이 세션을 TASK 하나로 자동 연동하고, FORMULA별
-  // TASK(WORKFLOW의 work_session_tasks, 시작시간이 입력된 것들)를 그 TASK의 "상세 항목"으로
-  // 동기화한다 — Edge Function(sync-work-session-to-planner, KORA Business 프로젝트)이 두
-  // Supabase 프로젝트를 모두 다룬다. 세션 정보가 바뀌거나(이름/일정) WORKFLOW의 TASK가
-  // 추가/시작시간변경/삭제될 때마다 이 함수를 다시 부르기만 하면 Planner 쪽이 항상 다시 맞춰진다
-  // (delete-then-insert로 "상세 항목"을 매번 통째로 재구성 — 실패해도 KORA 쪽 작업은 막지 않는
-  // best-effort 연동).
-  const syncPlanner = async () => {
-    try {
-      await supabase.functions.invoke("sync-work-session-to-planner", {
-        body: { work_session_id: sessionId },
-      });
-    } catch {
-      // WANN OS 연동은 best-effort — 실패해도 KORA 쪽 화면/저장은 그대로 정상 동작해야 한다.
-    }
-  };
-
+  // 2026-10-20 사용자 요청: "work session 단독 task로 생성되는기능 지워줘" — 이전에는 Work
+  // Session에 작업일정을 입력하면 WANN Weekly OS(Planner)에 이 세션을 "단독 TASK"(어느
+  // 프로젝트에도 속하지 않는 독립 항목)로 자동 생성했는데(sync-work-session-to-planner Edge
+  // Function 호출), 이게 ORDER가 CONFIRMED 전환 시 만드는 WANN 프로젝트와는 별개로 떠서
+  // 프로젝트 밖에 중복 TASK가 쌓이는 문제였다. 제거 — 이미 만들어졌던 단독 TASK들은 WANN OS
+  // 쪽에서 직접 정리했다. (ORDER의 프로젝트 하위에 시트/크림 등 TASK를 붙이는 방식은 별도로
+  // 다시 설계할 예정 — 그 전까지는 WORK SESSION → Planner 자동 연동 자체가 없다.)
   const invalidateSession = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
     await queryClient.invalidateQueries({ queryKey: ["work_sessions", sessionId] });
-    await syncPlanner();
   };
   const invalidateSelections = async () => {
     await queryClient.invalidateQueries({
@@ -168,7 +156,6 @@ function WorkSessionPage() {
     await queryClient.invalidateQueries({
       queryKey: ["work_session_task_predecessors", sessionId],
     });
-    await syncPlanner();
   };
 
   const updateSession = useMutation({
@@ -605,13 +592,12 @@ function ProductionEfficiencyLinkSection({
 }
 
 /**
- * 작업 일정(2026-10-13 사용자 요청) — 이 Work Session을 WANN Weekly OS(Planner)에 TASK로
- * 올릴지 말지를 결정하는 유일한 입력점. DATE를 넣는 순간부터 Planner에 TASK가 생기고(SHCO >
- * Production timeline), START/END TIME이 TASK의 TIME/END로, WORKFLOW에서 시작시각이 입력된
- * FORMULA별 TASK들이 그 TASK의 "상세 항목"으로 동기화된다(sync-work-session-to-planner Edge
- * Function, $sessionId.tsx의 syncPlanner가 이 섹션 저장 직후와 WORKFLOW TASK 변경 때마다 호출).
- * DATE를 지우면 Planner 쪽 TASK/상세항목도 함께 삭제된다 — "작업일정 없음" = "Planner 비연동".
- * 실제 작업 시작(started_at, START WORK 버튼)과는 별개 개념 — 이건 "계획"이고 그건 "실제"다.
+ * 작업 일정(2026-10-13 사용자 요청) — 이 Work Session을 언제 작업할지 계획하는 DATE/START/END
+ * TIME 입력. 실제 작업 시작(started_at, START WORK 버튼)과는 별개 개념 — 이건 "계획"이고 그건
+ * "실제"다.
+ * 2026-10-20 사용자 요청으로 WANN Weekly OS(Planner) 자동 연동(단독 TASK 생성)은 제거했다 —
+ * ORDER의 프로젝트 하위에 붙이는 방식으로 다시 설계할 예정, 그 전까지 이 DATE/TIME은 KORA
+ * 안에서만 쓰이는 순수 계획값이다.
  */
 function WorkScheduleSection({
   scheduledDate,
@@ -627,7 +613,7 @@ function WorkScheduleSection({
   const toTimeInputValue = (v: string | null) => (v ? v.slice(0, 5) : "");
 
   return (
-    <SectionCard title="작업 일정 (WANN WEEKLY OS 연동)">
+    <SectionCard title="작업 일정">
       <div className="flex flex-wrap items-end gap-3">
         <Field label="DATE">
           <input
@@ -653,17 +639,7 @@ function WorkScheduleSection({
             onChange={(e) => onSave({ scheduled_end_time: e.target.value || null })}
           />
         </Field>
-        {scheduledDate && (
-          <span className="label-caps px-2 py-1 text-[10px] text-muted-foreground">
-            ✓ WANN WEEKLY OS에 TASK로 연동됨 (SHCO · Production timeline)
-          </span>
-        )}
       </div>
-      <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-        DATE를 입력하면 이 세션이 WANN Weekly OS(Planner)에 TASK 하나로 생기고, 아래 WORKFLOW에서
-        FORMULA별 TASK에 시작시각을 넣을 때마다 그 TASK의 "상세 항목"이 자동으로 같이 갱신됩니다.
-        DATE를 비우면 Planner 쪽 TASK도 함께 삭제됩니다.
-      </p>
     </SectionCard>
   );
 }
