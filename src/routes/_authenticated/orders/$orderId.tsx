@@ -817,7 +817,7 @@ function OrderDetailPage() {
               SAVE 바는 탭 밖이라 여기서 수정해도 그대로 저장된다. */}
           <SectionCard title="DESIGN NOTE">
             <Field label="DESIGN / STRUCTURE / ASSEMBLY">
-              <textarea
+              <AutoGrowTextarea
                 rows={4}
                 className={inputClass}
                 placeholder="e.g. 2 tiers, chocolate tuile decoration attached just before delivery"
@@ -978,7 +978,7 @@ function OrderDetailPage() {
                 />
               </Field>
               <Field label="DELIVERY ADDRESS">
-                <input
+                <AutoGrowTextarea
                   className={inputClass}
                   placeholder="Leave empty for pickup"
                   value={deliveryAddress}
@@ -987,7 +987,7 @@ function OrderDetailPage() {
               </Field>
               <div className="md:col-span-2">
                 <Field label="DIETARY REQUIREMENTS">
-                  <textarea
+                  <AutoGrowTextarea
                     rows={2}
                     className={inputClass}
                     placeholder="e.g. Nut free, Halal friendly"
@@ -1012,7 +1012,7 @@ function OrderDetailPage() {
               </Field>
               <div className="md:col-span-2">
                 <Field label="ORDER NOTE">
-                  <textarea
+                  <AutoGrowTextarea
                     rows={3}
                     className={inputClass}
                     placeholder="e.g. Prefer pickup after 3pm"
@@ -1240,7 +1240,7 @@ function OrderDetailPage() {
             </div>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="CUSTOMER FEEDBACK">
-                <textarea
+                <AutoGrowTextarea
                   rows={3}
                   className={inputClass}
                   placeholder='e.g. "She absolutely loved the surprise!"'
@@ -1249,7 +1249,7 @@ function OrderDetailPage() {
                 />
               </Field>
               <Field label="MAKER NOTES">
-                <textarea
+                <AutoGrowTextarea
                   rows={3}
                   className={inputClass}
                   placeholder='e.g. "Result was beautiful but production took too long."'

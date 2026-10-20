@@ -7,9 +7,10 @@
 ## 2026-10-21 — 주문 상세: OCCASION / 관계 메모칸 자동 높이
 
 - 고객이 남긴 OCCASION 메모(그리고 RECIPIENT RELATIONSHIP 메모)가 길어도 잘리지 않고, 글자 수만큼 칸이 아래로 늘어납니다.
+- 같은 방식으로 ORDER NOTE, DESIGN / STRUCTURE / ASSEMBLY, DIETARY REQUIREMENTS, DELIVERY ADDRESS, CUSTOMER FEEDBACK, MAKER NOTES 칸도 내용만큼 늘어납니다(내부 스크롤바 없음).
 - 저장되는 값과 기존 데이터는 변하지 않습니다.
 
-확인 방법: 주문 상세에서 OCCASION 메모칸에 긴 문장을 입력(또는 긴 메모가 있는 주문 열기) → 칸이 여러 줄로 늘어나 전체가 보이는지 확인.
+확인 방법: 주문 상세에서 위 칸들에 긴 문장을 입력(또는 긴 메모가 있는 주문 열기) → 칸이 여러 줄로 늘어나 전체가 보이는지 확인.
 
 ---
 
