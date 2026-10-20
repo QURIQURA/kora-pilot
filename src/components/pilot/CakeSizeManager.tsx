@@ -81,7 +81,9 @@ export function CakeSizeManager() {
       const list = [...(sizes.data ?? [])];
       const target = index + dir;
       if (target < 0 || target >= list.length) return;
-      [list[index], list[target]] = [list[target], list[index]];
+      const moved = list[index];
+      list[index] = list[target];
+      list[target] = moved;
       const results = await Promise.all(
         list.map((r, i) =>
           r.sort_order === i
