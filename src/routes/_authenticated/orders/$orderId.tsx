@@ -399,7 +399,8 @@ function OrderDetailPage() {
               ? recipientRelationshipOtherNote.trim() || null
               : null,
           occasion: occasion || null,
-          occasion_other_note: occasion === "Other" ? occasionOtherNote.trim() || null : null,
+          // 2026-10-21: 메모는 드롭다운 값과 무관하게 항상 보존 (Other 아니어도 지우지 않음)
+          occasion_other_note: occasionOtherNote.trim() || null,
           product_line: productLine || null,
           event_date: eventDate || null,
           pickup_at: datetimeLocalToIso(pickupAt),
@@ -898,10 +899,10 @@ function OrderDetailPage() {
                         </option>
                       ))}
                     </select>
-                    {occasion === "Other" && (
+                    {(occasion === "Other" || occasionOtherNote.trim() !== "") && (
                       <input
                         className={inputClass + " mt-1"}
-                        placeholder="Enter manually"
+                        placeholder={occasion === "Other" ? "Enter manually" : "Customer memo"}
                         value={occasionOtherNote}
                         onChange={(e) => setOccasionOtherNote(e.target.value)}
                       />
