@@ -41,6 +41,7 @@ import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
 import { suggestedMultiplierFromTarget } from "@/lib/work-session";
 import { mouldBatchMultiplier } from "@/lib/formula-calc";
 import { mouldOptionLabel } from "@/components/pilot/MouldSelect";
+import { ProductSizeSelect } from "@/components/pilot/ProductSizeSelect";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
@@ -472,7 +473,20 @@ function OrderDetailPage() {
       const effectiveProductId = productId || o.product_id || null;
       // 2026-10-12 사용자 요청: ORDER에 PRODUCT SIZE가 골라져 있으면 WORK SESSION 생성 시 그대로
       // 넘겨서(work_sessions.product_size_id) PRODUCT SIZE 기준 자동 배수 계산에 바로 쓰일 수 있게.
-      const effectiveProductSizeId = productSizeId || o.product_size_id || null;
+      const effectiveCakeSizeId = cakeSizeId || o.cake_size_id || null;
+      // 2026-10-20 사이즈 통합 1단계: PRODUCT SIZE가 명시적으로 골라져 있으면 그대로 쓰고, 없으면
+      // 이 제품의 product_sizes 중 "이 CAKE SIZE에 연결(cake_size_id)"된 행이 정확히 1개일 때만
+      // 자동 연결한다. 연결(매핑)은 사용자가 확정한 뒤에만 존재하므로 지금은 항상 null — 자동 추정 없음.
+      let effectiveProductSizeId = productSizeId || o.product_size_id || null;
+      if (!effectiveProductSizeId && effectiveProductId && effectiveCakeSizeId) {
+        const { data: linked, error: linkedError } = await supabase
+          .from("product_sizes")
+          .select("id")
+          .eq("product_id", effectiveProductId)
+          .eq("cake_size_id", effectiveCakeSizeId);
+        if (linkedError) throw linkedError;
+        if (linked && linked.length === 1 && linked[0]) effectiveProductSizeId = linked[0].id;
+      }
       // 2026-10-20 사용자 요청: PRODUCT SIZE 기준 계산(product_components.quantity_g)이 가능한
       // 경우(위) 그게 우선이지만, PRODUCT SIZE 데이터가 아예 없는 제품/커스텀 사이즈 주문도
       // "시트 사이즈"(몰드)만 골라져 있으면 그 몰드 기준으로 자동 배수 계산이 가능해야 한다.
@@ -494,6 +508,7 @@ function OrderDetailPage() {
           status: "PLANNED",
           product_id: effectiveProductId,
           product_size_id: effectiveProductSizeId,
+          cake_size_id: effectiveCakeSizeId,
         })
         .select("id")
         .single();
@@ -1002,7 +1017,8 @@ function OrderDetailPage() {
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  On CONFIRMED, a project is created/synced to this product line in the WANN Weekly OS calendar.
+                  On CONFIRMED, a project is created/synced to this product line in the WANN Weekly
+                  OS calendar.
                 </p>
               </Field>
               <div className="hidden md:block" aria-hidden />
@@ -1016,6 +1032,15 @@ function OrderDetailPage() {
                   emptyLabel="TBD"
                 />
               </Field>
+              {productId && (
+                <Field label="PRODUCT SIZE (legacy)">
+                  <ProductSizeSelect
+                    productId={productId}
+                    value={productSizeId}
+                    onChange={setProductSizeId}
+                  />
+                </Field>
+              )}
               <Field label="CAKE SIZE">
                 <select
                   className={selectClass}
@@ -1042,9 +1067,11 @@ function OrderDetailPage() {
                   if (picked) {
                     return (
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        {picked.servings != null ? `${picked.servings} servings` : "servings not set"} ·{" "}
-                        {mould ? `sheet: ${mouldOptionLabel(mould)}` : "no sheet mould set"} (edit in
-                        SETTINGS → CAKE SIZES)
+                        {picked.servings != null
+                          ? `${picked.servings} servings`
+                          : "servings not set"}{" "}
+                        · {mould ? `sheet: ${mouldOptionLabel(mould)}` : "no sheet mould set"} (edit
+                        in SETTINGS → CAKE SIZES)
                       </p>
                     );
                   }
@@ -1105,7 +1132,8 @@ function OrderDetailPage() {
                   ))}
                 </div>
                 <p className="mt-1 text-[10px] text-muted-foreground">
-                  Each dropdown lists FORMULAs of COMPONENTs classified into that slot under SETTINGS → TECHNIQUE CATEGORIES.
+                  Each dropdown lists FORMULAs of COMPONENTs classified into that slot under
+                  SETTINGS → TECHNIQUE CATEGORIES.
                 </p>
                 {/* 2026-10-12 사용자 요청: 기존 PRODUCT를 링크한 경우에만 그 PRODUCT의 현재 레시피를
                 보여주고, 버튼 한 번으로 SHEET/CREAM/FILLING에 적용할 수 있게 한다 — FLAVORING NOTE를
@@ -1281,11 +1309,7 @@ function OrderDetailPage() {
             </button>
           )}
           <span className="label-caps text-[10px] text-muted-foreground">
-            {save.isPending
-              ? "SAVING…"
-              : isDirty
-                ? "UNSAVED CHANGES — press SAVE"
-                : "✓ SAVED"}
+            {save.isPending ? "SAVING…" : isDirty ? "UNSAVED CHANGES — press SAVE" : "✓ SAVED"}
           </span>
           <button
             type="button"

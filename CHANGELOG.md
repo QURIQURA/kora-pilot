@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-10-20 — 사이즈 통합 1단계: PRODUCT SIZE 선택 복구 + 주문 → WORK SESSION 사이즈 전달
+
+- 주문 상세에 PRODUCT SIZE 선택을 "(legacy)"로 되살렸습니다(제품을 고르면 나타납니다). 기존 값은 모두 그대로입니다.
+- WORK SESSION을 만들면 주문의 CAKE SIZE가 세션에 함께 저장됩니다(새 컬럼 `work_sessions.cake_size_id`).
+- 제품별 완성 스펙(`product_sizes`)을 CAKE SIZE에 연결할 컬럼(`product_sizes.cake_size_id`)을 추가했습니다. 지금은 모두 비어 있고
+  자동으로 채우지 않습니다 — 연결을 확정하면 그 제품·사이즈 조합으로 세션을 만들 때 PRODUCT SIZE가 자동 선택됩니다.
+- 기존 주문·세션 기록, 배수, 재료량, 인분, 수량(quantity)은 변경하지 않았습니다.
+
+확인 방법: 제품이 있는 주문에서 CAKE SIZE를 고르고 CREATE WORK SESSION → 세션이 정상 생성되고, 사이즈 미지정 주문도 이전처럼 생성되는지 확인.
+
+---
+
 ## 2026-10-20 — CAKE SIZES 순서를 ▲▼로 조정
 
 SETTINGS → CAKE SIZES 각 줄 왼쪽의 ▲▼ 버튼으로 순서를 바꿉니다. 이 순서가 주문 상세 CAKE SIZE 드롭다운의 순서가 됩니다.

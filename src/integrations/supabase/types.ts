@@ -1826,6 +1826,7 @@ export type Database = {
       };
       product_sizes: {
         Row: {
+          cake_size_id: string | null;
           created_at: string;
           diameter_mm: number | null;
           height_mm: number | null;
@@ -1843,6 +1844,7 @@ export type Database = {
           width_mm: number | null;
         };
         Insert: {
+          cake_size_id?: string | null;
           created_at?: string;
           diameter_mm?: number | null;
           height_mm?: number | null;
@@ -1860,6 +1862,7 @@ export type Database = {
           width_mm?: number | null;
         };
         Update: {
+          cake_size_id?: string | null;
           created_at?: string;
           diameter_mm?: number | null;
           height_mm?: number | null;
@@ -3015,6 +3018,7 @@ export type Database = {
       work_sessions: {
         Row: {
           completed_at: string | null;
+          cake_size_id: string | null;
           created_at: string;
           id: string;
           name: string;
@@ -3033,6 +3037,7 @@ export type Database = {
         };
         Insert: {
           completed_at?: string | null;
+          cake_size_id?: string | null;
           created_at?: string;
           id?: string;
           name: string;
@@ -3051,6 +3056,7 @@ export type Database = {
         };
         Update: {
           completed_at?: string | null;
+          cake_size_id?: string | null;
           created_at?: string;
           id?: string;
           name?: string;
