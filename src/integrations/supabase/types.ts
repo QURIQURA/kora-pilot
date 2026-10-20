@@ -82,6 +82,7 @@ export type Database = {
           notes: string | null;
           servings: number | null;
           shape: string | null;
+          size_inch: number | null;
           sheet_mould_id: string | null;
           sort_order: number;
           updated_at: string;
@@ -98,6 +99,7 @@ export type Database = {
           notes?: string | null;
           servings?: number | null;
           shape?: string | null;
+          size_inch?: number | null;
           sheet_mould_id?: string | null;
           sort_order?: number;
           updated_at?: string;
@@ -114,6 +116,7 @@ export type Database = {
           notes?: string | null;
           servings?: number | null;
           shape?: string | null;
+          size_inch?: number | null;
           sheet_mould_id?: string | null;
           sort_order?: number;
           updated_at?: string;

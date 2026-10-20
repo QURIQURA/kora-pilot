@@ -3,14 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cakeSizesQuery, currentUserId, type CakeSize } from "@/lib/queries";
 import { cmToMm, mmToCm } from "@/lib/product-size";
+import { CAKE_SIZE_INCHES, CAKE_SIZE_SHAPES, buildCakeSizeName } from "@/lib/cake-size";
 import { MouldSelect } from "./MouldSelect";
 import { SectionCard, buttonClass, inputClass, selectClass } from "./ui";
 
-const SHAPES = ["ROUND", "SQUARE", "RECTANGLE", "OTHER"] as const;
-
 /**
  * SETTINGS > ORDERS > CAKE SIZES — 주문의 CAKE SIZE로 고를 전역 사이즈 목록.
- * 치수는 cm로 입력/표시하고 저장 시 mm로 변환(DB canonical unit = mm). 시트 몰드를 지정해두면
+ * 이름은 사이즈+모양+높이로 자동 구성된다(lib/cake-size.ts). ROUND/SQUARE는 4~12인치 드롭다운,
+ * RECTANGLE은 가로·세로·높이를 cm로 직접 입력(저장 시 mm로 변환, DB canonical unit = mm). 시트 몰드를 지정해두면
  * 주문에서 이 사이즈를 고를 때 WORK SESSION 배수 계산에 그 몰드가 쓰인다.
  */
 export function CakeSizeManager() {
@@ -22,11 +22,11 @@ export function CakeSizeManager() {
       const { data, error } = await supabase.from("orders").select("cake_size_id");
       if (error) throw error;
       const map: Record<string, number> = {};
-      for (const r of data ?? []) if (r.cake_size_id) map[r.cake_size_id] = (map[r.cake_size_id] ?? 0) + 1;
+      for (const r of data ?? [])
+        if (r.cake_size_id) map[r.cake_size_id] = (map[r.cake_size_id] ?? 0) + 1;
       return map;
     },
   });
-  const [newName, setNewName] = useState("");
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["cake_sizes"] });
@@ -34,24 +34,41 @@ export function CakeSizeManager() {
   };
 
   const create = useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async () => {
       const user_id = await currentUserId();
-      const { error } = await supabase
-        .from("cake_sizes")
-        .insert({ name, user_id, sort_order: (sizes.data?.length ?? 0) + 1 });
+      const base = {
+        shape: "ROUND",
+        size_inch: 8,
+        length_mm: null,
+        width_mm: null,
+        height_mm: null,
+      };
+      const { error } = await supabase.from("cake_sizes").insert({
+        ...base,
+        name: buildCakeSizeName(base),
+        user_id,
+        sort_order: (sizes.data?.length ?? 0) + 1,
+      });
       if (error) throw error;
     },
-    onSuccess: async () => {
-      setNewName("");
-      await invalidate();
-    },
+    onSuccess: invalidate,
   });
 
   const update = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<CakeSize> }) => {
+      const current = (sizes.data ?? []).find((r) => r.id === id);
+      const merged = { ...(current as CakeSize), ...patch };
+      // 사이즈/모양/치수가 바뀌면 이름을 자동으로 다시 만든다.
+      const touchesName = ["shape", "size_inch", "length_mm", "width_mm", "height_mm"].some(
+        (k) => k in patch,
+      );
       const { error } = await supabase
         .from("cake_sizes")
-        .update({ ...patch, updated_at: new Date().toISOString() })
+        .update({
+          ...patch,
+          ...(touchesName ? { name: buildCakeSizeName(merged) } : {}),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", id);
       if (error) throw error;
     },
@@ -69,11 +86,7 @@ export function CakeSizeManager() {
   const rows = sizes.data ?? [];
   const usageMap = usage.data ?? {};
 
-  const dimInput = (
-    row: CakeSize,
-    key: "diameter_mm" | "length_mm" | "width_mm" | "height_mm",
-    label: string,
-  ) => (
+  const dimInput = (row: CakeSize, key: "length_mm" | "width_mm" | "height_mm", label: string) => (
     <div className="flex items-center gap-1">
       <input
         type="number"
@@ -96,28 +109,21 @@ export function CakeSizeManager() {
   return (
     <SectionCard title="CAKE SIZES">
       <p className="mb-3 font-mono text-[11px] text-muted-foreground">
-        Sizes you can pick as an order&apos;s CAKE SIZE. Servings and the sheet mould are filled in
-        from here when an order selects the size. Dimensions are finished (after icing) size in cm.
+        The name is built automatically: size + shape + height (e.g. 8&quot; Round 10cm). Round /
+        Square: pick 4–12 inch. Rectangle: enter length × width × height in cm. Servings and the
+        sheet mould are filled into an order when it selects the size.
       </p>
 
-      <form
-        className="mb-3 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const name = newName.trim();
-          if (name) create.mutate(name);
-        }}
-      >
-        <input
-          className={`${inputClass} flex-1`}
-          placeholder='New size name (e.g. 8" Round)'
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
-        <button type="submit" className={buttonClass} disabled={!newName.trim() || create.isPending}>
+      <div className="mb-3">
+        <button
+          type="button"
+          className={buttonClass}
+          disabled={create.isPending}
+          onClick={() => create.mutate()}
+        >
           + ADD SIZE
         </button>
-      </form>
+      </div>
 
       {rows.length === 0 ? (
         <p className="font-mono text-xs uppercase text-muted-foreground">NO CAKE SIZES YET</p>
@@ -127,23 +133,18 @@ export function CakeSizeManager() {
             const used = usageMap[row.id] ?? 0;
             return (
               <li key={row.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
-                <input
-                  className={`${inputClass} min-w-[9rem] flex-1 border-transparent hover:border-input`}
-                  defaultValue={row.name}
-                  onBlur={(e) => {
-                    const name = e.target.value.trim();
-                    if (name && name !== row.name) update.mutate({ id: row.id, patch: { name } });
-                  }}
-                />
+                <span className="label-caps min-w-[9rem] flex-1 text-sm">{row.name}</span>
                 <select
                   className={`${selectClass} !w-32`}
                   value={row.shape ?? ""}
-                  onChange={(e) => update.mutate({ id: row.id, patch: { shape: e.target.value || null } })}
+                  onChange={(e) =>
+                    update.mutate({ id: row.id, patch: { shape: e.target.value || null } })
+                  }
                 >
                   <option value="">— SHAPE —</option>
-                  {SHAPES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  {CAKE_SIZE_SHAPES.map((sh) => (
+                    <option key={sh} value={sh}>
+                      {sh}
                     </option>
                   ))}
                 </select>
@@ -153,7 +154,23 @@ export function CakeSizeManager() {
                     {dimInput(row, "width_mm", "W")}
                   </>
                 ) : (
-                  dimInput(row, "diameter_mm", "⌀")
+                  <select
+                    className={`${selectClass} !w-24`}
+                    value={row.size_inch ?? ""}
+                    onChange={(e) =>
+                      update.mutate({
+                        id: row.id,
+                        patch: { size_inch: e.target.value ? Number(e.target.value) : null },
+                      })
+                    }
+                  >
+                    <option value="">— INCH —</option>
+                    {CAKE_SIZE_INCHES.map((n) => (
+                      <option key={n} value={n}>
+                        {n}&quot;
+                      </option>
+                    ))}
+                  </select>
                 )}
                 {dimInput(row, "height_mm", "H")}
                 <div className="flex items-center gap-1">
@@ -166,7 +183,8 @@ export function CakeSizeManager() {
                     defaultValue={row.servings ?? ""}
                     onBlur={(e) => {
                       const next = e.target.value.trim() ? Number(e.target.value) : null;
-                      if (next !== (row.servings ?? null)) update.mutate({ id: row.id, patch: { servings: next } });
+                      if (next !== (row.servings ?? null))
+                        update.mutate({ id: row.id, patch: { servings: next } });
                     }}
                   />
                   <span className="label-caps text-[10px] text-muted-foreground">SERVINGS</span>
@@ -174,7 +192,9 @@ export function CakeSizeManager() {
                 <div className="w-56">
                   <MouldSelect
                     value={row.sheet_mould_id ?? ""}
-                    onChange={(id) => update.mutate({ id: row.id, patch: { sheet_mould_id: id || null } })}
+                    onChange={(id) =>
+                      update.mutate({ id: row.id, patch: { sheet_mould_id: id || null } })
+                    }
                     emptyLabel="— SHEET MOULD —"
                   />
                 </div>
@@ -183,7 +203,13 @@ export function CakeSizeManager() {
                   type="button"
                   className={buttonClass}
                   onClick={() => {
-                    if (confirm(used > 0 ? `${used} order(s) use this size. Delete anyway?` : "Delete this size?"))
+                    if (
+                      confirm(
+                        used > 0
+                          ? `${used} order(s) use this size. Delete anyway?`
+                          : "Delete this size?",
+                      )
+                    )
                       remove.mutate(row.id);
                   }}
                 >
