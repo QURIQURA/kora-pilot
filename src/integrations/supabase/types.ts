@@ -1829,6 +1829,9 @@ export type Database = {
           cake_size_id: string | null;
           created_at: string;
           diameter_mm: number | null;
+          finished_diameter_mm: number | null;
+          finished_height_mm: number | null;
+          mould_diameter_mm: number | null;
           height_mm: number | null;
           id: string;
           is_default: boolean;
@@ -1847,6 +1850,9 @@ export type Database = {
           cake_size_id?: string | null;
           created_at?: string;
           diameter_mm?: number | null;
+          finished_diameter_mm?: number | null;
+          finished_height_mm?: number | null;
+          mould_diameter_mm?: number | null;
           height_mm?: number | null;
           id?: string;
           is_default?: boolean;
@@ -1865,6 +1871,9 @@ export type Database = {
           cake_size_id?: string | null;
           created_at?: string;
           diameter_mm?: number | null;
+          finished_diameter_mm?: number | null;
+          finished_height_mm?: number | null;
+          mould_diameter_mm?: number | null;
           height_mm?: number | null;
           id?: string;
           is_default?: boolean;
