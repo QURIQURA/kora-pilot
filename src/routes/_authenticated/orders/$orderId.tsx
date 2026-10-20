@@ -17,7 +17,7 @@ import {
   ORDER_OCCASIONS,
   ORDER_OCCASION_CATEGORIES,
   ORDER_OCCASION_CATEGORY_MAP,
-  ORDER_RECIPIENT_RELATIONSHIPS,
+  ORDER_RECIPIENT_RELATIONSHIP_OPTIONS,
   ORDER_CAKE_SIZES,
   ORDER_PAYMENT_STATUSES,
   ORDER_PRODUCT_LINES,
@@ -782,11 +782,19 @@ function OrderDetailPage() {
                   }
                 >
                   <option value="">— 선택 —</option>
-                  {ORDER_RECIPIENT_RELATIONSHIPS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
+                  {ORDER_RECIPIENT_RELATIONSHIP_OPTIONS.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
                     </option>
                   ))}
+                  {recipientRelationship &&
+                    !ORDER_RECIPIENT_RELATIONSHIP_OPTIONS.some(
+                      (r) => r.value === recipientRelationship,
+                    ) && (
+                      <option value={recipientRelationship}>
+                        {recipientRelationship} (이전 값)
+                      </option>
+                    )}
                 </select>
                 {recipientRelationship === "Other" && (
                   <input

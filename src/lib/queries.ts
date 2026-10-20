@@ -1465,6 +1465,21 @@ export const ORDER_RECIPIENT_RELATIONSHIPS = [
 ] as const;
 export type OrderRecipientRelationship = (typeof ORDER_RECIPIENT_RELATIONSHIPS)[number];
 
+// 2026-10-20 사용자 요청: 주문서(secrethusband.org)와 같은 선택지/문구로 맞춤. 나머지 enum 값은
+// 기존 주문 데이터 보존용으로만 남겨둔다(이미 그 값이 저장된 주문에서만 보임).
+export const ORDER_RECIPIENT_RELATIONSHIP_OPTIONS: {
+  value: OrderRecipientRelationship;
+  label: string;
+}[] = [
+  { value: "Partner", label: "Partner" },
+  { value: "Family", label: "Family" },
+  { value: "Friend", label: "Friend" },
+  { value: "Colleague", label: "Colleague" },
+  { value: "Client", label: "Client" },
+  { value: "Self", label: "It's for me" },
+  { value: "Other", label: "Someone else" },
+];
+
 export const ORDER_CAKE_SIZES = [
   '6" Round',
   '8" Round',
