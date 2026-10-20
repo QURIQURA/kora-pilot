@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-10-20 — ORDER DETAIL 정리: QUANTITY·FLAVORING NOTE 삭제, DESIGN NOTE는 VISUALS로 이동
+
+ORDER DETAIL 탭에서 QUANTITY 칸과 FLAVORING NOTE(자유 텍스트)를 없앴습니다. Sheet/Cream/Filling
+FORMULA 링크 드롭다운 3개는 그대로 있고 칸 이름만 "FLAVORING FORMULAS"로 바뀌었습니다.
+PRODUCT LINE 드롭다운도 이 FORMULA 드롭다운들 바로 위로 옮겨 한곳에 모았습니다.
+DESIGN NOTE는 VISUALS 탭의 결과물 사진 아래로 옮겼습니다. (DB에 이미 저장된 값은 지우지 않고 보존됩니다.)
+
+확인 방법: 주문 상세 → ORDER DETAIL 탭에서 QUANTITY/FLAVORING NOTE가 없는지, 드롭다운은 있는지 확인 →
+VISUALS 탭 맨 아래 DESIGN NOTE에 입력 후 SAVE → 새로고침해도 유지되는지 확인.
+
+---
+
 ## 2026-10-07 — WORK SESSION에 같은 FORMULA VERSION을 중복으로 추가 가능하게 수정 (병합 포함)
 
 지금까지는 한 WORK SESSION에 같은 FORMULA VERSION을 두 번 추가할 수 없었습니다(예: 같은

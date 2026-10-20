@@ -165,7 +165,6 @@ function OrderDetailPage() {
   const [cakeSize, setCakeSize] = useState<OrderCakeSize | "">("");
   const [customSize, setCustomSize] = useState("");
   const [customSizeCm, setCustomSizeCm] = useState("");
-  const [quantity, setQuantity] = useState("");
   const [servings, setServings] = useState("");
   const [price, setPrice] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<OrderPaymentStatus | "">("");
@@ -188,7 +187,6 @@ function OrderDetailPage() {
   // - Flavoring Note: Sheet/Cream/Filling 등 전체 맛 밸런스(내부용, 새 flavoring_note 컬럼)
   // - Design Note: 디자인/구조/조립(기존에 있었지만 UI에 없던 design_notes 컬럼 재사용)
   // - Order Note: 고객 요청/배송 등 주문 자체에 대한 메모(기존 notes 컬럼, 라벨만 변경)
-  const [flavoringNote, setFlavoringNote] = useState("");
   const [designNote, setDesignNote] = useState("");
   const [orderNote, setOrderNote] = useState("");
   // 2026-10-06 사용자 재확인: FLAVORING NOTE는 자유 텍스트뿐 아니라 실제 FORMULA까지 링크할 수
@@ -258,7 +256,6 @@ function OrderDetailPage() {
       cakeSize: o.cake_size ?? "",
       customSize: o.custom_size ?? "",
       customSizeCm: o.custom_size_cm != null ? String(o.custom_size_cm) : "",
-      quantity: o.quantity != null ? String(o.quantity) : "",
       servings: o.servings != null ? String(o.servings) : "",
       price: o.price != null ? String(o.price) : "",
       paymentStatus: o.payment_status ?? "",
@@ -266,7 +263,6 @@ function OrderDetailPage() {
       productId: o.product_id ?? "",
       productSizeId: o.product_size_id ?? "",
       sheetMouldId: o.sheet_mould_id ?? "",
-      flavoringNote: o.flavoring_note ?? "",
       flavoringSheetFormulaId: o.flavoring_sheet_formula_id ?? "",
       flavoringCreamFormulaId: o.flavoring_cream_formula_id ?? "",
       flavoringFillingFormulaId: o.flavoring_filling_formula_id ?? "",
@@ -300,7 +296,6 @@ function OrderDetailPage() {
     setCakeSize(o.cake_size ?? "");
     setCustomSize(o.custom_size ?? "");
     setCustomSizeCm(o.custom_size_cm != null ? String(o.custom_size_cm) : "");
-    setQuantity(o.quantity != null ? String(o.quantity) : "");
     setServings(o.servings != null ? String(o.servings) : "");
     setPrice(o.price != null ? String(o.price) : "");
     setPaymentStatus(o.payment_status ?? "");
@@ -308,7 +303,6 @@ function OrderDetailPage() {
     setProductId(o.product_id ?? "");
     setProductSizeId(o.product_size_id ?? "");
     setSheetMouldId(o.sheet_mould_id ?? "");
-    setFlavoringNote(o.flavoring_note ?? "");
     setFlavoringSheetFormulaId(o.flavoring_sheet_formula_id ?? "");
     setFlavoringCreamFormulaId(o.flavoring_cream_formula_id ?? "");
     setFlavoringFillingFormulaId(o.flavoring_filling_formula_id ?? "");
@@ -344,7 +338,6 @@ function OrderDetailPage() {
     cakeSize,
     customSize,
     customSizeCm,
-    quantity,
     servings,
     price,
     paymentStatus,
@@ -354,7 +347,6 @@ function OrderDetailPage() {
     // "저장되지 않은 변경사항" 표시가 안 뜨던 기존 버그를 같이 고쳤다.
     productSizeId,
     sheetMouldId,
-    flavoringNote,
     flavoringSheetFormulaId,
     flavoringCreamFormulaId,
     flavoringFillingFormulaId,
@@ -396,7 +388,6 @@ function OrderDetailPage() {
           custom_size: cakeSize === "Custom" ? customSize.trim() || null : null,
           custom_size_cm:
             cakeSize === "Custom" && customSizeCm.trim() ? Number(customSizeCm) : null,
-          quantity: quantity.trim() ? Number(quantity) : null,
           servings: servings.trim() ? Number(servings) : null,
           price: price.trim() ? Number(price) : null,
           payment_status: paymentStatus || null,
@@ -404,7 +395,6 @@ function OrderDetailPage() {
           product_id: productId || null,
           product_size_id: productSizeId || null,
           sheet_mould_id: sheetMouldId || null,
-          flavoring_note: flavoringNote.trim() || null,
           flavoring_sheet_formula_id: flavoringSheetFormulaId || null,
           flavoring_cream_formula_id: flavoringCreamFormulaId || null,
           flavoring_filling_formula_id: flavoringFillingFormulaId || null,
@@ -763,6 +753,19 @@ function OrderDetailPage() {
           <OrderMoodboardSection orderId={order.data.id} />
           {/* 2026-10-15 사용자 요청: "무드보드 아래에 결과물사진 업로드할수있게 이미지 박스만들어줘" */}
           <OrderResultPhotosSection orderId={order.data.id} />
+          {/* 2026-10-20 사용자 요청: DESIGN NOTE를 ORDER DETAIL에서 VISUALS(사진들 아래)로 이동.
+              SAVE 바는 탭 밖이라 여기서 수정해도 그대로 저장된다. */}
+          <SectionCard title="DESIGN NOTE">
+            <Field label="디자인/구조/조립">
+              <textarea
+                rows={4}
+                className={inputClass}
+                placeholder="예: 2단 구조, 초콜릿 튀일 장식은 배송 직전 부착"
+                value={designNote}
+                onChange={(e) => setDesignNote(e.target.value)}
+              />
+            </Field>
+          </SectionCard>
         </div>
       ) : (
         <>
@@ -975,24 +978,6 @@ function OrderDetailPage() {
                   />
                 </Field>
               )}
-              <Field label="PRODUCT LINE">
-                <select
-                  className={selectClass}
-                  value={productLine}
-                  onChange={(e) => setProductLine(e.target.value as OrderProductLineKey | "")}
-                >
-                  <option value="">— 선택 —</option>
-                  {ORDER_PRODUCT_LINES.map((p) => (
-                    <option key={p.key} value={p.key}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가
-                  생성/동기화됩니다.
-                </p>
-              </Field>
               <Field label="CAKE SIZE">
                 <select
                   className={selectClass}
@@ -1037,16 +1022,6 @@ function OrderDetailPage() {
                   이 몰드 기준으로 배수를 자동 계산한다. PRODUCT SIZE가 골라져 있으면 그쪽이 우선.
                 </p>
               </Field>
-              <Field label="QUANTITY">
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  className={inputClass}
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
-              </Field>
               <Field label="SERVINGS (인분)">
                 <input
                   type="number"
@@ -1059,16 +1034,27 @@ function OrderDetailPage() {
                 />
               </Field>
             </div>
-            {/* 2026-10-06 사용자 요청: 메모를 목적별로 분리 — 섞어 쓰지 않는다. */}
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="FLAVORING NOTE — Sheet/Cream/Filling 등 맛 밸런스 (내부용)">
-                <textarea
-                  rows={4}
-                  className={inputClass}
-                  placeholder="예: 코코아 시트 + 바나나 필링, 전체적으로 덜 달게"
-                  value={flavoringNote}
-                  onChange={(e) => setFlavoringNote(e.target.value)}
-                />
+            {/* 2026-10-20 사용자 요청: PRODUCT LINE과 SHEET/CREAM/FILLING FORMULA 드롭다운을 한곳에 묶어 배치. */}
+            <div className="mt-3 grid grid-cols-1 gap-3">
+              <Field label="PRODUCT LINE">
+                <select
+                  className={selectClass}
+                  value={productLine}
+                  onChange={(e) => setProductLine(e.target.value as OrderProductLineKey | "")}
+                >
+                  <option value="">— 선택 —</option>
+                  {ORDER_PRODUCT_LINES.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  CONFIRMED 전환 시 WANN Weekly OS 캘린더의 해당 제품 라인으로 프로젝트가
+                  생성/동기화됩니다.
+                </p>
+              </Field>
+              <Field label="FLAVORING FORMULAS — Sheet/Cream/Filling">
                 {/* 2026-10-06 사용자 재확인: 자유 텍스트만으론 부족 — Sheet/Cream/Filling 각각 실제
                 FORMULA까지 링크할 수 있어야 한다. FORMULA VERSION은 아직 안 정함 — WORK SESSION
                 생성 시 pickEffectiveFormulaVersion으로 시작값만 자동 채우고, 그 뒤엔 WORK SESSION
@@ -1153,15 +1139,6 @@ function OrderDetailPage() {
                     </ul>
                   </div>
                 )}
-              </Field>
-              <Field label="DESIGN NOTE — 디자인/구조/조립">
-                <textarea
-                  rows={4}
-                  className={inputClass}
-                  placeholder="예: 2단 구조, 초콜릿 튀일 장식은 배송 직전 부착"
-                  value={designNote}
-                  onChange={(e) => setDesignNote(e.target.value)}
-                />
               </Field>
             </div>
           </SectionCard>
