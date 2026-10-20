@@ -1415,6 +1415,41 @@ export const ORDER_OCCASIONS = [
 ] as const;
 export type OrderOccasion = (typeof ORDER_OCCASIONS)[number];
 
+// 2026-10-20 사용자 요청: "주문 받을때부터 occasion 드롭다운을 formality 기준으로
+// Family&Friend / Business&Official 로 2단계 구분해서 간추려줘, 이벤트별로도 구분해야해".
+// enum 값 자체(위 ORDER_OCCASIONS)는 그대로 유지 — 줄이지 않고 그룹 태그만 추가해서, 기존
+// 주문 데이터는 손실/마이그레이션 없이 그대로 재분류된다. "Other"는 두 그룹 모두에서 항상
+// 선택 가능하도록 UI에서 별도 처리한다(아래 맵의 값은 참고용 기본값).
+export const ORDER_OCCASION_CATEGORIES = ["Family & Friend", "Business & Official"] as const;
+export type OrderOccasionCategory = (typeof ORDER_OCCASION_CATEGORIES)[number];
+
+export const ORDER_OCCASION_CATEGORY_MAP: Record<OrderOccasion, OrderOccasionCategory> = {
+  Birthday: "Family & Friend",
+  Anniversary: "Family & Friend",
+  Wedding: "Family & Friend",
+  Engagement: "Family & Friend",
+  Graduation: "Family & Friend",
+  "New Baby": "Family & Friend",
+  Housewarming: "Family & Friend",
+  "Mother's Day": "Family & Friend",
+  "Father's Day": "Family & Friend",
+  "Valentine's Day": "Family & Friend",
+  Christmas: "Family & Friend",
+  Easter: "Family & Friend",
+  "Lunar New Year": "Family & Friend",
+  "Just Because": "Family & Friend",
+  Promotion: "Business & Official",
+  Retirement: "Business & Official",
+  Achievement: "Business & Official",
+  "Thank You": "Business & Official",
+  Congratulations: "Business & Official",
+  Farewell: "Business & Official",
+  "Corporate Event": "Business & Official",
+  "Client Gift": "Business & Official",
+  "Team Celebration": "Business & Official",
+  Other: "Family & Friend",
+};
+
 export const ORDER_RECIPIENT_RELATIONSHIPS = [
   "Self",
   "Partner",

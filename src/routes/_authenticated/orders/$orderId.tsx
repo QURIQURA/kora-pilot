@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
 import {
   orderQuery,
   productsQuery,
@@ -16,6 +15,8 @@ import {
   currentUserId,
   ORDER_STATUSES,
   ORDER_OCCASIONS,
+  ORDER_OCCASION_CATEGORIES,
+  ORDER_OCCASION_CATEGORY_MAP,
   ORDER_RECIPIENT_RELATIONSHIPS,
   ORDER_CAKE_SIZES,
   ORDER_PAYMENT_STATUSES,
@@ -28,6 +29,7 @@ import {
   type OrderListRow,
   type OrderStatus,
   type OrderOccasion,
+  type OrderOccasionCategory,
   type OrderRecipientRelationship,
   type OrderCakeSize,
   type OrderPaymentStatus,
@@ -61,36 +63,6 @@ export const Route = createFileRoute("/_authenticated/orders/$orderId")({
   component: OrderDetailPage,
 });
 
-interface ExtractedOrderInfo {
-  customer_name: string | null;
-  instagram_handle: string | null;
-  phone: string | null;
-  email: string | null;
-  recipient: string | null;
-  occasion: string | null;
-  event_date: string | null;
-  pickup_time: string | null;
-  cake_size: string | null;
-  quantity: number | null;
-  preferences: string | null;
-  special_requests: string | null;
-}
-
-const FIELD_LABELS: Record<keyof ExtractedOrderInfo, string> = {
-  customer_name: "고객 이름",
-  instagram_handle: "인스타그램",
-  phone: "전화번호",
-  email: "이메일",
-  recipient: "받는 사람",
-  occasion: "행사",
-  event_date: "행사 날짜",
-  pickup_time: "픽업/배달 시각",
-  cake_size: "케익 사이즈",
-  quantity: "수량",
-  preferences: "취향",
-  special_requests: "특별 요청",
-};
-
 function isoToDatetimeLocal(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -101,13 +73,6 @@ function isoToDatetimeLocal(iso: string | null): string {
 function datetimeLocalToIso(value: string): string | null {
   if (!value) return null;
   return new Date(value).toISOString();
-}
-
-/** AI가 뽑아낸 자유텍스트를 정형화된 Dropdown 옵션과 대소문자 무관 정확 일치로 매칭한다.
- * 못 찾으면 null — 억지로 추측해서 틀린 값을 넣지 않는다(기존 "AI가 추측하지 않는다" 원칙과 동일). */
-function matchOption<T extends string>(options: readonly T[], value: string): T | null {
-  const found = options.find((o) => o.toLowerCase() === value.trim().toLowerCase());
-  return found ?? null;
 }
 
 // 2026-10-06 사용자 요청: Satisfaction(만족도) — Status와는 별개의 5단계 평가.
@@ -167,11 +132,6 @@ function OrderDetailPage() {
       return resolveSlotGroup(techniqueCategories.data ?? [], catId) === slot;
     });
 
-  const [dmText, setDmText] = useState("");
-  const [extracting, setExtracting] = useState(false);
-  const [extractError, setExtractError] = useState<string | null>(null);
-  const [extracted, setExtracted] = useState<ExtractedOrderInfo | null>(null);
-  const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set());
   // 2026-10-15 사용자 요청: "무드보드 아래에 결과물사진 업로드할수있게... 근데 복잡해지니까
   // 탭으로 이미지용 공간 구분하자" — 무드보드 + 결과물 사진(VISUALS)과 기존 입력 폼들
   // (ORDER DETAIL)을 탭으로 분리. SAVE/DELETE 바는 둘 다에 적용되므로 탭 밖(페이지 하단)에 둔다.
@@ -188,6 +148,12 @@ function OrderDetailPage() {
   const [recipientRelationshipOtherNote, setRecipientRelationshipOtherNote] = useState("");
   const [occasion, setOccasion] = useState<OrderOccasion | "">("");
   const [occasionOtherNote, setOccasionOtherNote] = useState("");
+  // 2026-10-20 사용자 요청: OCCASION을 formality 기준 2단계(그룹→세부항목) 드롭다운으로 —
+  // 이 카테고리는 DB에 저장하지 않는 UI 전용 상태(두번째 select의 옵션을 필터링하는 용도)이며,
+  // hydrateFromOrder에서 저장된 occasion 값으로부터 역추적해 초기값을 맞춘다.
+  const [occasionCategory, setOccasionCategory] = useState<OrderOccasionCategory>(
+    ORDER_OCCASION_CATEGORIES[0],
+  );
   // 2026-10-12 사용자 요청: WANN Weekly OS 제품 라인과 연결 — CONFIRMED 전환 시
   // sync_confirmed_order_to_planner() 트리거가 이 값을 그대로 WANN 프로젝트에 실어보낸다.
   const [productLine, setProductLine] = useState<OrderProductLineKey | "">("");
@@ -269,11 +235,9 @@ function OrderDetailPage() {
   // 요청 — SAVE 누르면 다시 수정하기 전까지 버튼이 비활성화되고 "✓ SAVED"로 보이게 함.
   // FORMULA 페이지(formulas/$formulaId.tsx)의 isDirty 패턴과 동일한 방식).
   // buildRowSnapshot: order.data(서버에 저장된 행) 기준으로 직렬화 — "마지막으로 저장된 상태".
-  const buildRowSnapshot = (o: OrderListRow, extractedJsonForSnapshot: Json | null) =>
+  const buildRowSnapshot = (o: OrderListRow) =>
     JSON.stringify({
       orderNumber: o.order_number ?? "",
-      dmText: o.raw_dm_text ?? "",
-      extractedJson: extractedJsonForSnapshot,
       customerId: o.customer_id ?? "",
       recipient: o.recipient ?? "",
       recipientRelationship: o.recipient_relationship ?? "",
@@ -310,13 +274,15 @@ function OrderDetailPage() {
 
   const hydrateFromOrder = (o: OrderListRow) => {
     setOrderNumber(o.order_number ?? "");
-    setDmText(o.raw_dm_text ?? "");
     setCustomerId(o.customer_id ?? "");
     setRecipient(o.recipient ?? "");
     setRecipientRelationship(o.recipient_relationship ?? "");
     setRecipientRelationshipOtherNote(o.recipient_relationship_other_note ?? "");
     setOccasion(o.occasion ?? "");
     setOccasionOtherNote(o.occasion_other_note ?? "");
+    setOccasionCategory(
+      o.occasion ? ORDER_OCCASION_CATEGORY_MAP[o.occasion] : ORDER_OCCASION_CATEGORIES[0],
+    );
     setProductLine((o.product_line as OrderProductLineKey | null) ?? "");
     setEventDate(o.event_date ?? "");
     setPickupAt(isoToDatetimeLocal(o.pickup_at));
@@ -346,16 +312,12 @@ function OrderDetailPage() {
   useEffect(() => {
     if (!order.data) return;
     hydrateFromOrder(order.data);
-    setSavedSnapshot(buildRowSnapshot(order.data, order.data.extracted_json ?? null));
+    setSavedSnapshot(buildRowSnapshot(order.data));
   }, [order.data]);
 
   // currentSnapshot: 지금 화면(로컬 state) 기준 — savedSnapshot과 다르면 "변경사항 있음".
   const currentSnapshot = JSON.stringify({
     orderNumber,
-    dmText,
-    extractedJson: extracted
-      ? (extracted as unknown as Json)
-      : (order.data?.extracted_json ?? null),
     customerId,
     recipient,
     recipientRelationship,
@@ -391,84 +353,6 @@ function OrderDetailPage() {
   });
   const isDirty = Boolean(order.data) && currentSnapshot !== savedSnapshot;
 
-  const runExtraction = async () => {
-    setExtractError(null);
-    if (!dmText.trim()) return;
-    setExtracting(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("extract-order-info", {
-        body: { text: dmText },
-      });
-      if (error) throw error;
-      setExtracted(data.extracted as ExtractedOrderInfo);
-      setAppliedKeys(new Set());
-    } catch (err) {
-      setExtractError((err as Error).message);
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  // AI 추출값은 여기서 폼 필드에 "프리필"만 한다 — 아직 저장이 아니다.
-  // 사용자가 아래 폼을 다시 확인하고 SAVE를 눌러야 실제로 orders에 저장된다.
-  const applyField = (key: keyof ExtractedOrderInfo) => {
-    if (!extracted) return;
-    const v = extracted[key];
-    if (v == null) return;
-    switch (key) {
-      case "recipient":
-        setRecipient(v as string);
-        break;
-      case "occasion": {
-        // OCCASION은 이제 Dropdown — AI 추출 텍스트가 옵션과 정확히 일치할 때만 채우고,
-        // 아니면 억지로 맞추지 않고 "Other" + 원문 메모로 보존한다(추측 금지 원칙과 동일).
-        const matched = matchOption(ORDER_OCCASIONS, v as string);
-        if (matched) {
-          setOccasion(matched);
-        } else {
-          setOccasion("Other");
-          setOccasionOtherNote(v as string);
-        }
-        break;
-      }
-      case "event_date":
-        setEventDate(v as string);
-        break;
-      case "cake_size": {
-        // CAKE SIZE도 Dropdown — Round/Square 등 모양까지는 AI가 단정할 수 없으므로,
-        // 정확히 일치하지 않으면 "Custom"으로 두고 원문을 CUSTOM SIZE에 그대로 보존한다.
-        const matched = matchOption(ORDER_CAKE_SIZES, v as string);
-        if (matched) {
-          setCakeSize(matched);
-        } else {
-          setCakeSize("Custom");
-          setCustomSize(v as string);
-        }
-        break;
-      }
-      case "quantity":
-        setQuantity(String(v));
-        break;
-      case "special_requests":
-      case "preferences":
-        setOrderNote((prev) => {
-          const line = `${FIELD_LABELS[key]}: ${v}`;
-          return prev.trim() ? `${prev}\n${line}` : line;
-        });
-        break;
-      default:
-        break;
-    }
-    setAppliedKeys((prev) => new Set(prev).add(key));
-  };
-
-  const applyAll = () => {
-    if (!extracted) return;
-    (Object.keys(extracted) as (keyof ExtractedOrderInfo)[]).forEach((k) => {
-      if (extracted[k] != null) applyField(k);
-    });
-  };
-
   const save = useMutation({
     mutationFn: async () => {
       const trimmedOrderNumber = orderNumber.trim();
@@ -479,10 +363,6 @@ function OrderDetailPage() {
         .from("orders")
         .update({
           order_number: trimmedOrderNumber,
-          raw_dm_text: dmText.trim() || null,
-          extracted_json: extracted
-            ? (extracted as unknown as Json)
-            : (order.data?.extracted_json ?? null),
           customer_id: customerId || null,
           recipient: recipient.trim() || null,
           recipient_relationship: recipientRelationship || null,
@@ -797,10 +677,6 @@ function OrderDetailPage() {
     );
   }
 
-  const extractedEntries = extracted
-    ? (Object.keys(extracted) as (keyof ExtractedOrderInfo)[]).filter((k) => extracted[k] != null)
-    : [];
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
@@ -870,89 +746,10 @@ function OrderDetailPage() {
         </div>
       ) : (
         <>
-          <SectionCard title="INSTAGRAM DM">
-            <p className="mb-2 font-mono text-[11px] text-muted-foreground">
-              DM 대화 전체를 그대로 붙여넣고 "AI로 추출"을 누르세요. AI는 텍스트에 없는 정보는
-              추측하지 않고 비워 둡니다 — 추출 결과는 바로 저장되지 않고, 아래에서 하나씩(또는 전체)
-              "적용"해야 폼에 채워지고, 그 후 SAVE를 눌러야 실제로 저장됩니다.
-            </p>
-            <textarea
-              rows={6}
-              className={inputClass}
-              placeholder="여기에 DM 대화를 붙여넣으세요…"
-              value={dmText}
-              onChange={(e) => setDmText(e.target.value)}
-            />
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                type="button"
-                className={buttonClass}
-                disabled={extracting || !dmText.trim()}
-                onClick={runExtraction}
-              >
-                {extracting ? "추출 중…" : "AI로 추출"}
-              </button>
-              {extractError && (
-                <span className="font-mono text-xs uppercase text-destructive">{extractError}</span>
-              )}
-            </div>
-
-            {extracted && (
-              <div className="mt-3 border border-dashed border-border p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="label-caps text-xs text-muted-foreground">
-                    AI 추출 결과 (확인 후 적용)
-                  </span>
-                  {extractedEntries.length > 0 && (
-                    <button type="button" className={buttonClass} onClick={applyAll}>
-                      모두 적용
-                    </button>
-                  )}
-                </div>
-                {extractedEntries.length === 0 ? (
-                  <p className="font-mono text-xs text-muted-foreground">
-                    텍스트에서 확실하게 뽑을 수 있는 정보가 없었습니다 — 직접 입력해주세요.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-border">
-                    {extractedEntries.map((k) => (
-                      <li key={k} className="flex items-center justify-between gap-2 py-1.5">
-                        <span className="text-sm">
-                          <span className="text-muted-foreground">{FIELD_LABELS[k]}: </span>
-                          {String(extracted[k])}
-                        </span>
-                        <button
-                          type="button"
-                          className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                          onClick={() => applyField(k)}
-                        >
-                          {appliedKeys.has(k) ? "적용됨" : "적용"}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {(extracted.customer_name ||
-                  extracted.instagram_handle ||
-                  extracted.phone ||
-                  extracted.email) && (
-                  <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-                    고객 연락처 정보(이름/인스타/전화/이메일)는 아래 CUSTOMER에서 "+ NEW CUSTOMER"로
-                    직접 만들어 연결하세요.
-                  </p>
-                )}
-              </div>
-            )}
-          </SectionCard>
-
           <SectionCard title="CUSTOMER DETAILS">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="CUSTOMER (= 요청자/구매자)">
-                <CustomerSelect
-                  value={customerId}
-                  onChange={setCustomerId}
-                  initialNameForCreate={extracted?.customer_name ?? ""}
-                />
+                <CustomerSelect value={customerId} onChange={setCustomerId} />
               </Field>
               <Field label="RECIPIENT (받는 사람)">
                 <input
@@ -986,26 +783,55 @@ function OrderDetailPage() {
                 )}
               </Field>
               <Field label="OCCASION">
-                <select
-                  className={selectClass}
-                  value={occasion}
-                  onChange={(e) => setOccasion(e.target.value as OrderOccasion | "")}
-                >
-                  <option value="">— 선택 —</option>
-                  {ORDER_OCCASIONS.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-                {occasion === "Other" && (
-                  <input
-                    className={inputClass + " mt-1"}
-                    placeholder="직접 입력"
-                    value={occasionOtherNote}
-                    onChange={(e) => setOccasionOtherNote(e.target.value)}
-                  />
-                )}
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">
+                  <select
+                    className={selectClass + " sm:w-[9.5rem] sm:shrink-0"}
+                    value={occasionCategory}
+                    onChange={(e) => {
+                      const nextCategory = e.target.value as OrderOccasionCategory;
+                      setOccasionCategory(nextCategory);
+                      // 선택된 occasion이 새 카테고리에 안 속하면(Other는 항상 양쪽에 있으므로 예외)
+                      // 비워서 사용자가 새 그룹 안에서 다시 고르게 한다.
+                      if (
+                        occasion &&
+                        occasion !== "Other" &&
+                        ORDER_OCCASION_CATEGORY_MAP[occasion] !== nextCategory
+                      ) {
+                        setOccasion("");
+                      }
+                    }}
+                  >
+                    {ORDER_OCCASION_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex-1">
+                    <select
+                      className={selectClass}
+                      value={occasion}
+                      onChange={(e) => setOccasion(e.target.value as OrderOccasion | "")}
+                    >
+                      <option value="">— 선택 —</option>
+                      {ORDER_OCCASIONS.filter(
+                        (o) => o === "Other" || ORDER_OCCASION_CATEGORY_MAP[o] === occasionCategory,
+                      ).map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                    {occasion === "Other" && (
+                      <input
+                        className={inputClass + " mt-1"}
+                        placeholder="직접 입력"
+                        value={occasionOtherNote}
+                        onChange={(e) => setOccasionOtherNote(e.target.value)}
+                      />
+                    )}
+                  </div>
+                </div>
               </Field>
               <Field label="EVENT DATE">
                 <input
