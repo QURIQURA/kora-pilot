@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,6 +58,31 @@ import {
 
 // orders.audience check constraint values (2026-10-20).
 const ORDER_AUDIENCES = ["Adults", "Adults + children", "Children"] as const;
+
+/** Textarea that grows with its content (no clipped customer memos). */
+function AutoGrowTextarea({
+  value,
+  className,
+  ...props
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      className={(className ?? "") + " resize-none overflow-hidden whitespace-pre-wrap break-words"}
+      {...props}
+    />
+  );
+}
+
 
 export const Route = createFileRoute("/_authenticated/orders/$orderId")({
   head: () => ({
@@ -850,7 +875,7 @@ function OrderDetailPage() {
                 </select>
                 {(recipientRelationship === "Other" ||
                   recipientRelationshipOtherNote.trim() !== "") && (
-                  <input
+                  <AutoGrowTextarea
                     className={inputClass + " mt-1"}
                     placeholder={
                       recipientRelationship === "Other" ? "Enter manually" : "Customer memo"
@@ -901,7 +926,7 @@ function OrderDetailPage() {
                       ))}
                     </select>
                     {(occasion === "Other" || occasionOtherNote.trim() !== "") && (
-                      <input
+                      <AutoGrowTextarea
                         className={inputClass + " mt-1"}
                         placeholder={occasion === "Other" ? "Enter manually" : "Customer memo"}
                         value={occasionOtherNote}
