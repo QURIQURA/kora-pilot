@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-10-20 — CAKE SIZES 순서를 ▲▼로 조정
+
+SETTINGS → CAKE SIZES 각 줄 왼쪽의 ▲▼ 버튼으로 순서를 바꿉니다. 이 순서가 주문 상세 CAKE SIZE 드롭다운의 순서가 됩니다.
+
+---
+
 ## 2026-10-20 — CAKE SIZES 이름 자동 구성 (사이즈 + 모양 + 높이)
 
 SETTINGS → CAKE SIZES에서 이름을 직접 쓰지 않고 자동으로 만듭니다. 예: `8" Round 10cm`, `Rectangle 20×30×8cm`.

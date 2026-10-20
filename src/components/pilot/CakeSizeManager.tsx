@@ -75,6 +75,26 @@ export function CakeSizeManager() {
     onSuccess: invalidate,
   });
 
+  // 2026-10-20 사용자 요청: 위/아래로 순서 조정 — 현재 순서를 0..n-1로 다시 매기며 두 칸을 맞바꾼다.
+  const move = useMutation({
+    mutationFn: async ({ index, dir }: { index: number; dir: -1 | 1 }) => {
+      const list = [...(sizes.data ?? [])];
+      const target = index + dir;
+      if (target < 0 || target >= list.length) return;
+      [list[index], list[target]] = [list[target], list[index]];
+      const results = await Promise.all(
+        list.map((r, i) =>
+          r.sort_order === i
+            ? Promise.resolve({ error: null })
+            : supabase.from("cake_sizes").update({ sort_order: i }).eq("id", r.id),
+        ),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+    },
+    onSuccess: invalidate,
+  });
+
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("cake_sizes").delete().eq("id", id);
@@ -129,10 +149,30 @@ export function CakeSizeManager() {
         <p className="font-mono text-xs uppercase text-muted-foreground">NO CAKE SIZES YET</p>
       ) : (
         <ul className="divide-y divide-border border border-border">
-          {rows.map((row) => {
+          {rows.map((row, index) => {
             const used = usageMap[row.id] ?? 0;
             return (
               <li key={row.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    className="label-caps px-1 text-[10px] leading-none hover:bg-secondary disabled:opacity-30"
+                    disabled={index === 0 || move.isPending}
+                    onClick={() => move.mutate({ index, dir: -1 })}
+                    aria-label="Move up"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    className="label-caps px-1 text-[10px] leading-none hover:bg-secondary disabled:opacity-30"
+                    disabled={index === rows.length - 1 || move.isPending}
+                    onClick={() => move.mutate({ index, dir: 1 })}
+                    aria-label="Move down"
+                  >
+                    ▼
+                  </button>
+                </div>
                 <span className="label-caps min-w-[9rem] flex-1 text-sm">{row.name}</span>
                 <select
                   className={`${selectClass} !w-32`}
