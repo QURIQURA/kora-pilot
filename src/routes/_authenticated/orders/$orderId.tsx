@@ -121,6 +121,19 @@ function OrderDetailPage() {
   const products = useQuery(productsQuery());
   const pilotSettings = useQuery(pilotSettingsQuery());
   const workSession = useQuery(workSessionByOrderQuery(orderId));
+  // 2026-10-20: REQ-xxxx 번호는 고객 요청(shco_order_requests)에서 생성되며 order_id로 이 주문에 연결된다(읽기전용 표시).
+  const linkedRequest = useQuery({
+    queryKey: ["order-linked-request", orderId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shco_order_requests")
+        .select("request_number")
+        .eq("order_id", orderId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
   const formulas = useQuery(formulasQuery());
   const statusColors =
     (pilotSettings.data?.order_status_colors as Record<string, string> | null) ?? null;
@@ -697,7 +710,12 @@ function OrderDetailPage() {
           >
             ← ORDERS
           </Link>
-          <p className="label-caps text-lg text-foreground">{orderNumber}</p>
+          <input
+            className="label-caps w-full max-w-[16rem] border-0 bg-transparent p-0 text-lg text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            value={orderNumber}
+            onChange={(e) => setOrderNumber(e.target.value)}
+            aria-label="ORDER NUMBER"
+          />
           <p className="font-mono text-xs uppercase text-muted-foreground">
             CREATED {formatDateTime(order.data.created_at)}
           </p>
@@ -770,11 +788,12 @@ function OrderDetailPage() {
               <Field label="CUSTOMER">
                 <CustomerSelect value={customerId} onChange={setCustomerId} />
               </Field>
-              <Field label="ORDER NUMBER">
+              <Field label="REQUEST NUMBER">
                 <input
                   className={inputClass}
-                  value={orderNumber}
-                  onChange={(e) => setOrderNumber(e.target.value)}
+                  readOnly
+                  value={linkedRequest.data?.request_number ?? ""}
+                  placeholder="—"
                 />
               </Field>
               <Field label="RECIPIENT">
