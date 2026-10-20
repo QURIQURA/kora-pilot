@@ -803,6 +803,10 @@ function AddFormulaVersionForm({
         mould_qty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
         base_weight_id: null,
         base_weight_qty: null,
+        // 2026-10-19 "테이블 통합" 1단계: moulds/base_weight_presets를 capacities로 통합한
+        // 신규 참조 컬럼도 함께 채운다(전환 기간 dual-write — 기존 mould_id 등은 그대로 유지).
+        capacity_id: scalingMode === "MOULD" ? mouldId || null : null,
+        capacity_qty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
         sort_order: nextSort,
         kind,
         slot,
@@ -1066,7 +1070,14 @@ function FormulaVersionRow({
       if (historyError) throw historyError;
       const { error: updateError } = await supabase
         .from("work_session_formula_versions")
-        .update({ multiplier: next.multiplier, mould_id: next.mouldId, mould_qty: next.mouldQty })
+        .update({
+          multiplier: next.multiplier,
+          mould_id: next.mouldId,
+          mould_qty: next.mouldQty,
+          // 2026-10-19 "테이블 통합" 1단계: 통합 capacity_id/capacity_qty도 함께 갱신(dual-write).
+          capacity_id: next.mouldId,
+          capacity_qty: next.mouldQty,
+        })
         .eq("id", row.id);
       if (updateError) throw updateError;
     },
@@ -1996,7 +2007,7 @@ function EditFormulaVersionModal({
         const { data: baseVersion, error: baseError } = await supabase
           .from("formula_versions")
           .select(
-            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id",
+            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id, default_capacity_id",
           )
           .eq("id", column.formulaVersionId)
           .single();
@@ -2019,6 +2030,8 @@ function EditFormulaVersionModal({
             status: "DRAFT",
             default_mould_id: baseVersion.default_mould_id,
             default_base_weight_id: baseVersion.default_base_weight_id,
+            // 2026-10-19 "테이블 통합" 1단계: 통합 default_capacity_id도 함께 복사(dual-write).
+            default_capacity_id: baseVersion.default_capacity_id,
             yield_quantity: baseVersion.yield_quantity,
             change_summary: autoSummary,
             change_reason: reason.trim() || null,
@@ -2119,7 +2132,7 @@ function EditFormulaVersionModal({
         const { data: baseVersion, error: baseError } = await supabase
           .from("formula_versions")
           .select(
-            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id",
+            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id, default_capacity_id",
           )
           .eq("id", column.formulaVersionId)
           .single();
@@ -2148,6 +2161,8 @@ function EditFormulaVersionModal({
             status: "CURRENT",
             default_mould_id: baseVersion.default_mould_id,
             default_base_weight_id: baseVersion.default_base_weight_id,
+            // 2026-10-19 "테이블 통합" 1단계: 통합 default_capacity_id도 함께 복사(dual-write).
+            default_capacity_id: baseVersion.default_capacity_id,
             yield_quantity: baseVersion.yield_quantity,
             change_summary: autoSummary,
             change_reason: reason.trim() || null,

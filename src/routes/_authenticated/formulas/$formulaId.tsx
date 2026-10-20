@@ -620,6 +620,11 @@ function FormulaDetailPage() {
         versionPatch.default_mould_id = draft.mouldId || null;
       if (draft.baseWeightId !== (version.default_base_weight_id ?? ""))
         versionPatch.default_base_weight_id = draft.baseWeightId || null;
+      // 2026-10-19 "테이블 통합" 1단계: moulds/base_weight_presets를 capacities로 통합한 통합
+      // 참조 컬럼도 같이 갱신한다(전환 기간 dual-write — 기존 default_mould_id 등은 그대로 유지).
+      if ("default_mould_id" in versionPatch || "default_base_weight_id" in versionPatch) {
+        versionPatch.default_capacity_id = draft.mouldId || draft.baseWeightId || null;
+      }
       const draftYield = draft.yieldQuantity ? parseNumber(draft.yieldQuantity) : null;
       const currentYield = version.yield_quantity != null ? Number(version.yield_quantity) : null;
       if (draftYield !== currentYield) versionPatch.yield_quantity = draftYield;
@@ -712,6 +717,10 @@ function FormulaDetailPage() {
           version_number: nextNumber,
           status: "DRAFT",
           default_mould_id: version?.default_mould_id ?? null,
+          // 2026-10-19 "테이블 통합" 1단계: default_base_weight_id가 복사 누락되던 기존 버그를
+          // 같이 고치고, 통합 default_capacity_id도 함께 채운다(dual-write).
+          default_base_weight_id: version?.default_base_weight_id ?? null,
+          default_capacity_id: version?.default_capacity_id ?? null,
           yield_quantity: version?.yield_quantity ?? null,
           change_summary: summary || null,
           change_reason: reason || null,

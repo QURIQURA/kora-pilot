@@ -650,6 +650,9 @@ function OrderDetailPage() {
               mould_qty: isMould ? 1 : null,
               base_weight_id: null,
               base_weight_qty: null,
+              // 2026-10-19 "테이블 통합" 1단계: 통합 capacity_id/capacity_qty도 함께 채운다(dual-write).
+              capacity_id: isMould ? (version.default_mould_id ?? null) : null,
+              capacity_qty: isMould ? 1 : null,
               sort_order: CORE_SLOTS.indexOf(slot),
             },
           },
