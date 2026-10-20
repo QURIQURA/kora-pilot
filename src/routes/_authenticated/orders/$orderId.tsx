@@ -394,10 +394,8 @@ function OrderDetailPage() {
           customer_id: customerId || null,
           recipient: recipient.trim() || null,
           recipient_relationship: recipientRelationship || null,
-          recipient_relationship_other_note:
-            recipientRelationship === "Other"
-              ? recipientRelationshipOtherNote.trim() || null
-              : null,
+          // 2026-10-21: 메모는 드롭다운 값과 무관하게 항상 보존
+          recipient_relationship_other_note: recipientRelationshipOtherNote.trim() || null,
           occasion: occasion || null,
           // 2026-10-21: 메모는 드롭다운 값과 무관하게 항상 보존 (Other 아니어도 지우지 않음)
           occasion_other_note: occasionOtherNote.trim() || null,
@@ -850,10 +848,13 @@ function OrderDetailPage() {
                       </option>
                     )}
                 </select>
-                {recipientRelationship === "Other" && (
+                {(recipientRelationship === "Other" ||
+                  recipientRelationshipOtherNote.trim() !== "") && (
                   <input
                     className={inputClass + " mt-1"}
-                    placeholder="Enter manually"
+                    placeholder={
+                      recipientRelationship === "Other" ? "Enter manually" : "Customer memo"
+                    }
                     value={recipientRelationshipOtherNote}
                     onChange={(e) => setRecipientRelationshipOtherNote(e.target.value)}
                   />
