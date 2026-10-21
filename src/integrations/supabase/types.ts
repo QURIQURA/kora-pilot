@@ -2809,6 +2809,8 @@ export type Database = {
           part_no: number;
           planner_task_id: string | null;
           start_time: string;
+          step_name: string | null;
+          step_template_task_id: string | null;
           updated_at: string;
           user_id: string;
           work_session_formula_version_id: string;
@@ -2822,6 +2824,8 @@ export type Database = {
           part_no?: number;
           planner_task_id?: string | null;
           start_time: string;
+          step_name?: string | null;
+          step_template_task_id?: string | null;
           updated_at?: string;
           user_id?: string;
           work_session_formula_version_id: string;
@@ -2835,6 +2839,8 @@ export type Database = {
           part_no?: number;
           planner_task_id?: string | null;
           start_time?: string;
+          step_name?: string | null;
+          step_template_task_id?: string | null;
           updated_at?: string;
           user_id?: string;
           work_session_formula_version_id?: string;

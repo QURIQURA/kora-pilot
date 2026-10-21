@@ -1025,6 +1025,8 @@ export interface DashboardComponentRow {
   work_session_id: string;
   planner_task_id: string | null;
   componentName: string;
+  /** 컴포넌트의 기본 WORKFLOW TEMPLATE(자동 적용이 켜진 경우만) — 단계가 곧 작업 블록 단위가 된다 */
+  templateId: string | null;
   sessionStatus: string;
   order: {
     id: string;
@@ -1043,7 +1045,7 @@ export const dashboardComponentsQuery = () =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "id, slot, work_session_id, planner_task_id, sort_order, formula_versions(formulas(name, components(name))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, products(name), customers(name)))",
+            "id, slot, work_session_id, planner_task_id, sort_order, formula_versions(formulas(name, components(name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, products(name), customers(name)))",
           )
           .eq("kind", "CORE")
           .order("sort_order", { ascending: true }),
@@ -1053,7 +1055,14 @@ export const dashboardComponentsQuery = () =>
         work_session_id: string;
         planner_task_id: string | null;
         formula_versions: {
-          formulas: { name: string; components: { name: string } | null } | null;
+          formulas: {
+            name: string;
+            components: {
+              name: string;
+              default_workflow_template_id: string | null;
+              auto_apply_default_workflow: boolean;
+            } | null;
+          } | null;
         } | null;
         work_sessions: {
           status: string;
@@ -1078,6 +1087,9 @@ export const dashboardComponentsQuery = () =>
           work_session_id: r.work_session_id,
           planner_task_id: r.planner_task_id,
           componentName: formula?.components?.name ?? formula?.name ?? "—",
+          templateId: formula?.components?.auto_apply_default_workflow
+            ? (formula.components.default_workflow_template_id ?? null)
+            : null,
           sessionStatus: r.work_sessions?.status ?? "PLANNED",
           order: {
             id: order.id,
@@ -2369,15 +2381,8 @@ export const cakeSizesQuery = () =>
   queryOptions({
     queryKey: ["cake_sizes"],
     queryFn: async (): Promise<CakeSize[]> =>
-      unwrap(
-        await supabase
-          .from("cake_sizes")
-          .select("*")
-          .order("sort_order")
-          .order("name"),
-      ),
+      unwrap(await supabase.from("cake_sizes").select("*").order("sort_order").order("name")),
   });
-
 
 // 2026-10-21: DIETARY TAGS — SETTINGS에서 관리하는 전역 식이 분류(복수 선택). 주문은 order_dietary_tags로 연결한다.
 export type DietaryTag = Tables<"dietary_tags">;
@@ -2448,4 +2453,17 @@ export const dietaryBuildsQuery = () =>
           .select("*, dietary_build_items(*), dietary_build_tags(*)")
           .order("created_at", { ascending: false }),
       ) as unknown as DietaryBuildFull[],
+  });
+
+/** 모든 WORKFLOW TEMPLATE의 단계(작업 블록 단위) — 대시보드가 템플릿 id로 묶어 쓴다. */
+export const workflowTemplateStepsQuery = () =>
+  queryOptions({
+    queryKey: ["workflow_template_steps_all"],
+    queryFn: async () =>
+      unwrap(
+        await supabase
+          .from("workflow_template_tasks")
+          .select("id, template_id, task_name, task_type, timer_minutes, sort_order")
+          .order("sort_order", { ascending: true }),
+      ),
   });

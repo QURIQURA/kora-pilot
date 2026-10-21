@@ -15,6 +15,7 @@ import {
   currentUserId,
   dashboardComponentsQuery,
   workBlocksQuery,
+  workflowTemplateStepsQuery,
   type DashboardComponentRow,
   type WorkBlock,
 } from "@/lib/queries";
@@ -98,6 +99,7 @@ export function ProductionDashboard() {
   const queryClient = useQueryClient();
   const components = useQuery(dashboardComponentsQuery());
   const blocksQuery = useQuery(workBlocksQuery());
+  const stepsQuery = useQuery(workflowTemplateStepsQuery());
   const [date, setDate] = useState(() => toLocalDateString());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 타임라인 아래 작업 박스(계량/워크플로 등)가 보여줄 세션 — 블록 선택 또는 대기공간 카드 클릭으로 정해진다.
@@ -109,6 +111,10 @@ export function ProductionDashboard() {
 
   const rows = useMemo(() => components.data ?? [], [components.data]);
   const blocks = useMemo(() => blocksQuery.data ?? [], [blocksQuery.data]);
+
+  // 컴포넌트의 기본 템플릿 단계들 — 대기공간에서 놓으면 단계마다 블록이 만들어진다.
+  const stepsOf = (row: DashboardComponentRow) =>
+    row.templateId ? (stepsQuery.data ?? []).filter((s) => s.template_id === row.templateId) : [];
 
   const rowById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
   const blocksByRow = useMemo(() => {
@@ -194,7 +200,10 @@ export function ProductionDashboard() {
   };
   const blockTitle = (b: WorkBlock, row: DashboardComponentRow) => {
     const siblings = blocksByRow.get(row.id) ?? [];
-    return `${row.componentName}${siblings.length > 1 ? ` (${b.part_no}차)` : ""}`;
+    if (siblings.length <= 1) return row.componentName;
+    return b.step_name
+      ? `${row.componentName} — ${b.step_name}`
+      : `${row.componentName} (${b.part_no}차)`;
   };
 
   const createBlock = useMutation({
@@ -205,27 +214,62 @@ export function ProductionDashboard() {
       day: string;
     }) => {
       const user_id = await currentUserId();
-      const partNo =
-        (blocksByRow.get(v.row.id) ?? []).reduce((m, b) => Math.max(m, b.part_no), 0) + 1;
-      const { data, error } = await supabase
-        .from("work_blocks")
-        .insert({
+      const steps = stepsOf(v.row);
+      type Insert = {
+        user_id: string;
+        work_session_formula_version_id: string;
+        block_date: string;
+        start_time: string;
+        end_time: string;
+        part_no: number;
+        step_name?: string | null;
+        step_template_task_id?: string | null;
+      };
+      const inserts: Insert[] = [];
+      if (steps.length === 0) {
+        const partNo =
+          (blocksByRow.get(v.row.id) ?? []).reduce((m, b) => Math.max(m, b.part_no), 0) + 1;
+        inserts.push({
           user_id,
           work_session_formula_version_id: v.row.id,
           block_date: v.day,
           start_time: toTime(v.startMin),
           end_time: toTime(v.endMin),
           part_no: partNo,
-        })
-        .select("id")
-        .single();
+        });
+      } else {
+        // 템플릿 단계 = 블록: 놓은 시각부터 단계 순서대로 이어 붙이고, 하루를 넘치면 다음 날 09:00로 넘긴다.
+        let day = v.day;
+        let cursor = v.startMin;
+        steps.forEach((step, idx) => {
+          const dur = step.timer_minutes
+            ? Math.max(SNAP_MIN, Math.ceil(step.timer_minutes / SNAP_MIN) * SNAP_MIN)
+            : DEFAULT_DURATION_MIN;
+          if (cursor + dur > DAY_END_MIN) {
+            day = addDays(day, 1);
+            cursor = 9 * 60;
+          }
+          inserts.push({
+            user_id,
+            work_session_formula_version_id: v.row.id,
+            block_date: day,
+            start_time: toTime(cursor),
+            end_time: toTime(cursor + dur),
+            part_no: idx + 1,
+            step_name: steps.length > 1 ? step.task_name : null,
+            step_template_task_id: step.id,
+          });
+          cursor += dur;
+        });
+      }
+      const { data, error } = await supabase.from("work_blocks").insert(inserts).select("id");
       if (error) throw error;
       await syncAfter(v.row.work_session_id);
-      return data.id;
+      return data?.[0]?.id ?? null;
     },
     onSuccess: async (id) => {
       await refresh();
-      setSelectedId(id);
+      if (id) setSelectedId(id);
     },
   });
 
@@ -296,26 +340,34 @@ export function ProductionDashboard() {
 
   // 배정 해제 — 블록과 그 플래너 TASK를 함께 지운다(Edge Function이 둘 다 처리).
   const removeBlock = useMutation({
-    mutationFn: async (block: WorkBlock) => {
-      const row = rowById.get(block.work_session_formula_version_id);
-      // 블록이 자동으로 만든 작업 기록(WORKFLOW TASK)은, 아직 아무 값도 안 넣었을 때만 같이 지운다.
-      if (block.work_session_task_id) {
-        await supabase
-          .from("work_session_tasks")
-          .delete()
-          .eq("id", block.work_session_task_id)
-          .eq("status", "NOT_STARTED")
-          .is("actual_started_at", null)
-          .is("completed_at", null)
-          .is("output_quantity", null)
-          .is("active_labour_minutes", null);
-      }
-      const { data, error } = await supabase.functions.invoke("sync-work-session-to-planner", {
-        body: { remove_block_id: block.id, work_session_id: row?.work_session_id },
-      });
-      if (error) throw error;
-      if (data && typeof data === "object" && "error" in data && data.error) {
-        throw new Error(String((data as { error: unknown }).error));
+    mutationFn: async (clicked: WorkBlock) => {
+      const row = rowById.get(clicked.work_session_formula_version_id);
+      // 템플릿 단계 블록은 한 덩어리 — 하나를 해제하면 그 컴포넌트의 모든 단계 블록이 대기공간으로 돌아간다.
+      const targets = clicked.step_name
+        ? blocks.filter(
+            (b) => b.work_session_formula_version_id === clicked.work_session_formula_version_id,
+          )
+        : [clicked];
+      for (const block of targets) {
+        // 블록이 자동으로 만든 작업 기록(WORKFLOW TASK)은, 아직 아무 값도 안 넣었을 때만 같이 지운다.
+        if (block.work_session_task_id) {
+          await supabase
+            .from("work_session_tasks")
+            .delete()
+            .eq("id", block.work_session_task_id)
+            .eq("status", "NOT_STARTED")
+            .is("actual_started_at", null)
+            .is("completed_at", null)
+            .is("output_quantity", null)
+            .is("active_labour_minutes", null);
+        }
+        const { data, error } = await supabase.functions.invoke("sync-work-session-to-planner", {
+          body: { remove_block_id: block.id, work_session_id: row?.work_session_id },
+        });
+        if (error) throw error;
+        if (data && typeof data === "object" && "error" in data && data.error) {
+          throw new Error(String((data as { error: unknown }).error));
+        }
       }
     },
     onSuccess: async () => {
@@ -489,6 +541,13 @@ export function ProductionDashboard() {
                           {r.slot ?? "CORE"}
                         </p>
                         <p className="truncate text-sm">{r.componentName}</p>
+                        {stepsOf(r).length > 1 && (
+                          <p className="truncate font-mono text-[10px] text-muted-foreground">
+                            {stepsOf(r)
+                              .map((s) => s.task_name)
+                              .join(" → ")}
+                          </p>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -711,15 +770,21 @@ export function ProductionDashboard() {
                     }}
                   />
                 </label>
-                <button
-                  type="button"
-                  className={buttonClass}
-                  disabled={busy}
-                  onClick={() => splitBlock.mutate(selected)}
-                  title="같은 컴포넌트의 다음 차수 블록을 만들어요"
-                >
-                  SPLIT (1차/2차)
-                </button>
+                {selected.step_name ? (
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    템플릿 단계 {selected.part_no}: {selected.step_name}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={busy}
+                    onClick={() => splitBlock.mutate(selected)}
+                    title="같은 컴포넌트의 다음 차수 블록을 만들어요"
+                  >
+                    SPLIT (1차/2차)
+                  </button>
+                )}
                 <button
                   type="button"
                   className={cn(buttonClass, "hover:text-destructive")}
@@ -727,7 +792,9 @@ export function ProductionDashboard() {
                   onClick={() => {
                     if (
                       confirm(
-                        "배정을 해제할까요? 이 블록과 플래너에 만들어진 TASK가 삭제되고 컴포넌트는 대기공간으로 돌아갑니다.",
+                        selected.step_name
+                          ? "배정을 해제할까요? 이 컴포넌트의 모든 단계 블록과 플래너 TASK가 삭제되고 대기공간으로 돌아갑니다."
+                          : "배정을 해제할까요? 이 블록과 플래너에 만들어진 TASK가 삭제되고 컴포넌트는 대기공간으로 돌아갑니다.",
                       )
                     ) {
                       removeBlock.mutate(selected);

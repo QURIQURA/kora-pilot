@@ -26,7 +26,7 @@ import {
   type ChecklistItem,
   type WorkSessionTask,
 } from "@/lib/workflow";
-import { loadTemplateTaskDefaults } from "@/lib/workflow-template";
+import { loadStepTaskDefaults, loadTemplateTaskDefaults } from "@/lib/workflow-template";
 import { buttonClass, primaryButtonClass } from "@/components/pilot/ui";
 
 const smallInput = "h-7 border border-border bg-background px-1.5 text-xs tabular-nums";
@@ -98,7 +98,10 @@ export function BlockTaskDetails({
           }
         ).formula_versions?.formulas?.components;
         let defaults: Awaited<ReturnType<typeof loadTemplateTaskDefaults>> | null = null;
-        if (comp?.auto_apply_default_workflow && comp.default_workflow_template_id) {
+        if (block.step_template_task_id) {
+          // 템플릿 단계에서 만든 블록 — 그 단계의 값만 쓴다.
+          defaults = await loadStepTaskDefaults(block.step_template_task_id);
+        } else if (comp?.auto_apply_default_workflow && comp.default_workflow_template_id) {
           defaults = await loadTemplateTaskDefaults(comp.default_workflow_template_id);
         }
         const maxSort = (tasks.data ?? []).reduce((m, t) => Math.max(m, t.sort_order), -1);

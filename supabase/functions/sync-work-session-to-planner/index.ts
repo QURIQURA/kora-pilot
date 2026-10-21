@@ -52,6 +52,7 @@ type Block = {
   start_time: string;
   end_time: string;
   part_no: number;
+  step_name: string | null;
   planner_task_id: string | null;
 };
 
@@ -135,7 +136,7 @@ Deno.serve(async (req: Request) => {
       const { data: blocksRaw, error: blocksError } = await kora
         .from("work_blocks")
         .select(
-          "id, work_session_formula_version_id, block_date, start_time, end_time, part_no, planner_task_id",
+          "id, work_session_formula_version_id, block_date, start_time, end_time, part_no, step_name, planner_task_id",
         )
         .in(
           "work_session_formula_version_id",
@@ -243,7 +244,12 @@ Deno.serve(async (req: Request) => {
           }
           const taskId = await upsertTask(existingId, {
             ...common,
-            title: rowBlocks.length > 1 ? `${baseTitle} (${block.part_no}차)` : baseTitle,
+            title:
+              rowBlocks.length > 1
+                ? block.step_name
+                  ? `${baseTitle} — ${block.step_name}`
+                  : `${baseTitle} (${block.part_no}차)`
+                : baseTitle,
             due_date: block.block_date,
             due_time: block.start_time,
             end_time: block.end_time,

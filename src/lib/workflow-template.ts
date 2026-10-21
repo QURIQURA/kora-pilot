@@ -174,7 +174,8 @@ export async function loadTemplateTaskDefaults(templateId: string): Promise<{
     .select("task_name, task_type, timer_minutes, checklist_items")
     .eq("template_id", templateId)
     .order("sort_order");
-  if (error) return { task_type: null, timer_minutes: null, checklist_items: null, error: error.message };
+  if (error)
+    return { task_type: null, timer_minutes: null, checklist_items: null, error: error.message };
   const steps = data ?? [];
   if (steps.length === 0) {
     return { task_type: null, timer_minutes: null, checklist_items: null, error: null };
@@ -186,7 +187,8 @@ export async function loadTemplateTaskDefaults(templateId: string): Promise<{
     if (list.length === 0) {
       if (multi) items.push({ label: s.task_name, done: false });
     } else {
-      for (const label of list) items.push({ label: multi ? `${s.task_name} — ${label}` : label, done: false });
+      for (const label of list)
+        items.push({ label: multi ? `${s.task_name} — ${label}` : label, done: false });
     }
   }
   const timers = steps.map((s) => s.timer_minutes).filter((n): n is number => n != null);
@@ -194,6 +196,35 @@ export async function loadTemplateTaskDefaults(templateId: string): Promise<{
     task_type: steps[0]!.task_type,
     timer_minutes: timers.length > 0 ? timers.reduce((a, b) => a + b, 0) : null,
     checklist_items: items.length > 0 ? items : null,
+    error: null,
+  };
+}
+
+/** 템플릿의 "단계 하나"를 작업 블록 기본값으로(2026-10-22: 단계 = 블록). */
+export async function loadStepTaskDefaults(stepId: string): Promise<{
+  task_type: string | null;
+  timer_minutes: number | null;
+  checklist_items: { label: string; done: boolean }[] | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from("workflow_template_tasks")
+    .select("task_type, timer_minutes, checklist_items")
+    .eq("id", stepId)
+    .maybeSingle();
+  if (error || !data) {
+    return {
+      task_type: null,
+      timer_minutes: null,
+      checklist_items: null,
+      error: error?.message ?? null,
+    };
+  }
+  const list = data.checklist_items ?? [];
+  return {
+    task_type: data.task_type,
+    timer_minutes: data.timer_minutes,
+    checklist_items: list.length > 0 ? list.map((label) => ({ label, done: false })) : null,
     error: null,
   };
 }
