@@ -6,6 +6,7 @@ import { currentUserId, productsQuery, workSessionsQuery } from "@/lib/queries";
 import { mergeWorkSessions, type WorkSession } from "@/lib/work-session";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
+import { ProductionDashboard } from "@/components/pilot/ProductionDashboard";
 import {
   Field,
   PageHeader,
@@ -35,7 +36,44 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "CANCELLED",
 };
 
+/**
+ * 2026-10-22 사용자 요청: PRODUCTION 메인보드를 DASHBOARD(작업 대기공간 + 데일리 타임라인)로 바꾸고,
+ * 기존 WORK SESSION 목록은 기록 보관용 HISTORY 탭으로 옮긴다. 기존 세션 기록/상세 화면은 그대로.
+ */
+type MainTab = "DASHBOARD" | "HISTORY";
+
 function ProductionDashboardPage() {
+  const [tab, setTab] = useState<MainTab>("DASHBOARD");
+
+  return (
+    <div className="space-y-4">
+      <PageHeader title="PRODUCTION" />
+      <div className="flex gap-4 border-b border-border" role="tablist">
+        {(["DASHBOARD", "HISTORY"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={
+              "label-caps -mb-px border-b-2 px-1 pb-2 text-xs " +
+              (tab === t
+                ? "border-foreground text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground")
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      {tab === "DASHBOARD" ? <ProductionDashboard /> : <WorkSessionHistory />}
+    </div>
+  );
+}
+
+/** 기존 WORK SESSION 목록(생성/병합/삭제 포함) — 내용 변경 없이 HISTORY 탭으로 이동. */
+function WorkSessionHistory() {
   const sessions = useQuery(workSessionsQuery());
   const [creating, setCreating] = useState(false);
 
@@ -43,14 +81,11 @@ function ProductionDashboardPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="PRODUCTION / WEIGHING"
-        action={
-          <button type="button" className={primaryButtonClass} onClick={() => setCreating(true)}>
-            + CREATE WORK SESSION
-          </button>
-        }
-      />
+      <div className="flex justify-end">
+        <button type="button" className={primaryButtonClass} onClick={() => setCreating(true)}>
+          + CREATE WORK SESSION
+        </button>
+      </div>
 
       {creating && <WorkSessionCreateForm onDone={() => setCreating(false)} />}
 

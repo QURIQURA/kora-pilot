@@ -230,18 +230,33 @@ function WorkSessionPage() {
         if (tasksError) throw tasksError;
       }
 
+      // 2026-10-22: 행을 지우면 그 행의 작업 블록(work_blocks)도 CASCADE로 사라지므로, 지우기 전에
+      // 그 행/블록이 만든 플래너 TASK id를 모아서 동기화 함수에 넘겨 함께 정리한다.
+      const plannerTaskIds: string[] = [];
+      if (row.kind === "CORE") {
+        if (row.planner_task_id) plannerTaskIds.push(row.planner_task_id);
+        const { data: blockRows } = await supabase
+          .from("work_blocks")
+          .select("planner_task_id")
+          .eq("work_session_formula_version_id", row.id);
+        for (const b of blockRows ?? []) if (b.planner_task_id) plannerTaskIds.push(b.planner_task_id);
+      }
+
       const { error } = await supabase
         .from("work_session_formula_versions")
         .delete()
         .eq("id", row.id);
       if (error) throw error;
+      return plannerTaskIds;
     },
-    onSuccess: async (_void, row) => {
+    onSuccess: async (plannerTaskIds, row) => {
       await invalidateSelections();
       await invalidateProgress();
       await invalidateTasks();
       // CORE(SHEET/CREAM/FILLING) 행을 지운 경우 Planner의 해당 TASK도 정리.
-      if (row.kind === "CORE") await syncPlanner();
+      if (row.kind === "CORE") {
+        await syncWorkSessionToPlanner(sessionId, { deletePlannerTaskIds: plannerTaskIds });
+      }
     },
   });
 

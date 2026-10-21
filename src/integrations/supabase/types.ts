@@ -2800,6 +2800,53 @@ export type Database = {
           },
         ];
       };
+      work_blocks: {
+        Row: {
+          block_date: string;
+          created_at: string;
+          end_time: string;
+          id: string;
+          part_no: number;
+          planner_task_id: string | null;
+          start_time: string;
+          updated_at: string;
+          user_id: string;
+          work_session_formula_version_id: string;
+        };
+        Insert: {
+          block_date: string;
+          created_at?: string;
+          end_time: string;
+          id?: string;
+          part_no?: number;
+          planner_task_id?: string | null;
+          start_time: string;
+          updated_at?: string;
+          user_id?: string;
+          work_session_formula_version_id: string;
+        };
+        Update: {
+          block_date?: string;
+          created_at?: string;
+          end_time?: string;
+          id?: string;
+          part_no?: number;
+          planner_task_id?: string | null;
+          start_time?: string;
+          updated_at?: string;
+          user_id?: string;
+          work_session_formula_version_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_blocks_work_session_formula_version_id_fkey";
+            columns: ["work_session_formula_version_id"];
+            isOneToOne: false;
+            referencedRelation: "work_session_formula_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       work_session_formula_versions: {
         Row: {
           added_at: string;

@@ -394,13 +394,30 @@ export async function mergeWorkSessions(sourceId: string, targetId: string): Pro
  * 동기화하는 Edge Function(sync-work-session-to-planner)을 호출한다. 이전에는 "일정(날짜/시간) 저장"과
  * "CORE 삭제" 때만 호출돼서, 오더에서 세션을 만들 때나 CORE를 새로 추가할 때는 TASK가 안 생겼다.
  * Planner 동기화는 best-effort — 실패해도 호출한 쪽(저장/생성 흐름)을 막지 않는다.
+ *
+ * 2026-10-22: 실패 사유를 문자열로 돌려준다(성공이면 null) — 호출한 쪽이 무시해도 되고, 대시보드처럼
+ * 사용자에게 경고로 보여줄 수도 있다. deletePlannerTaskIds는 CORE 행 삭제처럼 KORA 행이 사라지기
+ * 전에 알던 플래너 TASK id를 함께 정리하기 위한 것(함수는 PRODUCTION 서브태그 TASK만 지운다).
  */
-export async function syncWorkSessionToPlanner(sessionId: string): Promise<void> {
+export async function syncWorkSessionToPlanner(
+  sessionId: string,
+  options?: { deletePlannerTaskIds?: string[] },
+): Promise<string | null> {
   try {
-    await supabase.functions.invoke("sync-work-session-to-planner", {
-      body: { work_session_id: sessionId },
+    const { data, error } = await supabase.functions.invoke("sync-work-session-to-planner", {
+      body: {
+        work_session_id: sessionId,
+        ...(options?.deletePlannerTaskIds?.length
+          ? { delete_planner_task_ids: options.deletePlannerTaskIds }
+          : {}),
+      },
     });
-  } catch {
-    // ignore
+    if (error) return error.message;
+    if (data && typeof data === "object" && "error" in data && data.error) {
+      return String((data as { error: unknown }).error);
+    }
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
   }
 }

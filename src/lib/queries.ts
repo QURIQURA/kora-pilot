@@ -1000,6 +1000,98 @@ export const workSessionsQuery = () =>
       ),
   });
 
+// ── PRODUCTION 메인보드 DASHBOARD(2026-10-22) ─────────────────────────────────
+// 작업 블록(work_blocks) = 오더의 CORE 컴포넌트 행을 날짜/시간에 배정한 조각. 같은 컴포넌트를 여러
+// 블록(1차/2차 …)으로 분할할 수 있고, 블록 1개 = WANN 플래너 TASK 1개.
+export type WorkBlock = Tables<"work_blocks">;
+
+export const workBlocksQuery = () =>
+  queryOptions({
+    queryKey: ["work_blocks"],
+    queryFn: async (): Promise<WorkBlock[]> =>
+      unwrap(
+        await supabase
+          .from("work_blocks")
+          .select("*")
+          .order("block_date", { ascending: true })
+          .order("start_time", { ascending: true }),
+      ),
+  });
+
+/** 대시보드가 다루는 "오더의 컴포넌트" 한 줄 — 오더에 연결된 WORK SESSION의 CORE 행. */
+export interface DashboardComponentRow {
+  id: string; // work_session_formula_versions.id
+  slot: string | null;
+  work_session_id: string;
+  planner_task_id: string | null;
+  componentName: string;
+  sessionStatus: string;
+  order: {
+    id: string;
+    order_number: string;
+    status: string;
+    productName: string | null;
+    customerName: string | null;
+  };
+}
+
+export const dashboardComponentsQuery = () =>
+  queryOptions({
+    queryKey: ["dashboard_components"],
+    queryFn: async (): Promise<DashboardComponentRow[]> => {
+      const data = unwrap(
+        await supabase
+          .from("work_session_formula_versions")
+          .select(
+            "id, slot, work_session_id, planner_task_id, sort_order, formula_versions(formulas(name, components(name))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, products(name), customers(name)))",
+          )
+          .eq("kind", "CORE")
+          .order("sort_order", { ascending: true }),
+      ) as unknown as {
+        id: string;
+        slot: string | null;
+        work_session_id: string;
+        planner_task_id: string | null;
+        formula_versions: {
+          formulas: { name: string; components: { name: string } | null } | null;
+        } | null;
+        work_sessions: {
+          status: string;
+          order_id: string | null;
+          orders: {
+            id: string;
+            order_number: string;
+            status: string;
+            products: { name: string } | null;
+            customers: { name: string | null } | null;
+          } | null;
+        } | null;
+      }[];
+      const rows: DashboardComponentRow[] = [];
+      for (const r of data) {
+        const order = r.work_sessions?.orders;
+        if (!order) continue; // 오더에 연결 안 된 세션은 대시보드 대상이 아니다
+        const formula = r.formula_versions?.formulas ?? null;
+        rows.push({
+          id: r.id,
+          slot: r.slot,
+          work_session_id: r.work_session_id,
+          planner_task_id: r.planner_task_id,
+          componentName: formula?.components?.name ?? formula?.name ?? "—",
+          sessionStatus: r.work_sessions?.status ?? "PLANNED",
+          order: {
+            id: order.id,
+            order_number: order.order_number,
+            status: order.status,
+            productName: order.products?.name ?? null,
+            customerName: order.customers?.name ?? null,
+          },
+        });
+      }
+      return rows;
+    },
+  });
+
 export const workSessionQuery = (id: string) =>
   queryOptions({
     queryKey: ["work_sessions", id],
