@@ -2305,3 +2305,33 @@ export const orderDietaryTagLinksQuery = () =>
     queryFn: async (): Promise<OrderDietaryTagLink[]> =>
       unwrap(await supabase.from("order_dietary_tags").select("*")),
   });
+
+/** 2026-10-21: formula version 단위 식이 태그(선언). 새 버전은 태그를 물려받지 않아 다시 확인해야 한다. */
+export type FormulaVersionDietaryTagLink = Tables<"formula_version_dietary_tags">;
+
+export const formulaVersionDietaryTagLinksQuery = () =>
+  queryOptions({
+    queryKey: ["formula_version_dietary_tags"],
+    queryFn: async (): Promise<FormulaVersionDietaryTagLink[]> =>
+      unwrap(await supabase.from("formula_version_dietary_tags").select("*")),
+  });
+
+/** DIETARY 탭용: 제품-컴포넌트 연결(사이즈 행 포함, component_id가 있는 행만 슬롯으로 쓴다). */
+export interface DietaryBoardProductComponent {
+  product_id: string;
+  component_id: string | null;
+  formula_version_id: string | null;
+  sort_order: number;
+}
+
+export const dietaryBoardProductComponentsQuery = () =>
+  queryOptions({
+    queryKey: ["dietary_board", "product_components"],
+    queryFn: async (): Promise<DietaryBoardProductComponent[]> =>
+      unwrap(
+        await supabase
+          .from("product_components")
+          .select("product_id, component_id, formula_version_id, sort_order")
+          .order("sort_order"),
+      ),
+  });

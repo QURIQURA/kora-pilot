@@ -13,6 +13,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedCostRouteImport } from './routes/_authenticated/cost'
+import { Route as AuthenticatedDietaryRouteImport } from './routes/_authenticated/dietary'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedReferencesRouteImport } from './routes/_authenticated/references'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
@@ -50,6 +51,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const AuthenticatedCostRoute = AuthenticatedCostRouteImport.update({
   id: '/cost',
   path: '/cost',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDietaryRoute = AuthenticatedDietaryRouteImport.update({
+  id: '/dietary',
+  path: '/dietary',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
@@ -168,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/cost': typeof AuthenticatedCostRoute
+  '/dietary': typeof AuthenticatedDietaryRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -191,6 +198,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/cost': typeof AuthenticatedCostRoute
+  '/dietary': typeof AuthenticatedDietaryRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/references': typeof AuthenticatedReferencesRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -217,6 +225,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/cost': typeof AuthenticatedCostRoute
+  '/_authenticated/dietary': typeof AuthenticatedDietaryRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/references': typeof AuthenticatedReferencesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/cost'
+    | '/dietary'
     | '/inventory'
     | '/references'
     | '/settings'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/cost'
+    | '/dietary'
     | '/inventory'
     | '/references'
     | '/settings'
@@ -292,6 +303,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/cost'
+    | '/_authenticated/dietary'
     | '/_authenticated/inventory'
     | '/_authenticated/references'
     | '/_authenticated/settings'
@@ -347,6 +359,13 @@ declare module '@tanstack/react-router' {
       path: '/cost'
       fullPath: '/cost'
       preLoaderRoute: typeof AuthenticatedCostRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dietary': {
+      id: '/_authenticated/dietary'
+      path: '/dietary'
+      fullPath: '/dietary'
+      preLoaderRoute: typeof AuthenticatedDietaryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/inventory': {
@@ -487,6 +506,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCostRoute: typeof AuthenticatedCostRoute
+  AuthenticatedDietaryRoute: typeof AuthenticatedDietaryRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedReferencesRoute: typeof AuthenticatedReferencesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -511,6 +531,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCostRoute: AuthenticatedCostRoute,
+  AuthenticatedDietaryRoute: AuthenticatedDietaryRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedReferencesRoute: AuthenticatedReferencesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,

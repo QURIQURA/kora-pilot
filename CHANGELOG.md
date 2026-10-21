@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-10-21 — DIETARY 탭: 식이별 부족한 FORMULA 찾기 + 레고 조립 보기
+
+- FORMULA 상세에 "DIETARY TAGS (THIS VERSION)"이 생겼습니다. 지금 보고 있는 버전에 해당하는 식이 태그를 눌러 선언합니다(누르면 바로 저장). 태그는 버전 단위라 새 버전은 다시 선택해야 합니다.
+- 사이드바에 DIETARY 탭이 생겼습니다. 태그를 고르면:
+  - GAPS: 그 식이용 FORMULA가 없는 컴포넌트와 필요한 제품 목록(MISSING = formula는 있으나 태그된 게 없음, NO FORMULA = 컴포넌트에 formula 자체가 없음)
+  - 제품별 카드: 컴포넌트마다 READY(지금 연결된 formula가 태그됨) / SWAP(같은 컴포넌트의 다른 태그 formula로 교체 가능) / MISSING / NO FORMULA, 교체할 formula를 드롭다운으로 고르면 조립된 레시피 구성이 보입니다.
+- 지금 단계에서 조립 선택은 저장되지 않는 작업 화면이고, 주문과 연결하는 것은 다음 단계입니다. 기존 제품/formula/주문 데이터는 변경하지 않았습니다.
+
+확인 방법: SETTINGS에서 태그 추가 → FORMULA 상세에서 식이용 formula 버전에 태그 선택 → DIETARY 탭에서 태그 선택 → 해당 컴포넌트가 READY/SWAP으로 바뀌는지, 태그 없는 컴포넌트는 GAPS에 뜨는지 확인.
+
+---
+
 ## 2026-10-21 — DIETARY 태그: SETTINGS 관리 + 주문 상세 복수 선택 + 주문 목록 열
 
 - SETTINGS > ORDERS > DIETARY TAGS: 식이 분류를 추가/이름변경/순서(▲▼)/삭제. 비어 있으면 "ADD DEFAULT TAGS"로 Lactose free, Gluten free, Egg free, Nut free, Vegan, Halal friendly를 한 번에 추가합니다.

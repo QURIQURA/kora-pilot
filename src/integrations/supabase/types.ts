@@ -536,6 +536,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      formula_version_dietary_tags: {
+        Row: {
+          created_at: string;
+          dietary_tag_id: string;
+          formula_version_id: string;
+          id: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          dietary_tag_id: string;
+          formula_version_id: string;
+          id?: string;
+          user_id?: string;
+        };
+        Update: {
+          created_at?: string;
+          dietary_tag_id?: string;
+          formula_version_id?: string;
+          id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "formula_version_dietary_tags_dietary_tag_id_fkey";
+            columns: ["dietary_tag_id"];
+            isOneToOne: false;
+            referencedRelation: "dietary_tags";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "formula_version_dietary_tags_formula_version_id_fkey";
+            columns: ["formula_version_id"];
+            isOneToOne: false;
+            referencedRelation: "formula_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       formula_version_batches: {
         Row: {
           created_at: string;
