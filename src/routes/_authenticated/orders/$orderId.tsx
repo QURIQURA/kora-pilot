@@ -8,6 +8,8 @@ import {
   productSizesQuery,
   productComponentsQuery,
   dietaryTagsQuery,
+  dietaryBuildsQuery,
+  formulaVersionDietaryTagLinksQuery,
   orderDietaryTagLinksQuery,
   pilotSettingsQuery,
   workSessionByOrderQuery,
@@ -280,6 +282,10 @@ function OrderDetailPage() {
   const dietaryTags = useQuery(dietaryTagsQuery());
   const dietaryLinks = useQuery(orderDietaryTagLinksQuery());
   const [dietaryTagIds, setDietaryTagIds] = useState<string[] | null>(null);
+  // 2026-10-21 DIETARY BUILD(3b): 저장된 식이 레시피 조합을 주문에 연결. APPLY는 FORMULA 칸에 채우기만 하고 저장은 SAVE로.
+  const [dietaryBuildId, setDietaryBuildId] = useState("");
+  const dietaryBuilds = useQuery(dietaryBuildsQuery());
+  const fvTagLinks = useQuery(formulaVersionDietaryTagLinksQuery());
   const serverDietaryTagIds = (dietaryLinks.data ?? [])
     .filter((l) => l.order_id === orderId)
     .map((l) => l.dietary_tag_id);
@@ -324,6 +330,7 @@ function OrderDetailPage() {
       designNote: o.design_notes ?? "",
       orderNote: o.notes ?? "",
       dietaryRequirements: o.dietary_requirements ?? "",
+      dietaryBuildId: o.dietary_build_id ?? "",
       audience: o.audience ?? "",
       deliveryAddress: o.delivery_address ?? "",
       makerSatisfaction: o.maker_satisfaction ?? "",
@@ -365,6 +372,7 @@ function OrderDetailPage() {
     setDesignNote(o.design_notes ?? "");
     setOrderNote(o.notes ?? "");
     setDietaryRequirements(o.dietary_requirements ?? "");
+    setDietaryBuildId(o.dietary_build_id ?? "");
     setAudience(o.audience ?? "");
     setDeliveryAddress(o.delivery_address ?? "");
     setMakerSatisfaction(o.maker_satisfaction ?? "");
@@ -410,6 +418,7 @@ function OrderDetailPage() {
     designNote,
     orderNote,
     dietaryRequirements,
+    dietaryBuildId,
     audience,
     deliveryAddress,
     makerSatisfaction,
@@ -458,6 +467,7 @@ function OrderDetailPage() {
           design_notes: designNote.trim() || null,
           notes: orderNote.trim() || null,
           dietary_requirements: dietaryRequirements.trim() || null,
+          dietary_build_id: dietaryBuildId || null,
           audience: audience || null,
           delivery_address: deliveryAddress.trim() || null,
           maker_satisfaction: makerSatisfaction === "" ? null : makerSatisfaction,
@@ -604,9 +614,34 @@ function OrderDetailPage() {
         productComponentRows = pcData ?? [];
       }
 
+      // 2026-10-21 DIETARY BUILD(3c): 주문에 BUILD가 연결돼 있으면, 그 BUILD에 고정된 formula version을
+      // pickEffectiveFormulaVersion(CURRENT/최신) 대신 쓴다. BUILD가 없는 주문은 예전과 완전히 같다.
+      const pinnedVersionByFormula = new Map<string, string>();
+      const effectiveBuildId = dietaryBuildId || o.dietary_build_id || null;
+      if (effectiveBuildId) {
+        const { data: buildItems, error: buildError } = await supabase
+          .from("dietary_build_items")
+          .select("formula_version_id")
+          .eq("build_id", effectiveBuildId);
+        if (buildError) throw buildError;
+        for (const it of buildItems ?? []) {
+          const owner = formulas.data?.find((f) =>
+            f.formula_versions.some((v) => v.id === it.formula_version_id),
+          );
+          if (owner) pinnedVersionByFormula.set(owner.id, it.formula_version_id);
+        }
+      }
+      const versionForFormula = (formula: NonNullable<typeof formulas.data>[number]) => {
+        const pinnedId = pinnedVersionByFormula.get(formula.id);
+        const pinned = pinnedId
+          ? formula.formula_versions.find((v) => v.id === pinnedId)
+          : undefined;
+        return pinned ?? pickEffectiveFormulaVersion(formula.formula_versions);
+      };
+
       const coreVersionIds = CORE_SLOTS.flatMap((slot) => {
         const formula = formulas.data?.find((f) => f.id === slotFormulaIds[slot]);
-        const version = formula ? pickEffectiveFormulaVersion(formula.formula_versions) : null;
+        const version = formula ? versionForFormula(formula) : null;
         return version ? [version.id] : [];
       });
       const baseGramsByVersion: Record<string, number> = {};
@@ -626,7 +661,7 @@ function OrderDetailPage() {
         const formulaId = slotFormulaIds[slot];
         if (!formulaId) return [];
         const formula = formulas.data?.find((f) => f.id === formulaId);
-        const version = formula ? pickEffectiveFormulaVersion(formula.formula_versions) : null;
+        const version = formula ? versionForFormula(formula) : null;
         if (!version || !formula) return [];
 
         const isMould = (formula.components?.scaling_mode ?? null) === "MOULD";
@@ -1227,6 +1262,111 @@ function OrderDetailPage() {
                     </label>
                   ))}
                 </div>
+                {(() => {
+                  const productBuilds = (dietaryBuilds.data ?? []).filter(
+                    (b) => !productId || b.product_id === productId,
+                  );
+                  const selectedBuild = (dietaryBuilds.data ?? []).find(
+                    (b) => b.id === dietaryBuildId,
+                  );
+                  if (productBuilds.length === 0 && !selectedBuild) return null;
+                  const buildTagIds = selectedBuild
+                    ? selectedBuild.dietary_build_tags.map((t) => t.dietary_tag_id)
+                    : [];
+                  const uncovered = selectedDietaryTagIds.filter((id) => !buildTagIds.includes(id));
+                  const stale = selectedBuild
+                    ? selectedBuild.dietary_build_items.filter((it) => {
+                        const have = new Set(
+                          (fvTagLinks.data ?? [])
+                            .filter((l) => l.formula_version_id === it.formula_version_id)
+                            .map((l) => l.dietary_tag_id),
+                        );
+                        return !buildTagIds.every((id) => have.has(id));
+                      })
+                    : [];
+                  const tagNameOf = (id: string) =>
+                    (dietaryTags.data ?? []).find((t) => t.id === id)?.name ?? "—";
+                  const applyBuild = () => {
+                    if (!selectedBuild) return;
+                    const unmapped: string[] = [];
+                    for (const it of selectedBuild.dietary_build_items) {
+                      const formula = (formulas.data ?? []).find((f) =>
+                        f.formula_versions.some((v) => v.id === it.formula_version_id),
+                      );
+                      if (!formula) continue;
+                      const slot = resolveSlotGroup(
+                        techniqueCategories.data ?? [],
+                        formula.components?.technique_category_id ?? null,
+                      );
+                      if (slot === "SHEET") setFlavoringSheetFormulaId(formula.id);
+                      else if (slot === "CREAM") setFlavoringCreamFormulaId(formula.id);
+                      else if (slot === "FILLING") setFlavoringFillingFormulaId(formula.id);
+                      else unmapped.push(formula.components?.name ?? formula.name);
+                    }
+                    if (unmapped.length > 0)
+                      window.alert(
+                        `Not applied (no SHEET/CREAM/FILLING slot): ${unmapped.join(", ")}`,
+                      );
+                  };
+                  return (
+                    <div className="mt-3 border border-dashed border-border p-2">
+                      <p className="label-caps mb-1.5 text-[10px] text-muted-foreground">
+                        Dietary build — fixes the formula versions used for this order
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select
+                          className={selectClass + " !w-72"}
+                          value={dietaryBuildId}
+                          onChange={(e) => setDietaryBuildId(e.target.value)}
+                        >
+                          <option value="">— NO BUILD —</option>
+                          {productBuilds.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                          {selectedBuild && !productBuilds.some((b) => b.id === selectedBuild.id) && (
+                            <option value={selectedBuild.id}>{selectedBuild.name}</option>
+                          )}
+                        </select>
+                        <button
+                          type="button"
+                          className={buttonClass}
+                          disabled={!selectedBuild}
+                          onClick={applyBuild}
+                        >
+                          APPLY TO FORMULAS
+                        </button>
+                      </div>
+                      {selectedBuild && (
+                        <ul className="mt-1.5 font-mono text-[11px] text-muted-foreground">
+                          {selectedBuild.dietary_build_items.map((it) => {
+                            const f = (formulas.data ?? []).find((x) =>
+                              x.formula_versions.some((v) => v.id === it.formula_version_id),
+                            );
+                            const v = f?.formula_versions.find((x) => x.id === it.formula_version_id);
+                            return (
+                              <li key={it.id}>
+                                {f?.components?.name ?? "—"} → {f?.name ?? "—"} v{v?.version_number ?? "?"}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                      {uncovered.length > 0 && selectedBuild && (
+                        <p className="mt-1 font-mono text-[11px] text-destructive">
+                          This build does not cover: {uncovered.map(tagNameOf).join(", ")}
+                        </p>
+                      )}
+                      {stale.length > 0 && (
+                        <p className="mt-1 font-mono text-[11px] text-destructive">
+                          STALE: a formula version in this build no longer carries the build&apos;s
+                          tags — re-check on the DIETARY tab.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   Each dropdown lists FORMULAs of COMPONENTs classified into that slot under
                   SETTINGS → TECHNIQUE CATEGORIES.

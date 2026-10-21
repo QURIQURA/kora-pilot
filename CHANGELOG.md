@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-10-21 — 주문에 DIETARY BUILD 연결 (3b) + 세션이 고정 버전 사용 (3c)
+
+- 주문 상세 FLAVORING FORMULAS 아래에 "Dietary build" 선택이 생겼습니다(이 제품으로 저장된 빌드만 보입니다). 선택하면 구성(컴포넌트 → formula 버전)이 보이고, APPLY TO FORMULAS를 눌러야 SHEET/CREAM/FILLING 칸에 채워집니다(저장은 SAVE). SHEET/CREAM/FILLING에 해당하지 않는 컴포넌트는 알림으로 알려줍니다.
+- 주문의 식이 태그를 빌드가 다 커버하지 못하면, 또는 빌드 안 버전의 태그가 사라졌으면 빨간 경고가 뜹니다.
+- WORK SESSION 생성: 주문에 빌드가 연결돼 있으면 CURRENT/최신 버전 대신 빌드에 고정된 버전을 씁니다. 빌드가 없는 주문은 예전과 완전히 같습니다.
+- 기존 주문 값은 자동으로 바꾸지 않았습니다(`dietary_build_id`는 직접 선택해 SAVE해야 저장됨).
+
+확인 방법: 제품이 있는 주문에서 빌드 선택 → APPLY TO FORMULAS → SAVE → WORK SESSION 생성 후 세션의 CORE formula 버전이 빌드의 버전인지 확인.
+
+---
+
 ## 2026-10-21 — DIETARY BUILD 저장 (3a)
 
 - DIETARY 탭의 제품 카드 아래에 빌드 이름 칸과 SAVE AS BUILD가 생겼습니다. 모든 컴포넌트에 formula가 정해졌을 때만 저장되고, 고른 formula 버전들이 공통으로 가진 식이 태그가 빌드의 태그로 저장됩니다.
