@@ -1,4 +1,5 @@
 import { FormulaVersionDietaryTags } from "@/components/pilot/FormulaVersionDietaryTags";
+import { DIETARY_ASSEMBLY_ENABLED } from "@/lib/feature-flags";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1250,7 +1251,7 @@ function FormulaDetailPage() {
       <CompositionPanel rows={rows} batch={batchValue} />
       <BalancePanel rows={rows} batch={batchValue} />
 
-      <FormulaVersionDietaryTags versionId={versionId} />
+      {DIETARY_ASSEMBLY_ENABLED && <FormulaVersionDietaryTags versionId={versionId} />}
 
       {/* NOTES */}
       <SectionCard title="VERSION NOTES">

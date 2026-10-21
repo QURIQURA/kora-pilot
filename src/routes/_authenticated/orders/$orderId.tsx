@@ -40,6 +40,7 @@ import {
   type OrderProductLineKey,
 } from "@/lib/queries";
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
+import { DIETARY_ASSEMBLY_ENABLED } from "@/lib/feature-flags";
 import { resolveSlotGroup } from "@/lib/technique";
 import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
 import { suggestedMultiplierFromTarget, syncWorkSessionToPlanner } from "@/lib/work-session";
@@ -617,7 +618,9 @@ function OrderDetailPage() {
       // 2026-10-21 DIETARY BUILD(3c): 주문에 BUILD가 연결돼 있으면, 그 BUILD에 고정된 formula version을
       // pickEffectiveFormulaVersion(CURRENT/최신) 대신 쓴다. BUILD가 없는 주문은 예전과 완전히 같다.
       const pinnedVersionByFormula = new Map<string, string>();
-      const effectiveBuildId = dietaryBuildId || o.dietary_build_id || null;
+      const effectiveBuildId = DIETARY_ASSEMBLY_ENABLED
+        ? dietaryBuildId || o.dietary_build_id || null
+        : null;
       if (effectiveBuildId) {
         const { data: buildItems, error: buildError } = await supabase
           .from("dietary_build_items")
@@ -1273,6 +1276,7 @@ function OrderDetailPage() {
                   const selectedBuild = (dietaryBuilds.data ?? []).find(
                     (b) => b.id === dietaryBuildId,
                   );
+                  if (!DIETARY_ASSEMBLY_ENABLED) return null;
                   if (productBuilds.length === 0 && !selectedBuild) return null;
                   const buildTagIds = selectedBuild
                     ? selectedBuild.dietary_build_tags.map((t) => t.dietary_tag_id)

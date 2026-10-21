@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-10-21 — DIETARY 조립 기능 임시 숨김
+
+- 사이드바 DIETARY 탭, FORMULA 상세의 DIETARY TAGS (THIS VERSION), 주문 상세의 Dietary build 선택을 화면에서 숨겼습니다. 주문에 BUILD가 연결돼 있어도 WORK SESSION 생성은 예전 방식(CURRENT/최신 버전)으로 동작합니다.
+- 테이블과 입력된 데이터는 그대로입니다. 다시 켜려면 `src/lib/feature-flags.ts`의 `DIETARY_ASSEMBLY_ENABLED`를 true로 바꾸면 됩니다.
+- SETTINGS의 DIETARY TAGS, 주문의 태그 선택, 주문 목록의 DIETARY REQUIREMENT 열은 그대로 쓸 수 있습니다.
+
+---
+
 ## 2026-10-21 — 주문에 DIETARY BUILD 연결 (3b) + 세션이 고정 버전 사용 (3c)
 
 - 주문 상세 FLAVORING FORMULAS 아래에 "Dietary build" 선택이 생겼습니다(이 제품으로 저장된 빌드만 보입니다). 선택하면 구성(컴포넌트 → formula 버전)이 보이고, APPLY TO FORMULAS를 눌러야 SHEET/CREAM/FILLING 칸에 채워집니다(저장은 SAVE). SHEET/CREAM/FILLING에 해당하지 않는 컴포넌트는 알림으로 알려줍니다.

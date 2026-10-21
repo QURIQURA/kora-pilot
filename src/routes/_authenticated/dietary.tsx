@@ -12,6 +12,7 @@ import {
 } from "@/lib/queries";
 import { buildDietaryBoard, type SlotStatus } from "@/lib/dietary";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
+import { DIETARY_ASSEMBLY_ENABLED } from "@/lib/feature-flags";
 import { SectionCard, buttonClass, inputClass, selectClass } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/dietary")({
@@ -39,7 +40,7 @@ const STATUS_CLASS: Record<SlotStatus, string> = {
   NO_FORMULA: "border-dashed border-destructive text-destructive",
 };
 
-function DietaryPage() {
+function DietaryPageInner() {
   useSetBreadcrumb([{ label: "PILOT", path: "/" }, { label: "DIETARY" }]);
 
   const tags = useQuery(dietaryTagsQuery());
@@ -417,4 +418,18 @@ function DietaryPage() {
       )}
     </div>
   );
+}
+
+function DietaryPage() {
+  if (!DIETARY_ASSEMBLY_ENABLED) {
+    return (
+      <div className="space-y-2">
+        <h1 className="text-lg">DIETARY</h1>
+        <p className="font-mono text-xs text-muted-foreground">
+          This page is currently hidden. Dietary tags in SETTINGS and on orders still work.
+        </p>
+      </div>
+    );
+  }
+  return <DietaryPageInner />;
 }
