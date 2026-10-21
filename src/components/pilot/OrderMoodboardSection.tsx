@@ -214,6 +214,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   const [livePos, setLivePos] = useState<LivePos | null>(null);
   // 배경 제거 처리 중인 아이템 id — 한 번에 하나씩만 처리(2026-10-14)
   const [removingBgId, setRemovingBgId] = useState<string | null>(null);
+  // 2026-10-21 버그수정: 네이티브 컬러 피커 팝업은 카드 밖에 떠서, 팝업으로 마우스를 옮기면
+  // group-hover가 풀려 툴바(hidden)가 display:none이 되고 그 안의 <input type="color">가 사라져
+  // 브라우저가 팝업을 닫아버렸다. 피커가 열려 있는 카드는 호버와 무관하게 툴바를 유지한다.
+  const [colorPickerItemId, setColorPickerItemId] = useState<string | null>(null);
   // 실행취소(⌘Z) 스택 — 리렌더를 유발할 필요가 없어 ref로 둔다(2026-10-14)
   const undoStackRef = useRef<UndoEntry[]>([]);
   // 컬러 피커처럼 한 번의 "편집"이 onChange를 연속으로 여러 번 쏘는 입력을 하나의 되돌리기
@@ -734,7 +738,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                 ) : (
                   <div className="flex h-full flex-col" style={noteBackgroundStyle(item)}>
                     <div
-                      className="hidden shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5 group-hover:flex"
+                      className={cn(
+                        "shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5",
+                        colorPickerItemId === item.id ? "flex" : "hidden group-hover:flex",
+                      )}
                       onPointerDown={(e) => beginDrag(e, item, "move")}
                     >
                       {/* 셰입(모양) 선택 — 2026-10-14 사용자 요청: "메모 카드 모양을 동그라미 등으로 바꿀 수 있게" */}
@@ -799,6 +806,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                           type="color"
                           value={item.color ?? "#fde68a"}
                           onChange={(e) => commitUpdate(item, { color: e.target.value })}
+                          onFocus={() => setColorPickerItemId(item.id)}
+                          onBlur={() =>
+                            setColorPickerItemId((cur) => (cur === item.id ? null : cur))
+                          }
                           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                         />
                       </label>
@@ -857,6 +868,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
                               type="color"
                               value={item.color2}
                               onChange={(e) => commitUpdate(item, { color2: e.target.value })}
+                              onFocus={() => setColorPickerItemId(item.id)}
+                              onBlur={() =>
+                                setColorPickerItemId((cur) => (cur === item.id ? null : cur))
+                              }
                               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                             />
                           </label>
