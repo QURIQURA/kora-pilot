@@ -242,7 +242,8 @@ export function WorkSessionWorkspace({
           .from("work_blocks")
           .select("planner_task_id")
           .eq("work_session_formula_version_id", row.id);
-        for (const b of blockRows ?? []) if (b.planner_task_id) plannerTaskIds.push(b.planner_task_id);
+        for (const b of blockRows ?? [])
+          if (b.planner_task_id) plannerTaskIds.push(b.planner_task_id);
       }
 
       const { error } = await supabase
@@ -317,8 +318,8 @@ export function WorkSessionWorkspace({
   const data = session.data;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+    <div className={embedded ? "flex flex-col gap-4" : "space-y-4"}>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4 order-0">
         <div className="space-y-2">
           <InlineName value={data.name} onSave={(name) => updateSession.mutate({ name })} />
           <p className="font-mono text-xs uppercase text-muted-foreground">
@@ -353,164 +354,243 @@ export function WorkSessionWorkspace({
         />
       )}
 
-      <ProductionEfficiencyLinkSection
-        productId={data.product_id}
-        productSizeId={data.product_size_id}
-        targetUnitCount={data.target_unit_count}
-        onSave={(patch) => updateSession.mutate(patch)}
-      />
+      {!embedded && (
+        <ProductionEfficiencyLinkSection
+          productId={data.product_id}
+          productSizeId={data.product_size_id}
+          targetUnitCount={data.target_unit_count}
+          onSave={(patch) => updateSession.mutate(patch)}
+        />
+      )}
 
       {/* 2026-10-06 사용자 정정: Order에서 넘어온 CORE ELEMENT(Sheet/Cream/Filling 고정 슬롯)와
           자유롭게 추가하는 DECORATIVE를 구분해서 보여준다 — 새 테이블이 아니라 기존
           work_session_formula_versions 행에 kind/slot 태그만 붙여서 표현한다. */}
-      <SectionCard title="CORE ELEMENTS — SHEET / CREAM / FILLING">
-        <ul className="divide-y divide-border border border-border">
-          {CORE_SLOTS.map((slot) => {
-            // 2026-10-07: 같은 FORMULA VERSION 중복 추가를 허용하면서, 한 슬롯에 여러 개(예: 같은
-            // 레시피를 다른 몰드/배치로 두 번)가 들어갈 수도 있게 됐다 — 하나만 찾지 않고 전부 보여준다.
-            const slotRows = rows.filter((r) => r.kind === "CORE" && r.slot === slot);
-            return (
-              <li key={slot} className="p-3">
-                <p className="label-caps mb-2 text-xs text-muted-foreground">
-                  {CORE_SLOT_LABELS[slot]}
-                </p>
-                {slotRows.length > 0 && (
-                  <ul className="mb-2 divide-y divide-border border border-border">
-                    {slotRows.map((row) => (
-                      <FormulaVersionRow
-                        key={row.id}
-                        row={row}
-                        sessionId={sessionId}
-                        lines={ingredientsByVersion[row.formula_version_id] ?? []}
-                        onRemove={() => removeFormulaVersion.mutate(row)}
-                      />
-                    ))}
-                  </ul>
-                )}
-                {addingSlot === slot ? (
-                  <AddFormulaVersionForm
-                    sessionId={sessionId}
-                    nextSort={rows.length}
-                    kind="CORE"
-                    slot={slot}
-                    productId={data.product_id}
-                    productSizeId={data.product_size_id}
-                    onDone={async () => {
-                      setAddingSlot(null);
-                      await invalidateSelections();
-                      await invalidateTasks();
-                      await syncPlanner();
-                    }}
-                  />
-                ) : (
-                  <button type="button" className={buttonClass} onClick={() => setAddingSlot(slot)}>
-                    {`+ ADD ${CORE_SLOT_LABELS[slot].toUpperCase()}`}
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </SectionCard>
-
-      <SectionCard
-        title="DECORATIVE ELEMENTS"
-        action={
-          <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
-            {adding ? "CLOSE" : "+ ADD FORMULA VERSION"}
-          </button>
-        }
-      >
-        <div className="space-y-3">
-          {adding && (
-            <AddFormulaVersionForm
-              sessionId={sessionId}
-              nextSort={rows.length}
-              productId={data.product_id}
-              productSizeId={data.product_size_id}
-              onDone={async () => {
-                setAdding(false);
-                await invalidateSelections();
-                await invalidateTasks();
-              }}
-            />
-          )}
-          {decorativeRows.length === 0 ? (
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              NO FORMULA VERSIONS SELECTED YET
-            </p>
-          ) : (
+      {embedded ? (
+        // 2026-10-22: 대시보드에서는 "생산량 조절" 공간이라는 뜻으로 ADJUST QUANTITY, 평소엔 접어둔 드롭다운.
+        <details className="order-2 border border-border bg-card">
+          <summary className="label-caps cursor-pointer px-3 py-2 text-xs">
+            ADJUST QUANTITY — SHEET / CREAM / FILLING
+          </summary>
+          <div className="p-3">
             <ul className="divide-y divide-border border border-border">
-              {decorativeRows.map((row) => (
-                <FormulaVersionRow
-                  key={row.id}
-                  row={row}
-                  sessionId={sessionId}
-                  lines={ingredientsByVersion[row.formula_version_id] ?? []}
-                  onRemove={() => removeFormulaVersion.mutate(row)}
-                />
-              ))}
+              {CORE_SLOTS.map((slot) => {
+                // 2026-10-07: 같은 FORMULA VERSION 중복 추가를 허용하면서, 한 슬롯에 여러 개(예: 같은
+                // 레시피를 다른 몰드/배치로 두 번)가 들어갈 수도 있게 됐다 — 하나만 찾지 않고 전부 보여준다.
+                const slotRows = rows.filter((r) => r.kind === "CORE" && r.slot === slot);
+                return (
+                  <li key={slot} className="p-3">
+                    <p className="label-caps mb-2 text-xs text-muted-foreground">
+                      {CORE_SLOT_LABELS[slot]}
+                    </p>
+                    {slotRows.length > 0 && (
+                      <ul className="mb-2 divide-y divide-border border border-border">
+                        {slotRows.map((row) => (
+                          <FormulaVersionRow
+                            key={row.id}
+                            row={row}
+                            sessionId={sessionId}
+                            lines={ingredientsByVersion[row.formula_version_id] ?? []}
+                            onRemove={() => removeFormulaVersion.mutate(row)}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                    {addingSlot === slot ? (
+                      <AddFormulaVersionForm
+                        sessionId={sessionId}
+                        nextSort={rows.length}
+                        kind="CORE"
+                        slot={slot}
+                        productId={data.product_id}
+                        productSizeId={data.product_size_id}
+                        onDone={async () => {
+                          setAddingSlot(null);
+                          await invalidateSelections();
+                          await invalidateTasks();
+                          await syncPlanner();
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        onClick={() => setAddingSlot(slot)}
+                      >
+                        {`+ ADD ${CORE_SLOT_LABELS[slot].toUpperCase()}`}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
-          )}
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title="WORK VIEW"
-        action={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className={viewMode === "WEIGHING" ? primaryButtonClass : buttonClass}
-              onClick={() => setViewMode("WEIGHING")}
-            >
-              WEIGHING MATRIX
-            </button>
-            <button
-              type="button"
-              className={viewMode === "FORMULA" ? primaryButtonClass : buttonClass}
-              onClick={() => setViewMode("FORMULA")}
-            >
-              FORMULA VIEW
-            </button>
           </div>
-        }
-      >
-        {viewMode === "WEIGHING" ? (
-          <WeighingView
+        </details>
+      ) : (
+        <SectionCard title="CORE ELEMENTS — SHEET / CREAM / FILLING">
+          <ul className="divide-y divide-border border border-border">
+            {CORE_SLOTS.map((slot) => {
+              // 2026-10-07: 같은 FORMULA VERSION 중복 추가를 허용하면서, 한 슬롯에 여러 개(예: 같은
+              // 레시피를 다른 몰드/배치로 두 번)가 들어갈 수도 있게 됐다 — 하나만 찾지 않고 전부 보여준다.
+              const slotRows = rows.filter((r) => r.kind === "CORE" && r.slot === slot);
+              return (
+                <li key={slot} className="p-3">
+                  <p className="label-caps mb-2 text-xs text-muted-foreground">
+                    {CORE_SLOT_LABELS[slot]}
+                  </p>
+                  {slotRows.length > 0 && (
+                    <ul className="mb-2 divide-y divide-border border border-border">
+                      {slotRows.map((row) => (
+                        <FormulaVersionRow
+                          key={row.id}
+                          row={row}
+                          sessionId={sessionId}
+                          lines={ingredientsByVersion[row.formula_version_id] ?? []}
+                          onRemove={() => removeFormulaVersion.mutate(row)}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                  {addingSlot === slot ? (
+                    <AddFormulaVersionForm
+                      sessionId={sessionId}
+                      nextSort={rows.length}
+                      kind="CORE"
+                      slot={slot}
+                      productId={data.product_id}
+                      productSizeId={data.product_size_id}
+                      onDone={async () => {
+                        setAddingSlot(null);
+                        await invalidateSelections();
+                        await invalidateTasks();
+                        await syncPlanner();
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className={buttonClass}
+                      onClick={() => setAddingSlot(slot)}
+                    >
+                      {`+ ADD ${CORE_SLOT_LABELS[slot].toUpperCase()}`}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+      )}
+
+      <div className="order-3">
+        <SectionCard
+          title="DECORATIVE ELEMENTS"
+          action={
+            <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
+              {adding ? "CLOSE" : "+ ADD FORMULA VERSION"}
+            </button>
+          }
+        >
+          <div className="space-y-3">
+            {adding && (
+              <AddFormulaVersionForm
+                sessionId={sessionId}
+                nextSort={rows.length}
+                productId={data.product_id}
+                productSizeId={data.product_size_id}
+                onDone={async () => {
+                  setAdding(false);
+                  await invalidateSelections();
+                  await invalidateTasks();
+                }}
+              />
+            )}
+            {decorativeRows.length === 0 ? (
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                NO FORMULA VERSIONS SELECTED YET
+              </p>
+            ) : (
+              <ul className="divide-y divide-border border border-border">
+                {decorativeRows.map((row) => (
+                  <FormulaVersionRow
+                    key={row.id}
+                    row={row}
+                    sessionId={sessionId}
+                    lines={ingredientsByVersion[row.formula_version_id] ?? []}
+                    onRemove={() => removeFormulaVersion.mutate(row)}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="order-1">
+        <SectionCard
+          title="WORK VIEW"
+          action={
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={viewMode === "WEIGHING" ? primaryButtonClass : buttonClass}
+                onClick={() => setViewMode("WEIGHING")}
+              >
+                WEIGHING MATRIX
+              </button>
+              <button
+                type="button"
+                className={viewMode === "FORMULA" ? primaryButtonClass : buttonClass}
+                onClick={() => setViewMode("FORMULA")}
+              >
+                FORMULA VIEW
+              </button>
+            </div>
+          }
+        >
+          {viewMode === "WEIGHING" ? (
+            <WeighingView
+              sessionId={sessionId}
+              groups={weighingGroups}
+              columns={orderedSelections}
+              onProgressChanged={invalidateProgress}
+              onEditColumn={setEditingColumn}
+            />
+          ) : (
+            <FormulaView rows={rows} ingredientsByVersion={ingredientsByVersion} />
+          )}
+        </SectionCard>
+      </div>
+
+      {/* 2026-09-30: WORKFLOW은 WORK VIEW 탭에서 분리해서 아래 별도 박스로 뺐다. 2026-10-22: 대시보드
+          (embedded)에서는 타임라인이 TASK 목록 역할을 하므로 숨기고, 상세는 BlockTaskDetails가 맡는다. */}
+      {!embedded && (
+        <SectionCard title="WORKFLOW">
+          <WorkflowView
             sessionId={sessionId}
-            groups={weighingGroups}
-            columns={orderedSelections}
-            onProgressChanged={invalidateProgress}
-            onEditColumn={setEditingColumn}
+            tasks={tasks.data ?? []}
+            formulaOptions={orderedSelections.map((s) => ({
+              formulaVersionId: s.formulaVersionId,
+              formulaName: s.formulaName,
+            }))}
+            ingredientsByVersion={ingredientsByVersion}
+            taskIngredients={taskIngredients.data ?? {}}
+            taskPredecessors={taskPredecessors.data ?? {}}
+            onTasksChanged={invalidateTasks}
+            onTaskStarted={ensureSessionStartedAt}
+            showEfficiencyFields={Boolean(data.product_id)}
           />
-        ) : (
-          <FormulaView rows={rows} ingredientsByVersion={ingredientsByVersion} />
-        )}
-      </SectionCard>
+        </SectionCard>
+      )}
 
-      {/* 2026-09-30: WORKFLOW은 WORK VIEW 탭에서 분리해서 아래 별도 박스로 뺐다 — 계량표/포뮬라뷰와
-          성격이 달라(공정 타임라인) 탭 전환으로 숨겨두기보다 항상 보이는 게 낫다는 사용자 피드백. */}
-      <SectionCard title="WORKFLOW">
-        <WorkflowView
-          sessionId={sessionId}
-          tasks={tasks.data ?? []}
-          formulaOptions={orderedSelections.map((s) => ({
-            formulaVersionId: s.formulaVersionId,
-            formulaName: s.formulaName,
-          }))}
-          ingredientsByVersion={ingredientsByVersion}
-          taskIngredients={taskIngredients.data ?? {}}
-          taskPredecessors={taskPredecessors.data ?? {}}
-          onTasksChanged={invalidateTasks}
-          onTaskStarted={ensureSessionStartedAt}
-          showEfficiencyFields={Boolean(data.product_id)}
-        />
-      </SectionCard>
-
-      <SectionCard title="NOTES">
-        <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateSession.mutate({ notes })} />
-      </SectionCard>
+      <div className="order-4">
+        <SectionCard title="NOTES">
+          <NotesEditor
+            value={data.notes ?? ""}
+            onSave={(notes) => updateSession.mutate({ notes })}
+          />
+        </SectionCard>
+      </div>
 
       {/* 재고 반영은 작업이 끝난 뒤 하는 일이므로 시퀀스상 맨 마지막(NOTES 다음)에 둔다(2026-09-30). */}
       {data.status === "COMPLETED" && <StockReflectSection sessionId={sessionId} rows={rows} />}

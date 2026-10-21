@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { WorkSessionWorkspace } from "@/components/pilot/WorkSessionWorkspace";
+import { BlockTaskDetails } from "@/components/pilot/BlockTaskDetails";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -63,8 +64,7 @@ const snap = (m: number) => Math.round(m / SNAP_MIN) * SNAP_MIN;
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
 type DragPayload =
-  | { kind: "row"; rowId: string }
-  | { kind: "block"; blockId: string; offsetMin: number };
+  { kind: "row"; rowId: string } | { kind: "block"; blockId: string; offsetMin: number };
 
 /** 시간이 겹치는 블록을 나란히(레인) 배치한다 — 겹침 묶음마다 레인 수만큼 폭을 나눈다. */
 function layoutLanes(items: { id: string; start: number; end: number }[]) {
@@ -127,7 +127,8 @@ export function ProductionDashboard() {
     const ids = [...new Map(rows.map((r) => [r.order.id, r.order.order_number])).entries()]
       .sort((a, b) => a[1].localeCompare(b[1]))
       .map(([id]) => id);
-    return (orderId: string) => ORDER_PALETTE[Math.max(ids.indexOf(orderId), 0) % ORDER_PALETTE.length]!;
+    return (orderId: string) =>
+      ORDER_PALETTE[Math.max(ids.indexOf(orderId), 0) % ORDER_PALETTE.length]!;
   }, [rows]);
 
   const isActive = (r: DashboardComponentRow) =>
@@ -136,7 +137,10 @@ export function ProductionDashboard() {
     r.sessionStatus !== "CANCELLED";
 
   const poolGroups = useMemo(() => {
-    const groups = new Map<string, { order: DashboardComponentRow["order"]; rows: DashboardComponentRow[] }>();
+    const groups = new Map<
+      string,
+      { order: DashboardComponentRow["order"]; rows: DashboardComponentRow[] }
+    >();
     for (const r of rows) {
       if (!isActive(r)) continue;
       if ((blocksByRow.get(r.id) ?? []).length > 0) continue;
@@ -144,30 +148,41 @@ export function ProductionDashboard() {
       g.rows.push(r);
       groups.set(r.order.id, g);
     }
-    return [...groups.values()].sort((a, b) => a.order.order_number.localeCompare(b.order.order_number));
+    return [...groups.values()].sort((a, b) =>
+      a.order.order_number.localeCompare(b.order.order_number),
+    );
   }, [rows, blocksByRow]);
   const poolCount = poolGroups.reduce((n, g) => n + g.rows.length, 0);
 
   const dayBlocks = useMemo(
-    () => blocks.filter((b) => b.block_date === date && rowById.has(b.work_session_formula_version_id)),
+    () =>
+      blocks.filter((b) => b.block_date === date && rowById.has(b.work_session_formula_version_id)),
     [blocks, date, rowById],
   );
   const effectiveEnd = (b: WorkBlock) => (resize?.id === b.id ? resize.endMin : toMin(b.end_time));
   const lanes = useMemo(
-    () => layoutLanes(dayBlocks.map((b) => ({ id: b.id, start: toMin(b.start_time), end: effectiveEnd(b) }))),
+    () =>
+      layoutLanes(
+        dayBlocks.map((b) => ({ id: b.id, start: toMin(b.start_time), end: effectiveEnd(b) })),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dayBlocks, resize],
   );
 
   const selected = dayBlocks.find((b) => b.id === selectedId) ?? null;
   const selectedRow = selected ? rowById.get(selected.work_session_formula_version_id) : undefined;
-  const workspaceSessionId = selectedRow?.work_session_id ?? focusSessionId;
-  useEffect(() => {
-    if (selectedRow) setFocusSessionId(selectedRow.work_session_id);
-  }, [selectedRow]);
-  const workspaceRow = workspaceSessionId
-    ? rows.find((r) => r.work_session_id === workspaceSessionId)
-    : undefined;
+  // 타임라인 아래 WORK VIEW 등은 "그날 블록이 속한 세션들"을 기본으로 보여준다(날짜 기준 작업공간).
+  // 대기공간 카드를 눌러 고른 세션은, 그날 블록이 없어도 추가로 보여준다.
+  const workspaceSessions = useMemo(() => {
+    const ordered: string[] = [];
+    const sorted = [...dayBlocks].sort((a, b) => a.start_time.localeCompare(b.start_time));
+    for (const b of sorted) {
+      const sid = rowById.get(b.work_session_formula_version_id)?.work_session_id;
+      if (sid && !ordered.includes(sid)) ordered.push(sid);
+    }
+    if (focusSessionId && !ordered.includes(focusSessionId)) ordered.push(focusSessionId);
+    return ordered.map((sid) => ({ sid, row: rows.find((r) => r.work_session_id === sid) }));
+  }, [dayBlocks, rowById, rows, focusSessionId]);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
@@ -183,9 +198,15 @@ export function ProductionDashboard() {
   };
 
   const createBlock = useMutation({
-    mutationFn: async (v: { row: DashboardComponentRow; startMin: number; endMin: number; day: string }) => {
+    mutationFn: async (v: {
+      row: DashboardComponentRow;
+      startMin: number;
+      endMin: number;
+      day: string;
+    }) => {
       const user_id = await currentUserId();
-      const partNo = (blocksByRow.get(v.row.id) ?? []).reduce((m, b) => Math.max(m, b.part_no), 0) + 1;
+      const partNo =
+        (blocksByRow.get(v.row.id) ?? []).reduce((m, b) => Math.max(m, b.part_no), 0) + 1;
       const { data, error } = await supabase
         .from("work_blocks")
         .insert({
@@ -209,7 +230,12 @@ export function ProductionDashboard() {
   });
 
   const updateBlock = useMutation({
-    mutationFn: async (v: { block: WorkBlock; day?: string; startMin?: number; endMin?: number }) => {
+    mutationFn: async (v: {
+      block: WorkBlock;
+      day?: string;
+      startMin?: number;
+      endMin?: number;
+    }) => {
       const row = rowById.get(v.block.work_session_formula_version_id);
       const { error } = await supabase
         .from("work_blocks")
@@ -233,7 +259,8 @@ export function ProductionDashboard() {
       const user_id = await currentUserId();
       const duration = toMin(block.end_time) - toMin(block.start_time);
       const startMin = Math.min(toMin(block.end_time), DAY_END_MIN - duration);
-      const partNo = (blocksByRow.get(row.id) ?? []).reduce((m, b) => Math.max(m, b.part_no), 0) + 1;
+      const partNo =
+        (blocksByRow.get(row.id) ?? []).reduce((m, b) => Math.max(m, b.part_no), 0) + 1;
       const { data, error } = await supabase
         .from("work_blocks")
         .insert({
@@ -256,10 +283,33 @@ export function ProductionDashboard() {
     },
   });
 
+  // TASK 시작시각이 기록되면 세션이 PLANNED일 때 IN_PROGRESS로 올린다(예전 WORKFLOW와 같은 규칙).
+  const ensureSessionStarted = async (sessionId: string, iso: string) => {
+    await supabase
+      .from("work_sessions")
+      .update({ status: "IN_PROGRESS", started_at: iso })
+      .eq("id", sessionId)
+      .eq("status", "PLANNED");
+    await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
+    await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
+  };
+
   // 배정 해제 — 블록과 그 플래너 TASK를 함께 지운다(Edge Function이 둘 다 처리).
   const removeBlock = useMutation({
     mutationFn: async (block: WorkBlock) => {
       const row = rowById.get(block.work_session_formula_version_id);
+      // 블록이 자동으로 만든 작업 기록(WORKFLOW TASK)은, 아직 아무 값도 안 넣었을 때만 같이 지운다.
+      if (block.work_session_task_id) {
+        await supabase
+          .from("work_session_tasks")
+          .delete()
+          .eq("id", block.work_session_task_id)
+          .eq("status", "NOT_STARTED")
+          .is("actual_started_at", null)
+          .is("completed_at", null)
+          .is("output_quantity", null)
+          .is("active_labour_minutes", null);
+      }
       const { data, error } = await supabase.functions.invoke("sync-work-session-to-planner", {
         body: { remove_block_id: block.id, work_session_id: row?.work_session_id },
       });
@@ -277,7 +327,9 @@ export function ProductionDashboard() {
 
   const busy =
     createBlock.isPending || updateBlock.isPending || splitBlock.isPending || removeBlock.isPending;
-  const firstError = [createBlock, updateBlock, splitBlock, removeBlock].find((m) => m.isError)?.error;
+  const firstError = [createBlock, updateBlock, splitBlock, removeBlock].find(
+    (m) => m.isError,
+  )?.error;
 
   // ── 드래그 앤 드롭 ───────────────────────────────────────────────────────────
   const minutesAt = (clientY: number) => {
@@ -317,7 +369,11 @@ export function ProductionDashboard() {
     let latest = origEnd;
     setResize({ id: block.id, endMin: origEnd });
     const move = (ev: PointerEvent) => {
-      latest = clamp(snap(origEnd + (ev.clientY - startY) / PX_PER_MIN), startMin + SNAP_MIN, DAY_END_MIN);
+      latest = clamp(
+        snap(origEnd + (ev.clientY - startY) / PX_PER_MIN),
+        startMin + SNAP_MIN,
+        DAY_END_MIN,
+      );
       setResize({ id: block.id, endMin: latest });
     };
     const up = () => {
@@ -333,7 +389,11 @@ export function ProductionDashboard() {
   // 터치/클릭용 빠른 배정 — 그날 마지막 블록 뒤(없으면 09:00)에 기본 1시간으로 넣는다.
   const quickAdd = (row: DashboardComponentRow) => {
     const lastEnd = dayBlocks.reduce((m, b) => Math.max(m, toMin(b.end_time)), 0);
-    const startMin = clamp(lastEnd > 0 ? lastEnd : 9 * 60, DAY_START_MIN, DAY_END_MIN - DEFAULT_DURATION_MIN);
+    const startMin = clamp(
+      lastEnd > 0 ? lastEnd : 9 * 60,
+      DAY_START_MIN,
+      DAY_END_MIN - DEFAULT_DURATION_MIN,
+    );
     createBlock.mutate({ row, startMin, endMin: startMin + DEFAULT_DURATION_MIN, day: date });
   };
 
@@ -411,7 +471,10 @@ export function ProductionDashboard() {
                       key={r.id}
                       draggable
                       onDragStart={(e) => {
-                        e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "row", rowId: r.id } satisfies DragPayload));
+                        e.dataTransfer.setData(
+                          "text/plain",
+                          JSON.stringify({ kind: "row", rowId: r.id } satisfies DragPayload),
+                        );
                         e.dataTransfer.effectAllowed = "move";
                       }}
                       onClick={() => {
@@ -422,7 +485,9 @@ export function ProductionDashboard() {
                       style={{ borderLeft: `3px solid ${color.accent}` }}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="label-caps text-[11px] text-muted-foreground">{r.slot ?? "CORE"}</p>
+                        <p className="label-caps text-[11px] text-muted-foreground">
+                          {r.slot ?? "CORE"}
+                        </p>
                         <p className="truncate text-sm">{r.componentName}</p>
                       </div>
                       <button
@@ -444,7 +509,12 @@ export function ProductionDashboard() {
         {/* ── 데일리 타임라인 ── */}
         <section className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={buttonClass} onClick={() => setDate(addDays(date, -1))} aria-label="이전 날">
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => setDate(addDays(date, -1))}
+              aria-label="이전 날"
+            >
               ‹
             </button>
             <input
@@ -453,10 +523,19 @@ export function ProductionDashboard() {
               value={date}
               onChange={(e) => e.target.value && setDate(e.target.value)}
             />
-            <button type="button" className={buttonClass} onClick={() => setDate(addDays(date, 1))} aria-label="다음 날">
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => setDate(addDays(date, 1))}
+              aria-label="다음 날"
+            >
               ›
             </button>
-            <button type="button" className={buttonClass} onClick={() => setDate(toLocalDateString())}>
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => setDate(toLocalDateString())}
+            >
               TODAY
             </button>
             <span className="font-mono text-sm">
@@ -512,7 +591,11 @@ export function ProductionDashboard() {
                       const offsetMin = ((e.clientY - rect.top) / PX_PER_HOUR) * 60;
                       e.dataTransfer.setData(
                         "text/plain",
-                        JSON.stringify({ kind: "block", blockId: b.id, offsetMin } satisfies DragPayload),
+                        JSON.stringify({
+                          kind: "block",
+                          blockId: b.id,
+                          offsetMin,
+                        } satisfies DragPayload),
                       );
                       e.dataTransfer.effectAllowed = "move";
                     }}
@@ -541,7 +624,9 @@ export function ProductionDashboard() {
                     }}
                   >
                     <p className="truncate text-xs font-medium">
-                      <span className="label-caps mr-1 text-[10px] opacity-70">{row.slot ?? "CORE"}</span>
+                      <span className="label-caps mr-1 text-[10px] opacity-70">
+                        {row.slot ?? "CORE"}
+                      </span>
                       {blockTitle(b, row)}
                     </p>
                     <p className="truncate font-mono text-[11px] opacity-80">
@@ -567,7 +652,10 @@ export function ProductionDashboard() {
           </div>
 
           {selected && selectedRow ? (
-            <div key={`${selected.id}-${selected.updated_at}`} className="space-y-2 border border-border bg-card p-3">
+            <div
+              key={`${selected.id}-${selected.updated_at}`}
+              className="space-y-2 border border-border bg-card p-3"
+            >
               <p className="text-sm">
                 <span className="label-caps mr-2 text-[11px] text-muted-foreground">
                   {selectedRow.order.order_number} · {selectedRow.slot ?? "CORE"}
@@ -659,24 +747,39 @@ export function ProductionDashboard() {
             </div>
           ) : (
             <p className="font-mono text-[11px] text-muted-foreground">
-              블록을 누르면 시간 수정·분할·배정 해제를 할 수 있어요. 아래쪽 가장자리를 끌면 길이가 바뀌어요.
+              블록을 누르면 시간 수정·분할·배정 해제를 할 수 있어요. 아래쪽 가장자리를 끌면 길이가
+              바뀌어요.
             </p>
           )}
         </section>
       </div>
 
-      {/* ── 선택한 컴포넌트가 속한 세션의 작업 박스들 (예전 WORK SESSION 페이지 기능) ── */}
-      {workspaceSessionId ? (
-        <div className="space-y-3 border-t border-border pt-4">
-          <p className="label-caps text-xs text-muted-foreground">
-            작업 박스 · {workspaceRow ? `${workspaceRow.order.order_number} ` : ""}
-            {workspaceRow?.order.productName ?? ""}
-          </p>
-          <WorkSessionWorkspace key={workspaceSessionId} sessionId={workspaceSessionId} embedded />
-        </div>
+      {/* ── 선택한 블록(TASK)의 상세: 시간·타이머·효율·생산량·단위·체크리스트·템플릿 ── */}
+      {selected && selectedRow && (
+        <BlockTaskDetails
+          key={selected.id}
+          block={selected}
+          row={selectedRow}
+          title={blockTitle(selected, selectedRow)}
+          onStarted={ensureSessionStarted}
+        />
+      )}
+
+      {/* ── 그날 작업의 WORK VIEW(계량) 등 — 블록이 속한 세션별로 ── */}
+      {workspaceSessions.length > 0 ? (
+        workspaceSessions.map(({ sid, row }) => (
+          <div key={sid} className="space-y-3 border-t border-border pt-4">
+            <p className="label-caps text-xs text-muted-foreground">
+              WORK VIEW · {row ? `${row.order.order_number} ` : ""}
+              {row?.order.productName ?? ""}
+            </p>
+            <WorkSessionWorkspace sessionId={sid} embedded />
+          </div>
+        ))
       ) : (
         <p className="border-t border-border pt-3 font-mono text-[11px] text-muted-foreground">
-          타임라인의 블록이나 대기공간의 카드를 누르면 아래에 계량·워크플로 등 작업 박스가 열려요.
+          이 날짜에 배정된 작업이 없어요. 컴포넌트를 타임라인에 배정하면 아래에 계량(WORK VIEW)이
+          열려요.
         </p>
       )}
     </div>

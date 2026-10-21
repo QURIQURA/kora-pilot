@@ -156,3 +156,44 @@ export async function applyDefaultWorkflowForFormulaVersion({
   if (taskError) return { error: `기본 TASK 생성 실패 — ${taskError.message}` };
   return { error: null };
 }
+
+/**
+ * 템플릿 하나를 "작업 블록(대시보드 TASK) 한 개"의 기본값으로 합친다(2026-10-22).
+ * 대시보드에서는 컴포넌트 블록이 곧 TASK라서 템플릿의 여러 단계를 TASK 여러 개로 펼치지 않고,
+ * task_type은 첫 단계의 것, 타이머는 단계 타이머의 합, 체크리스트는 단계별 항목을 이어 붙인다
+ * (단계가 둘 이상이면 "단계명 — 항목" 형태, 항목이 없는 단계는 단계명 자체가 항목).
+ */
+export async function loadTemplateTaskDefaults(templateId: string): Promise<{
+  task_type: string | null;
+  timer_minutes: number | null;
+  checklist_items: { label: string; done: boolean }[] | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from("workflow_template_tasks")
+    .select("task_name, task_type, timer_minutes, checklist_items")
+    .eq("template_id", templateId)
+    .order("sort_order");
+  if (error) return { task_type: null, timer_minutes: null, checklist_items: null, error: error.message };
+  const steps = data ?? [];
+  if (steps.length === 0) {
+    return { task_type: null, timer_minutes: null, checklist_items: null, error: null };
+  }
+  const multi = steps.length > 1;
+  const items: { label: string; done: boolean }[] = [];
+  for (const s of steps) {
+    const list = s.checklist_items ?? [];
+    if (list.length === 0) {
+      if (multi) items.push({ label: s.task_name, done: false });
+    } else {
+      for (const label of list) items.push({ label: multi ? `${s.task_name} — ${label}` : label, done: false });
+    }
+  }
+  const timers = steps.map((s) => s.timer_minutes).filter((n): n is number => n != null);
+  return {
+    task_type: steps[0]!.task_type,
+    timer_minutes: timers.length > 0 ? timers.reduce((a, b) => a + b, 0) : null,
+    checklist_items: items.length > 0 ? items : null,
+    error: null,
+  };
+}

@@ -2812,6 +2812,7 @@ export type Database = {
           updated_at: string;
           user_id: string;
           work_session_formula_version_id: string;
+          work_session_task_id: string | null;
         };
         Insert: {
           block_date: string;
@@ -2824,6 +2825,7 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
           work_session_formula_version_id: string;
+          work_session_task_id?: string | null;
         };
         Update: {
           block_date?: string;
@@ -2836,6 +2838,7 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
           work_session_formula_version_id?: string;
+          work_session_task_id?: string | null;
         };
         Relationships: [
           {

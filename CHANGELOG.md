@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-10-22 — DASHBOARD: 날짜 기준 작업공간 (WORK VIEW 기본 노출 · TASK DETAILS · WORKFLOW 박스 제거)
+
+- 타임라인 아래에 **그날 배정된 작업의 세션별 WORK VIEW(계량표/포뮬라 뷰)**가 기본으로 열립니다. 블록을 안 눌러도 보입니다.
+- **PRODUCT / BATCH SIZE(EFFICIENCY)** 박스는 대시보드에서 뺐습니다(제품 기준이 아니라 날짜 기준이라서). 기존 세션 페이지(HISTORY)에는 그대로 있습니다.
+- **CORE ELEMENTS → ADJUST QUANTITY**: 생산량 조절 공간이라는 뜻으로 이름을 바꾸고, 평소엔 접혀 있는 드롭다운으로 만들었습니다(펼치면 Sheet/Cream/Filling 배수·몰드·수량 조절).
+- **WORKFLOW 박스는 대시보드에서 제거**(타임라인이 TASK 목록 역할). 대신 블록을 누르면 **TASK DETAILS**가 열립니다: START(TIMER)/COMPLETE, 실제 시작·종료 시간, 타이머(분), TASK TYPE, 효율(작업시간·생산량·단위), 관찰값(해당 TYPE만), 체크리스트, **TEMPLATE 드롭다운**(SETTINGS의 COMPONENT WORKFLOW TEMPLATES를 불러와 적용). 컴포넌트에 기본 템플릿 + 자동 적용이 켜져 있으면 처음 열 때 자동으로 채워집니다. 템플릿에 단계가 여러 개면 한 TASK로 합칩니다(타입=첫 단계, 타이머=합계, 체크리스트=단계별 이어붙임).
+- 저장은 기존 작업 기록(work_session_tasks)에 그대로 해서 EFFICIENCY 화면에도 계속 반영됩니다. 기존 기록은 건드리지 않았습니다.
+- 배정 해제하면 아직 아무 값도 안 넣은 TASK 기록은 같이 지워지고, 값이 들어간 기록은 남깁니다.
+
 ## 2026-10-22 — DASHBOARD: 작업 박스 + 블록을 대기공간으로 되돌리기
 
 - 오더에서 **+ CREATE WORK SESSION**을 누르면 컴포넌트가 바로 PRODUCTION DASHBOARD의 작업 대기공간에 올라오고, 화면도 대시보드로 이동합니다.
