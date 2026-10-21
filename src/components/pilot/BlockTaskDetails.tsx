@@ -26,6 +26,7 @@ import {
   type ChecklistItem,
   type WorkSessionTask,
 } from "@/lib/workflow";
+import { syncWorkSessionToPlanner } from "@/lib/work-session";
 import { loadStepTaskDefaults, loadTemplateTaskDefaults } from "@/lib/workflow-template";
 import { buttonClass, primaryButtonClass } from "@/components/pilot/ui";
 
@@ -157,6 +158,11 @@ export function BlockTaskDetails({
     if (e) setError(`${label} 저장 실패 — ${e.message}`);
     else setError(null);
     await refresh();
+    // 관찰값은 플래너 TASK의 상세항목("관찰 — …")에도 반영한다.
+    if (!e && Object.keys(patch).some((k) => k.startsWith("observation_"))) {
+      const syncError = await syncWorkSessionToPlanner(sessionId);
+      if (syncError) setError(`플래너 반영 실패 — ${syncError}`);
+    }
   };
 
   const observationOverrides: Record<string, boolean> = {};

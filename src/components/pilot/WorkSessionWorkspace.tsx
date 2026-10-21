@@ -319,31 +319,34 @@ export function WorkSessionWorkspace({
 
   return (
     <div className={embedded ? "flex flex-col gap-4" : "space-y-4"}>
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4 order-0">
-        <div className="space-y-2">
-          <InlineName value={data.name} onSave={(name) => updateSession.mutate({ name })} />
-          <p className="font-mono text-xs uppercase text-muted-foreground">
-            CREATED {formatDateTime(data.created_at)}
-            {data.started_at ? ` · STARTED ${formatDateTime(data.started_at)}` : ""}
-            {data.completed_at ? ` · COMPLETED ${formatDateTime(data.completed_at)}` : ""}
-          </p>
+      {/* 대시보드(embedded)에서는 세션 이름/상태/생성일 헤더를 숨긴다(2026-10-22 사용자 요청). */}
+      {!embedded && (
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4 order-0">
+          <div className="space-y-2">
+            <InlineName value={data.name} onSave={(name) => updateSession.mutate({ name })} />
+            <p className="font-mono text-xs uppercase text-muted-foreground">
+              CREATED {formatDateTime(data.created_at)}
+              {data.started_at ? ` · STARTED ${formatDateTime(data.started_at)}` : ""}
+              {data.completed_at ? ` · COMPLETED ${formatDateTime(data.completed_at)}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="label-caps border border-foreground bg-foreground px-3 py-1 text-background">
+              {data.status}
+            </span>
+            {(NEXT_ACTIONS[data.status] ?? []).map((action) => (
+              <button
+                key={action.nextStatus}
+                type="button"
+                className={buttonClass}
+                onClick={() => setStatus(action.nextStatus)}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="label-caps border border-foreground bg-foreground px-3 py-1 text-background">
-            {data.status}
-          </span>
-          {(NEXT_ACTIONS[data.status] ?? []).map((action) => (
-            <button
-              key={action.nextStatus}
-              type="button"
-              className={buttonClass}
-              onClick={() => setStatus(action.nextStatus)}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {!embedded && (
         <WorkScheduleSection

@@ -834,12 +834,8 @@ export function ProductionDashboard() {
 
       {/* ── 그날 작업의 WORK VIEW(계량) 등 — 블록이 속한 세션별로 ── */}
       {workspaceSessions.length > 0 ? (
-        workspaceSessions.map(({ sid, row }) => (
+        workspaceSessions.map(({ sid }) => (
           <div key={sid} className="space-y-3 border-t border-border pt-4">
-            <p className="label-caps text-xs text-muted-foreground">
-              WORK VIEW · {row ? `${row.order.order_number} ` : ""}
-              {row?.order.productName ?? ""}
-            </p>
             <WorkSessionWorkspace sessionId={sid} embedded />
           </div>
         ))
