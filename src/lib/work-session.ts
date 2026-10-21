@@ -388,3 +388,19 @@ export async function mergeWorkSessions(sourceId: string, targetId: string): Pro
   }
 }
 
+
+/**
+ * 2026-10-21: WORK SESSION의 CORE ELEMENT(SHEET/CREAM/FILLING)를 ORDER의 WANN 프로젝트 하위 TASK로
+ * 동기화하는 Edge Function(sync-work-session-to-planner)을 호출한다. 이전에는 "일정(날짜/시간) 저장"과
+ * "CORE 삭제" 때만 호출돼서, 오더에서 세션을 만들 때나 CORE를 새로 추가할 때는 TASK가 안 생겼다.
+ * Planner 동기화는 best-effort — 실패해도 호출한 쪽(저장/생성 흐름)을 막지 않는다.
+ */
+export async function syncWorkSessionToPlanner(sessionId: string): Promise<void> {
+  try {
+    await supabase.functions.invoke("sync-work-session-to-planner", {
+      body: { work_session_id: sessionId },
+    });
+  } catch {
+    // ignore
+  }
+}

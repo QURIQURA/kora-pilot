@@ -58,6 +58,7 @@ import {
   workingAmount,
   sumBaseGrams,
   suggestedMultiplierFromTarget,
+  syncWorkSessionToPlanner,
   type WorkSessionProgressStatus,
 } from "@/lib/work-session";
 import { WorkflowView } from "@/components/pilot/WorkflowTimeline";
@@ -136,15 +137,7 @@ function WorkSessionPage() {
   // 프로젝트가 없으면(CONFIRMED 전환 전) 아무것도 만들지 않는다 — Edge Function이 조건을 직접
   // 체크해서 알아서 skip/정리한다. 실패해도 조용히 무시(네트워크 문제로 WORK SESSION 저장 자체가
   // 막히면 안 됨).
-  const syncPlanner = async () => {
-    try {
-      await supabase.functions.invoke("sync-work-session-to-planner", {
-        body: { work_session_id: sessionId },
-      });
-    } catch {
-      // ignore — Planner 동기화는 best-effort
-    }
-  };
+  const syncPlanner = () => syncWorkSessionToPlanner(sessionId);
 
   const invalidateSession = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
@@ -832,7 +825,12 @@ function AddFormulaVersionForm({
         console.error("기본 워크플로 자동 적용 실패:", templateError);
       }
     },
-    onSuccess: onDone,
+    onSuccess: async () => {
+      onDone();
+      // 2026-10-21: CORE(SHEET/CREAM/FILLING)를 새로 추가하면 Planner에도 TASK가 생겨야 한다 —
+      // 예전에는 일정을 저장할 때만 동기화돼서, 일정을 먼저 잡고 나중에 추가한 CREAM 등은 누락됐다.
+      if (kind === "CORE") await syncWorkSessionToPlanner(sessionId);
+    },
   });
 
   return (

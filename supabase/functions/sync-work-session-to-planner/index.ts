@@ -105,9 +105,12 @@ Deno.serve(async (req: Request) => {
 
     const existingTaskIds = coreRows.map((r) => r.planner_task_id).filter((id): id is string => !!id);
 
-    // 동기화 조건이 깨졌으면(일정 없음 / 오더 미연결 / 오더에 WANN 프로젝트가 아직 없음) 기존에
-    // 만들어둔 TASK가 있다면 전부 정리하고 끝낸다.
-    if (!session.scheduled_date || !session.order_id || !projectId) {
+    // 동기화 조건이 깨졌으면(오더 미연결 / 오더에 WANN 프로젝트가 아직 없음) 기존에 만들어둔 TASK가
+    // 있다면 전부 정리하고 끝낸다.
+    // 2026-10-21: 일정(scheduled_date)이 아직 없어도 TASK는 만든다(날짜 없는 TASK로 프로젝트에 먼저
+    // 뜨고, 일정이 잡히면 같은 TASK의 날짜/시간이 갱신됨) — 사용자 요청: "오더에서 work session을
+    // 생성할 때 sheet, cream이 각각 task로 뜨도록". 이전엔 일정이 없으면 TASK를 지웠다.
+    if (!session.order_id || !projectId) {
       if (existingTaskIds.length > 0) {
         await wann.from("planner_tasks").delete().in("id", existingTaskIds);
         await kora
@@ -123,9 +126,7 @@ Deno.serve(async (req: Request) => {
           synced: false,
           reason: !session.order_id
             ? "work session not linked to an order"
-            : !projectId
-              ? "order has no wann project yet"
-              : "no scheduled_date",
+            : "order has no wann project yet",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );

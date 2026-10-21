@@ -42,7 +42,7 @@ import {
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { resolveSlotGroup } from "@/lib/technique";
 import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
-import { suggestedMultiplierFromTarget } from "@/lib/work-session";
+import { suggestedMultiplierFromTarget, syncWorkSessionToPlanner } from "@/lib/work-session";
 import { mouldBatchMultiplier } from "@/lib/formula-calc";
 import { mouldOptionLabel } from "@/components/pilot/MouldSelect";
 import { ProductSizeSelect } from "@/components/pilot/ProductSizeSelect";
@@ -736,6 +736,10 @@ function OrderDetailPage() {
             console.error("Default workflow auto-apply failed:", workflowError);
           }
         }
+        // 2026-10-21 사용자 요청: 오더에서 WORK SESSION을 만들 때 그 오더의 WANN 프로젝트 하위에
+        // SHEET/CREAM(/FILLING) TASK가 바로 뜨도록 — 일정(날짜)은 나중에 WORK SESSION에서 잡으면
+        // 같은 TASK의 날짜/시간이 갱신된다(Edge Function이 planner_task_id로 멱등 처리).
+        await syncWorkSessionToPlanner(session.id);
       }
       return session.id;
     },
