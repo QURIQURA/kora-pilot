@@ -280,7 +280,6 @@ function OrderDetailPage() {
   const dietaryTags = useQuery(dietaryTagsQuery());
   const dietaryLinks = useQuery(orderDietaryTagLinksQuery());
   const [dietaryTagIds, setDietaryTagIds] = useState<string[] | null>(null);
-  const [dietaryOtherOpen, setDietaryOtherOpen] = useState(false);
   const serverDietaryTagIds = (dietaryLinks.data ?? [])
     .filter((l) => l.order_id === orderId)
     .map((l) => l.dietary_tag_id);
@@ -1049,36 +1048,21 @@ function OrderDetailPage() {
                         </button>
                       );
                     })}
-                    <button
-                      type="button"
-                      aria-pressed={dietaryOtherOpen || dietaryRequirements.trim() !== ""}
-                      className={
-                        "label-caps border px-2 py-1 text-[11px] " +
-                        (dietaryOtherOpen || dietaryRequirements.trim() !== ""
-                          ? "border-foreground bg-foreground text-background"
-                          : "border-input bg-background text-foreground hover:border-foreground")
-                      }
-                      onClick={() => setDietaryOtherOpen((v) => !v)}
-                    >
-                      Other
-                    </button>
                     {(dietaryTags.data ?? []).length === 0 && (
                       <span className="font-mono text-[11px] text-muted-foreground">
                         Add tags in SETTINGS &gt; DIETARY TAGS
                       </span>
                     )}
                   </div>
-                  {(dietaryOtherOpen || dietaryRequirements.trim() !== "") && (
-                    <AutoGrowTextarea
-                      rows={2}
-                      className={inputClass + " mt-1.5"}
-                      placeholder={
-                        dietaryOtherOpen ? "Enter manually" : "Customer memo"
-                      }
-                      value={dietaryRequirements}
-                      onChange={(e) => setDietaryRequirements(e.target.value)}
-                    />
-                  )}
+                  {/* 2026-10-21 사용자 요청: "Other" 토글 버튼 삭제 — 고객 메모 입력칸은 토글 없이
+                      항상 노출(토글이 없으면 내용을 다 지운 순간 입력칸이 사라지는 문제가 생김). */}
+                  <AutoGrowTextarea
+                    rows={2}
+                    className={inputClass + " mt-1.5"}
+                    placeholder="Customer memo"
+                    value={dietaryRequirements}
+                    onChange={(e) => setDietaryRequirements(e.target.value)}
+                  />
                 </Field>
               </div>
               <Field label="PAYMENT STATUS">
