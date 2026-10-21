@@ -19,6 +19,7 @@ import {
   orderStatusLabel,
   orderStatusColor,
   ORDER_STATUSES,
+  ORDER_RECIPIENT_RELATIONSHIP_OPTIONS,
   type OrderStatus,
   type OrderListRow,
 } from "@/lib/queries";
@@ -453,7 +454,19 @@ function OrderRow({
       </span>
     ),
     customer: <span className="text-sm">{o.customers?.name || o.requester_legacy || "—"}</span>,
-    recipient: <span className="text-sm">{o.recipient || "—"}</span>,
+    // 2026-10-21 사용자 요청: RECIPIENT 컬럼에 받는 사람 이름이 아니라 "관계"(recipient_relationship)를
+    // 표시. Other는 직접 적은 메모가 있으면 그걸, 옵션에 없는 예전 값은 원문 그대로 보여준다.
+    recipient: (
+      <span className="text-sm">
+        {o.recipient_relationship === "Other" && o.recipient_relationship_other_note?.trim()
+          ? o.recipient_relationship_other_note.trim()
+          : o.recipient_relationship
+            ? (ORDER_RECIPIENT_RELATIONSHIP_OPTIONS.find(
+                (r) => r.value === o.recipient_relationship,
+              )?.label ?? o.recipient_relationship)
+            : "—"}
+      </span>
+    ),
     occasion: <span className="text-sm text-muted-foreground">{o.occasion || "—"}</span>,
     date: (
       <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
