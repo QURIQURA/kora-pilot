@@ -1,17 +1,18 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   componentsQuery,
   dietaryBoardProductComponentsQuery,
+  dietaryBuildsQuery,
   dietaryTagsQuery,
   formulaVersionDietaryTagLinksQuery,
   formulasQuery,
 } from "@/lib/queries";
 import { buildDietaryBoard, type SlotStatus } from "@/lib/dietary";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
-import { SectionCard, selectClass } from "@/components/pilot/ui";
+import { SectionCard, buttonClass, inputClass, selectClass } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/dietary")({
   head: () => ({
@@ -55,6 +56,9 @@ function DietaryPage() {
     },
   });
 
+  const queryClient = useQueryClient();
+  const builds = useQuery(dietaryBuildsQuery());
+  const [buildNames, setBuildNames] = useState<Record<string, string>>({});
   const [tagId, setTagId] = useState("");
   const activeTagId = tagId || tags.data?.[0]?.id || "";
   // 레고 조립: "productId:componentId" → 고른 formula version. 저장하지 않는 작업용 선택(주문 연결은 다음 단계).
@@ -103,6 +107,70 @@ function DietaryPage() {
   }, [board, productList]);
 
   const unlinkedFormulas = (formulas.data ?? []).filter((f) => !f.component_id);
+
+  const versionLabel = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of formulas.data ?? [])
+      for (const v of f.formula_versions ?? []) m.set(v.id, `${f.name} v${v.version_number}`);
+    return m;
+  }, [formulas.data]);
+  const tagsByVersion = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const l of links.data ?? []) {
+      const set = m.get(l.formula_version_id) ?? new Set<string>();
+      set.add(l.dietary_tag_id);
+      m.set(l.formula_version_id, set);
+    }
+    return m;
+  }, [links.data]);
+  const tagName = useMemo(() => new Map((tags.data ?? []).map((t) => [t.id, t.name])), [tags.data]);
+
+  // BUILD 저장: 모든 슬롯의 버전이 같은 태그를 공통으로 가질 때만(활성 태그 포함) 저장한다.
+  // 서버 트랜잭션이 없어서 중간에 실패하면 만든 build를 지워 반쪽짜리 저장본이 남지 않게 한다.
+  const saveBuild = useMutation({
+    mutationFn: async (args: {
+      name: string;
+      productId: string;
+      items: { componentId: string; versionId: string }[];
+    }) => {
+      const sets = args.items.map((i) => tagsByVersion.get(i.versionId) ?? new Set<string>());
+      const common = [...(sets[0] ?? [])].filter((t) => sets.every((st) => st.has(t)));
+      if (!common.includes(activeTagId)) throw new Error("Every chosen formula must carry the tag");
+      const { data: build, error } = await supabase
+        .from("dietary_builds")
+        .insert({ name: args.name, product_id: args.productId })
+        .select("id")
+        .single();
+      if (error) throw error;
+      try {
+        const { error: tErr } = await supabase
+          .from("dietary_build_tags")
+          .insert(common.map((dietary_tag_id) => ({ build_id: build.id, dietary_tag_id })));
+        if (tErr) throw tErr;
+        const { error: iErr } = await supabase.from("dietary_build_items").insert(
+          args.items.map((i, idx) => ({
+            build_id: build.id,
+            component_id: i.componentId,
+            formula_version_id: i.versionId,
+            sort_order: idx,
+          })),
+        );
+        if (iErr) throw iErr;
+      } catch (e) {
+        await supabase.from("dietary_builds").delete().eq("id", build.id);
+        throw e;
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dietary_builds"] }),
+  });
+
+  const removeBuild = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("dietary_builds").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dietary_builds"] }),
+  });
   const loading = tags.isLoading || formulas.isLoading || productComponents.isLoading;
   const activeTag = (tags.data ?? []).find((t) => t.id === activeTagId);
 
@@ -236,12 +304,114 @@ function DietaryPage() {
                     </li>
                   ))}
                 </ul>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    className={inputClass + " !w-72"}
+                    value={buildNames[b.productId] ?? `${product?.name ?? ""} — ${activeTag.name}`}
+                    onChange={(e) =>
+                      setBuildNames((n) => ({ ...n, [b.productId]: e.target.value }))
+                    }
+                    aria-label="Build name"
+                  />
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={!complete || saveBuild.isPending}
+                    onClick={() =>
+                      saveBuild.mutate({
+                        name: (
+                          buildNames[b.productId] ?? `${product?.name ?? ""} — ${activeTag.name}`
+                        ).trim(),
+                        productId: b.productId,
+                        items: chosen.map((c) => ({
+                          componentId: c.slot.componentId,
+                          versionId: c.pick as string,
+                        })),
+                      })
+                    }
+                  >
+                    SAVE AS BUILD
+                  </button>
+                  {saveBuild.isError && (
+                    <span className="font-mono text-[11px] text-destructive">
+                      {(saveBuild.error as Error).message}
+                    </span>
+                  )}
+                </div>
               </SectionCard>
             );
           })}
+
+          <SectionCard title={`SAVED BUILDS — ${activeTag.name}`}>
+            {(() => {
+              const list = (builds.data ?? []).filter((bd) =>
+                bd.dietary_build_tags.some((t) => t.dietary_tag_id === activeTagId),
+              );
+              if (list.length === 0)
+                return (
+                  <p className="font-mono text-xs text-muted-foreground">NO SAVED BUILDS YET</p>
+                );
+              return (
+                <ul className="divide-y divide-border border border-border">
+                  {list.map((bd) => {
+                    const buildTagIds = bd.dietary_build_tags.map((t) => t.dietary_tag_id);
+                    const stale = bd.dietary_build_items.filter((it) => {
+                      const have = tagsByVersion.get(it.formula_version_id);
+                      return !have || !buildTagIds.every((id) => have.has(id));
+                    });
+                    return (
+                      <li key={bd.id} className="space-y-1 px-2 py-2 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{bd.name}</span>
+                          {stale.length > 0 ? (
+                            <span className="label-caps border border-destructive bg-destructive px-1.5 py-0.5 text-[10px] text-destructive-foreground">
+                              STALE — RE-CHECK TAGS
+                            </span>
+                          ) : (
+                            <span className="label-caps border border-foreground px-1.5 py-0.5 text-[10px]">
+                              OK
+                            </span>
+                          )}
+                          {buildTagIds.map((id) => (
+                            <span
+                              key={id}
+                              className="label-caps border border-input px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                            >
+                              {tagName.get(id) ?? "—"}
+                            </span>
+                          ))}
+                          <button
+                            type="button"
+                            className={buttonClass + " ml-auto"}
+                            disabled={removeBuild.isPending}
+                            onClick={() => {
+                              if (window.confirm(`Delete build "${bd.name}"?`))
+                                removeBuild.mutate(bd.id);
+                            }}
+                          >
+                            DELETE
+                          </button>
+                        </div>
+                        <ul className="font-mono text-[11px] text-muted-foreground">
+                          {[...bd.dietary_build_items]
+                            .sort((a, b2) => a.sort_order - b2.sort_order)
+                            .map((it) => (
+                              <li key={it.id}>
+                                {componentName.get(it.component_id) ?? "—"} →{" "}
+                                {versionLabel.get(it.formula_version_id) ?? "—"}
+                                {stale.some((x) => x.id === it.id) ? "  (tag missing)" : ""}
+                              </li>
+                            ))}
+                        </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
+          </SectionCard>
           <p className="font-mono text-[11px] text-muted-foreground">
-            Selections here are a working view only (not saved). Linking an assembled recipe to an
-            order comes next.
+            SAVE AS BUILD stores the chosen formula versions. Linking a build to an order comes next.
           </p>
         </>
       )}

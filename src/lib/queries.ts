@@ -2335,3 +2335,25 @@ export const dietaryBoardProductComponentsQuery = () =>
           .order("sort_order"),
       ),
   });
+
+// 2026-10-21 DIETARY BUILD: 한 제품을 특정 식이로 만들 때의 formula version 조합(저장본). 주문 연결은 3b.
+export type DietaryBuild = Tables<"dietary_builds">;
+export type DietaryBuildItem = Tables<"dietary_build_items">;
+export type DietaryBuildTagLink = Tables<"dietary_build_tags">;
+
+export interface DietaryBuildFull extends DietaryBuild {
+  dietary_build_items: DietaryBuildItem[];
+  dietary_build_tags: DietaryBuildTagLink[];
+}
+
+export const dietaryBuildsQuery = () =>
+  queryOptions({
+    queryKey: ["dietary_builds"],
+    queryFn: async (): Promise<DietaryBuildFull[]> =>
+      unwrap(
+        await supabase
+          .from("dietary_builds")
+          .select("*, dietary_build_items(*), dietary_build_tags(*)")
+          .order("created_at", { ascending: false }),
+      ) as unknown as DietaryBuildFull[],
+  });

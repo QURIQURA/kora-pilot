@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-10-21 — DIETARY BUILD 저장 (3a)
+
+- DIETARY 탭의 제품 카드 아래에 빌드 이름 칸과 SAVE AS BUILD가 생겼습니다. 모든 컴포넌트에 formula가 정해졌을 때만 저장되고, 고른 formula 버전들이 공통으로 가진 식이 태그가 빌드의 태그로 저장됩니다.
+- "SAVED BUILDS" 목록: 컴포넌트 → formula 버전 구성이 보이고, 나중에 버전의 태그를 해제하면 STALE — RE-CHECK TAGS가 뜹니다. DELETE로 삭제할 수 있습니다.
+- 주문에 빌드를 연결하는 것(3b)과 세션 생성이 고정 버전을 쓰는 것(3c)은 아직 적용되지 않았습니다. 기존 주문/세션/formula 값은 변경하지 않았습니다(새 컬럼 `orders.dietary_build_id`는 모두 비어 있음).
+
+확인 방법: 태그가 붙은 formula 버전이 있는 상태에서 DIETARY 탭 → 제품 카드의 SAVE AS BUILD → 아래 SAVED BUILDS에 나타나는지 확인 → formula에서 그 버전의 태그를 해제하고 돌아오면 STALE이 뜨는지 확인.
+
+---
+
 ## 2026-10-21 — DIETARY 탭: 식이별 부족한 FORMULA 찾기 + 레고 조립 보기
 
 - FORMULA 상세에 "DIETARY TAGS (THIS VERSION)"이 생겼습니다. 지금 보고 있는 버전에 해당하는 식이 태그를 눌러 선언합니다(누르면 바로 저장). 태그는 버전 단위라 새 버전은 다시 선택해야 합니다.

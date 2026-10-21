@@ -431,6 +431,100 @@ export type Database = {
         };
         Relationships: [];
       };
+      dietary_build_items: {
+        Row: {
+          build_id: string;
+          component_id: string;
+          formula_version_id: string;
+          id: string;
+          sort_order: number;
+          user_id: string;
+        };
+        Insert: {
+          build_id: string;
+          component_id: string;
+          formula_version_id: string;
+          id?: string;
+          sort_order?: number;
+          user_id?: string;
+        };
+        Update: {
+          build_id?: string;
+          component_id?: string;
+          formula_version_id?: string;
+          id?: string;
+          sort_order?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dietary_build_items_build_id_fkey";
+            columns: ["build_id"];
+            isOneToOne: false;
+            referencedRelation: "dietary_builds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      dietary_build_tags: {
+        Row: {
+          build_id: string;
+          dietary_tag_id: string;
+          id: string;
+          user_id: string;
+        };
+        Insert: {
+          build_id: string;
+          dietary_tag_id: string;
+          id?: string;
+          user_id?: string;
+        };
+        Update: {
+          build_id?: string;
+          dietary_tag_id?: string;
+          id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "dietary_build_tags_build_id_fkey";
+            columns: ["build_id"];
+            isOneToOne: false;
+            referencedRelation: "dietary_builds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      dietary_builds: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string;
+          notes: string | null;
+          product_id: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          name: string;
+          notes?: string | null;
+          product_id?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string;
+          notes?: string | null;
+          product_id?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       dietary_tags: {
         Row: {
           created_at: string;
@@ -1496,6 +1590,7 @@ export type Database = {
           customer_id: string | null;
           customer_satisfaction: number | null;
           delivery_address: string | null;
+          dietary_build_id: string | null;
           design_notes: string | null;
           dietary_requirements: string | null;
           event_date: string | null;
@@ -1551,6 +1646,7 @@ export type Database = {
           customer_id?: string | null;
           customer_satisfaction?: number | null;
           delivery_address?: string | null;
+          dietary_build_id?: string | null;
           design_notes?: string | null;
           dietary_requirements?: string | null;
           event_date?: string | null;
@@ -1606,6 +1702,7 @@ export type Database = {
           customer_id?: string | null;
           customer_satisfaction?: number | null;
           delivery_address?: string | null;
+          dietary_build_id?: string | null;
           design_notes?: string | null;
           dietary_requirements?: string | null;
           event_date?: string | null;
