@@ -423,7 +423,6 @@ function OrderRow({
     .filter((t): t is NonNullable<typeof t> => Boolean(t))
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((t) => t.name);
-  const hasDietaryMemo = Boolean(o.dietary_requirements?.trim());
 
   const cakeSizes = useQuery(cakeSizesQuery());
   const cakeSizeName = o.cake_size_id
@@ -500,7 +499,7 @@ function OrderRow({
       </span>
     ),
     dietary:
-      orderTagNames.length === 0 && !hasDietaryMemo ? (
+      orderTagNames.length === 0 ? (
         <span className="text-sm text-muted-foreground">—</span>
       ) : (
         <span className="flex flex-wrap gap-1">
@@ -512,14 +511,6 @@ function OrderRow({
               {n}
             </span>
           ))}
-          {hasDietaryMemo && (
-            <span
-              className="label-caps border border-dashed border-muted-foreground px-1.5 py-0.5 text-[10px] text-muted-foreground"
-              title={o.dietary_requirements ?? undefined}
-            >
-              Other
-            </span>
-          )}
         </span>
       ),
     cake_size: <span className="text-sm text-muted-foreground">{cakeSizeName || o.cake_size || "—"}</span>,
