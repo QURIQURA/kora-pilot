@@ -749,7 +749,10 @@ function OrderDetailPage() {
     onSuccess: async (sessionId) => {
       await queryClient.invalidateQueries({ queryKey: ["work_sessions", "by_order", orderId] });
       await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
-      if (sessionId) void navigate({ to: "/production/$sessionId", params: { sessionId } });
+      // 컴포넌트가 PRODUCTION 대시보드 작업 대기공간에 바로 올라오게 하고, 그 대시보드로 이동한다.
+      await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
+      await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
+      if (sessionId) void navigate({ to: "/production" });
     },
   });
 

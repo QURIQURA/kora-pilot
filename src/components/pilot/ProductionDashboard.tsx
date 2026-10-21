@@ -1,10 +1,12 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { WorkSessionWorkspace } from "@/components/pilot/WorkSessionWorkspace";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -98,6 +100,9 @@ export function ProductionDashboard() {
   const blocksQuery = useQuery(workBlocksQuery());
   const [date, setDate] = useState(() => toLocalDateString());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 타임라인 아래 작업 박스(계량/워크플로 등)가 보여줄 세션 — 블록 선택 또는 대기공간 카드 클릭으로 정해진다.
+  const [focusSessionId, setFocusSessionId] = useState<string | null>(null);
+  const [poolOver, setPoolOver] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [resize, setResize] = useState<{ id: string; endMin: number } | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -156,6 +161,13 @@ export function ProductionDashboard() {
 
   const selected = dayBlocks.find((b) => b.id === selectedId) ?? null;
   const selectedRow = selected ? rowById.get(selected.work_session_formula_version_id) : undefined;
+  const workspaceSessionId = selectedRow?.work_session_id ?? focusSessionId;
+  useEffect(() => {
+    if (selectedRow) setFocusSessionId(selectedRow.work_session_id);
+  }, [selectedRow]);
+  const workspaceRow = workspaceSessionId
+    ? rows.find((r) => r.work_session_id === workspaceSessionId)
+    : undefined;
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
@@ -337,13 +349,39 @@ export function ProductionDashboard() {
 
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         {/* ── 작업 대기공간 ── */}
-        <section className="space-y-3 border border-border bg-card p-3">
+        <section
+          className={cn(
+            "space-y-3 border bg-card p-3",
+            poolOver ? "border-foreground bg-muted" : "border-border",
+          )}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setPoolOver(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPoolOver(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setPoolOver(false);
+            try {
+              const payload = JSON.parse(e.dataTransfer.getData("text/plain")) as DragPayload;
+              if (payload.kind !== "block") return;
+              const blk = blocks.find((b) => b.id === payload.blockId);
+              if (blk) removeBlock.mutate(blk);
+            } catch {
+              /* 다른 드래그는 무시 */
+            }
+          }}
+        >
           <div>
             <p className="label-caps text-xs">작업 대기공간</p>
             <p className="font-mono text-[11px] text-muted-foreground">
               {poolCount === 0
                 ? "배정 안 된 컴포넌트가 없어요"
                 : `${poolCount}개 대기 중 · 타임라인으로 끌어다 놓거나 ADD`}
+              {" · 블록을 여기로 끌면 배정 해제"}
             </p>
           </div>
           {components.isLoading ? (
@@ -375,6 +413,10 @@ export function ProductionDashboard() {
                       onDragStart={(e) => {
                         e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "row", rowId: r.id } satisfies DragPayload));
                         e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onClick={() => {
+                        setSelectedId(null);
+                        setFocusSessionId(r.work_session_id);
                       }}
                       className="flex cursor-grab items-center gap-2 border border-border bg-background px-2 py-1.5"
                       style={{ borderLeft: `3px solid ${color.accent}` }}
@@ -622,6 +664,21 @@ export function ProductionDashboard() {
           )}
         </section>
       </div>
+
+      {/* ── 선택한 컴포넌트가 속한 세션의 작업 박스들 (예전 WORK SESSION 페이지 기능) ── */}
+      {workspaceSessionId ? (
+        <div className="space-y-3 border-t border-border pt-4">
+          <p className="label-caps text-xs text-muted-foreground">
+            작업 박스 · {workspaceRow ? `${workspaceRow.order.order_number} ` : ""}
+            {workspaceRow?.order.productName ?? ""}
+          </p>
+          <WorkSessionWorkspace key={workspaceSessionId} sessionId={workspaceSessionId} embedded />
+        </div>
+      ) : (
+        <p className="border-t border-border pt-3 font-mono text-[11px] text-muted-foreground">
+          타임라인의 블록이나 대기공간의 카드를 누르면 아래에 계량·워크플로 등 작업 박스가 열려요.
+        </p>
+      )}
     </div>
   );
 }
