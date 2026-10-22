@@ -237,3 +237,107 @@ export function DashboardComponentCopyForm({
     </form>
   );
 }
+
+/**
+ * 대시보드에서 "빈 새 COMPONENT"를 만들어 이 오더의 WORK SESSION에 바로 넣는다(2026-10-22).
+ * 이름만 정하면 COMPONENT + FORMULA + 빈 V1(CURRENT)이 생기고, 재료/제작방법은 COMPONENT 페이지에서 채우면 된다.
+ */
+export function DashboardComponentNewForm({
+  sessionId,
+  slot,
+  nextSort,
+  onDone,
+}: {
+  sessionId: string;
+  slot: CoreSlot;
+  nextSort: number;
+  onDone: () => void | Promise<void>;
+}) {
+  const queryClient = useQueryClient();
+  const techniqueCategories = useQuery(techniqueCategoriesQuery());
+  const [name, setName] = useState("");
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error("이름을 입력하세요");
+      const user_id = await currentUserId();
+      const { data: comp, error: compErr } = await supabase
+        .from("components")
+        .insert({ user_id, name: trimmed, scaling_mode: "" })
+        .select("id")
+        .single();
+      if (compErr) throw compErr;
+      const { data: formula, error: fErr } = await supabase
+        .from("formulas")
+        .insert({ user_id, name: trimmed, component_id: comp.id })
+        .select("id")
+        .single();
+      if (fErr) throw fErr;
+      const { data: version, error: vErr } = await supabase
+        .from("formula_versions")
+        .insert({ user_id, formula_id: formula.id, version_number: 1, status: "CURRENT" })
+        .select("id")
+        .single();
+      if (vErr) throw vErr;
+      const { error: rowErr } = await supabase.from("work_session_formula_versions").insert({
+        user_id,
+        work_session_id: sessionId,
+        formula_version_id: version.id,
+        kind: "CORE",
+        slot,
+        multiplier: 1,
+        sort_order: nextSort,
+      });
+      if (rowErr) throw rowErr;
+      const { error: wfErr } = await applyDefaultWorkflowForFormulaVersion({
+        sessionId,
+        userId: user_id,
+        formulaVersionId: version.id,
+        component: null,
+        formulaTechniqueCategoryId: null,
+        techniqueCategories: techniqueCategories.data ?? [],
+      });
+      if (wfErr) console.error("기본 워크플로 자동 적용 실패:", wfErr);
+      await syncWorkSessionToPlanner(sessionId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["formulas"] });
+      await queryClient.invalidateQueries({ queryKey: ["components"] });
+      await onDone();
+    },
+  });
+
+  return (
+    <form
+      className="space-y-2 border border-dashed border-border p-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        create.mutate();
+      }}
+    >
+      <p className="font-mono text-[11px] text-muted-foreground">
+        {CORE_SLOT_LABELS[slot]} · 이름만 정해 빈 컴포넌트를 만들어요. 재료·제작방법은 COMPONENT
+        페이지에서 채우세요.
+      </p>
+      <input
+        className={inputClass}
+        placeholder="새 컴포넌트 이름"
+        value={name}
+        autoFocus
+        onChange={(e) => setName(e.target.value)}
+        required
+      />
+      {create.isError && (
+        <p className="font-mono text-[11px] text-destructive">{(create.error as Error).message}</p>
+      )}
+      <button
+        type="submit"
+        className={`${primaryButtonClass} !min-h-[28px] text-[11px]`}
+        disabled={create.isPending}
+      >
+        {create.isPending ? "만드는 중…" : "CREATE & ADD"}
+      </button>
+    </form>
+  );
+}

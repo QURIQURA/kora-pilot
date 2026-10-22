@@ -17,7 +17,10 @@ import {
 import { formatDelivery, generateTitle } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { AddFormulaVersionForm } from "@/components/pilot/WorkSessionWorkspace";
-import { DashboardComponentCopyForm } from "@/components/pilot/DashboardComponentCopyForm";
+import {
+  DashboardComponentCopyForm,
+  DashboardComponentNewForm,
+} from "@/components/pilot/DashboardComponentCopyForm";
 import { DietaryChips, orderTitle, useOrderDietaryNames } from "./OrderTitle";
 import { buttonClass } from "./ui";
 
@@ -34,7 +37,7 @@ export function ProductionOrdersTab() {
   const blocks = useQuery(workBlocksQuery());
   const [adding, setAdding] = useState<{ orderId: string; slot: CoreSlot } | null>(null);
   const dietaryOf = useOrderDietaryNames();
-  const [mode, setMode] = useState<"pick" | "copy">("pick");
+  const [mode, setMode] = useState<"pick" | "copy" | "new">("pick");
 
   const rowsByOrder = useMemo(() => {
     const map = new Map<string, DashboardComponentRow[]>();
@@ -180,86 +183,94 @@ export function ProductionOrdersTab() {
               </ul>
             )}
 
-            {session ? (
-              <div className="space-y-1.5">
-                <div className="flex flex-wrap gap-1">
-                  {CORE_SLOTS.map((slot) => (
+            {/* 슬롯 버튼은 세션 유무와 상관없이 항상 — 세션이 없으면 누르는 순간 자동으로 만든다 */}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap gap-1">
+                {CORE_SLOTS.map((slot) => (
+                  <button
+                    key={slot}
+                    type="button"
+                    className={cn(
+                      buttonClass,
+                      "!min-h-[26px] px-1.5 text-[11px]",
+                      adding?.orderId === order.id && adding.slot === slot && "bg-secondary",
+                    )}
+                    disabled={createSession.isPending}
+                    onClick={async () => {
+                      if (adding?.orderId === order.id && adding.slot === slot) {
+                        setAdding(null);
+                        return;
+                      }
+                      if (!session) await createSession.mutateAsync(order);
+                      setAdding({ orderId: order.id, slot });
+                    }}
+                  >
+                    + {CORE_SLOT_LABELS[slot].toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              {adding?.orderId === order.id && (
+                <div className="flex gap-1">
+                  {(["pick", "copy", "new"] as const).map((m) => (
                     <button
-                      key={slot}
+                      key={m}
                       type="button"
                       className={cn(
                         buttonClass,
-                        "!min-h-[26px] px-1.5 text-[11px]",
-                        adding?.orderId === order.id && adding.slot === slot && "bg-secondary",
+                        "!min-h-[24px] px-1.5 text-[10px]",
+                        mode === m && "bg-secondary",
                       )}
-                      onClick={() =>
-                        setAdding(
-                          adding?.orderId === order.id && adding.slot === slot
-                            ? null
-                            : { orderId: order.id, slot },
-                        )
-                      }
+                      onClick={() => setMode(m)}
                     >
-                      + {CORE_SLOT_LABELS[slot].toUpperCase()}
+                      {m === "pick"
+                        ? "기존 컴포넌트 지정"
+                        : m === "copy"
+                          ? "복사해서 새로 만들기"
+                          : "빈 컴포넌트 새로 만들기"}
                     </button>
                   ))}
                 </div>
-                {adding?.orderId === order.id && (
-                  <div className="flex gap-1">
-                    {(["pick", "copy"] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        className={cn(
-                          buttonClass,
-                          "!min-h-[24px] px-1.5 text-[10px]",
-                          mode === m && "bg-secondary",
-                        )}
-                        onClick={() => setMode(m)}
-                      >
-                        {m === "pick" ? "기존 컴포넌트 지정" : "복사해서 새로 만들기"}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {adding?.orderId === order.id && mode === "copy" && (
-                  <DashboardComponentCopyForm
-                    key={`copy-${adding.slot}`}
-                    sessionId={session.id}
-                    slot={adding.slot}
-                    nextSort={rows.length}
-                    onDone={async () => {
-                      setAdding(null);
-                      await refresh(session.id);
-                    }}
-                  />
-                )}
-                {adding?.orderId === order.id && mode === "pick" && (
-                  <AddFormulaVersionForm
-                    key={adding.slot}
-                    sessionId={session.id}
-                    nextSort={rows.length}
-                    kind="CORE"
-                    slot={adding.slot}
-                    productId={session.product_id}
-                    productSizeId={session.product_size_id}
-                    onDone={async () => {
-                      setAdding(null);
-                      await refresh(session.id);
-                    }}
-                  />
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                className={cn(buttonClass, "!min-h-[26px] px-1.5 text-[11px]")}
-                disabled={createSession.isPending}
-                onClick={() => createSession.mutate(order)}
-              >
-                + WORK SESSION 만들기
-              </button>
-            )}
+              )}
+              {session && adding?.orderId === order.id && mode === "new" && (
+                <DashboardComponentNewForm
+                  key={`new-${adding.slot}`}
+                  sessionId={session.id}
+                  slot={adding.slot}
+                  nextSort={rows.length}
+                  onDone={async () => {
+                    setAdding(null);
+                    await refresh(session.id);
+                  }}
+                />
+              )}
+              {session && adding?.orderId === order.id && mode === "copy" && (
+                <DashboardComponentCopyForm
+                  key={`copy-${adding.slot}`}
+                  sessionId={session.id}
+                  slot={adding.slot}
+                  nextSort={rows.length}
+                  onDone={async () => {
+                    setAdding(null);
+                    await refresh(session.id);
+                  }}
+                />
+              )}
+              {session && adding?.orderId === order.id && mode === "pick" && (
+                <AddFormulaVersionForm
+                  key={adding.slot}
+                  sessionId={session.id}
+                  nextSort={rows.length}
+                  kind="CORE"
+                  slot={adding.slot}
+                  productId={session.product_id}
+                  productSizeId={session.product_size_id}
+                  onDone={async () => {
+                    setAdding(null);
+                    await refresh(session.id);
+                  }}
+                />
+              )}
+            </div>
           </section>
         ))}
       </div>
