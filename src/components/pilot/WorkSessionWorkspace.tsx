@@ -789,7 +789,7 @@ function NotesEditor({ value, onSave }: { value: string; onSave: (value: string)
   );
 }
 
-function AddFormulaVersionForm({
+export function AddFormulaVersionForm({
   sessionId,
   nextSort,
   onDone,

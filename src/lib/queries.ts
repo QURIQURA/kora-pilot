@@ -1018,6 +1018,38 @@ export const workBlocksQuery = () =>
       ),
   });
 
+// ── DAILY TASKS(2026-10-22) ──────────────────────────────────────────────────
+// 케이크 제품/컴포넌트와 무관한 작업. 라이브러리(daily_task_templates)는 SETTINGS에서 관리하고,
+// 대시보드에 올린 건 daily_tasks 한 줄 = WANN 플래너 TASK 1개(그 날짜의 Daily Project 하위).
+export type DailyTaskTemplate = Tables<"daily_task_templates">;
+export type DailyTask = Tables<"daily_tasks">;
+
+export const dailyTaskTemplatesQuery = () =>
+  queryOptions({
+    queryKey: ["daily_task_templates"],
+    queryFn: async (): Promise<DailyTaskTemplate[]> =>
+      unwrap(
+        await supabase
+          .from("daily_task_templates")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true }),
+      ),
+  });
+
+export const dailyTasksQuery = () =>
+  queryOptions({
+    queryKey: ["daily_tasks"],
+    queryFn: async (): Promise<DailyTask[]> =>
+      unwrap(
+        await supabase
+          .from("daily_tasks")
+          .select("*")
+          .order("task_date", { ascending: true })
+          .order("start_time", { ascending: true }),
+      ),
+  });
+
 /** 대시보드가 다루는 "오더의 컴포넌트" 한 줄 — 오더에 연결된 WORK SESSION의 CORE 행. */
 export interface DashboardComponentRow {
   id: string; // work_session_formula_versions.id

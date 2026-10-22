@@ -10,6 +10,7 @@ import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryMa
 import { MethodManager } from "@/components/pilot/MethodManager";
 import { WorkflowTemplateManager } from "@/components/pilot/WorkflowTemplateManager";
 import { TaskTypeManager } from "@/components/pilot/TaskTypeManager";
+import { DailyTaskTemplateManager } from "@/components/pilot/DailyTaskTemplateManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
 import {
   IngredientGroupBulkAssign,
@@ -133,6 +134,9 @@ function SettingsPage() {
         </SettingsSection>
         <SettingsSection title="TASK TYPES">
           <TaskTypeManager />
+        </SettingsSection>
+        <SettingsSection title="DAILY TASKS (제품과 무관한 작업)">
+          <DailyTaskTemplateManager />
         </SettingsSection>
       </SettingsGroup>
 

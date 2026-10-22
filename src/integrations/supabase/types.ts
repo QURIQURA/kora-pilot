@@ -431,6 +431,98 @@ export type Database = {
         };
         Relationships: [];
       };
+      daily_task_templates: {
+        Row: {
+          checklist_items: string[];
+          created_at: string;
+          default_minutes: number;
+          id: string;
+          name: string;
+          note: string | null;
+          sort_order: number;
+          task_type: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          checklist_items?: string[];
+          created_at?: string;
+          default_minutes?: number;
+          id?: string;
+          name: string;
+          note?: string | null;
+          sort_order?: number;
+          task_type?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Update: {
+          checklist_items?: string[];
+          created_at?: string;
+          default_minutes?: number;
+          id?: string;
+          name?: string;
+          note?: string | null;
+          sort_order?: number;
+          task_type?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      daily_tasks: {
+        Row: {
+          created_at: string;
+          end_time: string;
+          id: string;
+          name: string;
+          note: string | null;
+          planner_task_id: string | null;
+          start_time: string;
+          task_date: string;
+          task_type: string | null;
+          template_id: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          end_time: string;
+          id?: string;
+          name: string;
+          note?: string | null;
+          planner_task_id?: string | null;
+          start_time: string;
+          task_date: string;
+          task_type?: string | null;
+          template_id?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Update: {
+          created_at?: string;
+          end_time?: string;
+          id?: string;
+          name?: string;
+          note?: string | null;
+          planner_task_id?: string | null;
+          start_time?: string;
+          task_date?: string;
+          task_type?: string | null;
+          template_id?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "daily_tasks_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "daily_task_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       dietary_build_items: {
         Row: {
           build_id: string;

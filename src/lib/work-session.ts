@@ -10,12 +10,12 @@ import type { Tables, TablesUpdate } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { ingredientDisplayName } from "@/lib/pilot";
 import type { VersionIngredientRow } from "@/lib/queries";
- 
+
 export type WorkSession = Tables<"work_sessions">;
 export type WorkSessionFormulaVersion = Tables<"work_session_formula_versions">;
 export type WorkSessionMultiplierHistory = Tables<"work_session_multiplier_history">;
 export type WorkSessionProgress = Tables<"work_session_progress">;
- 
+
 export const WORK_SESSION_STATUSES = [
   "PLANNED",
   "IN_PROGRESS",
@@ -24,7 +24,7 @@ export const WORK_SESSION_STATUSES = [
   "CANCELLED",
 ] as const;
 export type WorkSessionStatus = (typeof WORK_SESSION_STATUSES)[number];
- 
+
 export const WORK_SESSION_PROGRESS_STATUSES = [
   "NOT_STARTED",
   "DONE",
@@ -32,28 +32,28 @@ export const WORK_SESSION_PROGRESS_STATUSES = [
   "SKIPPED",
 ] as const;
 export type WorkSessionProgressStatus = (typeof WORK_SESSION_PROGRESS_STATUSES)[number];
- 
+
 export const PROGRESS_STATUS_ICON: Record<WorkSessionProgressStatus, string> = {
   NOT_STARTED: "○",
   DONE: "☑",
   SHORTAGE: "⚠",
   SKIPPED: "⊘",
 };
- 
+
 export const PROGRESS_STATUS_LABEL: Record<WorkSessionProgressStatus, string> = {
   NOT_STARTED: "NOT STARTED",
   DONE: "DONE",
   SHORTAGE: "SHORTAGE",
   SKIPPED: "SKIPPED",
 };
- 
+
 /** 원본 amount × multiplier — 저장하지 않고 화면에 표시할 때만 계산한다 */
 export function workingAmount(originalAmount: number, multiplier: number): number {
   return originalAmount * multiplier;
 }
- 
+
 /* ── Weighing View grouping (Ingredient Master ID 기준) ─────────── */
- 
+
 export interface WeighingCell {
   /** work_session_formula_versions.id — 열(컬럼)의 실제 식별자. 같은 FORMULA VERSION이 두 번
    * 이상 선택돼도(2026-10-07, 동일 포뮬라 중복 추가 허용) 각 선택마다 고유하다. */
@@ -164,7 +164,7 @@ export function buildWeighingGroups(params: {
     return a.firstSortOrder - b.firstSortOrder;
   });
 }
- 
+
 /** Multiplier History에 남길 스냅샷 — 적용 당시 계산된 working quantity를 그대로 기록한다 */
 export function buildMultiplierSnapshot(
   lines: VersionIngredientRow[],
@@ -388,7 +388,6 @@ export async function mergeWorkSessions(sourceId: string, targetId: string): Pro
   }
 }
 
-
 /**
  * 2026-10-21: WORK SESSION의 CORE ELEMENT(SHEET/CREAM/FILLING)를 ORDER의 WANN 프로젝트 하위 TASK로
  * 동기화하는 Edge Function(sync-work-session-to-planner)을 호출한다. 이전에는 "일정(날짜/시간) 저장"과
@@ -411,6 +410,41 @@ export async function syncWorkSessionToPlanner(
           ? { delete_planner_task_ids: options.deletePlannerTaskIds }
           : {}),
       },
+    });
+    if (error) return error.message;
+    if (data && typeof data === "object" && "error" in data && data.error) {
+      return String((data as { error: unknown }).error);
+    }
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+/**
+ * 2026-10-22 DAILY TASK — daily_tasks 한 줄을 그 날짜의 Daily Project 하위 플래너 TASK로 동기화(생성/수정/날짜 이동).
+ * 실패 사유 문자열 또는 null.
+ */
+export async function syncDailyTaskToPlanner(dailyTaskId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke("sync-work-session-to-planner", {
+      body: { daily_task_id: dailyTaskId },
+    });
+    if (error) return error.message;
+    if (data && typeof data === "object" && "error" in data && data.error) {
+      return String((data as { error: unknown }).error);
+    }
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+/** daily_tasks 행과 그 플래너 TASK를 함께 지운다(대기공간으로 되돌리기/삭제). */
+export async function removeDailyTask(dailyTaskId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke("sync-work-session-to-planner", {
+      body: { remove_daily_task_id: dailyTaskId },
     });
     if (error) return error.message;
     if (data && typeof data === "object" && "error" in data && data.error) {

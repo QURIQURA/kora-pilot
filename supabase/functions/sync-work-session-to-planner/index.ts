@@ -24,6 +24,9 @@
 // - 블록에 연결된 작업 기록(work_session_tasks)의 관찰값(상태/높이/온도)을 플래너 TASK의 상세항목
 //   (planner_task_subitems)에 "관찰 — …" 한 줄로 넣는다. 값이 모두 비면 그 줄을 지운다.
 //
+// 2026-10-22 DAILY TASK: 요청 본문에 daily_task_id / remove_daily_task_id를 받아, 컴포넌트와 무관한 작업(daily_tasks)을
+//   그 날짜의 "Daily Project — …" 하위 TASK로 동기화/삭제한다(제목=작업 이름, notes=메모).
+//
 // 멱등성: 이미 planner_task_id가 있으면 그 TASK를 UPDATE(WANN 쪽 완료 체크 등 보존), 없거나 WANN에서
 // 지워졌으면 INSERT 후 id를 저장한다.
 //
@@ -157,7 +160,8 @@ Deno.serve(async (req: Request) => {
     const deleteIds: string[] = Array.isArray(body.delete_planner_task_ids)
       ? body.delete_planner_task_ids.filter((s: unknown) => typeof s === "string")
       : [];
-    if (!sessionId && !removeBlockId) return json({ error: "work_session_id required" }, 400);
+    if (!sessionId && !removeBlockId && !body.daily_task_id && !body.remove_daily_task_id)
+      return json({ error: "work_session_id required" }, 400);
 
     const kora = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -177,6 +181,121 @@ Deno.serve(async (req: Request) => {
         .in("id", ids)
         .eq("subtag_id", WANN_PRODUCTION_SUBTAG_ID);
     };
+
+    /** 그 날짜의 Daily Project를 찾거나 만든다. 같은 호출 안에서는 캐시. */
+    const dailyProjectCache = new Map<string, string>();
+    const dailyProjectFor = async (date: string): Promise<string> => {
+      const cached = dailyProjectCache.get(date);
+      if (cached) return cached;
+      const { data: existing, error: findError } = await wann
+        .from("planner_multiple_tasks")
+        .select("id")
+        .eq("user_id", WANN_USER_ID)
+        .eq("category_id", WANN_SHCO_CATEGORY_ID)
+        .eq("date", date)
+        .like("name", `${DAILY_PROJECT_PREFIX}%`)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (findError) throw findError;
+      let id = existing?.[0]?.id as string | undefined;
+      if (!id) {
+        const weekday = WEEKDAYS_KO[new Date(`${date}T00:00:00Z`).getUTCDay()];
+        const { data: created, error: createError } = await wann
+          .from("planner_multiple_tasks")
+          .insert({
+            user_id: WANN_USER_ID,
+            category_id: WANN_SHCO_CATEGORY_ID,
+            name: `${DAILY_PROJECT_PREFIX} — ${date} (${weekday})`,
+            date,
+            end_date: date,
+          })
+          .select("id")
+          .single();
+        if (createError) throw createError;
+        id = created.id as string;
+      }
+      dailyProjectCache.set(date, id);
+      return id;
+    };
+
+    const common = {
+      user_id: WANN_USER_ID,
+      category_id: WANN_SHCO_CATEGORY_ID,
+      subtag_id: WANN_PRODUCTION_SUBTAG_ID,
+      category_ids: [WANN_SHCO_CATEGORY_ID],
+      recurrence: "none",
+      // 유니크 인덱스(세션당 1개) 때문에 새 TASK에는 채우지 않는다. 기존 TASK를 UPDATE할 때는 null로 풀어준다.
+      kora_work_session_id: null,
+    };
+
+    /** 기존 TASK가 있으면 UPDATE, 없거나 WANN에서 지워졌으면 INSERT. 최종 TASK id를 돌려준다. */
+    const upsertTask = async (
+      existingId: string | null,
+      payload: Record<string, unknown>,
+    ): Promise<string> => {
+      if (existingId) {
+        const { data: updated, error: updateError } = await wann
+          .from("planner_tasks")
+          .update(payload)
+          .eq("id", existingId)
+          .select("id");
+        if (updateError) throw updateError;
+        if (updated && updated.length > 0) return existingId;
+      }
+      const { data: inserted, error: insertError } = await wann
+        .from("planner_tasks")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (insertError) throw insertError;
+      return inserted.id;
+    };
+
+    // DAILY TASK(컴포넌트와 무관한 작업) — 2026-10-22.
+    // daily_task_id: daily_tasks 한 줄을 그 날짜의 Daily Project 하위 TASK로 만들거나 갱신(날짜가 바뀌면 프로젝트도 이동).
+    // remove_daily_task_id: 대기공간으로 되돌리거나 삭제할 때 TASK와 행을 함께 지운다.
+    const removeDailyTaskId: string | null = body.remove_daily_task_id ?? null;
+    const dailyTaskId: string | null = body.daily_task_id ?? null;
+    if (removeDailyTaskId) {
+      const { data: dt, error: dtError } = await kora
+        .from("daily_tasks")
+        .select("id, planner_task_id")
+        .eq("id", removeDailyTaskId)
+        .maybeSingle();
+      if (dtError) throw dtError;
+      if (dt) {
+        if (dt.planner_task_id) await deleteWannTasks([dt.planner_task_id]);
+        const { error: delError } = await kora.from("daily_tasks").delete().eq("id", dt.id);
+        if (delError) throw delError;
+      }
+      return json({ synced: true, removed_daily_task: removeDailyTaskId });
+    }
+    if (dailyTaskId) {
+      const { data: dt, error: dtError } = await kora
+        .from("daily_tasks")
+        .select("id, task_date, start_time, end_time, name, note, planner_task_id")
+        .eq("id", dailyTaskId)
+        .single();
+      if (dtError) throw dtError;
+      const taskId = await upsertTask(dt.planner_task_id, {
+        ...common,
+        multiple_task_id: await dailyProjectFor(dt.task_date),
+        title: dt.name,
+        notes: dt.note ?? null,
+        due_date: dt.task_date,
+        due_time: dt.start_time,
+        end_time: dt.end_time,
+      });
+      if (taskId !== dt.planner_task_id) {
+        const { error: linkError } = await kora
+          .from("daily_tasks")
+          .update({ planner_task_id: taskId })
+          .eq("id", dt.id);
+        if (linkError) throw linkError;
+      }
+      return json({ synced: true, task_ids: [taskId], daily_project_ids: [...dailyProjectCache.values()] });
+    }
+
 
     // 1) 블록 배정 해제 — 블록 행과 그 TASK를 함께 지운다.
     const taskIdsToDelete = [...deleteIds];
@@ -288,78 +407,9 @@ Deno.serve(async (req: Request) => {
       return json({ synced: false, reason: "order has no wann project yet" });
     }
 
-    /** 그 날짜의 Daily Project를 찾거나 만든다. 같은 호출 안에서는 캐시. */
-    const dailyProjectCache = new Map<string, string>();
-    const dailyProjectFor = async (date: string): Promise<string> => {
-      const cached = dailyProjectCache.get(date);
-      if (cached) return cached;
-      const { data: existing, error: findError } = await wann
-        .from("planner_multiple_tasks")
-        .select("id")
-        .eq("user_id", WANN_USER_ID)
-        .eq("category_id", WANN_SHCO_CATEGORY_ID)
-        .eq("date", date)
-        .like("name", `${DAILY_PROJECT_PREFIX}%`)
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (findError) throw findError;
-      let id = existing?.[0]?.id as string | undefined;
-      if (!id) {
-        const weekday = WEEKDAYS_KO[new Date(`${date}T00:00:00Z`).getUTCDay()];
-        const { data: created, error: createError } = await wann
-          .from("planner_multiple_tasks")
-          .insert({
-            user_id: WANN_USER_ID,
-            category_id: WANN_SHCO_CATEGORY_ID,
-            name: `${DAILY_PROJECT_PREFIX} — ${date} (${weekday})`,
-            date,
-            end_date: date,
-          })
-          .select("id")
-          .single();
-        if (createError) throw createError;
-        id = created.id as string;
-      }
-      dailyProjectCache.set(date, id);
-      return id;
-    };
-
     /** 오더 프로젝트가 있으면 그것, 없으면(오더 미연결) 그 날짜의 Daily Project. */
     const projectFor = async (date: string | null): Promise<string> =>
       orderProjectId ?? (await dailyProjectFor(date ?? canberraToday()));
-
-    const common = {
-      user_id: WANN_USER_ID,
-      category_id: WANN_SHCO_CATEGORY_ID,
-      subtag_id: WANN_PRODUCTION_SUBTAG_ID,
-      category_ids: [WANN_SHCO_CATEGORY_ID],
-      recurrence: "none",
-      // 유니크 인덱스(세션당 1개) 때문에 새 TASK에는 채우지 않는다. 기존 TASK를 UPDATE할 때는 null로 풀어준다.
-      kora_work_session_id: null,
-    };
-
-    /** 기존 TASK가 있으면 UPDATE, 없거나 WANN에서 지워졌으면 INSERT. 최종 TASK id를 돌려준다. */
-    const upsertTask = async (
-      existingId: string | null,
-      payload: Record<string, unknown>,
-    ): Promise<string> => {
-      if (existingId) {
-        const { data: updated, error: updateError } = await wann
-          .from("planner_tasks")
-          .update(payload)
-          .eq("id", existingId)
-          .select("id");
-        if (updateError) throw updateError;
-        if (updated && updated.length > 0) return existingId;
-      }
-      const { data: inserted, error: insertError } = await wann
-        .from("planner_tasks")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (insertError) throw insertError;
-      return inserted.id;
-    };
 
     /** 플래너 TASK의 상세항목에 "관찰 — …" 한 줄을 맞춘다(없으면 추가, 있으면 수정, 값이 비면 삭제). */
     const syncObservationSubitem = async (plannerTaskId: string, line: string | null) => {
