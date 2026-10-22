@@ -18,6 +18,7 @@ import { formatDelivery, generateTitle } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { AddFormulaVersionForm } from "@/components/pilot/WorkSessionWorkspace";
 import { DashboardComponentCopyForm } from "@/components/pilot/DashboardComponentCopyForm";
+import { DietaryChips, orderTitle, useOrderDietaryNames } from "./OrderTitle";
 import { buttonClass } from "./ui";
 
 /**
@@ -32,6 +33,7 @@ export function ProductionOrdersTab() {
   const components = useQuery(dashboardComponentsQuery());
   const blocks = useQuery(workBlocksQuery());
   const [adding, setAdding] = useState<{ orderId: string; slot: CoreSlot } | null>(null);
+  const dietaryOf = useOrderDietaryNames();
   const [mode, setMode] = useState<"pick" | "copy">("pick");
 
   const rowsByOrder = useMemo(() => {
@@ -142,8 +144,9 @@ export function ProductionOrdersTab() {
                 params={{ orderId: order.id }}
                 className="text-sm underline-offset-2 hover:underline"
               >
-                {order.products?.name ?? order.customers?.name ?? order.recipient ?? ""}
+                {orderTitle(order.customers?.name, order.products?.name, order.recipient ?? "")}
               </Link>
+              <DietaryChips names={dietaryOf(order.id)} />
               <span className="font-mono text-[10px] uppercase text-muted-foreground">
                 {orderStatusLabel(order.status)}
               </span>

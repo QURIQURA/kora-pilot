@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { WorkSessionWorkspace } from "@/components/pilot/WorkSessionWorkspace";
+import { DietaryChips, orderTitle, useOrderDietaryNames } from "@/components/pilot/OrderTitle";
 import { BlockTaskDetails } from "@/components/pilot/BlockTaskDetails";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -125,6 +126,7 @@ export function ProductionDashboard() {
   const dailyQuery = useQuery(dailyTasksQuery());
   const dailyTemplatesQuery = useQuery(dailyTaskTemplatesQuery());
   const ordersData = useQuery(ordersQuery());
+  const dietaryOf = useOrderDietaryNames();
   const [pickedRowIds, setPickedRowIds] = useState<string[]>([]);
   const [selectedDailyId, setSelectedDailyId] = useState<string | null>(null);
   const [dailyName, setDailyName] = useState("");
@@ -777,8 +779,9 @@ export function ProductionDashboard() {
                       {g.order.order_number}
                     </span>
                     <span className="text-muted-foreground">
-                      {g.order.productName ?? g.order.customerName ?? ""}
+                      {orderTitle(g.order.customerName, g.order.productName)}
                     </span>
+                    <DietaryChips names={dietaryOf(g.order.id)} />
                     {delivery && (
                       <span className="ml-auto font-mono text-[11px]">🚚 {delivery}</span>
                     )}
@@ -921,7 +924,10 @@ export function ProductionDashboard() {
                       <div key={g.order.id} className="space-y-0.5">
                         <p className="label-caps text-[10px] text-muted-foreground">
                           {g.order.order_number} ·{" "}
-                          {g.order.productName ?? g.order.customerName ?? ""}
+                          {orderTitle(g.order.customerName, g.order.productName)}
+                          {dietaryOf(g.order.id).length > 0
+                            ? ` · ${dietaryOf(g.order.id).join(", ")}`
+                            : ""}
                           {formatDelivery(g.order.pickupAt, g.order.eventDate)
                             ? ` · 🚚 ${formatDelivery(g.order.pickupAt, g.order.eventDate)}`
                             : ""}
