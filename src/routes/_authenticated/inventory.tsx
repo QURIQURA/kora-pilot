@@ -1,16 +1,15 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import {
   mouldsQuery,
   stockCandidatesQuery,
   stockItemsQuery,
-  stockMovementsQuery,
   type StockItemRow,
+  type StockLine,
 } from "@/lib/queries";
-import { supabase } from "@/integrations/supabase/client";
-import { adjustStock, STOCK_REASON_LABEL, type StockReason } from "@/lib/stock";
-import { formatDateTime } from "@/lib/datetime";
+import { adjustStock } from "@/lib/stock";
 import {
   Field,
   PageHeader,
@@ -33,104 +32,195 @@ export const Route = createFileRoute("/_authenticated/inventory")({
   component: InventoryPage,
 });
 
+type MouldLite = { id: string; name: string; diameter_mm: number | null };
+
 /** 몰드 하나의 바닥 면적(cm²) — 지름(mm) 기준 원형. 지름이 없으면 null. */
-function mouldAreaCm2(m: { diameter_mm: number | null } | undefined | null): number | null {
+function mouldAreaCm2(m: MouldLite | undefined | null): number | null {
   const d = m?.diameter_mm;
   return d ? Math.PI * (Number(d) / 20) ** 2 : null;
 }
 
-function sizeSummary(
-  row: Pick<StockItemRow, "area_cm2" | "height_mm" | "mould_id" | "mould_qty">,
-  moulds: { id: string; name: string; diameter_mm: number | null }[],
-): string {
-  const parts: string[] = [];
-  if (row.area_cm2 != null) parts.push(`면적 ${row.area_cm2}cm²`);
-  if (row.height_mm != null) parts.push(`높이 ${row.height_mm}mm`);
-  const mould = moulds.find((m) => m.id === row.mould_id);
-  if (mould) {
-    if (row.mould_qty != null) parts.push(`${mould.name} ${row.mould_qty}개분`);
-    const a = mouldAreaCm2(mould);
-    if (a && row.area_cm2 != null) parts.push(`(면적 기준 ≈ ${(row.area_cm2 / a).toFixed(1)}개분)`);
-  }
-  return parts.join(" · ");
+const numOrNull = (v: string): number | null =>
+  v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null;
+
+/** 가로×세로×높이(mm) 표시 — 입력된 값만 */
+function dimText(l: Pick<StockLine, "width_mm" | "length_mm" | "height_mm">): string {
+  const parts = [l.width_mm, l.length_mm, l.height_mm];
+  if (parts.every((v) => v == null)) return "";
+  return `${parts.map((v) => (v == null ? "–" : v)).join("×")}mm`;
 }
 
-/** 면적/높이/몰드 기준 입력 — 추가 폼과 항목 편집이 같이 쓴다 */
-function SizeFields({
-  area,
-  height,
-  mouldId,
-  mouldQty,
-  onChange,
-}: {
-  area: string;
+function mouldText(
+  l: Pick<StockLine, "width_mm" | "length_mm" | "mould_id" | "mould_qty">,
+  moulds: MouldLite[],
+): string {
+  const mould = moulds.find((m) => m.id === l.mould_id);
+  if (!mould) return "";
+  const parts: string[] = [];
+  if (l.mould_qty != null) parts.push(`${mould.name} ${l.mould_qty}개분`);
+  const a = mouldAreaCm2(mould);
+  if (a && l.width_mm && l.length_mm) {
+    parts.push(`면적 기준 ≈ ${((l.width_mm * l.length_mm) / 100 / a).toFixed(1)}개분`);
+  }
+  return parts.length ? parts.join(" · ") : mould.name;
+}
+
+type SizeForm = {
+  width: string;
+  length: string;
   height: string;
+  unit: string;
+  qty: string;
   mouldId: string;
   mouldQty: string;
-  onChange: (
-    patch: Partial<{ area: string; height: string; mouldId: string; mouldQty: string }>,
-  ) => void;
+};
+
+const emptyForm = (): SizeForm => ({
+  width: "",
+  length: "",
+  height: "",
+  unit: "개",
+  qty: "0",
+  mouldId: "",
+  mouldQty: "",
+});
+
+const formFromLine = (l: StockLine): SizeForm => ({
+  width: l.width_mm != null ? String(l.width_mm) : "",
+  length: l.length_mm != null ? String(l.length_mm) : "",
+  height: l.height_mm != null ? String(l.height_mm) : "",
+  unit: l.unit_label,
+  qty: String(l.quantity),
+  mouldId: l.mould_id ?? "",
+  mouldQty: l.mould_qty != null ? String(l.mould_qty) : "",
+});
+
+/** 가로·세로·높이 / 단위·수량 / 몰드 기준 입력 — 추가와 수정이 같이 쓴다 */
+function LineFields({
+  form,
+  onChange,
+}: {
+  form: SizeForm;
+  onChange: (patch: Partial<SizeForm>) => void;
 }) {
   const moulds = useQuery(mouldsQuery());
-  const mould = (moulds.data ?? []).find((m) => m.id === mouldId);
+  const mould = (moulds.data ?? []).find((m) => m.id === form.mouldId);
   const a = mouldAreaCm2(mould);
-  const auto = a && Number(area) > 0 ? (Number(area) / a).toFixed(1) : null;
+  const w = Number(form.width);
+  const l = Number(form.length);
+  const auto = a && w > 0 && l > 0 ? ((w * l) / 100 / a).toFixed(1) : null;
   return (
-    <div className="grid gap-3 sm:grid-cols-4">
-      <Field label="면적 (cm²)">
-        <input
-          className={inputClass}
-          inputMode="decimal"
-          value={area}
-          onChange={(e) => onChange({ area: e.target.value })}
-        />
-      </Field>
-      <Field label="높이 (mm)">
-        <input
-          className={inputClass}
-          inputMode="decimal"
-          value={height}
-          onChange={(e) => onChange({ height: e.target.value })}
-        />
-      </Field>
-      <Field label="케익 몰드 기준">
-        <select
-          className={selectClass}
-          value={mouldId}
-          onChange={(e) => onChange({ mouldId: e.target.value })}
-        >
-          <option value="">— 안 함 —</option>
-          {(moulds.data ?? []).map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="몰드 몇 개분">
-        <input
-          className={inputClass}
-          inputMode="decimal"
-          disabled={!mouldId}
-          placeholder={auto ? `면적 기준 ≈ ${auto}` : ""}
-          value={mouldQty}
-          onChange={(e) => onChange({ mouldQty: e.target.value })}
-        />
-      </Field>
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-5">
+        <Field label="가로 (mm)">
+          <input
+            className={inputClass}
+            inputMode="decimal"
+            value={form.width}
+            onChange={(e) => onChange({ width: e.target.value })}
+          />
+        </Field>
+        <Field label="세로 (mm)">
+          <input
+            className={inputClass}
+            inputMode="decimal"
+            value={form.length}
+            onChange={(e) => onChange({ length: e.target.value })}
+          />
+        </Field>
+        <Field label="높이 (mm)">
+          <input
+            className={inputClass}
+            inputMode="decimal"
+            value={form.height}
+            onChange={(e) => onChange({ height: e.target.value })}
+          />
+        </Field>
+        <Field label="수량">
+          <input
+            className={inputClass}
+            inputMode="decimal"
+            value={form.qty}
+            onChange={(e) => onChange({ qty: e.target.value })}
+          />
+        </Field>
+        <Field label="단위 (개, 장, g)">
+          <input
+            className={inputClass}
+            value={form.unit}
+            onChange={(e) => onChange({ unit: e.target.value })}
+          />
+        </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="케익 몰드 기준">
+          <select
+            className={selectClass}
+            value={form.mouldId}
+            onChange={(e) => onChange({ mouldId: e.target.value })}
+          >
+            <option value="">— 안 함 —</option>
+            {(moulds.data ?? []).map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="몰드 몇 개분">
+          <input
+            className={inputClass}
+            inputMode="decimal"
+            disabled={!form.mouldId}
+            placeholder={auto ? `면적 기준 ≈ ${auto}` : ""}
+            value={form.mouldQty}
+            onChange={(e) => onChange({ mouldQty: e.target.value })}
+          />
+        </Field>
+      </div>
     </div>
   );
 }
 
-const numOrNull = (v: string): number | null =>
-  v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null;
+const lineValues = (f: SizeForm) => ({
+  width_mm: numOrNull(f.width),
+  length_mm: numOrNull(f.length),
+  height_mm: numOrNull(f.height),
+  unit_label: f.unit.trim() || "개",
+  mould_id: f.mouldId || null,
+  mould_qty: f.mouldId ? numOrNull(f.mouldQty) : null,
+});
+
+/** 컴포넌트 stock_items.quantity를 줄 합계로 맞춘다 */
+async function syncItemTotal(stockItemId: string) {
+  const { data, error } = await supabase
+    .from("stock_item_lines")
+    .select("quantity")
+    .eq("stock_item_id", stockItemId);
+  if (error) throw error;
+  const total = (data ?? []).reduce((s, l) => s + Number(l.quantity), 0);
+  const { error: e2 } = await supabase
+    .from("stock_items")
+    .update({ quantity: total, updated_at: new Date().toISOString() })
+    .eq("id", stockItemId);
+  if (e2) throw e2;
+}
 
 function InventoryPage() {
   const items = useQuery(stockItemsQuery());
   const [adding, setAdding] = useState(false);
 
   const rows = items.data ?? [];
-  const productRows = rows.filter((r) => r.item_type === "PRODUCT");
-  const componentRows = rows.filter((r) => r.item_type === "COMPONENT");
+  const products = useMemo(() => {
+    const map = new Map<string, StockItemRow[]>();
+    for (const r of rows.filter((r) => r.item_type === "PRODUCT")) {
+      const list = map.get(r.group_label) ?? [];
+      list.push(r);
+      map.set(r.group_label, list);
+    }
+    return [...map.entries()];
+  }, [rows]);
+  const components = rows.filter((r) => r.item_type === "COMPONENT");
 
   return (
     <div className="space-y-4">
@@ -143,31 +233,39 @@ function InventoryPage() {
         }
       />
       <p className="font-mono text-xs uppercase text-muted-foreground">
-        PRODUCT(완성 케익)와 COMPONENT(반제품/시트)를 각각 따로 추적합니다. PRODUCTION 작업 세션을
-        COMPLETED로 바꾸면 그 자리에서 바로 반영하거나, 여기서 언제든 수동으로 조정할 수 있습니다.
+        PRODUCT(완성 케익)와 COMPONENT(반제품/시트)를 각각 따로 추적합니다. 같은 품목은 한 박스에
+        사이즈별로 수량을 적어요. PRODUCTION 작업 세션을 COMPLETED로 바꾸면 그 자리에서 바로
+        반영하거나, 여기서 언제든 수정할 수 있습니다.
       </p>
 
-      {adding && <AddStockItemForm onDone={() => setAdding(false)} />}
+      {adding && <AddStockForm onDone={() => setAdding(false)} />}
 
-      <SectionCard title={`PRODUCT (${productRows.length})`}>
-        {productRows.length === 0 ? (
+      <SectionCard title={`PRODUCT (${products.length})`}>
+        {products.length === 0 ? (
           <p className="font-mono text-xs uppercase text-muted-foreground">등록된 항목 없음</p>
         ) : (
           <ul className="divide-y divide-border">
-            {productRows.map((row) => (
-              <StockItemRowView key={row.id} row={row} />
+            {products.map(([name, list]) => (
+              <li key={name} className="space-y-1 px-3 py-3">
+                <p className="text-sm">{name}</p>
+                <ul className="divide-y divide-dashed divide-border">
+                  {list.map((r) => (
+                    <ProductSizeLine key={r.id} row={r} />
+                  ))}
+                </ul>
+              </li>
             ))}
           </ul>
         )}
       </SectionCard>
 
-      <SectionCard title={`COMPONENT (${componentRows.length})`}>
-        {componentRows.length === 0 ? (
+      <SectionCard title={`COMPONENT (${components.length})`}>
+        {components.length === 0 ? (
           <p className="font-mono text-xs uppercase text-muted-foreground">등록된 항목 없음</p>
         ) : (
           <ul className="divide-y divide-border">
-            {componentRows.map((row) => (
-              <StockItemRowView key={row.id} row={row} />
+            {components.map((row) => (
+              <ComponentBox key={row.id} row={row} />
             ))}
           </ul>
         )}
@@ -176,13 +274,12 @@ function InventoryPage() {
   );
 }
 
-function AddStockItemForm({ onDone }: { onDone: () => void }) {
+function AddStockForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
   const candidates = useQuery(stockCandidatesQuery());
-  const [itemType, setItemType] = useState<"PRODUCT" | "COMPONENT">("PRODUCT");
+  const [itemType, setItemType] = useState<"PRODUCT" | "COMPONENT">("COMPONENT");
   const [targetId, setTargetId] = useState("");
-  const [unitLabel, setUnitLabel] = useState("개");
-  const [size, setSize] = useState({ area: "", height: "", mouldId: "", mouldQty: "" });
+  const [form, setForm] = useState<SizeForm>(emptyForm());
   const [error, setError] = useState<string | null>(null);
 
   const options =
@@ -191,31 +288,19 @@ function AddStockItemForm({ onDone }: { onDone: () => void }) {
   const create = useMutation({
     mutationFn: async () => {
       if (!targetId) throw new Error("항목을 선택하세요");
+      const qty = Number(form.qty || "0");
+      if (!Number.isFinite(qty)) throw new Error("수량이 올바르지 않아요");
+      const v = lineValues(form);
       await adjustStock({
         itemType,
         productSizeId: itemType === "PRODUCT" ? targetId : null,
         componentId: itemType === "COMPONENT" ? targetId : null,
-        quantityDelta: 0,
+        quantityDelta: qty,
         reason: "MANUAL_ADJUST",
-        note: "재고 항목 신규 등록",
-        unitLabel,
+        note: "재고 항목 등록",
+        unitLabel: v.unit_label,
+        line: { createNew: true, ...v },
       });
-      // 면적/높이/몰드 기준(선택) — 방금 만든 항목에 채운다
-      const matchColumn = itemType === "PRODUCT" ? "product_size_id" : "component_id";
-      const patch = {
-        area_cm2: numOrNull(size.area),
-        height_mm: numOrNull(size.height),
-        mould_id: size.mouldId || null,
-        mould_qty: size.mouldId ? numOrNull(size.mouldQty) : null,
-      };
-      if (patch.area_cm2 != null || patch.height_mm != null || patch.mould_id) {
-        const { error: upErr } = await supabase
-          .from("stock_items")
-          .update(patch)
-          .eq("item_type", itemType)
-          .eq(matchColumn, targetId);
-        if (upErr) throw upErr;
-      }
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["stock_items"] });
@@ -227,7 +312,7 @@ function AddStockItemForm({ onDone }: { onDone: () => void }) {
 
   return (
     <SectionCard title="신규 재고 항목">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="유형">
           <select
             className={selectClass}
@@ -237,8 +322,8 @@ function AddStockItemForm({ onDone }: { onDone: () => void }) {
               setTargetId("");
             }}
           >
-            <option value="PRODUCT">PRODUCT (완성 케익)</option>
             <option value="COMPONENT">COMPONENT (반제품)</option>
+            <option value="PRODUCT">PRODUCT (완성 케익)</option>
           </select>
         </Field>
         <Field label="대상">
@@ -255,16 +340,28 @@ function AddStockItemForm({ onDone }: { onDone: () => void }) {
             ))}
           </select>
         </Field>
-        <Field label="단위 (예: 개, 장, g)">
-          <input
-            className={inputClass}
-            value={unitLabel}
-            onChange={(e) => setUnitLabel(e.target.value)}
-          />
-        </Field>
       </div>
       <div className="mt-3">
-        <SizeFields {...size} onChange={(p) => setSize((s) => ({ ...s, ...p }))} />
+        {itemType === "COMPONENT" ? (
+          <LineFields form={form} onChange={(p) => setForm((f) => ({ ...f, ...p }))} />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="수량">
+              <input
+                className={inputClass}
+                value={form.qty}
+                onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))}
+              />
+            </Field>
+            <Field label="단위 (개, 조각)">
+              <input
+                className={inputClass}
+                value={form.unit}
+                onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+              />
+            </Field>
+          </div>
+        )}
       </div>
       {error && <p className="mt-2 font-mono text-xs text-destructive">{error}</p>}
       <div className="mt-3">
@@ -281,140 +378,313 @@ function AddStockItemForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function StockItemRowView({ row }: { row: StockItemRow }) {
+/** 컴포넌트 한 박스 — 사이즈별 줄이 모두 보인다(펼침 없음) */
+function ComponentBox({ row }: { row: StockItemRow }) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [delta, setDelta] = useState("");
-  const [reason, setReason] = useState<StockReason>("MANUAL_ADJUST");
-  const [note, setNote] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const moulds = useQuery(mouldsQuery());
-  const [size, setSize] = useState({
-    area: row.area_cm2 != null ? String(row.area_cm2) : "",
-    height: row.height_mm != null ? String(row.height_mm) : "",
-    mouldId: row.mould_id ?? "",
-    mouldQty: row.mould_qty != null ? String(row.mould_qty) : "",
-  });
-  const saveSize = useMutation({
-    mutationFn: async () => {
-      const { error: e } = await supabase
-        .from("stock_items")
-        .update({
-          area_cm2: numOrNull(size.area),
-          height_mm: numOrNull(size.height),
-          mould_id: size.mouldId || null,
-          mould_qty: size.mouldId ? numOrNull(size.mouldQty) : null,
-        })
-        .eq("id", row.id);
-      if (e) throw e;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["stock_items"] }),
-    onError: (e: Error) => setError(e.message),
-  });
-  const summary = sizeSummary(row, moulds.data ?? []);
+  const [addingLine, setAddingLine] = useState(false);
+  const [form, setForm] = useState<SizeForm>(emptyForm());
+  const [error, setError] = useState<string | null>(null);
 
-  const movements = useQuery({ ...stockMovementsQuery(row.id), enabled: open });
-
-  const adjust = useMutation({
+  const addLine = useMutation({
     mutationFn: async () => {
-      const n = Number(delta);
-      if (!Number.isFinite(n) || n === 0) throw new Error("숫자를 입력하세요 (0 제외)");
+      const qty = Number(form.qty || "0");
+      if (!Number.isFinite(qty)) throw new Error("수량이 올바르지 않아요");
+      const v = lineValues(form);
       await adjustStock({
-        itemType: row.item_type,
-        productSizeId: row.product_size_id,
+        itemType: "COMPONENT",
         componentId: row.component_id,
-        quantityDelta: n,
-        reason,
-        note: note.trim() || null,
+        quantityDelta: qty,
+        reason: "MANUAL_ADJUST",
+        note: "사이즈 추가",
+        unitLabel: v.unit_label,
+        line: { createNew: true, ...v },
       });
     },
     onSuccess: async () => {
-      setDelta("");
-      setNote("");
+      setAddingLine(false);
+      setForm(emptyForm());
       await queryClient.invalidateQueries({ queryKey: ["stock_items"] });
-      await queryClient.invalidateQueries({ queryKey: ["stock_movements", row.id] });
     },
     onError: (e: Error) => setError(e.message),
   });
 
   return (
-    <li className="space-y-2 px-3 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          className="text-left text-sm hover:underline"
-          onClick={() => setOpen((v) => !v)}
-        >
-          {row.label}
+    <li className="space-y-1 px-3 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm">{row.group_label}</p>
+        <button type="button" className={buttonClass} onClick={() => setAddingLine((v) => !v)}>
+          {addingLine ? "닫기" : "+ 사이즈 추가"}
         </button>
-        <span className="font-mono text-sm">
-          {row.quantity} {row.unit_label}
-        </span>
       </div>
-      {summary && <p className="font-mono text-[11px] text-muted-foreground">{summary}</p>}
-
-      {open && (
-        <div className="space-y-3 border-t border-dashed border-border pt-2">
-          <div className="grid gap-2 sm:grid-cols-4">
-            <input
-              className={inputClass}
-              placeholder="+3 / -2"
-              value={delta}
-              onChange={(e) => setDelta(e.target.value)}
-            />
-            <select
-              className={selectClass}
-              value={reason}
-              onChange={(e) => setReason(e.target.value as StockReason)}
-            >
-              {(Object.keys(STOCK_REASON_LABEL) as StockReason[]).map((r) => (
-                <option key={r} value={r}>
-                  {STOCK_REASON_LABEL[r]}
-                </option>
-              ))}
-            </select>
-            <input
-              className={inputClass + " sm:col-span-1"}
-              placeholder="메모 (선택)"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-            <button
-              type="button"
-              className={buttonClass}
-              disabled={adjust.isPending}
-              onClick={() => adjust.mutate()}
-            >
-              반영
-            </button>
-          </div>
-          <div className="space-y-2">
-            <SizeFields {...size} onChange={(p) => setSize((s) => ({ ...s, ...p }))} />
-            <button
-              type="button"
-              className={buttonClass}
-              disabled={saveSize.isPending}
-              onClick={() => saveSize.mutate()}
-            >
-              면적/높이/몰드 저장
-            </button>
-          </div>
+      {row.lines.length === 0 ? (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          사이즈별 재고가 없어요 — “+ 사이즈 추가”로 입력하세요.
+        </p>
+      ) : (
+        <ul className="divide-y divide-dashed divide-border">
+          {row.lines.map((l) => (
+            <ComponentLine key={l.id} line={l} stockItemId={row.id} moulds={moulds.data ?? []} />
+          ))}
+        </ul>
+      )}
+      {addingLine && (
+        <div className="space-y-2 border border-dashed border-border p-2">
+          <LineFields form={form} onChange={(p) => setForm((f) => ({ ...f, ...p }))} />
           {error && <p className="font-mono text-xs text-destructive">{error}</p>}
-          <div className="space-y-1">
-            {(movements.data ?? []).length === 0 ? (
-              <p className="font-mono text-[11px] text-muted-foreground">변동 이력 없음</p>
-            ) : (
-              (movements.data ?? []).map((m) => (
-                <p key={m.id} className="font-mono text-[11px] text-muted-foreground">
-                  {formatDateTime(m.created_at)} · {m.quantity_delta > 0 ? "+" : ""}
-                  {m.quantity_delta} · {STOCK_REASON_LABEL[m.reason as StockReason] ?? m.reason}
-                  {m.note ? ` · ${m.note}` : ""}
-                </p>
-              ))
-            )}
+          <button
+            type="button"
+            className={primaryButtonClass}
+            disabled={addLine.isPending}
+            onClick={() => addLine.mutate()}
+          >
+            추가
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function ComponentLine({
+  line,
+  stockItemId,
+  moulds,
+}: {
+  line: StockLine;
+  stockItemId: string;
+  moulds: MouldLite[];
+}) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [form, setForm] = useState<SizeForm>(formFromLine(line));
+  const [error, setError] = useState<string | null>(null);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["stock_items"] });
+
+  const bump = useMutation({
+    mutationFn: async (delta: number) => {
+      const next = Math.max(0, line.quantity + delta);
+      const { error: e } = await supabase
+        .from("stock_item_lines")
+        .update({ quantity: next, updated_at: new Date().toISOString() })
+        .eq("id", line.id);
+      if (e) throw e;
+      await syncItemTotal(stockItemId);
+      await supabase.from("stock_movements").insert({
+        stock_item_id: stockItemId,
+        quantity_delta: next - line.quantity,
+        reason: "MANUAL_ADJUST",
+        note: `${dimText(line) || "사이즈 미지정"} 수량 조정`,
+      });
+    },
+    onSuccess: refresh,
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const qty = Number(form.qty);
+      if (!Number.isFinite(qty) || qty < 0) throw new Error("수량이 올바르지 않아요");
+      const { error: e } = await supabase
+        .from("stock_item_lines")
+        .update({ ...lineValues(form), quantity: qty, updated_at: new Date().toISOString() })
+        .eq("id", line.id);
+      if (e) throw e;
+      await syncItemTotal(stockItemId);
+      if (qty !== line.quantity) {
+        await supabase.from("stock_movements").insert({
+          stock_item_id: stockItemId,
+          quantity_delta: qty - line.quantity,
+          reason: "MANUAL_ADJUST",
+          note: "수정",
+        });
+      }
+    },
+    onSuccess: async () => {
+      setEditing(false);
+      await refresh();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async () => {
+      const { error: e } = await supabase.from("stock_item_lines").delete().eq("id", line.id);
+      if (e) throw e;
+      await syncItemTotal(stockItemId);
+    },
+    onSuccess: refresh,
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const mt = mouldText(line, moulds);
+
+  return (
+    <li className="space-y-2 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-mono text-sm">{dimText(line) || "사이즈 미입력"}</p>
+          {mt && <p className="font-mono text-[11px] text-muted-foreground">{mt}</p>}
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={bump.isPending || line.quantity <= 0}
+            onClick={() => bump.mutate(-1)}
+          >
+            −
+          </button>
+          <span className="min-w-14 text-center font-mono text-sm">
+            {line.quantity} {line.unit_label}
+          </span>
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={bump.isPending}
+            onClick={() => bump.mutate(1)}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={() => {
+              setForm(formFromLine(line));
+              setEditing((v) => !v);
+            }}
+          >
+            {editing ? "닫기" : "수정"}
+          </button>
+        </div>
+      </div>
+      {editing && (
+        <div className="space-y-2 border border-dashed border-border p-2">
+          <LineFields form={form} onChange={(p) => setForm((f) => ({ ...f, ...p }))} />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={save.isPending}
+              onClick={() => save.mutate()}
+            >
+              저장
+            </button>
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={remove.isPending}
+              onClick={() => (confirmDelete ? remove.mutate() : setConfirmDelete(true))}
+            >
+              {confirmDelete ? "정말 삭제" : "이 사이즈 삭제"}
+            </button>
           </div>
         </div>
       )}
+      {error && <p className="font-mono text-xs text-destructive">{error}</p>}
+    </li>
+  );
+}
+
+/** PRODUCT는 사이즈별 항목이 이미 따로 있어, 같은 제품끼리 한 박스에 줄로 보여준다 */
+function ProductSizeLine({ row }: { row: StockItemRow }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [qty, setQty] = useState(String(row.quantity));
+  const [unit, setUnit] = useState(row.unit_label);
+  const [error, setError] = useState<string | null>(null);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["stock_items"] });
+
+  const bump = useMutation({
+    mutationFn: async (delta: number) => {
+      await adjustStock({
+        itemType: "PRODUCT",
+        productSizeId: row.product_size_id,
+        quantityDelta: delta,
+        reason: "MANUAL_ADJUST",
+      });
+    },
+    onSuccess: refresh,
+    onError: (e: Error) => setError(e.message),
+  });
+  const save = useMutation({
+    mutationFn: async () => {
+      const n = Number(qty);
+      if (!Number.isFinite(n) || n < 0) throw new Error("수량이 올바르지 않아요");
+      const { error: e } = await supabase
+        .from("stock_items")
+        .update({
+          quantity: n,
+          unit_label: unit.trim() || "개",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
+      if (e) throw e;
+      if (n !== row.quantity) {
+        await supabase.from("stock_movements").insert({
+          stock_item_id: row.id,
+          quantity_delta: n - row.quantity,
+          reason: "MANUAL_ADJUST",
+          note: "수정",
+        });
+      }
+    },
+    onSuccess: async () => {
+      setEditing(false);
+      await refresh();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  return (
+    <li className="space-y-2 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-mono text-sm">{row.size_label || "사이즈 미지정"}</p>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={bump.isPending || row.quantity <= 0}
+            onClick={() => bump.mutate(-1)}
+          >
+            −
+          </button>
+          <span className="min-w-14 text-center font-mono text-sm">
+            {row.quantity} {row.unit_label}
+          </span>
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={bump.isPending}
+            onClick={() => bump.mutate(1)}
+          >
+            +
+          </button>
+          <button type="button" className={buttonClass} onClick={() => setEditing((v) => !v)}>
+            {editing ? "닫기" : "수정"}
+          </button>
+        </div>
+      </div>
+      {editing && (
+        <div className="flex flex-wrap items-end gap-2 border border-dashed border-border p-2">
+          <Field label="수량">
+            <input className={inputClass} value={qty} onChange={(e) => setQty(e.target.value)} />
+          </Field>
+          <Field label="단위">
+            <input className={inputClass} value={unit} onChange={(e) => setUnit(e.target.value)} />
+          </Field>
+          <button
+            type="button"
+            className={primaryButtonClass}
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+          >
+            저장
+          </button>
+        </div>
+      )}
+      {error && <p className="font-mono text-xs text-destructive">{error}</p>}
     </li>
   );
 }

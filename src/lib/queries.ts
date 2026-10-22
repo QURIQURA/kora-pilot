@@ -2155,6 +2155,19 @@ export const formulaCostCompareQuery = (formulaIds: string[]) =>
 
 // ---- 냉동 재고관리 (STOCK) ----
 
+/** 같은 컴포넌트의 사이즈(크기)별 재고 한 줄 — stock_item_lines */
+export interface StockLine {
+  id: string;
+  width_mm: number | null;
+  length_mm: number | null;
+  height_mm: number | null;
+  unit_label: string;
+  quantity: number;
+  mould_id: string | null;
+  mould_qty: number | null;
+  note: string | null;
+}
+
 export interface StockItemRow {
   id: string;
   item_type: "PRODUCT" | "COMPONENT";
@@ -2164,12 +2177,11 @@ export interface StockItemRow {
   quantity: number;
   notes: string | null;
   updated_at: string;
-  /** 면적(cm²)·높이(mm) — 시트 자투리처럼 크기로 관리하는 항목용(선택) */
-  area_cm2: number | null;
-  height_mm: number | null;
-  /** 케익 몰드 기준 환산: 어떤 몰드 몇 개분이 남았는지(선택) */
-  mould_id: string | null;
-  mould_qty: number | null;
+  /** COMPONENT: 사이즈별 줄들(같은 컴포넌트는 한 박스). PRODUCT는 비어 있고 항목 자체가 한 줄. */
+  lines: StockLine[];
+  /** 박스 제목(제품/컴포넌트 이름)과 사이즈 라벨 */
+  group_label: string;
+  size_label: string;
   label: string; // 화면 표시용 이름 (Product면 "이름 · 사이즈", Component면 이름)
 }
 
@@ -2181,7 +2193,7 @@ export const stockItemsQuery = () =>
         await supabase
           .from("stock_items")
           .select(
-            "*, product_sizes(id, shape, diameter_mm, length_mm, width_mm, height_mm, is_default, products(id, name)), components(id, name)",
+            "*, stock_item_lines(*), product_sizes(id, shape, diameter_mm, length_mm, width_mm, height_mm, is_default, products(id, name)), components(id, name)",
           ),
       ) as unknown as Array<{
         id: string;
@@ -2192,33 +2204,55 @@ export const stockItemsQuery = () =>
         quantity: number;
         notes: string | null;
         updated_at: string;
-        area_cm2: number | null;
-        height_mm: number | null;
-        mould_id: string | null;
-        mould_qty: number | null;
+        stock_item_lines: Tables<"stock_item_lines">[] | null;
         product_sizes: (ProductSize & { products: { id: string; name: string } | null }) | null;
         components: Component | null;
       }>;
       return rows
         .map((r) => {
-          const label =
+          const groupLabel =
             r.item_type === "PRODUCT" && r.product_sizes
-              ? `${r.product_sizes.products?.name ?? "?"} · ${formatProductSizeLabel(r.product_sizes)}`
+              ? (r.product_sizes.products?.name ?? "?")
               : (r.components?.name ?? "?");
+          const sizeLabel =
+            r.item_type === "PRODUCT" && r.product_sizes
+              ? formatProductSizeLabel(r.product_sizes)
+              : "";
+          const num = (v: unknown) => (v == null ? null : Number(v));
+          const lines: StockLine[] =
+            r.item_type === "COMPONENT"
+              ? (r.stock_item_lines ?? [])
+                  .map((l) => ({
+                    id: l.id,
+                    width_mm: num(l.width_mm),
+                    length_mm: num(l.length_mm),
+                    height_mm: num(l.height_mm),
+                    unit_label: l.unit_label,
+                    quantity: Number(l.quantity),
+                    mould_id: l.mould_id,
+                    mould_qty: num(l.mould_qty),
+                    note: l.note,
+                    _created: l.created_at,
+                  }))
+                  .sort((x, y) => x._created.localeCompare(y._created))
+                  .map(({ _created, ...rest }) => rest)
+              : [];
           return {
             id: r.id,
             item_type: r.item_type,
             product_size_id: r.product_size_id,
             component_id: r.component_id,
             unit_label: r.unit_label,
-            quantity: Number(r.quantity),
+            quantity:
+              r.item_type === "COMPONENT" && lines.length > 0
+                ? lines.reduce((sum, l) => sum + l.quantity, 0)
+                : Number(r.quantity),
             notes: r.notes,
             updated_at: r.updated_at,
-            area_cm2: r.area_cm2 == null ? null : Number(r.area_cm2),
-            height_mm: r.height_mm == null ? null : Number(r.height_mm),
-            mould_id: r.mould_id,
-            mould_qty: r.mould_qty == null ? null : Number(r.mould_qty),
-            label,
+            lines,
+            group_label: groupLabel,
+            size_label: sizeLabel,
+            label: sizeLabel ? `${groupLabel} · ${sizeLabel}` : groupLabel,
           };
         })
         .sort((a, b) => a.label.localeCompare(b.label));
@@ -2255,9 +2289,12 @@ export const stockCandidatesQuery = () =>
           label: `${s.products?.name ?? "?"} · ${formatProductSizeLabel(s)}`,
         }))
         .sort((a, b) => a.label.localeCompare(b.label));
-      const components = (componentsRes.data as Component[])
-        .filter((c) => !usedComponentIds.has(c.id))
-        .map((c) => ({ id: c.id, label: c.name }));
+      // 같은 컴포넌트도 사이즈가 다르면 또 추가할 수 있어야 하므로 이미 재고에 있어도 목록에 둔다.
+      void usedComponentIds;
+      const components = (componentsRes.data as Component[]).map((c) => ({
+        id: c.id,
+        label: c.name,
+      }));
       return { sizes, components };
     },
   });

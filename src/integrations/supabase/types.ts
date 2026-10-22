@@ -2648,6 +2648,69 @@ export type Database = {
         };
         Relationships: [];
       };
+      stock_item_lines: {
+        Row: {
+          created_at: string;
+          height_mm: number | null;
+          id: string;
+          length_mm: number | null;
+          mould_id: string | null;
+          mould_qty: number | null;
+          note: string | null;
+          quantity: number;
+          stock_item_id: string;
+          unit_label: string;
+          updated_at: string;
+          user_id: string;
+          width_mm: number | null;
+        };
+        Insert: {
+          created_at?: string;
+          height_mm?: number | null;
+          id?: string;
+          length_mm?: number | null;
+          mould_id?: string | null;
+          mould_qty?: number | null;
+          note?: string | null;
+          quantity?: number;
+          stock_item_id: string;
+          unit_label?: string;
+          updated_at?: string;
+          user_id?: string;
+          width_mm?: number | null;
+        };
+        Update: {
+          created_at?: string;
+          height_mm?: number | null;
+          id?: string;
+          length_mm?: number | null;
+          mould_id?: string | null;
+          mould_qty?: number | null;
+          note?: string | null;
+          quantity?: number;
+          stock_item_id?: string;
+          unit_label?: string;
+          updated_at?: string;
+          user_id?: string;
+          width_mm?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stock_item_lines_stock_item_id_fkey";
+            columns: ["stock_item_id"];
+            isOneToOne: false;
+            referencedRelation: "stock_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_item_lines_mould_id_fkey";
+            columns: ["mould_id"];
+            isOneToOne: false;
+            referencedRelation: "moulds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       stock_items: {
         Row: {
           area_cm2: number | null;

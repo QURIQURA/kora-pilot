@@ -1,12 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type StockReason =
-  | "PRODUCTION_FREEZE"
-  | "PRODUCTION_SALE"
-  | "MANUAL_ADJUST"
-  | "SALE"
-  | "WASTE"
-  | "OTHER";
+  "PRODUCTION_FREEZE" | "PRODUCTION_SALE" | "MANUAL_ADJUST" | "SALE" | "WASTE" | "OTHER";
 
 export const STOCK_REASON_LABEL: Record<StockReason, string> = {
   PRODUCTION_FREEZE: "생산 → 냉동 재고",
@@ -26,6 +21,16 @@ interface AdjustStockArgs {
   workSessionId?: string | null;
   note?: string | null;
   unitLabel?: string;
+  /** COMPONENT 전용 — 사이즈별 줄. id가 있으면 그 줄을, createNew면 새 줄을, 둘 다 없으면 첫 줄(없으면 새 줄)을 조정 */
+  line?: {
+    id?: string;
+    createNew?: boolean;
+    width_mm?: number | null;
+    length_mm?: number | null;
+    height_mm?: number | null;
+    mould_id?: string | null;
+    mould_qty?: number | null;
+  };
 }
 
 /**
@@ -33,8 +38,7 @@ interface AdjustStockArgs {
  * PRODUCTION 세션 종료 시 즉시반영 플로우와 재고관리 탭 수동조정 플로우가 이 함수 하나를 공유한다.
  */
 export async function adjustStock(args: AdjustStockArgs): Promise<void> {
-  const { itemType, productSizeId, componentId, quantityDelta, reason, workSessionId, note } =
-    args;
+  const { itemType, productSizeId, componentId, quantityDelta, reason, workSessionId, note } = args;
 
   const matchColumn = itemType === "PRODUCT" ? "product_size_id" : "component_id";
   const matchValue = itemType === "PRODUCT" ? productSizeId : componentId;
@@ -69,9 +73,48 @@ export async function adjustStock(args: AdjustStockArgs): Promise<void> {
     stockItemId = created.id;
   }
 
+  let newTotal = currentQty + quantityDelta;
+  if (itemType === "COMPONENT") {
+    const { data: lines, error: linesError } = await supabase
+      .from("stock_item_lines")
+      .select("id, quantity, created_at")
+      .eq("stock_item_id", stockItemId)
+      .order("created_at");
+    if (linesError) throw linesError;
+    const all = lines ?? [];
+    const target = args.line?.id
+      ? all.find((l) => l.id === args.line?.id)
+      : args.line?.createNew
+        ? undefined
+        : all[0];
+    if (target) {
+      const { error: lineErr } = await supabase
+        .from("stock_item_lines")
+        .update({
+          quantity: Number(target.quantity) + quantityDelta,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", target.id);
+      if (lineErr) throw lineErr;
+    } else {
+      const { error: lineErr } = await supabase.from("stock_item_lines").insert({
+        stock_item_id: stockItemId,
+        quantity: quantityDelta,
+        unit_label: args.unitLabel ?? "개",
+        width_mm: args.line?.width_mm ?? null,
+        length_mm: args.line?.length_mm ?? null,
+        height_mm: args.line?.height_mm ?? null,
+        mould_id: args.line?.mould_id ?? null,
+        mould_qty: args.line?.mould_qty ?? null,
+      });
+      if (lineErr) throw lineErr;
+    }
+    newTotal = all.reduce((sum, l) => sum + Number(l.quantity), 0) + quantityDelta;
+  }
+
   const { error: updateError } = await supabase
     .from("stock_items")
-    .update({ quantity: currentQty + quantityDelta, updated_at: new Date().toISOString() })
+    .update({ quantity: newTotal, updated_at: new Date().toISOString() })
     .eq("id", stockItemId);
   if (updateError) throw updateError;
 
