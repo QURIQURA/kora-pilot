@@ -2164,6 +2164,12 @@ export interface StockItemRow {
   quantity: number;
   notes: string | null;
   updated_at: string;
+  /** 면적(cm²)·높이(mm) — 시트 자투리처럼 크기로 관리하는 항목용(선택) */
+  area_cm2: number | null;
+  height_mm: number | null;
+  /** 케익 몰드 기준 환산: 어떤 몰드 몇 개분이 남았는지(선택) */
+  mould_id: string | null;
+  mould_qty: number | null;
   label: string; // 화면 표시용 이름 (Product면 "이름 · 사이즈", Component면 이름)
 }
 
@@ -2186,6 +2192,10 @@ export const stockItemsQuery = () =>
         quantity: number;
         notes: string | null;
         updated_at: string;
+        area_cm2: number | null;
+        height_mm: number | null;
+        mould_id: string | null;
+        mould_qty: number | null;
         product_sizes: (ProductSize & { products: { id: string; name: string } | null }) | null;
         components: Component | null;
       }>;
@@ -2204,6 +2214,10 @@ export const stockItemsQuery = () =>
             quantity: Number(r.quantity),
             notes: r.notes,
             updated_at: r.updated_at,
+            area_cm2: r.area_cm2 == null ? null : Number(r.area_cm2),
+            height_mm: r.height_mm == null ? null : Number(r.height_mm),
+            mould_id: r.mould_id,
+            mould_qty: r.mould_qty == null ? null : Number(r.mould_qty),
             label,
           };
         })

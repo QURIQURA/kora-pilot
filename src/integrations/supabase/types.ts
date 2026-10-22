@@ -2650,6 +2650,10 @@ export type Database = {
       };
       stock_items: {
         Row: {
+          area_cm2: number | null;
+          height_mm: number | null;
+          mould_id: string | null;
+          mould_qty: number | null;
           component_id: string | null;
           created_at: string;
           id: string;
@@ -2662,6 +2666,10 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          area_cm2?: number | null;
+          height_mm?: number | null;
+          mould_id?: string | null;
+          mould_qty?: number | null;
           component_id?: string | null;
           created_at?: string;
           id?: string;
@@ -2674,6 +2682,10 @@ export type Database = {
           user_id?: string;
         };
         Update: {
+          area_cm2?: number | null;
+          height_mm?: number | null;
+          mould_id?: string | null;
+          mould_qty?: number | null;
           component_id?: string | null;
           created_at?: string;
           id?: string;
@@ -2691,6 +2703,13 @@ export type Database = {
             columns: ["component_id"];
             isOneToOne: false;
             referencedRelation: "components";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_items_mould_id_fkey";
+            columns: ["mould_id"];
+            isOneToOne: false;
+            referencedRelation: "moulds";
             referencedColumns: ["id"];
           },
           {
