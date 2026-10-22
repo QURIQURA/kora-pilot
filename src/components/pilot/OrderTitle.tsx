@@ -43,3 +43,26 @@ export function DietaryChips({ names }: { names: string[] }) {
     </>
   );
 }
+
+/** 복사만 하고 레시피를 아직 수정하지 않은 컴포넌트 경고 — 레시피 수정 우선 */
+export function CopyWarning({ formulaId }: { formulaId?: string | null }) {
+  const badge = (
+    <span
+      title="복사만 한 컴포넌트예요 — 레시피를 먼저 수정하세요"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-destructive font-mono text-[11px] font-bold leading-none text-white"
+    >
+      !
+    </span>
+  );
+  if (!formulaId) return badge;
+  return (
+    <a
+      href={`/formulas/${formulaId}`}
+      onClick={(e) => e.stopPropagation()}
+      className="shrink-0"
+      title="복사만 한 컴포넌트예요 — 눌러서 레시피를 수정하세요"
+    >
+      {badge}
+    </a>
+  );
+}

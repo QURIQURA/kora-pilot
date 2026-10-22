@@ -24,6 +24,7 @@ import {
   type OrderListRow,
 } from "@/lib/queries";
 import { toLocalDateString, koreanWeekdayShort } from "@/lib/datetime";
+import { ensureWorkSessionForOrder } from "@/lib/work-session";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader, primaryButtonClass, buttonClass, selectClass } from "@/components/pilot/ui";
 import { cn } from "@/lib/utils";
@@ -56,10 +57,17 @@ function OrdersPage() {
         .select("id")
         .single();
       if (error) throw error;
+      // 2026-10-22: 모든 오더는 WORK SESSION을 기본으로 가진다.
+      try {
+        await ensureWorkSessionForOrder(data.id);
+      } catch {
+        /* 실패해도 오더 생성은 막지 않는다 — PRODUCTION > ORDERS 탭이 없는 세션을 자동으로 채운다 */
+      }
       return data.id;
     },
     onSuccess: async (id) => {
       await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
       void navigate({ to: "/orders/$orderId", params: { orderId: id } });
     },
   });

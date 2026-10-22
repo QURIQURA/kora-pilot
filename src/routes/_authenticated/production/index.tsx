@@ -41,7 +41,7 @@ const STATUS_LABEL: Record<string, string> = {
  * 2026-10-22 사용자 요청: PRODUCTION 메인보드를 DASHBOARD(작업 대기공간 + 데일리 타임라인)로 바꾸고,
  * 기존 WORK SESSION 목록은 기록 보관용 HISTORY 탭으로 옮긴다. 기존 세션 기록/상세 화면은 그대로.
  */
-type MainTab = "DASHBOARD" | "ORDERS" | "HISTORY";
+type MainTab = "DASHBOARD" | "ORDERS" | "ORDER HISTORY" | "HISTORY";
 
 function ProductionDashboardPage() {
   const [tab, setTab] = useState<MainTab>("DASHBOARD");
@@ -50,7 +50,7 @@ function ProductionDashboardPage() {
     <div className="space-y-4">
       <PageHeader title="PRODUCTION" />
       <div className="flex gap-4 border-b border-border" role="tablist">
-        {(["DASHBOARD", "ORDERS", "HISTORY"] as const).map((t) => (
+        {(["DASHBOARD", "ORDERS", "ORDER HISTORY", "HISTORY"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -72,6 +72,8 @@ function ProductionDashboardPage() {
         <ProductionDashboard />
       ) : tab === "ORDERS" ? (
         <ProductionOrdersTab />
+      ) : tab === "ORDER HISTORY" ? (
+        <ProductionOrdersTab completed />
       ) : (
         <WorkSessionHistory />
       )}

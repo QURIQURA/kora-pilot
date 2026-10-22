@@ -1,11 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import {
   CORE_SLOTS,
   CORE_SLOT_LABELS,
-  currentUserId,
   dashboardComponentsQuery,
   orderStatusLabel,
   ordersQuery,
@@ -14,14 +12,15 @@ import {
   type CoreSlot,
   type DashboardComponentRow,
 } from "@/lib/queries";
-import { formatDelivery, generateTitle } from "@/lib/datetime";
+import { formatDelivery } from "@/lib/datetime";
+import { ensureWorkSessionForOrder } from "@/lib/work-session";
 import { cn } from "@/lib/utils";
 import { AddFormulaVersionForm } from "@/components/pilot/WorkSessionWorkspace";
 import {
   DashboardComponentCopyForm,
   DashboardComponentNewForm,
 } from "@/components/pilot/DashboardComponentCopyForm";
-import { DietaryChips, orderTitle, useOrderDietaryNames } from "./OrderTitle";
+import { CopyWarning, DietaryChips, orderTitle, useOrderDietaryNames } from "./OrderTitle";
 import { buttonClass } from "./ui";
 
 /**
@@ -29,7 +28,7 @@ import { buttonClass } from "./ui";
  * 여기서 오더에 컴포넌트(TASK)를 지정한다: 기존 컴포넌트 지정 / 기존 컴포넌트를 복사해 새로 만들기(최신 버전 하나만) /
  * WORK SESSION이 없는 오더는 바로 세션 만들기. 컴포넌트가 지정되면 DASHBOARD의 "작업 대기공간"(시간 배정 전)으로 올라간다.
  */
-export function ProductionOrdersTab() {
+export function ProductionOrdersTab({ completed = false }: { completed?: boolean } = {}) {
   const queryClient = useQueryClient();
   const orders = useQuery(ordersQuery());
   const sessions = useQuery(workSessionsQuery());
@@ -69,7 +68,7 @@ export function ProductionOrdersTab() {
   const list = useMemo(
     () =>
       (orders.data ?? [])
-        .filter((o) => o.status !== "COMPLETED")
+        .filter((o) => (o.status === "COMPLETED") === completed)
         .map((o) => ({
           order: o,
           rows: rowsByOrder.get(o.id) ?? [],
@@ -78,12 +77,15 @@ export function ProductionOrdersTab() {
             null,
         }))
         // 컴포넌트가 아직 없는 오더를 위에(지정이 필요한 것부터), 그 다음 오더 번호순
-        .sort(
-          (a, b) =>
-            Number(a.rows.length > 0) - Number(b.rows.length > 0) ||
-            a.order.order_number.localeCompare(b.order.order_number),
+        .sort((a, b) =>
+          completed
+            ? (b.order.pickup_at ?? b.order.event_date ?? "").localeCompare(
+                a.order.pickup_at ?? a.order.event_date ?? "",
+              )
+            : Number(a.rows.length > 0) - Number(b.rows.length > 0) ||
+              a.order.order_number.localeCompare(b.order.order_number),
         ),
-    [orders.data, rowsByOrder, sessions.data],
+    [orders.data, rowsByOrder, sessions.data, completed],
   );
 
   const refresh = async (sessionId?: string) => {
@@ -100,35 +102,52 @@ export function ProductionOrdersTab() {
 
   const createSession = useMutation({
     mutationFn: async (order: NonNullable<typeof orders.data>[number]) => {
-      const userId = await currentUserId();
-      const delivery = order.pickup_at ? order.pickup_at.slice(0, 10) : order.event_date;
-      const baseName = order.products?.name || order.recipient || order.order_number;
-      const { error } = await supabase.from("work_sessions").insert({
-        user_id: userId,
-        order_id: order.id,
-        name: generateTitle(baseName, delivery),
-        status: "PLANNED",
-        product_id: order.product_id,
-        product_size_id: order.product_size_id,
-        cake_size_id: order.cake_size_id,
-      });
-      if (error) throw error;
+      await ensureWorkSessionForOrder(order.id);
     },
     onSuccess: () => refresh(),
   });
+
+  // 모든 진행 중 오더는 WORK SESSION을 기본으로 가진다 — 없는 오더가 보이면 자동으로 채운다.
+  const ensuredRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (completed || !orders.data || !sessions.data) return;
+    const missing = orders.data.filter(
+      (o) =>
+        o.status !== "COMPLETED" &&
+        !ensuredRef.current.has(o.id) &&
+        !sessions.data.some((s) => s.order_id === o.id),
+    );
+    if (missing.length === 0) return;
+    for (const o of missing) ensuredRef.current.add(o.id);
+    void (async () => {
+      for (const o of missing) {
+        try {
+          await ensureWorkSessionForOrder(o.id);
+        } catch {
+          ensuredRef.current.delete(o.id);
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
+    })();
+  }, [orders.data, sessions.data, queryClient, completed]);
 
   if (orders.isLoading || components.isLoading) {
     return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
   }
   if (list.length === 0) {
-    return <p className="font-mono text-xs text-muted-foreground">진행 중인 오더가 없어요.</p>;
+    return (
+      <p className="font-mono text-xs text-muted-foreground">
+        {completed ? "완료된 오더가 없어요." : "진행 중인 오더가 없어요."}
+      </p>
+    );
   }
 
   return (
     <div className="space-y-3">
       <p className="font-mono text-[11px] text-muted-foreground">
-        진행 중인 오더 {list.length}개 · 여기서 컴포넌트를 지정하면 DASHBOARD의 작업 대기공간(시간
-        배정 전)으로 올라가요.
+        {completed
+          ? `완료된 오더 ${list.length}개 · 오더가 COMPLETED가 되면 ORDERS에서 자동으로 여기로 옮겨져요.`
+          : `진행 중인 오더 ${list.length}개 · 여기서 컴포넌트를 지정하면 DASHBOARD의 작업 대기공간(시간 배정 전)으로 올라가요.`}
       </p>
       {createSession.isError && (
         <p className="font-mono text-xs text-destructive">
@@ -172,6 +191,7 @@ export function ProductionOrdersTab() {
                         {r.slot ?? "CORE"}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-sm">{r.componentName}</span>
+                      {r.unmodifiedCopy && <CopyWarning formulaId={r.formulaId} />}
                       <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                         {b
                           ? `${b.date.slice(5)} ${b.time}${b.count > 1 ? ` +${b.count - 1}` : ""}`
@@ -184,7 +204,7 @@ export function ProductionOrdersTab() {
             )}
 
             {/* 슬롯 버튼은 세션 유무와 상관없이 항상 — 세션이 없으면 누르는 순간 자동으로 만든다 */}
-            <div className="space-y-1.5">
+            <div className={cn("space-y-1.5", completed && "hidden")}>
               <div className="flex flex-wrap gap-1">
                 {CORE_SLOTS.map((slot) => (
                   <button

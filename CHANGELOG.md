@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-10-22 — 모든 오더는 WORK SESSION 기본 보유 / 세션 상세는 읽기 전용 미러 / ORDER HISTORY / 복사 경고
+
+- **오더 = WORK SESSION 기본 보유**: 오더를 만들거나 열면 세션이 자동으로 생깁니다(예전 오더도 ORDERS 탭·오더 페이지를 열 때 자동 생성). 오더 페이지의 "WORK SESSION 만들기" 버튼은 사라지고 **OPEN IN PRODUCTION / WORK SESSION 보기** 링크가 있습니다. (참고: 예전의 "오더의 맛 포뮬라 필드로 CORE 자동 채우기"는 없어졌어요 — 컴포넌트는 ORDERS 탭에서 지정.)
+- **세션 상세 페이지(오더 연결된 세션)**: 컴포넌트 · 계량(WEIGHING) · WORKFLOW는 **보기 전용**(대시보드 입력을 비춤). NOTES · 일정 · PRODUCT/BATCH(EFFICIENCY) · DECORATIVE · 재고 반영 · 상태 버튼은 그대로 편집. 오더 없는 세션은 예전과 완전히 동일.
+- **ORDER HISTORY 탭**(ORDERS 옆): 오더가 COMPLETED가 되면 ORDERS에서 빠져 자동으로 여기에 모입니다(배달일 최신순, 읽기용).
+- **빨간 ! 경고**: 기존 컴포넌트를 *복사해서 만들고 레시피(재료)를 아직 하나도 수정하지 않은* 컴포넌트에 붙습니다(ORDERS 탭·작업 대기공간·드롭다운). 누르면 해당 포뮬라 페이지로 이동 — 재료를 수정하면 경고가 사라집니다.
+
+---
+
 ## 2026-10-22 — PRODUCTION: ORDERS 탭 / DAILY TASKS(제품과 무관한 작업) / delivery 표기
 
 - **ORDERS 탭(새로 생김)**: 진행 중인 오더(완료 전) 전체 목록. 컴포넌트가 아직 없는 오더가 맨 위에 옵니다. 오더마다 **+ SHEET / + CREAM / + FILLING**으로 컴포넌트를 지정하거나, **복사해서 새로 만들기**(기존 컴포넌트의 **최신 버전 하나만** 복사)로 새 컴포넌트를 만들어 바로 넣습니다. WORK SESSION이 없는 오더는 **+ WORK SESSION 만들기**. 각 오더 오른쪽에 🚚 delivery 날짜·시간(MM-DD(요일) HH:mm)이 보입니다.

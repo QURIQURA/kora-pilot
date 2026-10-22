@@ -8,6 +8,7 @@
  */
 import type { Tables, TablesUpdate } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
+import { generateTitle } from "@/lib/datetime";
 import { ingredientDisplayName } from "@/lib/pilot";
 import type { VersionIngredientRow } from "@/lib/queries";
 
@@ -454,4 +455,47 @@ export async function removeDailyTask(dailyTaskId: string): Promise<string | nul
   } catch (err) {
     return err instanceof Error ? err.message : String(err);
   }
+}
+
+/**
+ * 2026-10-22: 모든 오더는 WORK SESSION을 기본으로 하나 가진다(오더 페이지의 "세션 만들기"는 없어짐).
+ * 오더에 세션이 없으면 만들고 id를 돌려준다(있으면 그대로 그 id). 이름은 "제품명(또는 받는 사람/오더번호) — 날짜 (요일)".
+ * 컴포넌트(CORE) 행은 만들지 않는다 — PRODUCTION > ORDERS 탭이나 대시보드에서 지정한다.
+ */
+export async function ensureWorkSessionForOrder(orderId: string): Promise<string> {
+  const { data: existing, error: existingError } = await supabase
+    .from("work_sessions")
+    .select("id")
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (existingError) throw existingError;
+  if (existing && existing[0]) return existing[0].id;
+
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .select(
+      "id, user_id, order_number, recipient, pickup_at, event_date, product_id, product_size_id, cake_size_id, products(name)",
+    )
+    .eq("id", orderId)
+    .single();
+  if (orderError) throw orderError;
+  const delivery = order.pickup_at ? order.pickup_at.slice(0, 10) : order.event_date;
+  const baseName =
+    (order.products as { name: string } | null)?.name || order.recipient || order.order_number;
+  const { data: created, error } = await supabase
+    .from("work_sessions")
+    .insert({
+      user_id: order.user_id,
+      order_id: order.id,
+      name: generateTitle(baseName, delivery),
+      status: "PLANNED",
+      product_id: order.product_id,
+      product_size_id: order.product_size_id,
+      cake_size_id: order.cake_size_id,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return created.id;
 }

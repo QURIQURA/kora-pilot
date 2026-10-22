@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -324,8 +325,31 @@ export function WorkSessionWorkspace({
 
   const data = session.data;
 
+  // 2026-10-22: 오더에 연결된 세션의 상세 페이지는 PRODUCTION 대시보드 입력을 비추는 읽기 전용 미러 —
+  // 컴포넌트/계량/WORKFLOW는 대시보드에서만 입력하고, NOTES·일정·EFFICIENCY·재고반영·DECORATIVE는 여기서도 편집.
+  const mirror = !embedded && Boolean(data.order_id);
+  const lock = (node: React.ReactNode) =>
+    mirror ? (
+      <fieldset disabled className="m-0 min-w-0 border-0 p-0">
+        {node}
+      </fieldset>
+    ) : (
+      node
+    );
+
   return (
     <div className={embedded ? "flex flex-col gap-4" : "space-y-4"}>
+      {mirror && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-border bg-secondary px-3 py-2 font-mono text-[11px]">
+          <span>
+            오더에 연결된 세션이에요 — 컴포넌트·계량·WORKFLOW는 PRODUCTION 대시보드에서 입력하고
+            여기선 보기만 해요.
+          </span>
+          <Link to="/production" className="label-caps underline">
+            OPEN PRODUCTION →
+          </Link>
+        </div>
+      )}
       {/* 대시보드(embedded)에서는 세션 이름/상태/생성일 헤더를 숨긴다(2026-10-22 사용자 요청). */}
       {!embedded && (
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4 order-0">
@@ -438,57 +462,59 @@ export function WorkSessionWorkspace({
         </details>
       ) : (
         <SectionCard title="CORE ELEMENTS — SHEET / CREAM / FILLING">
-          <ul className="divide-y divide-border border border-border">
-            {CORE_SLOTS.map((slot) => {
-              // 2026-10-07: 같은 FORMULA VERSION 중복 추가를 허용하면서, 한 슬롯에 여러 개(예: 같은
-              // 레시피를 다른 몰드/배치로 두 번)가 들어갈 수도 있게 됐다 — 하나만 찾지 않고 전부 보여준다.
-              const slotRows = rows.filter((r) => r.kind === "CORE" && r.slot === slot);
-              return (
-                <li key={slot} className="p-3">
-                  <p className="label-caps mb-2 text-xs text-muted-foreground">
-                    {CORE_SLOT_LABELS[slot]}
-                  </p>
-                  {slotRows.length > 0 && (
-                    <ul className="mb-2 divide-y divide-border border border-border">
-                      {slotRows.map((row) => (
-                        <FormulaVersionRow
-                          key={row.id}
-                          row={row}
-                          sessionId={sessionId}
-                          lines={ingredientsByVersion[row.formula_version_id] ?? []}
-                          onRemove={() => removeFormulaVersion.mutate(row)}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                  {addingSlot === slot ? (
-                    <AddFormulaVersionForm
-                      sessionId={sessionId}
-                      nextSort={rows.length}
-                      kind="CORE"
-                      slot={slot}
-                      productId={data.product_id}
-                      productSizeId={data.product_size_id}
-                      onDone={async () => {
-                        setAddingSlot(null);
-                        await invalidateSelections();
-                        await invalidateTasks();
-                        await syncPlanner();
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className={buttonClass}
-                      onClick={() => setAddingSlot(slot)}
-                    >
-                      {`+ ADD ${CORE_SLOT_LABELS[slot].toUpperCase()}`}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          {lock(
+            <ul className="divide-y divide-border border border-border">
+              {CORE_SLOTS.map((slot) => {
+                // 2026-10-07: 같은 FORMULA VERSION 중복 추가를 허용하면서, 한 슬롯에 여러 개(예: 같은
+                // 레시피를 다른 몰드/배치로 두 번)가 들어갈 수도 있게 됐다 — 하나만 찾지 않고 전부 보여준다.
+                const slotRows = rows.filter((r) => r.kind === "CORE" && r.slot === slot);
+                return (
+                  <li key={slot} className="p-3">
+                    <p className="label-caps mb-2 text-xs text-muted-foreground">
+                      {CORE_SLOT_LABELS[slot]}
+                    </p>
+                    {slotRows.length > 0 && (
+                      <ul className="mb-2 divide-y divide-border border border-border">
+                        {slotRows.map((row) => (
+                          <FormulaVersionRow
+                            key={row.id}
+                            row={row}
+                            sessionId={sessionId}
+                            lines={ingredientsByVersion[row.formula_version_id] ?? []}
+                            onRemove={() => removeFormulaVersion.mutate(row)}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                    {mirror ? null : addingSlot === slot ? (
+                      <AddFormulaVersionForm
+                        sessionId={sessionId}
+                        nextSort={rows.length}
+                        kind="CORE"
+                        slot={slot}
+                        productId={data.product_id}
+                        productSizeId={data.product_size_id}
+                        onDone={async () => {
+                          setAddingSlot(null);
+                          await invalidateSelections();
+                          await invalidateTasks();
+                          await syncPlanner();
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        onClick={() => setAddingSlot(slot)}
+                      >
+                        {`+ ADD ${CORE_SLOT_LABELS[slot].toUpperCase()}`}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>,
+          )}
         </SectionCard>
       )}
 
@@ -559,13 +585,15 @@ export function WorkSessionWorkspace({
           }
         >
           {viewMode === "WEIGHING" ? (
-            <WeighingView
-              sessionId={sessionId}
-              groups={weighingGroups}
-              columns={orderedSelections}
-              onProgressChanged={invalidateProgress}
-              onEditColumn={setEditingColumn}
-            />
+            lock(
+              <WeighingView
+                sessionId={sessionId}
+                groups={weighingGroups}
+                columns={orderedSelections}
+                onProgressChanged={invalidateProgress}
+                onEditColumn={setEditingColumn}
+              />,
+            )
           ) : (
             <FormulaView rows={visibleRows} ingredientsByVersion={ingredientsByVersion} />
           )}
@@ -576,20 +604,22 @@ export function WorkSessionWorkspace({
           (embedded)에서는 타임라인이 TASK 목록 역할을 하므로 숨기고, 상세는 BlockTaskDetails가 맡는다. */}
       {!embedded && (
         <SectionCard title="WORKFLOW">
-          <WorkflowView
-            sessionId={sessionId}
-            tasks={tasks.data ?? []}
-            formulaOptions={orderedSelections.map((s) => ({
-              formulaVersionId: s.formulaVersionId,
-              formulaName: s.formulaName,
-            }))}
-            ingredientsByVersion={ingredientsByVersion}
-            taskIngredients={taskIngredients.data ?? {}}
-            taskPredecessors={taskPredecessors.data ?? {}}
-            onTasksChanged={invalidateTasks}
-            onTaskStarted={ensureSessionStartedAt}
-            showEfficiencyFields={Boolean(data.product_id)}
-          />
+          {lock(
+            <WorkflowView
+              sessionId={sessionId}
+              tasks={tasks.data ?? []}
+              formulaOptions={orderedSelections.map((s) => ({
+                formulaVersionId: s.formulaVersionId,
+                formulaName: s.formulaName,
+              }))}
+              ingredientsByVersion={ingredientsByVersion}
+              taskIngredients={taskIngredients.data ?? {}}
+              taskPredecessors={taskPredecessors.data ?? {}}
+              onTasksChanged={invalidateTasks}
+              onTaskStarted={ensureSessionStartedAt}
+              showEfficiencyFields={Boolean(data.product_id)}
+            />,
+          )}
         </SectionCard>
       )}
 

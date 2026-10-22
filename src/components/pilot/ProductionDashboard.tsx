@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { WorkSessionWorkspace } from "@/components/pilot/WorkSessionWorkspace";
-import { DietaryChips, orderTitle, useOrderDietaryNames } from "@/components/pilot/OrderTitle";
+import { CopyWarning, DietaryChips, orderTitle, useOrderDietaryNames } from "@/components/pilot/OrderTitle";
 import { BlockTaskDetails } from "@/components/pilot/BlockTaskDetails";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -808,7 +808,10 @@ export function ProductionDashboard() {
                         <p className="label-caps text-[11px] text-muted-foreground">
                           {r.slot ?? "CORE"}
                         </p>
-                        <p className="truncate text-sm">{r.componentName}</p>
+                        <p className="flex items-center gap-1 truncate text-sm">
+                          <span className="truncate">{r.componentName}</span>
+                          {r.unmodifiedCopy && <CopyWarning formulaId={r.formulaId} />}
+                        </p>
                         {stepsOf(r).length > 1 && (
                           <p className="truncate font-mono text-[10px] text-muted-foreground">
                             {stepsOf(r)
@@ -949,6 +952,7 @@ export function ProductionDashboard() {
                               {r.slot ?? "CORE"}
                             </span>
                             <span className="truncate">{r.componentName}</span>
+                            {r.unmodifiedCopy && <CopyWarning formulaId={r.formulaId} />}
                           </label>
                         ))}
                       </div>

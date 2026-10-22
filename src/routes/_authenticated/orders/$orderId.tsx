@@ -4,8 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   orderQuery,
-  productsQuery,
-  productSizesQuery,
   productComponentsQuery,
   dietaryTagsQuery,
   dietaryBuildsQuery,
@@ -25,7 +23,6 @@ import {
   ORDER_RECIPIENT_RELATIONSHIP_OPTIONS,
   ORDER_PAYMENT_STATUSES,
   ORDER_PRODUCT_LINES,
-  CORE_SLOTS,
   CORE_SLOT_LABELS,
   type CoreSlot,
   orderStatusLabel,
@@ -39,12 +36,9 @@ import {
   type OrderPaymentStatus,
   type OrderProductLineKey,
 } from "@/lib/queries";
-import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { DIETARY_ASSEMBLY_ENABLED } from "@/lib/feature-flags";
 import { resolveSlotGroup } from "@/lib/technique";
-import { applyDefaultWorkflowForFormulaVersion } from "@/lib/workflow-template";
-import { suggestedMultiplierFromTarget, syncWorkSessionToPlanner } from "@/lib/work-session";
-import { mouldBatchMultiplier } from "@/lib/formula-calc";
+import { ensureWorkSessionForOrder } from "@/lib/work-session";
 import { mouldOptionLabel } from "@/components/pilot/MouldSelect";
 import { ProductSizeSelect } from "@/components/pilot/ProductSizeSelect";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
@@ -148,9 +142,16 @@ function OrderDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const order = useQuery(orderQuery(orderId));
-  const products = useQuery(productsQuery());
   const pilotSettings = useQuery(pilotSettingsQuery());
   const workSession = useQuery(workSessionByOrderQuery(orderId));
+  // 2026-10-22: 모든 오더는 WORK SESSION을 기본으로 가진다 — 아직 없으면(예전 오더) 여기서 자동으로 만든다.
+  useEffect(() => {
+    if (!order.data || workSession.isLoading || workSession.data) return;
+    void ensureWorkSessionForOrder(orderId).then(() =>
+      queryClient.invalidateQueries({ queryKey: ["work_sessions"] }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order.data?.id, workSession.isLoading, workSession.data]);
   // 2026-10-20: REQ-xxxx 번호는 고객 요청(shco_order_requests)에서 생성되며 order_id로 이 주문에 연결된다(읽기전용 표시).
   const linkedRequest = useQuery({
     queryKey: ["order-linked-request", orderId],
@@ -220,10 +221,6 @@ function OrderDetailPage() {
   // 그 PRODUCT에 등록된 product_sizes 중 "최종 사이즈"를 FK로 골라둘 수 있게 한다 — Work
   // Session을 이 ORDER에서 만들 때 그대로 넘겨서 PRODUCT SIZE 기준 자동 배수 계산에 쓰인다.
   const [productSizeId, setProductSizeId] = useState("");
-  const productSizes = useQuery({
-    ...productSizesQuery(productId),
-    enabled: Boolean(productId),
-  });
   // 2026-10-20 사용자 요청: "최종 케익 사이즈"(위 product_size_id — PRODUCT에 연결, 단가계산용)와는
   // 별개로 "시트 사이즈"를 따로 관리한다 — PRODUCT SIZE 데이터가 없는 제품/커스텀 사이즈 주문이라도
   // 이 몰드만 골라두면 WORK SESSION 생성 시 그 몰드 기준으로 자동 배수 계산이 가능해진다.
@@ -523,236 +520,6 @@ function OrderDetailPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["orders"] });
       void navigate({ to: "/orders" });
-    },
-  });
-
-  // 2026-10-06 사용자 정정: 별도 PRODUCTION PLAN 테이블이 아니라 기존 PRODUCTION(work_sessions)
-  // 시스템을 그대로 재사용한다. CORE ELEMENT(Sheet/Cream/Filling)는 새 테이블 없이
-  // work_session_formula_versions 행에 kind='CORE'/slot 태그를 붙여서 만든다. 위에서 사용자가
-  // Flavoring Formula를 지정해둔 경우, pickEffectiveFormulaVersion으로 고른 버전을 "시작값"으로
-  // 자동 채워 넣는다 — 잠겨있지 않고, Work Session 화면에서 언제든 바꿀 수 있다.
-  // 이미 연결된 Work Session이 있으면 중복 생성하지 않고 그 화면으로 이동만 한다(버튼 쪽에서 분기).
-  const createWorkSession = useMutation({
-    mutationFn: async () => {
-      if (!order.data) return;
-      const o = order.data;
-      const deliveryDate = o.pickup_at ? o.pickup_at.slice(0, 10) : o.event_date;
-      // 2026-10-06 사용자 요청: 이름을 RECIPIENT가 아니라 PRODUCT명으로 — PRODUCT 칸에서 아직
-      // SAVE를 안 누른 상태로 바로 WORK SESSION을 만들어도 반영되게, 화면에 선택된(아직 저장 전일
-      // 수 있는) productId를 저장된 o.product_id보다 우선한다.
-      const effectiveProductId = productId || o.product_id || null;
-      // 2026-10-12 사용자 요청: ORDER에 PRODUCT SIZE가 골라져 있으면 WORK SESSION 생성 시 그대로
-      // 넘겨서(work_sessions.product_size_id) PRODUCT SIZE 기준 자동 배수 계산에 바로 쓰일 수 있게.
-      const effectiveCakeSizeId = cakeSizeId || o.cake_size_id || null;
-      // 2026-10-20 사이즈 통합 1단계: PRODUCT SIZE가 명시적으로 골라져 있으면 그대로 쓰고, 없으면
-      // 이 제품의 product_sizes 중 "이 CAKE SIZE에 연결(cake_size_id)"된 행이 정확히 1개일 때만
-      // 자동 연결한다. 연결(매핑)은 사용자가 확정한 뒤에만 존재하므로 지금은 항상 null — 자동 추정 없음.
-      let effectiveProductSizeId = productSizeId || o.product_size_id || null;
-      if (!effectiveProductSizeId && effectiveProductId && effectiveCakeSizeId) {
-        const { data: linked, error: linkedError } = await supabase
-          .from("product_sizes")
-          .select("id")
-          .eq("product_id", effectiveProductId)
-          .eq("cake_size_id", effectiveCakeSizeId);
-        if (linkedError) throw linkedError;
-        if (linked && linked.length === 1 && linked[0]) effectiveProductSizeId = linked[0].id;
-      }
-      // 2026-10-20 사용자 요청: PRODUCT SIZE 기준 계산(product_components.quantity_g)이 가능한
-      // 경우(위) 그게 우선이지만, PRODUCT SIZE 데이터가 아예 없는 제품/커스텀 사이즈 주문도
-      // "시트 사이즈"(몰드)만 골라져 있으면 그 몰드 기준으로 자동 배수 계산이 가능해야 한다.
-      const selectedCakeSize = (cakeSizes.data ?? []).find((c) => c.id === cakeSizeId);
-      const effectiveSheetMouldId =
-        selectedCakeSize?.sheet_mould_id || sheetMouldId || o.sheet_mould_id || null;
-      const mouldsById = new Map((moulds.data ?? []).map((m) => [m.id, m]));
-      const baseName =
-        products.data?.find((p) => p.id === effectiveProductId)?.name ||
-        o.recipient ||
-        o.order_number;
-      const userId = await currentUserId();
-      const { data: session, error } = await supabase
-        .from("work_sessions")
-        .insert({
-          user_id: userId,
-          order_id: orderId,
-          name: generateTitle(baseName, deliveryDate),
-          status: "PLANNED",
-          product_id: effectiveProductId,
-          product_size_id: effectiveProductSizeId,
-          cake_size_id: effectiveCakeSizeId,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-
-      const slotFormulaIds: Record<CoreSlot, string> = {
-        SHEET: flavoringSheetFormulaId,
-        CREAM: flavoringCreamFormulaId,
-        FILLING: flavoringFillingFormulaId,
-      };
-      // 2026-10-21 사용자 요청("시폰 레시피 task 기본꺼 왜 안떠?") — 여기서 CORE 재료 행을
-      // Supabase에 직접 insert하고 끝나서, $sessionId.tsx의 "+ ADD SHEET/CREAM/FILLING"에서만
-      // 돌던 기본 WORKFLOW 적용 로직을 한 번도 안 거치는 게 원인이었다. coreRows를 만들 때
-      // 그 Formula도 같이 들고 있다가, insert 성공 뒤 각 행마다 applyDefaultWorkflowForFormulaVersion을
-      // 호출해서 $sessionId.tsx와 똑같이 템플릿(또는 기본 TASK 1개)이 깔리도록 한다.
-      //
-      // 2026-10-27 사용자 요청("몰드·용량 시스템 통합 개선안" 3단계를 전체 통합 전에 먼저 적용):
-      // 이전에는 여기서 CORE 행을 만들 때 multiplier=1, mould_id/mould_qty=null로 고정해버려서,
-      // ORDER에 PRODUCT SIZE가 이미 연결돼 있어도 생성 직후 WORK SESSION에서 매번 손으로 몰드·배수를
-      // 다시 맞춰야 했다(문제 7). $sessionId.tsx의 "+ ADD" 폼과 같은 로직으로 PRODUCT SIZE의
-      // product_components.quantity_g를 읽어 배수를 역산하고, scaling_mode가 MOULD인 Component는
-      // 사이즈 기준으로 만들어도 몰드 정체성(mould_id)을 항상 같이 채워 넣는다(문제 6과 같은 원인).
-      let productComponentRows: {
-        component_id: string | null;
-        quantity_g: number | null;
-        product_size_id: string | null;
-      }[] = [];
-      if (effectiveProductId) {
-        const { data: pcData, error: pcError } = await supabase
-          .from("product_components")
-          .select("component_id, quantity_g, product_size_id")
-          .eq("product_id", effectiveProductId);
-        if (pcError) throw pcError;
-        productComponentRows = pcData ?? [];
-      }
-
-      // 2026-10-21 DIETARY BUILD(3c): 주문에 BUILD가 연결돼 있으면, 그 BUILD에 고정된 formula version을
-      // pickEffectiveFormulaVersion(CURRENT/최신) 대신 쓴다. BUILD가 없는 주문은 예전과 완전히 같다.
-      const pinnedVersionByFormula = new Map<string, string>();
-      const effectiveBuildId = DIETARY_ASSEMBLY_ENABLED
-        ? dietaryBuildId || o.dietary_build_id || null
-        : null;
-      if (effectiveBuildId) {
-        const { data: buildItems, error: buildError } = await supabase
-          .from("dietary_build_items")
-          .select("formula_version_id")
-          .eq("build_id", effectiveBuildId);
-        if (buildError) throw buildError;
-        for (const it of buildItems ?? []) {
-          const owner = formulas.data?.find((f) =>
-            f.formula_versions.some((v) => v.id === it.formula_version_id),
-          );
-          if (owner) pinnedVersionByFormula.set(owner.id, it.formula_version_id);
-        }
-      }
-      const versionForFormula = (formula: NonNullable<typeof formulas.data>[number]) => {
-        const pinnedId = pinnedVersionByFormula.get(formula.id);
-        const pinned = pinnedId
-          ? formula.formula_versions.find((v) => v.id === pinnedId)
-          : undefined;
-        return pinned ?? pickEffectiveFormulaVersion(formula.formula_versions);
-      };
-
-      const coreVersionIds = CORE_SLOTS.flatMap((slot) => {
-        const formula = formulas.data?.find((f) => f.id === slotFormulaIds[slot]);
-        const version = formula ? versionForFormula(formula) : null;
-        return version ? [version.id] : [];
-      });
-      const baseGramsByVersion: Record<string, number> = {};
-      if (coreVersionIds.length > 0) {
-        const { data: ingredientRows, error: ingError } = await supabase
-          .from("formula_version_ingredients")
-          .select("formula_version_id, amount")
-          .in("formula_version_id", coreVersionIds);
-        if (ingError) throw ingError;
-        for (const row of ingredientRows ?? []) {
-          baseGramsByVersion[row.formula_version_id] =
-            (baseGramsByVersion[row.formula_version_id] ?? 0) + Number(row.amount);
-        }
-      }
-
-      const coreRows = CORE_SLOTS.flatMap((slot) => {
-        const formulaId = slotFormulaIds[slot];
-        if (!formulaId) return [];
-        const formula = formulas.data?.find((f) => f.id === formulaId);
-        const version = formula ? versionForFormula(formula) : null;
-        if (!version || !formula) return [];
-
-        const isMould = (formula.components?.scaling_mode ?? null) === "MOULD";
-        const sizeMatch = formula.components?.id
-          ? productComponentRows.find(
-              (pc) =>
-                pc.component_id === formula.components!.id &&
-                pc.product_size_id === effectiveProductSizeId,
-            )
-          : undefined;
-        const sizeTargetGrams = sizeMatch?.quantity_g != null ? Number(sizeMatch.quantity_g) : null;
-        const baseTotalGrams = baseGramsByVersion[version.id] ?? 0;
-        const suggestedFromSize = suggestedMultiplierFromTarget(sizeTargetGrams, 1, baseTotalGrams);
-
-        // PRODUCT SIZE 기준 타깃이 없고(이 제품에 사이즈 데이터가 없거나, 주문이 커스텀 사이즈라
-        // 어차피 매칭이 안 됨) MOULD 기준 Component라면, "시트 사이즈"로 골라둔 몰드를 기준으로
-        // 배수를 역산한다 — version의 기본 몰드(1배 기준) 대비 목표 몰드의 기준중량 비율.
-        let suggested = suggestedFromSize;
-        let resolvedMouldId = isMould ? (version.default_mould_id ?? null) : null;
-        if (suggestedFromSize == null && isMould && effectiveSheetMouldId) {
-          const targetMould = mouldsById.get(effectiveSheetMouldId) ?? null;
-          const baseMould = version.default_mould_id
-            ? (mouldsById.get(version.default_mould_id) ?? null)
-            : null;
-          const { multiplier, mismatch } = mouldBatchMultiplier(1, targetMould, baseMould);
-          if (!mismatch) {
-            suggested = multiplier;
-            resolvedMouldId = effectiveSheetMouldId;
-          }
-        }
-
-        return [
-          {
-            formula,
-            row: {
-              user_id: userId,
-              work_session_id: session.id,
-              formula_version_id: version.id,
-              kind: "CORE" as const,
-              slot,
-              multiplier: suggested ?? 1,
-              mould_id: resolvedMouldId,
-              mould_qty: isMould ? 1 : null,
-              base_weight_id: null,
-              base_weight_qty: null,
-              // 2026-10-19 "테이블 통합" 1단계: 통합 capacity_id/capacity_qty도 함께 채운다(dual-write).
-              capacity_id: resolvedMouldId,
-              capacity_qty: isMould ? 1 : null,
-              sort_order: CORE_SLOTS.indexOf(slot),
-            },
-          },
-        ];
-      });
-      if (coreRows.length > 0) {
-        const { error: rowsError } = await supabase
-          .from("work_session_formula_versions")
-          .insert(coreRows.map((r) => r.row));
-        if (rowsError) throw rowsError;
-
-        for (const { formula, row } of coreRows) {
-          const { error: workflowError } = await applyDefaultWorkflowForFormulaVersion({
-            sessionId: session.id,
-            userId,
-            formulaVersionId: row.formula_version_id,
-            component: formula.components ?? null,
-            formulaTechniqueCategoryId: formula.technique_category_id ?? null,
-            techniqueCategories: techniqueCategories.data ?? [],
-          });
-          if (workflowError) {
-            // 세션/재료 연결 자체는 이미 성공했으니, 기본 워크플로 적용 실패는 콘솔에만 남기고
-            // 세션 생성 흐름은 막지 않는다 ($sessionId.tsx의 add mutation과 동일한 방침).
-            console.error("Default workflow auto-apply failed:", workflowError);
-          }
-        }
-        // 2026-10-21 사용자 요청: 오더에서 WORK SESSION을 만들 때 그 오더의 WANN 프로젝트 하위에
-        // SHEET/CREAM(/FILLING) TASK가 바로 뜨도록 — 일정(날짜)은 나중에 WORK SESSION에서 잡으면
-        // 같은 TASK의 날짜/시간이 갱신된다(Edge Function이 planner_task_id로 멱등 처리).
-        await syncWorkSessionToPlanner(session.id);
-      }
-      return session.id;
-    },
-    onSuccess: async (sessionId) => {
-      await queryClient.invalidateQueries({ queryKey: ["work_sessions", "by_order", orderId] });
-      await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
-      // 컴포넌트가 PRODUCTION 대시보드 작업 대기공간에 바로 올라오게 하고, 그 대시보드로 이동한다.
-      await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
-      await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
-      if (sessionId) void navigate({ to: "/production" });
     },
   });
 
@@ -1485,23 +1252,23 @@ function OrderDetailPage() {
           "생성"이 아니라 "열기"로 바뀐다(중복 생성 금지). */}
           <SectionCard title="PRODUCTION / PRODUCT">
             <div className="flex flex-wrap items-center gap-2">
+              {/* 2026-10-22: WORK SESSION은 오더마다 기본으로 있다(만들기 버튼 없음). 컴포넌트 지정/시간 배정은
+                  PRODUCTION > ORDERS 탭·DASHBOARD에서 하고, 세션 페이지는 그 내용을 보여준다. */}
+              <Link to="/production" className={buttonClass}>
+                OPEN IN PRODUCTION
+              </Link>
               {workSession.data ? (
                 <Link
                   to="/production/$sessionId"
                   params={{ sessionId: workSession.data.id }}
                   className={buttonClass}
                 >
-                  OPEN WORK SESSION{workSession.data.name ? ` — ${workSession.data.name}` : ""}
+                  WORK SESSION 보기{workSession.data.name ? ` — ${workSession.data.name}` : ""}
                 </Link>
               ) : (
-                <button
-                  type="button"
-                  className={buttonClass}
-                  disabled={createWorkSession.isPending}
-                  onClick={() => createWorkSession.mutate()}
-                >
-                  {createWorkSession.isPending ? "CREATING…" : "+ CREATE WORK SESSION"}
-                </button>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  WORK SESSION 준비 중…
+                </span>
               )}
               {order.data.product_id ? (
                 <Link
@@ -1522,9 +1289,9 @@ function OrderDetailPage() {
                 </button>
               )}
             </div>
-            {(createWorkSession.isError || upgradeToProduct.isError) && (
+            {upgradeToProduct.isError && (
               <p className="mt-2 font-mono text-xs uppercase text-destructive">
-                {((createWorkSession.error ?? upgradeToProduct.error) as Error).message}
+                {(upgradeToProduct.error as Error).message}
               </p>
             )}
           </SectionCard>

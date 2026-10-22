@@ -1057,6 +1057,10 @@ export interface DashboardComponentRow {
   work_session_id: string;
   planner_task_id: string | null;
   componentName: string;
+  /** 기존 컴포넌트를 복사해 만들었고 레시피(재료)를 아직 하나도 수정하지 않음 → 빨간 ! 경고 */
+  unmodifiedCopy: boolean;
+  formulaId: string | null;
+  componentId: string | null;
   /** 컴포넌트의 기본 WORKFLOW TEMPLATE(자동 적용이 켜진 경우만) — 단계가 곧 작업 블록 단위가 된다 */
   templateId: string | null;
   sessionStatus: string;
@@ -1079,7 +1083,7 @@ export const dashboardComponentsQuery = () =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "id, slot, work_session_id, planner_task_id, sort_order, formula_versions(formulas(name, components(name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, products(name), customers(name)))",
+            "id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, products(name), customers(name)))",
           )
           .eq("kind", "CORE")
           .order("sort_order", { ascending: true }),
@@ -1089,9 +1093,13 @@ export const dashboardComponentsQuery = () =>
         work_session_id: string;
         planner_task_id: string | null;
         formula_versions: {
+          formula_version_ingredients: { amount_source: string }[];
           formulas: {
+            id: string;
             name: string;
+            derived_from_formula_id: string | null;
             components: {
+              id: string;
               name: string;
               default_workflow_template_id: string | null;
               auto_apply_default_workflow: boolean;
@@ -1123,6 +1131,13 @@ export const dashboardComponentsQuery = () =>
           work_session_id: r.work_session_id,
           planner_task_id: r.planner_task_id,
           componentName: formula?.components?.name ?? formula?.name ?? "—",
+          formulaId: formula?.id ?? null,
+          componentId: formula?.components?.id ?? null,
+          unmodifiedCopy:
+            !!formula?.derived_from_formula_id &&
+            (r.formula_versions?.formula_version_ingredients ?? []).every(
+              (i) => i.amount_source === "copied",
+            ),
           templateId: formula?.components?.auto_apply_default_workflow
             ? (formula.components.default_workflow_template_id ?? null)
             : null,
