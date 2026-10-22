@@ -81,10 +81,13 @@ export function formatDateTime(input: Date | string): string {
   return `${toLocalDateString(date)} ${formatTime(date)}`;
 }
 
-/** 오더 delivery 표기(간단히) — 픽업/배달 시각이 있으면 "MM-DD HH:mm", 없으면 행사일 "MM-DD", 둘 다 없으면 null. */
+/** 오더 delivery 표기(간단히) — 픽업/배달 시각이 있으면 "MM-DD(요일) HH:mm", 없으면 행사일 "MM-DD(요일)", 둘 다 없으면 null. */
 export function formatDelivery(pickupAt: string | null, eventDate: string | null): string | null {
-  if (pickupAt) return formatDateTime(pickupAt).slice(5);
-  return eventDate ? eventDate.slice(5) : null;
+  if (pickupAt) {
+    const full = formatDateTime(pickupAt); // "YYYY-MM-DD HH:mm"
+    return `${full.slice(5, 10)}(${koreanWeekdayShort(full.slice(0, 10))}) ${full.slice(11)}`;
+  }
+  return eventDate ? `${eventDate.slice(5)}(${koreanWeekdayShort(eventDate)})` : null;
 }
 
 const KOREAN_WEEKDAYS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
