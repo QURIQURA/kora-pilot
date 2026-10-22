@@ -5,8 +5,13 @@ import {
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { WorkSessionWorkspace } from "@/components/pilot/WorkSessionWorkspace";
-import { CopyWarning, DietaryChips, orderTitle, useOrderDietaryNames } from "@/components/pilot/OrderTitle";
+import { DayWorkView, WorkSessionWorkspace } from "@/components/pilot/WorkSessionWorkspace";
+import {
+  CopyWarning,
+  DietaryChips,
+  orderTitle,
+  useOrderDietaryNames,
+} from "@/components/pilot/OrderTitle";
 import { BlockTaskDetails } from "@/components/pilot/BlockTaskDetails";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -238,6 +243,21 @@ export function ProductionDashboard() {
     if (focusRowId && (blocksByRow.get(focusRowId) ?? []).length === 0) add(focusRowId);
     return [...bySession.entries()].map(([sid, rowIds]) => ({ sid, rowIds }));
   }, [dayBlocks, rowById, blocksByRow, focusRowId]);
+  // 합쳐진 WORK VIEW용: 타임라인 시간순으로 (세션 상관없이) 컴포넌트 열을 나열
+  const dayWorkItems = useMemo(
+    () =>
+      workspaceSessions
+        .flatMap(({ sid, rowIds }) => rowIds.map((rowId) => ({ sessionId: sid, rowId })))
+        .sort((a, b) => {
+          const first = (id: string) =>
+            [...dayBlocks]
+              .filter((x) => x.work_session_formula_version_id === id)
+              .map((x) => x.start_time)
+              .sort()[0] ?? "99:99";
+          return first(a.rowId).localeCompare(first(b.rowId));
+        }),
+    [workspaceSessions, dayBlocks],
+  );
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
@@ -1453,11 +1473,14 @@ export function ProductionDashboard() {
 
       {/* ── 그날 작업의 WORK VIEW(계량) 등 — 블록이 속한 세션별로 ── */}
       {workspaceSessions.length > 0 ? (
-        workspaceSessions.map(({ sid, rowIds }) => (
-          <div key={sid} className="space-y-3 border-t border-border pt-4">
-            <WorkSessionWorkspace sessionId={sid} rowIds={rowIds} embedded />
-          </div>
-        ))
+        <>
+          <DayWorkView items={dayWorkItems} />
+          {workspaceSessions.map(({ sid, rowIds }) => (
+            <div key={sid} className="space-y-3 border-t border-border pt-4">
+              <WorkSessionWorkspace sessionId={sid} rowIds={rowIds} embedded />
+            </div>
+          ))}
+        </>
       ) : (
         <p className="border-t border-border pt-3 font-mono text-[11px] text-muted-foreground">
           이 날짜에 배정된 작업이 없어요. 컴포넌트를 타임라인에 배정하면 아래에 계량(WORK VIEW)이

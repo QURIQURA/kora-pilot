@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-10-22 — DASHBOARD: WORK VIEW를 한 표로 합침
+
+- 선택한 날짜의 타임라인에 배정된 컴포넌트들이 **오더(세션)와 상관없이 하나의 WEIGHING MATRIX / FORMULA VIEW 표에 나란히** 보입니다(타임라인 시간순 열). 예전 WORK SESSION 화면처럼 재료 행이 공유되고, 체크/메모/EDIT도 그대로 동작합니다. ADJUST QUANTITY는 오더별로 접힌 상태로 아래에 남아 있어요.
+
+---
+
 ## 2026-10-22 — 모든 오더는 WORK SESSION 기본 보유 / 세션 상세는 읽기 전용 미러 / ORDER HISTORY / 복사 경고
 
 - **오더 = WORK SESSION 기본 보유**: 오더를 만들거나 열면 세션이 자동으로 생깁니다(예전 오더도 ORDERS 탭·오더 페이지를 열 때 자동 생성). 오더 페이지의 "WORK SESSION 만들기" 버튼은 사라지고 **OPEN IN PRODUCTION / WORK SESSION 보기** 링크가 있습니다. (참고: 예전의 "오더의 맛 포뮬라 필드로 CORE 자동 채우기"는 없어졌어요 — 컴포넌트는 ORDERS 탭에서 지정.)

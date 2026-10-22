@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   PointerSensor,
@@ -562,7 +562,7 @@ export function WorkSessionWorkspace({
         </SectionCard>
       </div>
 
-      <div className="order-1">
+      <div className={embedded ? "hidden" : "order-1"}>
         <SectionCard
           title="WORK VIEW"
           action={
@@ -1402,6 +1402,8 @@ type WeighingColumn = {
   versionNumber: number;
   multiplier: number;
   sortOrder: number;
+  /** 여러 세션을 한 표에 합칠 때(대시보드 DayWorkView) 이 열이 속한 세션 */
+  sessionId?: string;
 };
 
 const DEFAULT_MATRIX_COL_WIDTH = 150;
@@ -1801,7 +1803,11 @@ function MatrixBodyRow({
             style={{ height }}
           >
             {cell ? (
-              <WeighingMatrixCell sessionId={sessionId} cell={cell} onChanged={onProgressChanged} />
+              <WeighingMatrixCell
+                sessionId={col.sessionId ?? sessionId}
+                cell={cell}
+                onChanged={onProgressChanged}
+              />
             ) : (
               <span className="block text-center text-muted-foreground">—</span>
             )}
@@ -2720,5 +2726,148 @@ function StockReflectSection({
       </ul>
       {error && <p className="mt-2 font-mono text-xs text-destructive">{error}</p>}
     </SectionCard>
+  );
+}
+
+/**
+ * 대시보드용 합쳐진 WORK VIEW(2026-10-22) — 그날 타임라인에 배정된 컴포넌트를 오더(세션)와 상관없이
+ * 한 계량표에 나란히 보여준다(예전 WORK SESSION 화면처럼). items는 타임라인 시간순.
+ */
+export function DayWorkView({ items }: { items: { sessionId: string; rowId: string }[] }) {
+  const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA">("WEIGHING");
+  const [editingColumn, setEditingColumn] = useState<WeighingColumn | null>(null);
+  const sessionIds = useMemo(() => [...new Set(items.map((i) => i.sessionId))], [items]);
+
+  const selectionQs = useQueries({
+    queries: sessionIds.map((sid) => workSessionFormulaVersionsQuery(sid)),
+  });
+  const progressQs = useQueries({
+    queries: sessionIds.map((sid) => workSessionProgressQuery(sid)),
+  });
+
+  const rowsById = useMemo(() => {
+    const map = new Map<string, { row: WorkSessionFormulaVersionRow; sessionId: string }>();
+    sessionIds.forEach((sid, i) => {
+      for (const r of selectionQs[i]?.data ?? []) map.set(r.id, { row: r, sessionId: sid });
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionIds, selectionQs.map((q) => q.dataUpdatedAt).join(",")]);
+
+  const ordered = useMemo(
+    () =>
+      items.flatMap((i) => {
+        const hit = rowsById.get(i.rowId);
+        return hit ? [hit] : [];
+      }),
+    [items, rowsById],
+  );
+  const versionIds = useMemo(
+    () => [...new Set(ordered.map((o) => o.row.formula_version_id))],
+    [ordered],
+  );
+  const ingredients = useQuery(versionIngredientsBulkQuery(versionIds));
+  const ingredientsByVersion = useMemo(() => ingredients.data ?? {}, [ingredients.data]);
+
+  const progressBySelectionAndLine = useMemo(() => {
+    const map: Record<string, { status: string; note: string | null }> = {};
+    for (const q of progressQs)
+      for (const p of q.data ?? []) {
+        map[`${p.work_session_formula_version_id}:${p.formula_version_ingredient_id}`] = {
+          status: p.status,
+          note: p.note,
+        };
+      }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progressQs.map((q) => q.dataUpdatedAt).join(",")]);
+
+  const columns: WeighingColumn[] = useMemo(
+    () =>
+      ordered.map(({ row: r, sessionId }, idx) => ({
+        selectionId: r.id,
+        formulaVersionId: r.formula_version_id,
+        formulaId: r.formula_versions.formulas.id,
+        formulaName:
+          r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name,
+        versionNumber: r.formula_versions.version_number,
+        multiplier: Number(r.multiplier),
+        sortOrder: idx,
+        sessionId,
+      })),
+    [ordered],
+  );
+  const groups = useMemo(
+    () =>
+      buildWeighingGroups({
+        selections: columns,
+        ingredientsByVersion,
+        progressBySelectionAndLine,
+      }),
+    [columns, ingredientsByVersion, progressBySelectionAndLine],
+  );
+
+  const invalidateProgress = async () => {
+    for (const sid of sessionIds)
+      await queryClient.invalidateQueries({ queryKey: ["work_session_progress", sid] });
+  };
+
+  if (ordered.length === 0) return null;
+  return (
+    <div className="border-t border-border pt-4">
+      <SectionCard
+        title="WORK VIEW"
+        action={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={viewMode === "WEIGHING" ? primaryButtonClass : buttonClass}
+              onClick={() => setViewMode("WEIGHING")}
+            >
+              WEIGHING MATRIX
+            </button>
+            <button
+              type="button"
+              className={viewMode === "FORMULA" ? primaryButtonClass : buttonClass}
+              onClick={() => setViewMode("FORMULA")}
+            >
+              FORMULA VIEW
+            </button>
+          </div>
+        }
+      >
+        {viewMode === "WEIGHING" ? (
+          <WeighingView
+            sessionId={ordered[0]!.sessionId}
+            groups={groups}
+            columns={columns}
+            onProgressChanged={invalidateProgress}
+            onEditColumn={setEditingColumn}
+          />
+        ) : (
+          <FormulaView
+            rows={ordered.map((o) => o.row)}
+            ingredientsByVersion={ingredientsByVersion}
+          />
+        )}
+      </SectionCard>
+      {editingColumn && (
+        <EditFormulaVersionModal
+          column={editingColumn}
+          onClose={() => setEditingColumn(null)}
+          onSaved={async () => {
+            const sid = editingColumn.sessionId;
+            setEditingColumn(null);
+            if (sid)
+              await queryClient.invalidateQueries({
+                queryKey: ["work_session_formula_versions", sid],
+              });
+            await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
+            await invalidateProgress();
+          }}
+        />
+      )}
+    </div>
   );
 }
