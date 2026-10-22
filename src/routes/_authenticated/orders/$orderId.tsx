@@ -276,8 +276,8 @@ function OrderDetailPage() {
   const [makerNotes, setMakerNotes] = useState("");
   // 2026-10-20 사용자 요청: 웹 주문서의 알레르기/식이 요구사항을 PILOT 주문에서도 보이게.
   const [dietaryRequirements, setDietaryRequirements] = useState("");
-  // 2026-10-22: 웹 주문서 "제일 안 좋아하는 과일" 답. "Not a fan of fruit" = 과일 없는 백업 케익.
-  const [leastLikedFruit, setLeastLikedFruit] = useState("");
+  // 2026-10-22: 웹 주문서 "제일 안 좋아하는 플레이버"(중복 선택) 답. "Fruit" = 과일 없는 백업 케익.
+  const [leastLikedFlavours, setLeastLikedFlavours] = useState("");
   // 2026-10-21: DIETARY REQUIREMENTS 태그(복수 선택, SETTINGS > DIETARY TAGS). null = 아직 손대지 않음(서버 값 사용).
   const dietaryTags = useQuery(dietaryTagsQuery());
   const dietaryLinks = useQuery(orderDietaryTagLinksQuery());
@@ -330,7 +330,7 @@ function OrderDetailPage() {
       designNote: o.design_notes ?? "",
       orderNote: o.notes ?? "",
       dietaryRequirements: o.dietary_requirements ?? "",
-      leastLikedFruit: o.least_liked_fruit ?? "",
+      leastLikedFlavours: o.least_liked_flavours ?? "",
       dietaryBuildId: o.dietary_build_id ?? "",
       audience: o.audience ?? "",
       deliveryAddress: o.delivery_address ?? "",
@@ -373,7 +373,7 @@ function OrderDetailPage() {
     setDesignNote(o.design_notes ?? "");
     setOrderNote(o.notes ?? "");
     setDietaryRequirements(o.dietary_requirements ?? "");
-    setLeastLikedFruit(o.least_liked_fruit ?? "");
+    setLeastLikedFlavours(o.least_liked_flavours ?? "");
     setDietaryBuildId(o.dietary_build_id ?? "");
     setAudience(o.audience ?? "");
     setDeliveryAddress(o.delivery_address ?? "");
@@ -420,7 +420,7 @@ function OrderDetailPage() {
     designNote,
     orderNote,
     dietaryRequirements,
-    leastLikedFruit,
+    leastLikedFlavours,
     dietaryBuildId,
     audience,
     deliveryAddress,
@@ -470,7 +470,7 @@ function OrderDetailPage() {
           design_notes: designNote.trim() || null,
           notes: orderNote.trim() || null,
           dietary_requirements: dietaryRequirements.trim() || null,
-          least_liked_fruit: leastLikedFruit.trim() || null,
+          least_liked_flavours: leastLikedFlavours.trim() || null,
           dietary_build_id: dietaryBuildId || null,
           audience: audience || null,
           delivery_address: deliveryAddress.trim() || null,
@@ -884,12 +884,12 @@ function OrderDetailPage() {
                 </Field>
               </div>
               <div className="md:col-span-2">
-                <Field label="LEAST LIKED FRUIT">
+                <Field label="LEAST LIKED FLAVOURS">
                   <input
                     className={inputClass}
                     placeholder="From the web order form"
-                    value={leastLikedFruit}
-                    onChange={(e) => setLeastLikedFruit(e.target.value)}
+                    value={leastLikedFlavours}
+                    onChange={(e) => setLeastLikedFlavours(e.target.value)}
                   />
                 </Field>
               </div>

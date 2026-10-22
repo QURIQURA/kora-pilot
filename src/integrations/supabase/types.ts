@@ -1695,7 +1695,7 @@ export type Database = {
           dietary_build_id: string | null;
           design_notes: string | null;
           dietary_requirements: string | null;
-          least_liked_fruit: string | null;
+          least_liked_flavours: string | null;
           event_date: string | null;
           extracted_json: Json | null;
           flavoring_cream_formula_id: string | null;
@@ -1752,7 +1752,7 @@ export type Database = {
           dietary_build_id?: string | null;
           design_notes?: string | null;
           dietary_requirements?: string | null;
-          least_liked_fruit?: string | null;
+          least_liked_flavours?: string | null;
           event_date?: string | null;
           extracted_json?: Json | null;
           flavoring_cream_formula_id?: string | null;
@@ -1809,7 +1809,7 @@ export type Database = {
           dietary_build_id?: string | null;
           design_notes?: string | null;
           dietary_requirements?: string | null;
-          least_liked_fruit?: string | null;
+          least_liked_flavours?: string | null;
           event_date?: string | null;
           extracted_json?: Json | null;
           flavoring_cream_formula_id?: string | null;
