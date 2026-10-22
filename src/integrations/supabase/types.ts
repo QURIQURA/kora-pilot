@@ -477,6 +477,7 @@ export type Database = {
           id: string;
           name: string;
           note: string | null;
+          order_id: string | null;
           planner_task_id: string | null;
           start_time: string;
           task_date: string;
@@ -491,6 +492,7 @@ export type Database = {
           id?: string;
           name: string;
           note?: string | null;
+          order_id?: string | null;
           planner_task_id?: string | null;
           start_time: string;
           task_date: string;
@@ -505,6 +507,7 @@ export type Database = {
           id?: string;
           name?: string;
           note?: string | null;
+          order_id?: string | null;
           planner_task_id?: string | null;
           start_time?: string;
           task_date?: string;
@@ -514,6 +517,13 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "daily_tasks_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "daily_tasks_template_id_fkey";
             columns: ["template_id"];

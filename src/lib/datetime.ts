@@ -81,6 +81,12 @@ export function formatDateTime(input: Date | string): string {
   return `${toLocalDateString(date)} ${formatTime(date)}`;
 }
 
+/** 오더 delivery 표기(간단히) — 픽업/배달 시각이 있으면 "MM-DD HH:mm", 없으면 행사일 "MM-DD", 둘 다 없으면 null. */
+export function formatDelivery(pickupAt: string | null, eventDate: string | null): string | null {
+  if (pickupAt) return formatDateTime(pickupAt).slice(5);
+  return eventDate ? eventDate.slice(5) : null;
+}
+
 const KOREAN_WEEKDAYS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
 const KOREAN_WEEKDAYS_SHORT = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -115,9 +121,7 @@ export function generateTitle(name: string, dateStr: string | null): string {
  */
 export function formatDateLabel(dateStr: string): string {
   const date = parseLocalDate(dateStr);
-  const weekday = new Intl.DateTimeFormat("en-AU", WEEKDAY_PARTS)
-    .format(date)
-    .toUpperCase();
+  const weekday = new Intl.DateTimeFormat("en-AU", WEEKDAY_PARTS).format(date).toUpperCase();
   return `${dateStr} ${weekday}`;
 }
 
@@ -199,18 +203,15 @@ const OFFSET_PARTS: Intl.DateTimeFormatOptions = {
  * Intl formatToParts 기반이라 DST 전환에도 안전하다.
  */
 function localOffsetMs(date: Date): number {
-  const parts = new Intl.DateTimeFormat("en-US", OFFSET_PARTS).formatToParts(
-    date
-  );
-  const get = (type: string) =>
-    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const parts = new Intl.DateTimeFormat("en-US", OFFSET_PARTS).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
   const asUTC = Date.UTC(
     get("year"),
     get("month") - 1,
     get("day"),
     get("hour"),
     get("minute"),
-    get("second")
+    get("second"),
   );
   return asUTC - Math.floor(date.getTime() / 1000) * 1000;
 }
@@ -231,7 +232,7 @@ export function localDateTimeToISO(dateStr: string, timeStr: string): string {
     date.getDate(),
     Number(tm[1]),
     Number(tm[2]),
-    Number(tm[3] ?? "0")
+    Number(tm[3] ?? "0"),
   );
   // 로컬 시각을 UTC로 가정한 뒤 오프셋을 빼고, DST 경계를 위해 한 번 더 보정한다.
   const first = localOffsetMs(new Date(guess));

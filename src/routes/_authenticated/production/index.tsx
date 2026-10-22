@@ -7,6 +7,7 @@ import { mergeWorkSessions, type WorkSession } from "@/lib/work-session";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
 import { ProductionDashboard } from "@/components/pilot/ProductionDashboard";
+import { ProductionOrdersTab } from "@/components/pilot/ProductionOrdersTab";
 import {
   Field,
   PageHeader,
@@ -40,7 +41,7 @@ const STATUS_LABEL: Record<string, string> = {
  * 2026-10-22 사용자 요청: PRODUCTION 메인보드를 DASHBOARD(작업 대기공간 + 데일리 타임라인)로 바꾸고,
  * 기존 WORK SESSION 목록은 기록 보관용 HISTORY 탭으로 옮긴다. 기존 세션 기록/상세 화면은 그대로.
  */
-type MainTab = "DASHBOARD" | "HISTORY";
+type MainTab = "DASHBOARD" | "ORDERS" | "HISTORY";
 
 function ProductionDashboardPage() {
   const [tab, setTab] = useState<MainTab>("DASHBOARD");
@@ -49,7 +50,7 @@ function ProductionDashboardPage() {
     <div className="space-y-4">
       <PageHeader title="PRODUCTION" />
       <div className="flex gap-4 border-b border-border" role="tablist">
-        {(["DASHBOARD", "HISTORY"] as const).map((t) => (
+        {(["DASHBOARD", "ORDERS", "HISTORY"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -67,7 +68,13 @@ function ProductionDashboardPage() {
           </button>
         ))}
       </div>
-      {tab === "DASHBOARD" ? <ProductionDashboard /> : <WorkSessionHistory />}
+      {tab === "DASHBOARD" ? (
+        <ProductionDashboard />
+      ) : tab === "ORDERS" ? (
+        <ProductionOrdersTab />
+      ) : (
+        <WorkSessionHistory />
+      )}
     </div>
   );
 }

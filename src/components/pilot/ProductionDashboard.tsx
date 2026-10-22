@@ -5,11 +5,7 @@ import {
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import {
-  AddFormulaVersionForm,
-  WorkSessionWorkspace,
-} from "@/components/pilot/WorkSessionWorkspace";
-import { DashboardComponentCopyForm } from "@/components/pilot/DashboardComponentCopyForm";
+import { WorkSessionWorkspace } from "@/components/pilot/WorkSessionWorkspace";
 import { BlockTaskDetails } from "@/components/pilot/BlockTaskDetails";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,21 +14,16 @@ import {
   currentUserId,
   dailyTasksQuery,
   dailyTaskTemplatesQuery,
-  CORE_SLOTS,
-  CORE_SLOT_LABELS,
   dashboardComponentsQuery,
-  orderStatusLabel,
   ordersQuery,
   workBlocksQuery,
-  workSessionsQuery,
-  type CoreSlot,
   workflowTemplateStepsQuery,
   type DailyTask,
   type DailyTaskTemplate,
   type DashboardComponentRow,
   type WorkBlock,
 } from "@/lib/queries";
-import { addDays, generateTitle, koreanWeekdayShort, toLocalDateString } from "@/lib/datetime";
+import { addDays, formatDelivery, koreanWeekdayShort, toLocalDateString } from "@/lib/datetime";
 import {
   removeDailyTask,
   syncDailyTaskToPlanner,
@@ -134,13 +125,7 @@ export function ProductionDashboard() {
   const dailyQuery = useQuery(dailyTasksQuery());
   const dailyTemplatesQuery = useQuery(dailyTaskTemplatesQuery());
   const ordersData = useQuery(ordersQuery());
-  const sessionsData = useQuery(workSessionsQuery());
-  // "+ SHEET/CREAM/FILLING"으로 대시보드에서 바로 컴포넌트를 추가하는 중인 오더/슬롯
-  const [addingComponent, setAddingComponent] = useState<{
-    orderId: string;
-    slot: CoreSlot;
-  } | null>(null);
-  const [addMode, setAddMode] = useState<"pick" | "copy">("pick");
+  const [pickedRowIds, setPickedRowIds] = useState<string[]>([]);
   const [selectedDailyId, setSelectedDailyId] = useState<string | null>(null);
   const [dailyName, setDailyName] = useState("");
   const [dailySave, setDailySave] = useState(false);
@@ -167,12 +152,12 @@ export function ProductionDashboard() {
 
   // 오더별 구분색 — 오더 번호순으로 고정 배정해서 새로고침해도 색이 안 바뀐다.
   const orderColor = useMemo(() => {
-    const all = new Map(rows.map((r) => [r.order.id, r.order.order_number]));
-    for (const o of ordersData.data ?? []) all.set(o.id, o.order_number);
-    const ids = [...all.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id]) => id);
+    const ids = [...new Map(rows.map((r) => [r.order.id, r.order.order_number])).entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([id]) => id);
     return (orderId: string) =>
       ORDER_PALETTE[Math.max(ids.indexOf(orderId), 0) % ORDER_PALETTE.length]!;
-  }, [rows, ordersData.data]);
+  }, [rows]);
 
   const isActive = (r: DashboardComponentRow) =>
     r.order.status !== "COMPLETED" &&
@@ -196,21 +181,6 @@ export function ProductionDashboard() {
     );
   }, [rows, blocksByRow]);
   const poolCount = poolGroups.reduce((n, g) => n + g.rows.length, 0);
-
-  // 진행 중인 오더(완료 전) 목록 — 컴포넌트가 아직 없어도 보이고, 여기서 바로 SHEET/CREAM/FILLING을 추가한다.
-  const orderList = useMemo(() => {
-    const pooledByOrder = new Map(poolGroups.map((g) => [g.order.id, g.rows]));
-    return (ordersData.data ?? [])
-      .filter((o) => o.status !== "COMPLETED")
-      .sort((a, b) => a.order_number.localeCompare(b.order_number))
-      .map((o) => ({
-        order: o,
-        session:
-          (sessionsData.data ?? []).find((s) => s.order_id === o.id && s.status !== "CANCELLED") ??
-          null,
-        rows: pooledByOrder.get(o.id) ?? [],
-      }));
-  }, [ordersData.data, sessionsData.data, poolGroups]);
 
   const dayBlocks = useMemo(
     () =>
@@ -464,29 +434,6 @@ export function ProductionDashboard() {
     setWarning(err ? `플래너 동기화에 실패했어요: ${err}` : null);
   };
 
-  // 오더에 WORK SESSION이 아직 없으면 대시보드에서 바로 빈 세션을 만든다(컴포넌트는 이어서 + SHEET/CREAM/FILLING으로 지정).
-  const createSession = useMutation({
-    mutationFn: async (order: NonNullable<typeof ordersData.data>[number]) => {
-      const userId = await currentUserId();
-      const delivery = order.pickup_at ? order.pickup_at.slice(0, 10) : order.event_date;
-      const baseName = order.products?.name || order.recipient || order.order_number;
-      const { error } = await supabase.from("work_sessions").insert({
-        user_id: userId,
-        order_id: order.id,
-        name: generateTitle(baseName, delivery),
-        status: "PLANNED",
-        product_id: order.product_id,
-        product_size_id: order.product_size_id,
-        cake_size_id: order.cake_size_id,
-      });
-      if (error) throw error;
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
-      await refresh();
-    },
-  });
-
   const createDaily = useMutation({
     mutationFn: async (v: {
       name: string;
@@ -548,6 +495,7 @@ export function ProductionDashboard() {
       endMin?: number;
       name?: string;
       note?: string | null;
+      orderId?: string | null;
     }) => {
       const { error } = await supabase
         .from("daily_tasks")
@@ -557,6 +505,7 @@ export function ProductionDashboard() {
           end_time: v.endMin !== undefined ? toTime(v.endMin) : v.task.end_time,
           name: v.name ?? v.task.name,
           note: v.note !== undefined ? v.note : v.task.note,
+          order_id: v.orderId !== undefined ? v.orderId : v.task.order_id,
           updated_at: new Date().toISOString(),
         })
         .eq("id", v.task.id);
@@ -584,7 +533,6 @@ export function ProductionDashboard() {
     splitBlock.isPending ||
     removeBlock.isPending ||
     createDaily.isPending ||
-    createSession.isPending ||
     updateDaily.isPending ||
     deleteDaily.isPending;
   const firstError = [
@@ -593,7 +541,6 @@ export function ProductionDashboard() {
     splitBlock,
     removeBlock,
     createDaily,
-    createSession,
     updateDaily,
     deleteDaily,
   ].find((m) => m.isError)?.error;
@@ -724,6 +671,39 @@ export function ProductionDashboard() {
     createBlock.mutate({ row, startMin, endMin: startMin + DEFAULT_DURATION_MIN, day: date });
   };
 
+  // 시간 배정 전 컴포넌트 여러 개를 그날 마지막 블록 뒤부터 차례로 이어서 넣는다(템플릿 단계가 있으면 단계 합계만큼 차지).
+  const addRowsToDay = async (rowIds: string[]) => {
+    let cursor = Math.max(
+      9 * 60,
+      dayBlocks.reduce((m, b) => Math.max(m, toMin(b.end_time)), 0),
+    );
+    for (const id of rowIds) {
+      const row = rowById.get(id);
+      if (!row) continue;
+      const steps = stepsOf(row);
+      const dur =
+        steps.length === 0
+          ? DEFAULT_DURATION_MIN
+          : steps.reduce(
+              (sum, st) =>
+                sum +
+                (st.timer_minutes
+                  ? Math.max(SNAP_MIN, Math.ceil(st.timer_minutes / SNAP_MIN) * SNAP_MIN)
+                  : DEFAULT_DURATION_MIN),
+              0,
+            );
+      const startMin = clamp(cursor, DAY_START_MIN, DAY_END_MIN - DEFAULT_DURATION_MIN);
+      await createBlock.mutateAsync({
+        row,
+        startMin,
+        endMin: startMin + DEFAULT_DURATION_MIN,
+        day: date,
+      });
+      cursor = startMin + dur;
+    }
+    setPickedRowIds([]);
+  };
+
   const gridHeight = HOURS.length * PX_PER_HOUR;
 
   return (
@@ -771,36 +751,39 @@ export function ProductionDashboard() {
             <p className="label-caps text-xs">작업 대기공간</p>
             <p className="font-mono text-[11px] text-muted-foreground">
               {poolCount === 0
-                ? "배정 안 된 컴포넌트가 없어요 · 오더 아래 + SHEET/CREAM/FILLING으로 추가"
+                ? "시간 배정 전인 컴포넌트가 없어요"
                 : `${poolCount}개 대기 중 · 타임라인으로 끌어다 놓거나 ADD`}
-              {" · 블록을 여기로 끌면 배정 해제(데일리 태스크는 삭제)"}
+              {" · 블록을 여기로 끌면 시간 배정 해제(데일리 태스크는 삭제)"}
             </p>
           </div>
-          {components.isLoading || ordersData.isLoading ? (
+          {components.isLoading ? (
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
-          ) : orderList.length === 0 ? (
-            <p className="font-mono text-xs text-muted-foreground">진행 중인 오더가 없어요.</p>
+          ) : poolGroups.length === 0 ? (
+            <p className="font-mono text-xs text-muted-foreground">
+              시간 배정 전인 컴포넌트가 없어요. ORDERS 탭에서 오더에 컴포넌트를 지정하면 여기에
+              쌓여요.
+            </p>
           ) : (
-            orderList.map(({ order, session, rows: pooled }) => {
-              const color = orderColor(order.id);
-              const sessionRowCount = rows.filter((r) => r.work_session_id === session?.id).length;
+            poolGroups.map((g) => {
+              const color = orderColor(g.order.id);
+              const delivery = formatDelivery(g.order.pickupAt, g.order.eventDate);
               return (
-                <div key={order.id} className="space-y-1.5">
+                <div key={g.order.id} className="space-y-1.5">
                   <p className="flex flex-wrap items-center gap-1.5 text-xs">
                     <span
                       className="label-caps px-1.5 py-0.5 text-[11px]"
                       style={{ background: color.bg, color: color.text }}
                     >
-                      {order.order_number}
+                      {g.order.order_number}
                     </span>
                     <span className="text-muted-foreground">
-                      {order.products?.name ?? order.customers?.name ?? ""}
+                      {g.order.productName ?? g.order.customerName ?? ""}
                     </span>
-                    <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                      {orderStatusLabel(order.status)}
-                    </span>
+                    {delivery && (
+                      <span className="ml-auto font-mono text-[11px]">🚚 {delivery}</span>
+                    )}
                   </p>
-                  {pooled.map((r) => (
+                  {g.rows.map((r) => (
                     <div
                       key={r.id}
                       draggable
@@ -841,184 +824,10 @@ export function ProductionDashboard() {
                       </button>
                     </div>
                   ))}
-                  {session ? (
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap gap-1">
-                        {CORE_SLOTS.map((slot) => (
-                          <button
-                            key={slot}
-                            type="button"
-                            className={cn(
-                              buttonClass,
-                              "!min-h-[26px] px-1.5 text-[11px]",
-                              addingComponent?.orderId === order.id &&
-                                addingComponent.slot === slot &&
-                                "bg-secondary",
-                            )}
-                            onClick={() =>
-                              setAddingComponent(
-                                addingComponent?.orderId === order.id &&
-                                  addingComponent.slot === slot
-                                  ? null
-                                  : { orderId: order.id, slot },
-                              )
-                            }
-                          >
-                            + {CORE_SLOT_LABELS[slot].toUpperCase()}
-                          </button>
-                        ))}
-                      </div>
-                      {addingComponent?.orderId === order.id && (
-                        <div className="flex gap-1">
-                          {(["pick", "copy"] as const).map((m) => (
-                            <button
-                              key={m}
-                              type="button"
-                              className={cn(
-                                buttonClass,
-                                "!min-h-[24px] px-1.5 text-[10px]",
-                                addMode === m && "bg-secondary",
-                              )}
-                              onClick={() => setAddMode(m)}
-                            >
-                              {m === "pick" ? "기존 컴포넌트 지정" : "복사해서 새로 만들기"}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {addingComponent?.orderId === order.id && addMode === "copy" && (
-                        <DashboardComponentCopyForm
-                          key={`copy-${addingComponent.slot}`}
-                          sessionId={session.id}
-                          slot={addingComponent.slot}
-                          nextSort={sessionRowCount}
-                          onDone={async () => {
-                            setAddingComponent(null);
-                            await queryClient.invalidateQueries({
-                              queryKey: ["work_session_formula_versions", session.id],
-                            });
-                            await queryClient.invalidateQueries({
-                              queryKey: ["work_session_tasks", session.id],
-                            });
-                            await refresh();
-                          }}
-                        />
-                      )}
-                      {addingComponent?.orderId === order.id && addMode === "pick" && (
-                        <AddFormulaVersionForm
-                          key={addingComponent.slot}
-                          sessionId={session.id}
-                          nextSort={sessionRowCount}
-                          kind="CORE"
-                          slot={addingComponent.slot}
-                          productId={session.product_id}
-                          productSizeId={session.product_size_id}
-                          onDone={async () => {
-                            setAddingComponent(null);
-                            await queryClient.invalidateQueries({
-                              queryKey: ["work_session_formula_versions", session.id],
-                            });
-                            await queryClient.invalidateQueries({
-                              queryKey: ["work_session_tasks", session.id],
-                            });
-                            await refresh();
-                          }}
-                        />
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className={cn(buttonClass, "!min-h-[26px] px-1.5 text-[11px]")}
-                        disabled={busy}
-                        onClick={() => createSession.mutate(order)}
-                      >
-                        + WORK SESSION 만들기
-                      </button>
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        컴포넌트가 연결 안 된 오더
-                      </span>
-                    </div>
-                  )}
                 </div>
               );
             })
           )}
-
-          {/* ── DAILY TASKS: 제품과 무관한 작업(라이브러리 + 즉석 추가) ── */}
-          <div className="space-y-1.5 border-t border-border pt-3">
-            <p className="label-caps text-xs">DAILY TASKS</p>
-            <p className="font-mono text-[11px] text-muted-foreground">
-              제품과 무관한 작업 · 오른쪽 DAILY 칸으로 끌어다 놓거나 ADD
-            </p>
-            {dailyTemplates.map((t) => (
-              <div
-                key={t.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(
-                    "text/plain",
-                    JSON.stringify({ kind: "dailyNew", templateId: t.id } satisfies DragPayload),
-                  );
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                className="flex cursor-grab items-center gap-2 border border-border bg-background px-2 py-1.5"
-                style={{ borderLeft: `3px solid ${DAILY_COLOR.accent}` }}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{t.name}</p>
-                  <p className="font-mono text-[10px] text-muted-foreground">
-                    {t.default_minutes}분{t.task_type ? ` · ${t.task_type}` : ""}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className={cn(buttonClass, "!min-h-[26px] px-1.5 text-[11px]")}
-                  disabled={busy}
-                  onClick={() => quickAddDaily(t.name, t.default_minutes, t)}
-                >
-                  ADD
-                </button>
-              </div>
-            ))}
-            {dailyTemplates.length === 0 && (
-              <p className="font-mono text-[11px] text-muted-foreground">
-                SETTINGS &gt; COMPONENTS &gt; DAILY TASKS에서 자주 쓰는 작업을 등록해두세요.
-              </p>
-            )}
-            <form
-              className="space-y-1.5 border border-dashed border-border p-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                quickAddDaily(dailyName, DEFAULT_DURATION_MIN);
-              }}
-            >
-              <input
-                className={inputClass}
-                placeholder="즉석 작업 이름 (예: 오븐 청소)"
-                value={dailyName}
-                onChange={(e) => setDailyName(e.target.value)}
-              />
-              <div className="flex items-center justify-between gap-2">
-                <label className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={dailySave}
-                    onChange={(e) => setDailySave(e.target.checked)}
-                  />
-                  라이브러리에도 저장
-                </label>
-                <button
-                  type="submit"
-                  className={cn(buttonClass, "!min-h-[26px] px-2 text-[11px]")}
-                  disabled={busy || !dailyName.trim()}
-                >
-                  + ADD
-                </button>
-              </div>
-            </form>
-          </div>
         </section>
 
         {/* ── 데일리 타임라인 ── */}
@@ -1059,6 +868,133 @@ export function ProductionDashboard() {
             <span className="font-mono text-[11px] text-muted-foreground">
               {dayBlocks.length}개 블록 · {dayDailies.length}개 데일리
             </span>
+          </div>
+
+          {/* ── DAILY / QUICK ADD: 데일리 태스크 + 시간 배정 전 컴포넌트 여러 개 한 번에 ── */}
+          <div className="space-y-2 border border-border bg-card p-3">
+            <p className="label-caps text-xs">DAILY TASKS · QUICK ADD</p>
+            <div className="flex flex-wrap items-start gap-2">
+              <form
+                className="flex min-w-[240px] flex-1 flex-wrap items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  quickAddDaily(dailyName, DEFAULT_DURATION_MIN);
+                }}
+              >
+                <input
+                  className={cn(inputClass, "min-w-[160px] flex-1")}
+                  placeholder="즉석 작업 이름 (예: 오븐 청소)"
+                  value={dailyName}
+                  onChange={(e) => setDailyName(e.target.value)}
+                />
+                <label className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={dailySave}
+                    onChange={(e) => setDailySave(e.target.checked)}
+                  />
+                  라이브러리에도 저장
+                </label>
+                <button
+                  type="submit"
+                  className={cn(buttonClass, "!min-h-[30px] px-2 text-[11px]")}
+                  disabled={busy || !dailyName.trim()}
+                >
+                  + ADD
+                </button>
+              </form>
+
+              <details className="relative">
+                <summary
+                  className={cn(buttonClass, "!min-h-[30px] cursor-pointer px-2 text-[11px]")}
+                >
+                  대기 중 컴포넌트에서 선택
+                  {pickedRowIds.length > 0 ? ` (${pickedRowIds.length})` : ""} ▾
+                </summary>
+                <div className="absolute right-0 z-20 mt-1 max-h-72 w-72 space-y-2 overflow-y-auto border border-border bg-background p-2 shadow-md">
+                  {poolGroups.length === 0 ? (
+                    <p className="font-mono text-[11px] text-muted-foreground">
+                      시간 배정 전인 컴포넌트가 없어요
+                    </p>
+                  ) : (
+                    poolGroups.map((g) => (
+                      <div key={g.order.id} className="space-y-0.5">
+                        <p className="label-caps text-[10px] text-muted-foreground">
+                          {g.order.order_number} ·{" "}
+                          {g.order.productName ?? g.order.customerName ?? ""}
+                          {formatDelivery(g.order.pickupAt, g.order.eventDate)
+                            ? ` · 🚚 ${formatDelivery(g.order.pickupAt, g.order.eventDate)}`
+                            : ""}
+                        </p>
+                        {g.rows.map((r) => (
+                          <label key={r.id} className="flex items-center gap-1.5 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={pickedRowIds.includes(r.id)}
+                              onChange={(e) =>
+                                setPickedRowIds((cur) =>
+                                  e.target.checked
+                                    ? [...cur, r.id]
+                                    : cur.filter((id) => id !== r.id),
+                                )
+                              }
+                            />
+                            <span className="label-caps w-12 shrink-0 text-[10px] text-muted-foreground">
+                              {r.slot ?? "CORE"}
+                            </span>
+                            <span className="truncate">{r.componentName}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ))
+                  )}
+                  <button
+                    type="button"
+                    className={cn(buttonClass, "!min-h-[28px] w-full text-[11px]")}
+                    disabled={busy || pickedRowIds.length === 0}
+                    onClick={() => void addRowsToDay(pickedRowIds)}
+                  >
+                    선택한 {pickedRowIds.length}개를 {date} 타임라인에 추가
+                  </button>
+                </div>
+              </details>
+            </div>
+
+            {dailyTemplates.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {dailyTemplates.map((t) => (
+                  <div
+                    key={t.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        "text/plain",
+                        JSON.stringify({
+                          kind: "dailyNew",
+                          templateId: t.id,
+                        } satisfies DragPayload),
+                      );
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    className="flex cursor-grab items-center gap-1.5 border border-border bg-background px-2 py-1"
+                    style={{ borderLeft: `3px solid ${DAILY_COLOR.accent}` }}
+                  >
+                    <span className="text-xs">{t.name}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {t.default_minutes}분
+                    </span>
+                    <button
+                      type="button"
+                      className={cn(buttonClass, "!min-h-[22px] px-1.5 text-[10px]")}
+                      disabled={busy}
+                      onClick={() => quickAddDaily(t.name, t.default_minutes, t)}
+                    >
+                      ADD
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div
@@ -1233,7 +1169,14 @@ export function ProductionDashboard() {
                         borderLeft: `3px solid ${DAILY_COLOR.accent}`,
                       }}
                     >
-                      <p className="truncate text-xs font-medium">{t.name}</p>
+                      <p className="truncate text-xs font-medium">
+                        {t.order_id && (
+                          <span className="label-caps mr-1 text-[10px] opacity-70">
+                            {(ordersData.data ?? []).find((o) => o.id === t.order_id)?.order_number}
+                          </span>
+                        )}
+                        {t.name}
+                      </p>
                       <p className="truncate font-mono text-[11px] opacity-80">
                         {hm(start)}–{hm(end)}
                       </p>
@@ -1338,6 +1281,29 @@ export function ProductionDashboard() {
                   DELETE
                 </button>
               </div>
+              <label className="block space-y-1">
+                <span className="label-caps block text-[11px] text-muted-foreground">
+                  LINK TO ORDER (연결하면 플래너 TASK가 그 오더 프로젝트로 이동)
+                </span>
+                <select
+                  className={inputClass}
+                  value={selectedDaily.order_id ?? ""}
+                  onChange={(e) =>
+                    updateDaily.mutate({ task: selectedDaily, orderId: e.target.value || null })
+                  }
+                >
+                  <option value="">— 연결 안 함 (Daily Project) —</option>
+                  {(ordersData.data ?? [])
+                    .filter((o) => o.status !== "COMPLETED" || o.id === selectedDaily.order_id)
+                    .sort((a, b) => a.order_number.localeCompare(b.order_number))
+                    .map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.order_number} ·{" "}
+                        {o.products?.name ?? o.customers?.name ?? o.recipient ?? ""}
+                      </option>
+                    ))}
+                </select>
+              </label>
               <label className="block space-y-1">
                 <span className="label-caps block text-[11px] text-muted-foreground">
                   NOTE (플래너 TASK 노트)

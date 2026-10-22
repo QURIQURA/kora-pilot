@@ -1064,6 +1064,8 @@ export interface DashboardComponentRow {
     id: string;
     order_number: string;
     status: string;
+    pickupAt: string | null;
+    eventDate: string | null;
     productName: string | null;
     customerName: string | null;
   };
@@ -1077,7 +1079,7 @@ export const dashboardComponentsQuery = () =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "id, slot, work_session_id, planner_task_id, sort_order, formula_versions(formulas(name, components(name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, products(name), customers(name)))",
+            "id, slot, work_session_id, planner_task_id, sort_order, formula_versions(formulas(name, components(name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, products(name), customers(name)))",
           )
           .eq("kind", "CORE")
           .order("sort_order", { ascending: true }),
@@ -1103,6 +1105,8 @@ export const dashboardComponentsQuery = () =>
             id: string;
             order_number: string;
             status: string;
+            pickup_at: string | null;
+            event_date: string | null;
             products: { name: string } | null;
             customers: { name: string | null } | null;
           } | null;
@@ -1127,6 +1131,8 @@ export const dashboardComponentsQuery = () =>
             id: order.id,
             order_number: order.order_number,
             status: order.status,
+            pickupAt: order.pickup_at,
+            eventDate: order.event_date,
             productName: order.products?.name ?? null,
             customerName: order.customers?.name ?? null,
           },

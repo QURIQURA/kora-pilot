@@ -24,6 +24,7 @@
 // - 블록에 연결된 작업 기록(work_session_tasks)의 관찰값(상태/높이/온도)을 플래너 TASK의 상세항목
 //   (planner_task_subitems)에 "관찰 — …" 한 줄로 넣는다. 값이 모두 비면 그 줄을 지운다.
 //
+// (데일리 태스크에 order_id가 있으면 그 오더의 WANN 프로젝트 하위로 들어간다 — 나중에 오더에 연결한 경우.)
 // 2026-10-22 DAILY TASK: 요청 본문에 daily_task_id / remove_daily_task_id를 받아, 컴포넌트와 무관한 작업(daily_tasks)을
 //   그 날짜의 "Daily Project — …" 하위 TASK로 동기화/삭제한다(제목=작업 이름, notes=메모).
 //
@@ -273,13 +274,24 @@ Deno.serve(async (req: Request) => {
     if (dailyTaskId) {
       const { data: dt, error: dtError } = await kora
         .from("daily_tasks")
-        .select("id, task_date, start_time, end_time, name, note, planner_task_id")
+        .select("id, task_date, start_time, end_time, name, note, planner_task_id, order_id")
         .eq("id", dailyTaskId)
         .single();
       if (dtError) throw dtError;
+      // 오더에 연결된 데일리 태스크는 그 오더의 WANN 프로젝트 하위로, 연결이 없거나 프로젝트가 아직 없으면 그날의 Daily Project로.
+      let linkedProjectId: string | null = null;
+      if (dt.order_id) {
+        const { data: linkedOrder, error: linkedError } = await kora
+          .from("orders")
+          .select("wann_project_id")
+          .eq("id", dt.order_id)
+          .maybeSingle();
+        if (linkedError) throw linkedError;
+        linkedProjectId = linkedOrder?.wann_project_id ?? null;
+      }
       const taskId = await upsertTask(dt.planner_task_id, {
         ...common,
-        multiple_task_id: await dailyProjectFor(dt.task_date),
+        multiple_task_id: linkedProjectId ?? (await dailyProjectFor(dt.task_date)),
         title: dt.name,
         notes: dt.note ?? null,
         due_date: dt.task_date,
@@ -293,9 +305,12 @@ Deno.serve(async (req: Request) => {
           .eq("id", dt.id);
         if (linkError) throw linkError;
       }
-      return json({ synced: true, task_ids: [taskId], daily_project_ids: [...dailyProjectCache.values()] });
+      return json({
+        synced: true,
+        task_ids: [taskId],
+        daily_project_ids: [...dailyProjectCache.values()],
+      });
     }
-
 
     // 1) 블록 배정 해제 — 블록 행과 그 TASK를 함께 지운다.
     const taskIdsToDelete = [...deleteIds];
