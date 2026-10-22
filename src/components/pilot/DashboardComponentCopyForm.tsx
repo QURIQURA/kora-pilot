@@ -29,6 +29,7 @@ async function withCleanup<T>(
       await supabase.from("formulas").delete().eq("component_id", created);
       await supabase.from("components").delete().eq("id", created);
     }
+    console.error("컴포넌트 생성 실패:", e);
     throw e;
   }
 }
@@ -248,7 +249,9 @@ export function DashboardComponentCopyForm({
         required
       />
       {copy.isError && (
-        <p className="font-mono text-[11px] text-destructive">{(copy.error as Error).message}</p>
+        <p className="font-mono text-[11px] text-destructive">
+          생성 실패 — {(copy.error as Error).message} (만들다 만 컴포넌트는 자동 정리됨)
+        </p>
       )}
       <button
         type="submit"
@@ -354,7 +357,9 @@ export function DashboardComponentNewForm({
         required
       />
       {create.isError && (
-        <p className="font-mono text-[11px] text-destructive">{(create.error as Error).message}</p>
+        <p className="font-mono text-[11px] text-destructive">
+          생성 실패 — {(create.error as Error).message} (만들다 만 컴포넌트는 자동 정리됨)
+        </p>
       )}
       <button
         type="submit"
