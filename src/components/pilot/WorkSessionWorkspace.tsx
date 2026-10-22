@@ -93,9 +93,12 @@ const NEXT_ACTIONS: Record<string, { label: string; nextStatus: string }[]> = {
 export function WorkSessionWorkspace({
   sessionId,
   embedded = false,
+  rowIds,
 }: {
   sessionId: string;
   embedded?: boolean;
+  /** embedded일 때 이 선택(컴포넌트 행)들만 WORK VIEW / ADJUST QUANTITY에 보여준다 — 대시보드의 선택한 날짜 기준. */
+  rowIds?: string[];
 }) {
   const queryClient = useQueryClient();
 
@@ -264,6 +267,10 @@ export function WorkSessionWorkspace({
     },
   });
 
+  const visibleRows = useMemo(
+    () => (embedded && rowIds ? rows.filter((r) => rowIds.includes(r.id)) : rows),
+    [embedded, rowIds, rows],
+  );
   const decorativeRows = useMemo(() => rows.filter((r) => r.kind !== "CORE"), [rows]);
   const ingredientsByVersion = useMemo(() => ingredients.data ?? {}, [ingredients.data]);
   // key: `${work_session_formula_version_id}:${formula_version_ingredient_id}` — 2026-10-07,
@@ -281,7 +288,7 @@ export function WorkSessionWorkspace({
 
   const orderedSelections = useMemo(
     () =>
-      [...rows]
+      [...visibleRows]
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((r) => ({
           selectionId: r.id,
@@ -293,7 +300,7 @@ export function WorkSessionWorkspace({
           multiplier: Number(r.multiplier),
           sortOrder: r.sort_order,
         })),
-    [rows],
+    [visibleRows],
   );
 
   const weighingGroups = useMemo(
@@ -380,7 +387,7 @@ export function WorkSessionWorkspace({
               {CORE_SLOTS.map((slot) => {
                 // 2026-10-07: 같은 FORMULA VERSION 중복 추가를 허용하면서, 한 슬롯에 여러 개(예: 같은
                 // 레시피를 다른 몰드/배치로 두 번)가 들어갈 수도 있게 됐다 — 하나만 찾지 않고 전부 보여준다.
-                const slotRows = rows.filter((r) => r.kind === "CORE" && r.slot === slot);
+                const slotRows = visibleRows.filter((r) => r.kind === "CORE" && r.slot === slot);
                 return (
                   <li key={slot} className="p-3">
                     <p className="label-caps mb-2 text-xs text-muted-foreground">
@@ -485,7 +492,7 @@ export function WorkSessionWorkspace({
         </SectionCard>
       )}
 
-      <div className="order-3">
+      <div className={embedded ? "hidden" : "order-3"}>
         <SectionCard
           title="DECORATIVE ELEMENTS"
           action={
@@ -560,7 +567,7 @@ export function WorkSessionWorkspace({
               onEditColumn={setEditingColumn}
             />
           ) : (
-            <FormulaView rows={rows} ingredientsByVersion={ingredientsByVersion} />
+            <FormulaView rows={visibleRows} ingredientsByVersion={ingredientsByVersion} />
           )}
         </SectionCard>
       </div>

@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -103,7 +102,7 @@ export function ProductionDashboard() {
   const [date, setDate] = useState(() => toLocalDateString());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 타임라인 아래 작업 박스(계량/워크플로 등)가 보여줄 세션 — 블록 선택 또는 대기공간 카드 클릭으로 정해진다.
-  const [focusSessionId, setFocusSessionId] = useState<string | null>(null);
+  const [focusRowId, setFocusRowId] = useState<string | null>(null);
   const [poolOver, setPoolOver] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
   const [resize, setResize] = useState<{ id: string; endMin: number } | null>(null);
@@ -180,15 +179,21 @@ export function ProductionDashboard() {
   // 타임라인 아래 WORK VIEW 등은 "그날 블록이 속한 세션들"을 기본으로 보여준다(날짜 기준 작업공간).
   // 대기공간 카드를 눌러 고른 세션은, 그날 블록이 없어도 추가로 보여준다.
   const workspaceSessions = useMemo(() => {
-    const ordered: string[] = [];
+    // WORK VIEW / ADJUST QUANTITY는 선택한 날짜에 블록이 있는 컴포넌트만(세션별로 묶어서) 보여준다.
+    // 대기공간 카드를 눌러 고른 컴포넌트(아직 배정 전)는 그 카드만 추가로 보여준다.
+    const bySession = new Map<string, string[]>();
     const sorted = [...dayBlocks].sort((a, b) => a.start_time.localeCompare(b.start_time));
-    for (const b of sorted) {
-      const sid = rowById.get(b.work_session_formula_version_id)?.work_session_id;
-      if (sid && !ordered.includes(sid)) ordered.push(sid);
-    }
-    if (focusSessionId && !ordered.includes(focusSessionId)) ordered.push(focusSessionId);
-    return ordered.map((sid) => ({ sid, row: rows.find((r) => r.work_session_id === sid) }));
-  }, [dayBlocks, rowById, rows, focusSessionId]);
+    const add = (rowId: string) => {
+      const r = rowById.get(rowId);
+      if (!r) return;
+      const list = bySession.get(r.work_session_id) ?? [];
+      if (!list.includes(rowId)) list.push(rowId);
+      bySession.set(r.work_session_id, list);
+    };
+    for (const b of sorted) add(b.work_session_formula_version_id);
+    if (focusRowId && (blocksByRow.get(focusRowId) ?? []).length === 0) add(focusRowId);
+    return [...bySession.entries()].map(([sid, rowIds]) => ({ sid, rowIds }));
+  }, [dayBlocks, rowById, blocksByRow, focusRowId]);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
@@ -531,7 +536,7 @@ export function ProductionDashboard() {
                       }}
                       onClick={() => {
                         setSelectedId(null);
-                        setFocusSessionId(r.work_session_id);
+                        setFocusRowId(r.id);
                       }}
                       className="flex cursor-grab items-center gap-2 border border-border bg-background px-2 py-1.5"
                       style={{ borderLeft: `3px solid ${color.accent}` }}
@@ -834,9 +839,9 @@ export function ProductionDashboard() {
 
       {/* ── 그날 작업의 WORK VIEW(계량) 등 — 블록이 속한 세션별로 ── */}
       {workspaceSessions.length > 0 ? (
-        workspaceSessions.map(({ sid }) => (
+        workspaceSessions.map(({ sid, rowIds }) => (
           <div key={sid} className="space-y-3 border-t border-border pt-4">
-            <WorkSessionWorkspace sessionId={sid} embedded />
+            <WorkSessionWorkspace sessionId={sid} rowIds={rowIds} embedded />
           </div>
         ))
       ) : (
