@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
-import { buttonClass, inputClass, primaryButtonClass } from "./ui";
+import { buttonClass, primaryButtonClass } from "./ui";
 
 export type PackagingKind = "CAKE_BOARD" | "CAKE_BOX";
 type PackagingRow = Tables<"packaging_items">;
