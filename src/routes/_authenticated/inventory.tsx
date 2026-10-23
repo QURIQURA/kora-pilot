@@ -36,6 +36,38 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 type MouldLite = { id: string; name: string; diameter_mm: number | null };
 
+/** 몰드의 가로·세로·높이(mm) — 원형은 지름×지름×높이, 그 외는 shape_size 글자("27*32*3", "25*H3cm")에서
+ * 숫자를 읽는다(cm 기준, H가 붙은 숫자는 높이). 읽을 수 없으면 null. */
+function mouldDims(m: {
+  shape_size?: string | null;
+  diameter_mm?: number | null;
+  height_mm?: number | null;
+}): { w: number | null; l: number | null; h: number | null } | null {
+  if (m.diameter_mm) {
+    return {
+      w: Number(m.diameter_mm),
+      l: Number(m.diameter_mm),
+      h: m.height_mm ? Number(m.height_mm) : null,
+    };
+  }
+  const text = (m.shape_size ?? "").replace(/"/g, "");
+  if (!/[*x×]/i.test(text)) return null;
+  const heightMatch = text.match(/H\s*(\d+(?:\.\d+)?)/i);
+  const nums = (text.replace(/H\s*\d+(?:\.\d+)?/gi, "").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+  let w: number | null = null;
+  let l: number | null = null;
+  let h: number | null = heightMatch ? Number(heightMatch[1]) * 10 : null;
+  if (heightMatch) {
+    w = nums[0] != null ? nums[0] * 10 : null;
+    l = nums[1] != null ? nums[1] * 10 : w;
+  } else if (nums.length >= 3) {
+    [w, l, h] = [nums[0]! * 10, nums[1]! * 10, nums[2]! * 10];
+  } else if (nums.length === 2) {
+    [w, l] = [nums[0]! * 10, nums[1]! * 10];
+  }
+  return w == null ? null : { w, l, h };
+}
+
 /** 몰드 하나의 바닥 면적(cm²) — 지름(mm) 기준 원형. 지름이 없으면 null. */
 function mouldAreaCm2(m: MouldLite | undefined | null): number | null {
   const d = m?.diameter_mm;
@@ -159,7 +191,22 @@ function LineFields({
           <select
             className={selectClass}
             value={form.mouldId}
-            onChange={(e) => onChange({ mouldId: e.target.value })}
+            onChange={(e) => {
+              const id = e.target.value;
+              const m = (moulds.data ?? []).find((x) => x.id === id);
+              // 몰드를 고르면 그 몰드 사이즈를 가로·세로·높이에 채운다(직접 고칠 수 있음)
+              const d = m ? mouldDims(m) : null;
+              onChange({
+                mouldId: id,
+                ...(d
+                  ? {
+                      width: d.w != null ? String(d.w) : "",
+                      length: d.l != null ? String(d.l) : "",
+                      height: d.h != null ? String(d.h) : "",
+                    }
+                  : {}),
+              });
+            }}
           >
             <option value="">— 안 함 —</option>
             {(moulds.data ?? []).map((m) => (
