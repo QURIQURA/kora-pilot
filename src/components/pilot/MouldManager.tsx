@@ -31,6 +31,8 @@ export function MouldManager() {
         reference_weight_g?: number | null;
         diameter_mm?: number | null;
         height_mm?: number | null;
+        width_mm?: number | null;
+        length_mm?: number | null;
         notes?: string | null;
       };
     }) => {
@@ -66,31 +68,23 @@ export function MouldManager() {
     >
       {adding && (
         <div className="mb-4 border border-border p-4">
-          <MouldCreateForm
-            onCancel={() => setAdding(false)}
-            onCreated={() => setAdding(false)}
-          />
+          <MouldCreateForm onCancel={() => setAdding(false)} onCreated={() => setAdding(false)} />
         </div>
       )}
 
       <p className="mb-3 font-mono text-[11px] text-muted-foreground">
-        지름/높이는 몰드 자체의 실측 치수입니다(아이싱 전). PRODUCT의 SIZES에서 이 몰드를
-        선택하면 시작값으로 채워지며, 아이싱 후 완성 사이즈는 SIZES 쪽에서 직접 조정하세요.
+        지름/높이는 몰드 자체의 실측 치수입니다(아이싱 전). PRODUCT의 SIZES에서 이 몰드를 선택하면
+        시작값으로 채워지며, 아이싱 후 완성 사이즈는 SIZES 쪽에서 직접 조정하세요.
       </p>
 
       {rows.length === 0 ? (
-        <p className="font-mono text-xs uppercase text-muted-foreground">
-          NO MOULDS YET
-        </p>
+        <p className="font-mono text-xs uppercase text-muted-foreground">NO MOULDS YET</p>
       ) : (
         <ul className="divide-y divide-border border border-border">
           {rows.map((mould) => {
             const used = usageMap[mould.id] ?? 0;
             return (
-              <li
-                key={mould.id}
-                className="flex flex-wrap items-center gap-2 px-3 py-2"
-              >
+              <li key={mould.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                 <input
                   className={`${inputClass} flex-1 min-w-[10rem] border-transparent hover:border-input`}
                   defaultValue={mould.name}
@@ -151,6 +145,40 @@ export function MouldManager() {
                     step="0.1"
                     min="0"
                     className={`${inputClass} !w-20 border-transparent text-right hover:border-input`}
+                    placeholder="가로"
+                    defaultValue={mould.width_mm != null ? mmToCm(mould.width_mm) : ""}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim() ? cmToMm(Number(e.target.value)) : null;
+                      if (next !== (mould.width_mm ?? null))
+                        update.mutate({ id: mould.id, patch: { width_mm: next } });
+                    }}
+                  />
+                  <span className="label-caps text-[10px] text-muted-foreground">CM W</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    min="0"
+                    className={`${inputClass} !w-20 border-transparent text-right hover:border-input`}
+                    placeholder="세로"
+                    defaultValue={mould.length_mm != null ? mmToCm(mould.length_mm) : ""}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim() ? cmToMm(Number(e.target.value)) : null;
+                      if (next !== (mould.length_mm ?? null))
+                        update.mutate({ id: mould.id, patch: { length_mm: next } });
+                    }}
+                  />
+                  <span className="label-caps text-[10px] text-muted-foreground">CM L</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    min="0"
+                    className={`${inputClass} !w-20 border-transparent text-right hover:border-input`}
                     placeholder="높이"
                     defaultValue={mould.height_mm != null ? mmToCm(mould.height_mm) : ""}
                     onBlur={(e) => {
@@ -170,7 +198,7 @@ export function MouldManager() {
                   onClick={() => {
                     if (used > 0) {
                       alert(
-                        `${used}개 버전이 이 몰드를 사용 중입니다 — 해당 버전의 몰드를 먼저 변경하세요.`
+                        `${used}개 버전이 이 몰드를 사용 중입니다 — 해당 버전의 몰드를 먼저 변경하세요.`,
                       );
                       return;
                     }

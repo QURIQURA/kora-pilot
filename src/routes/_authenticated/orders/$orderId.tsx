@@ -994,7 +994,8 @@ function OrderDetailPage() {
                         {picked.servings != null
                           ? `${picked.servings} servings`
                           : "servings not set"}{" "}
-                        · {mould ? `sheet: ${mouldOptionLabel(mould)}` : "no sheet mould set"} (edit
+                        · {mould ? `sheet: ${mouldOptionLabel(mould)}` : "no sheet mould set"} ·{" "}
+                        {picked.cream_g != null ? `cream ${picked.cream_g}g` : "cream not set"} (edit
                         in SETTINGS → CAKE SIZES)
                       </p>
                     );

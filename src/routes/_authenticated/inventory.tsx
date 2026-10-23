@@ -39,10 +39,20 @@ type MouldLite = { id: string; name: string; diameter_mm: number | null };
 /** 몰드의 가로·세로·높이(mm) — 원형은 지름×지름×높이, 그 외는 shape_size 글자("27*32*3", "25*H3cm")에서
  * 숫자를 읽는다(cm 기준, H가 붙은 숫자는 높이). 읽을 수 없으면 null. */
 function mouldDims(m: {
+  width_mm?: number | null;
+  length_mm?: number | null;
   shape_size?: string | null;
   diameter_mm?: number | null;
   height_mm?: number | null;
 }): { w: number | null; l: number | null; h: number | null } | null {
+  // 몰드에 가로·세로가 직접 입력돼 있으면 그 값을 우선 쓴다
+  if (m.width_mm && m.length_mm) {
+    return {
+      w: Number(m.width_mm),
+      l: Number(m.length_mm),
+      h: m.height_mm ? Number(m.height_mm) : null,
+    };
+  }
   if (m.diameter_mm) {
     return {
       w: Number(m.diameter_mm),

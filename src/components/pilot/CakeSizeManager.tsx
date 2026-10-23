@@ -233,6 +233,22 @@ export function CakeSizeManager() {
                   />
                   <span className="label-caps text-[10px] text-muted-foreground">SERVINGS</span>
                 </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    className={`${inputClass} !w-20 border-transparent text-right hover:border-input`}
+                    placeholder="cream"
+                    defaultValue={row.cream_g ?? ""}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim() ? Number(e.target.value) : null;
+                      if (next !== (row.cream_g ?? null))
+                        update.mutate({ id: row.id, patch: { cream_g: next } });
+                    }}
+                  />
+                  <span className="label-caps text-[10px] text-muted-foreground">CREAM g</span>
+                </div>
                 <div className="w-56">
                   <MouldSelect
                     value={row.sheet_mould_id ?? ""}
