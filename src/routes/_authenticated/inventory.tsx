@@ -10,6 +10,14 @@ import {
   type StockLine,
 } from "@/lib/queries";
 import { adjustStock } from "@/lib/stock";
+import {
+  cmInputToMm,
+  mmToCmInput,
+  mouldDimensionInputs,
+  mouldDimensionsMm,
+  mouldFootprintCm2,
+  type MouldDimensions,
+} from "@/lib/mould-dimensions";
 import { PackagingInventory } from "@/components/pilot/PackagingInventory";
 import { cn } from "@/lib/utils";
 import {
@@ -34,64 +42,18 @@ export const Route = createFileRoute("/_authenticated/inventory")({
   component: InventoryPage,
 });
 
-type MouldLite = { id: string; name: string; diameter_mm: number | null };
-
-/** 몰드의 가로·세로·높이(mm) — 원형은 지름×지름×높이, 그 외는 shape_size 글자("27*32*3", "25*H3cm")에서
- * 숫자를 읽는다(cm 기준, H가 붙은 숫자는 높이). 읽을 수 없으면 null. */
-function mouldDims(m: {
-  width_mm?: number | null;
-  length_mm?: number | null;
-  shape_size?: string | null;
-  diameter_mm?: number | null;
-  height_mm?: number | null;
-}): { w: number | null; l: number | null; h: number | null } | null {
-  // 몰드에 가로·세로가 직접 입력돼 있으면 그 값을 우선 쓴다
-  if (m.width_mm && m.length_mm) {
-    return {
-      w: Number(m.width_mm),
-      l: Number(m.length_mm),
-      h: m.height_mm ? Number(m.height_mm) : null,
-    };
-  }
-  if (m.diameter_mm) {
-    return {
-      w: Number(m.diameter_mm),
-      l: Number(m.diameter_mm),
-      h: m.height_mm ? Number(m.height_mm) : null,
-    };
-  }
-  const text = (m.shape_size ?? "").replace(/"/g, "");
-  if (!/[*x×]/i.test(text)) return null;
-  const heightMatch = text.match(/H\s*(\d+(?:\.\d+)?)/i);
-  const nums = (text.replace(/H\s*\d+(?:\.\d+)?/gi, "").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
-  let w: number | null = null;
-  let l: number | null = null;
-  let h: number | null = heightMatch ? Number(heightMatch[1]) * 10 : null;
-  if (heightMatch) {
-    w = nums[0] != null ? nums[0] * 10 : null;
-    l = nums[1] != null ? nums[1] * 10 : w;
-  } else if (nums.length >= 3) {
-    [w, l, h] = [nums[0]! * 10, nums[1]! * 10, nums[2]! * 10];
-  } else if (nums.length === 2) {
-    [w, l] = [nums[0]! * 10, nums[1]! * 10];
-  }
-  return w == null ? null : { w, l, h };
-}
-
-/** 몰드 하나의 바닥 면적(cm²) — 지름(mm) 기준 원형. 지름이 없으면 null. */
-function mouldAreaCm2(m: MouldLite | undefined | null): number | null {
-  const d = m?.diameter_mm;
-  return d ? Math.PI * (Number(d) / 20) ** 2 : null;
-}
+type MouldLite = MouldDimensions & { id: string; name: string };
 
 const numOrNull = (v: string): number | null =>
   v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null;
 
-/** 가로×세로×높이(mm) 표시 — 입력된 값만 */
+/** Stored mm dimensions displayed in cm; missing values remain unknown. */
 function dimText(l: Pick<StockLine, "width_mm" | "length_mm" | "height_mm">): string {
-  const parts = [l.width_mm, l.length_mm, l.height_mm];
+  const parts = [l.width_mm, l.length_mm, l.height_mm].map((v) =>
+    v == null ? null : mmToCmInput(v),
+  );
   if (parts.every((v) => v == null)) return "";
-  return `${parts.map((v) => (v == null ? "–" : v)).join("×")}mm`;
+  return `${parts.map((v) => (v == null ? "–" : v)).join("×")}cm`;
 }
 
 function mouldText(
@@ -102,9 +64,9 @@ function mouldText(
   if (!mould) return "";
   const parts: string[] = [];
   if (l.mould_qty != null) parts.push(`${mould.name} ${l.mould_qty}개분`);
-  const a = mouldAreaCm2(mould);
+  const a = mouldFootprintCm2(mould);
   if (a && l.width_mm && l.length_mm) {
-    parts.push(`면적 기준 ≈ ${((l.width_mm * l.length_mm) / 100 / a).toFixed(1)}개분`);
+    parts.push(`직사각 조각 면적 기준 ≈ ${((l.width_mm * l.length_mm) / 100 / a).toFixed(1)}개분`);
   }
   return parts.length ? parts.join(" · ") : mould.name;
 }
@@ -130,9 +92,9 @@ const emptyForm = (): SizeForm => ({
 });
 
 const formFromLine = (l: StockLine): SizeForm => ({
-  width: l.width_mm != null ? String(l.width_mm) : "",
-  length: l.length_mm != null ? String(l.length_mm) : "",
-  height: l.height_mm != null ? String(l.height_mm) : "",
+  width: mmToCmInput(l.width_mm),
+  length: mmToCmInput(l.length_mm),
+  height: mmToCmInput(l.height_mm),
   unit: l.unit_label,
   qty: String(l.quantity),
   mouldId: l.mould_id ?? "",
@@ -149,14 +111,29 @@ function LineFields({
 }) {
   const moulds = useQuery(mouldsQuery());
   const mould = (moulds.data ?? []).find((m) => m.id === form.mouldId);
-  const a = mouldAreaCm2(mould);
+  const a = mouldFootprintCm2(mould);
   const w = Number(form.width);
   const l = Number(form.length);
-  const auto = a && w > 0 && l > 0 ? ((w * l) / 100 / a).toFixed(1) : null;
+  const auto = a && w > 0 && l > 0 ? ((w * l) / a).toFixed(1) : null;
   return (
     <div className="space-y-3">
+      <p className="font-mono text-[11px] text-muted-foreground">
+        cm로 입력합니다. 몰드 치수는 시작값이며, 구운 시트·자투리의 실제 크기로 조정하세요.
+      </p>
+      {mould && Object.values(mouldDimensionsMm(mould)).some((v) => v == null) && (
+        <p role="status" className="text-xs text-destructive">
+          이 몰드에 숫자 치수가 비어 있어요. SETTINGS → MOULDS에서 실측값을 입력하세요. 이름에 적힌
+          치수는 자동 추정하지 않습니다.
+        </p>
+      )}
+      {a != null && (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          몰드 외곽 바닥 면적: {a.toFixed(1)} cm² · 중앙 기둥·테이퍼 미반영. 면적 환산은 직사각 조각
+          기준이며, 원형 전체 시트는 몰드 개수를 직접 입력하세요.
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-5">
-        <Field label="가로 (mm)">
+        <Field label="가로 (cm)">
           <input
             className={inputClass}
             inputMode="decimal"
@@ -164,7 +141,7 @@ function LineFields({
             onChange={(e) => onChange({ width: e.target.value })}
           />
         </Field>
-        <Field label="세로 (mm)">
+        <Field label="세로 (cm)">
           <input
             className={inputClass}
             inputMode="decimal"
@@ -172,7 +149,7 @@ function LineFields({
             onChange={(e) => onChange({ length: e.target.value })}
           />
         </Field>
-        <Field label="높이 (mm)">
+        <Field label="높이 (cm)">
           <input
             className={inputClass}
             inputMode="decimal"
@@ -204,18 +181,8 @@ function LineFields({
             onChange={(e) => {
               const id = e.target.value;
               const m = (moulds.data ?? []).find((x) => x.id === id);
-              // 몰드를 고르면 그 몰드 사이즈를 가로·세로·높이에 채운다(직접 고칠 수 있음)
-              const d = m ? mouldDims(m) : null;
-              onChange({
-                mouldId: id,
-                ...(d
-                  ? {
-                      width: d.w != null ? String(d.w) : "",
-                      length: d.l != null ? String(d.l) : "",
-                      height: d.h != null ? String(d.h) : "",
-                    }
-                  : {}),
-              });
+              // Known numeric fields only; clear stale dimensions on every selection.
+              onChange({ mouldId: id, mouldQty: "", ...mouldDimensionInputs(m) });
             }}
           >
             <option value="">— 안 함 —</option>
@@ -231,7 +198,7 @@ function LineFields({
             className={inputClass}
             inputMode="decimal"
             disabled={!form.mouldId}
-            placeholder={auto ? `면적 기준 ≈ ${auto}` : ""}
+            placeholder={auto ? `직사각 조각 면적 기준 ≈ ${auto}` : ""}
             value={form.mouldQty}
             onChange={(e) => onChange({ mouldQty: e.target.value })}
           />
@@ -242,9 +209,9 @@ function LineFields({
 }
 
 const lineValues = (f: SizeForm) => ({
-  width_mm: numOrNull(f.width),
-  length_mm: numOrNull(f.length),
-  height_mm: numOrNull(f.height),
+  width_mm: cmInputToMm(f.width),
+  length_mm: cmInputToMm(f.length),
+  height_mm: cmInputToMm(f.height),
   unit_label: f.unit.trim() || "개",
   mould_id: f.mouldId || null,
   mould_qty: f.mouldId ? numOrNull(f.mouldQty) : null,

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { mouldUsageQuery, mouldsQuery } from "@/lib/queries";
-import { cmToMm, mmToCm } from "@/lib/product-size";
+import { mmToCm } from "@/lib/product-size";
+import { mouldFootprintCm2, MOULD_REFERENCE_PRESETS } from "@/lib/mould-dimensions";
 import { MouldCreateForm } from "./MouldCreateForm";
 import { SectionCard, buttonClass, inputClass } from "./ui";
 
@@ -16,6 +17,7 @@ export function MouldManager() {
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["moulds"] });
     await queryClient.invalidateQueries({ queryKey: ["mould_usage"] });
+    await queryClient.invalidateQueries({ queryKey: ["capacities"] });
     await queryClient.invalidateQueries({ queryKey: ["formula_versions"] });
   };
 
@@ -36,6 +38,11 @@ export function MouldManager() {
         notes?: string | null;
       };
     }) => {
+      for (const key of ["diameter_mm", "width_mm", "length_mm", "height_mm"] as const) {
+        const value = patch[key];
+        if (value != null && (!Number.isFinite(value) || value <= 0))
+          throw new Error("치수는 0보다 큰 cm 숫자로 입력하세요.");
+      }
       const { error } = await supabase.from("moulds").update(patch).eq("id", id);
       if (error) throw error;
     },
@@ -73,10 +80,30 @@ export function MouldManager() {
       )}
 
       <p className="mb-3 font-mono text-[11px] text-muted-foreground">
-        지름/높이는 몰드 자체의 실측 치수입니다(아이싱 전). PRODUCT의 SIZES에서 이 몰드를 선택하면
-        시작값으로 채워지며, 아이싱 후 완성 사이즈는 SIZES 쪽에서 직접 조정하세요.
+        몰드 숫자 치수는 도구 자체의 내부 치수(cm)입니다. 완성 케이크 규격과 별도로 관리합니다.
+        원형은 지름을 기준으로 면적을 계산하며, 비어 있는 치수는 이름에서 추정하지 않습니다.
       </p>
 
+      <details className="mb-3 border border-border p-3 text-xs">
+        <summary className="cursor-pointer">높이 10cm · 바닥분리형 기본 참고 규격 6종</summary>
+        <p className="my-2 text-muted-foreground">
+          명목 사이즈 참고값·실측 전. + ADD MOULD에서 불러올 수 있어요. 면적은 중앙 기둥·테이퍼를
+          제외하지 않은 외곽 바닥 면적입니다.
+        </p>
+        <ul className="space-y-1 font-mono">
+          {MOULD_REFERENCE_PRESETS.map((p) => (
+            <li key={p.key}>
+              {p.inch}″ {p.shape} · {p.width_mm / 10} × {p.length_mm / 10} × 10cm ·{" "}
+              {mouldFootprintCm2(p)?.toFixed(1)} cm²
+            </li>
+          ))}
+        </ul>
+      </details>
+      {update.isError && (
+        <p role="alert" className="text-xs text-destructive">
+          {(update.error as Error).message}
+        </p>
+      )}
       {rows.length === 0 ? (
         <p className="font-mono text-xs uppercase text-muted-foreground">NO MOULDS YET</p>
       ) : (
@@ -131,7 +158,7 @@ export function MouldManager() {
                     placeholder="지름"
                     defaultValue={mould.diameter_mm != null ? mmToCm(mould.diameter_mm) : ""}
                     onBlur={(e) => {
-                      const next = e.target.value.trim() ? cmToMm(Number(e.target.value)) : null;
+                      const next = e.target.value.trim() ? Number(e.target.value) * 10 : null;
                       if (next !== (mould.diameter_mm ?? null))
                         update.mutate({ id: mould.id, patch: { diameter_mm: next } });
                     }}
@@ -148,7 +175,7 @@ export function MouldManager() {
                     placeholder="가로"
                     defaultValue={mould.width_mm != null ? mmToCm(mould.width_mm) : ""}
                     onBlur={(e) => {
-                      const next = e.target.value.trim() ? cmToMm(Number(e.target.value)) : null;
+                      const next = e.target.value.trim() ? Number(e.target.value) * 10 : null;
                       if (next !== (mould.width_mm ?? null))
                         update.mutate({ id: mould.id, patch: { width_mm: next } });
                     }}
@@ -165,7 +192,7 @@ export function MouldManager() {
                     placeholder="세로"
                     defaultValue={mould.length_mm != null ? mmToCm(mould.length_mm) : ""}
                     onBlur={(e) => {
-                      const next = e.target.value.trim() ? cmToMm(Number(e.target.value)) : null;
+                      const next = e.target.value.trim() ? Number(e.target.value) * 10 : null;
                       if (next !== (mould.length_mm ?? null))
                         update.mutate({ id: mould.id, patch: { length_mm: next } });
                     }}
@@ -182,13 +209,16 @@ export function MouldManager() {
                     placeholder="높이"
                     defaultValue={mould.height_mm != null ? mmToCm(mould.height_mm) : ""}
                     onBlur={(e) => {
-                      const next = e.target.value.trim() ? cmToMm(Number(e.target.value)) : null;
+                      const next = e.target.value.trim() ? Number(e.target.value) * 10 : null;
                       if (next !== (mould.height_mm ?? null))
                         update.mutate({ id: mould.id, patch: { height_mm: next } });
                     }}
                   />
                   <span className="label-caps text-[10px] text-muted-foreground">CM H</span>
                 </div>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  외곽 면적 {mouldFootprintCm2(mould)?.toFixed(1) ?? "—"} cm²
+                </span>
                 <span className="label-caps text-xs text-muted-foreground">
                   {used > 0 ? `${used} IN USE` : "UNUSED"}
                 </span>

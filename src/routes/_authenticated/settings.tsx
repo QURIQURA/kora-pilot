@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
+import { PastryMeasurementGuide } from "@/components/pilot/PastryMeasurementGuide";
 import { CakeSizeManager } from "@/components/pilot/CakeSizeManager";
 import { DietaryTagManager } from "@/components/pilot/DietaryTagManager";
 import { ProductSizeManager } from "@/components/pilot/ProductSizeManager";
@@ -97,6 +98,10 @@ function SettingsPage() {
           - INGREDIENTS: 재료 태깅용 FUNCTIONS / FLAVOUR FAMILIES / AROMA TAGS
           - COST: 제품 원가 계산에 쓰이는 COST ITEMS / MONTHLY OVERHEAD
       */}
+
+      <SettingsSection title="사용 설명서 · 측정 순서와 크림 참고량">
+        <PastryMeasurementGuide />
+      </SettingsSection>
 
       <SettingsGroup label="ORDERS">
         <SettingsSection title="GOOGLE 캘린더 구독 (.ics)">
