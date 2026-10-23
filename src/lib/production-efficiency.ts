@@ -8,34 +8,21 @@
  *   자동계산)은 구분한다 — KPI는 전부 Active Labour Time 기준.
  * - Component와 무관한 단계(Assembly 등)는 완제품 개수로 통일해서 기록한다(환산 없음).
  */
+import { gramsByFormula, type UsageScope } from "@/lib/product-usage";
 import type { Tables } from "@/integrations/supabase/types";
 
 export type WorkSessionEfficiencyRow = Tables<"work_sessions"> & {
   work_session_tasks: Tables<"work_session_tasks">[];
 };
 
-export interface ComponentGramsRow {
-  formula_version_id: string | null;
-  quantity_g: number | null;
-  product_size_id: string | null;
-}
+export type ComponentGramsRow = UsageScope;
 
-/** product_components 원본 행들로부터, 특정 Size(세션이 그때 쓴 product_size_id) 기준
- * Formula Version → 1단위당 필요한 양(g) 맵을 만든다. Size 지정 행을 우선하고, 없으면
- * 사이즈 미지정("전체") 행으로 보충한다. */
+/** Same scope and summation rules as product costing and production targets. */
 export function buildGramsPerUnitMap(
   rows: ComponentGramsRow[],
   productSizeId: string | null,
 ): Record<string, number> {
-  const map: Record<string, number> = {};
-  for (const row of rows) {
-    if (!row.formula_version_id || row.quantity_g == null) continue;
-    if (row.product_size_id != null && row.product_size_id !== productSizeId) continue;
-    if (row.product_size_id === productSizeId || map[row.formula_version_id] == null) {
-      map[row.formula_version_id] = Number(row.quantity_g);
-    }
-  }
-  return map;
+  return gramsByFormula(rows, productSizeId);
 }
 
 /** output_unit이 이미 "완제품 개수" 단위인지 판정 — 이 경우 그램 환산 없이 그대로 쓴다. */
@@ -54,7 +41,10 @@ export function isCountUnit(unit: string | null): boolean {
  * - 환산할 방법이 없으면 null.
  */
 export function stepUnitsProduced(
-  task: Pick<Tables<"work_session_tasks">, "formula_version_id" | "output_quantity" | "output_unit">,
+  task: Pick<
+    Tables<"work_session_tasks">,
+    "formula_version_id" | "output_quantity" | "output_unit"
+  >,
   gramsPerUnitByFormulaVersionId: Record<string, number>,
 ): number | null {
   if (task.output_quantity == null) return null;
@@ -119,7 +109,8 @@ export function summarizeSessionEfficiency(
       taskId: task.id,
       taskName: task.task_name,
       taskType: task.task_type,
-      activeLabourMinutes: task.active_labour_minutes != null ? Number(task.active_labour_minutes) : null,
+      activeLabourMinutes:
+        task.active_labour_minutes != null ? Number(task.active_labour_minutes) : null,
       elapsedMinutes: elapsedMinutesOf(task),
       unitsProduced,
       minutesPerUnit: stepMinutesPerUnit(task, unitsProduced),
@@ -127,7 +118,8 @@ export function summarizeSessionEfficiency(
   });
 
   const totalActiveLabourMinutes = steps.reduce((sum, s) => sum + (s.activeLabourMinutes ?? 0), 0);
-  const targetUnitCount = session.target_unit_count != null ? Number(session.target_unit_count) : null;
+  const targetUnitCount =
+    session.target_unit_count != null ? Number(session.target_unit_count) : null;
   const minutesPerUnit =
     targetUnitCount != null && targetUnitCount > 0 && totalActiveLabourMinutes > 0
       ? totalActiveLabourMinutes / targetUnitCount
@@ -167,22 +159,29 @@ export interface ProductEfficiencyStats {
 
 /** 여러 Work Session의 요약을 Product 단위로 집계 — PRODUCTS 상세 EFFICIENCY 섹션과
  * EFFICIENCY 대시보드가 공유하는 핵심 집계 로직. */
-export function aggregateProductEfficiency(summaries: SessionEfficiencySummary[]): ProductEfficiencyStats {
+export function aggregateProductEfficiency(
+  summaries: SessionEfficiencySummary[],
+): ProductEfficiencyStats {
   // 최근 기록 순(완료일 내림차순, 없으면 session id 순서 그대로)으로 정렬해 들어온다고 가정 — 호출부에서 정렬.
   const withMinutesPerUnit = summaries.filter((s) => s.minutesPerUnit != null);
   const values = withMinutesPerUnit.map((s) => s.minutesPerUnit!);
 
-  const avgMinutesPerUnit = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  const avgMinutesPerUnit =
+    values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
   const bestMinutesPerUnit = values.length > 0 ? Math.min(...values) : null;
   const recentMinutesPerUnit = withMinutesPerUnit[0]?.minutesPerUnit ?? null;
-  const avgUnitsPerHour = avgMinutesPerUnit != null && avgMinutesPerUnit > 0 ? 60 / avgMinutesPerUnit : null;
+  const avgUnitsPerHour =
+    avgMinutesPerUnit != null && avgMinutesPerUnit > 0 ? 60 / avgMinutesPerUnit : null;
 
   const stepMinutesByLabel = new Map<string, number>();
   for (const s of summaries) {
     for (const step of s.steps) {
       if (step.activeLabourMinutes == null) continue;
       const label = step.taskType ?? step.taskName;
-      stepMinutesByLabel.set(label, (stepMinutesByLabel.get(label) ?? 0) + step.activeLabourMinutes);
+      stepMinutesByLabel.set(
+        label,
+        (stepMinutesByLabel.get(label) ?? 0) + step.activeLabourMinutes,
+      );
     }
   }
   const totalStepMinutes = [...stepMinutesByLabel.values()].reduce((a, b) => a + b, 0);

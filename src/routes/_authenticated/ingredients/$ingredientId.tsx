@@ -81,6 +81,9 @@ function IngredientDetailPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["ingredients"] });
+      await queryClient.invalidateQueries({ queryKey: ["formula_version_costs"] });
+      await queryClient.invalidateQueries({ queryKey: ["product_components"] });
+      await queryClient.invalidateQueries({ queryKey: ["cost_dashboard"] });
       await queryClient.invalidateQueries({ queryKey: ["aroma_tag_usage"] });
     },
   });

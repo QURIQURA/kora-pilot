@@ -140,3 +140,36 @@ export function fmtCurrency(value: number): string {
     maximumFractionDigits,
   }).format(value);
 }
+
+/** Version-pinned input-basis costing. Actual cooked/usable yield is a separate future basis. */
+export interface VersionCostInfo {
+  componentId: string | null;
+  costPerGram: number | null;
+  hasMissingPrice: boolean;
+}
+
+export function productUsageCost(
+  row: {
+    component_id: string | null;
+    formula_version_id: string | null;
+    quantity_g: number | null;
+    ingredients: CostableIngredient | null;
+  },
+  versions: Record<string, VersionCostInfo>,
+): number | null {
+  if (row.quantity_g == null || !Number.isFinite(row.quantity_g) || row.quantity_g < 0) return null;
+  if (row.quantity_g === 0) return 0;
+  if (!row.component_id) {
+    const price = costPerGram(row.ingredients);
+    return price == null ? null : row.quantity_g * price;
+  }
+  const version = row.formula_version_id ? versions[row.formula_version_id] : undefined;
+  if (
+    !version ||
+    version.componentId !== row.component_id ||
+    version.hasMissingPrice ||
+    version.costPerGram == null
+  )
+    return null;
+  return row.quantity_g * version.costPerGram;
+}

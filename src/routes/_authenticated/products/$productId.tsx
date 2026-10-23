@@ -6,7 +6,7 @@ import { CategorySelect } from "@/components/pilot/CategorySelect";
 import { TechniqueSelect } from "@/components/pilot/TechniqueSelect";
 import {
   categoriesQuery,
-  componentCostsQuery,
+  versionCostsQuery,
   componentsQuery,
   currentUserId,
   formulasByComponentQuery,
@@ -22,11 +22,17 @@ import {
   productQuery,
   productSizesQuery,
   versionIngredientsQuery,
-  type ComponentCostInfo,
   type OrderListRow,
   type ProductComponentRow,
 } from "@/lib/queries";
-import { costPerGram, fmtCurrency, overheadPerUnit, sumCostItemAssignments } from "@/lib/cost";
+import {
+  productUsageCost,
+  type VersionCostInfo,
+  costPerGram,
+  fmtCurrency,
+  overheadPerUnit,
+  sumCostItemAssignments,
+} from "@/lib/cost";
 import { ProductCostItemsSection } from "@/components/pilot/ProductCostItemsSection";
 import { fmtNumber, toGrams } from "@/lib/formula";
 import { categoryPath } from "@/lib/pilot";
@@ -35,6 +41,8 @@ import type { TablesUpdate } from "@/integrations/supabase/types";
 import { formatDateTime, koreanWeekdayShort, toLocalDateString } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { ProductFormulasSection } from "@/components/pilot/FormulaSummary";
+import { summarizeUsage } from "@/lib/product-usage";
+import { ProductSizesSection } from "@/components/pilot/ProductSizesSection";
 import { ProductOrderSizesSection } from "@/components/pilot/ProductOrderSizesSection";
 import { ProductDesignSection } from "@/components/pilot/ProductDesignSection";
 import { ProductImagesSection } from "@/components/pilot/ProductImagesSection";
@@ -210,11 +218,16 @@ function LinkOrderPanel({
       {orders.isLoading ? (
         <p className="mt-2 font-mono text-xs text-muted-foreground">LOADING…</p>
       ) : results.length === 0 ? (
-        <p className="mt-2 font-mono text-xs text-muted-foreground">연결할 수 있는 주문이 없습니다.</p>
+        <p className="mt-2 font-mono text-xs text-muted-foreground">
+          연결할 수 있는 주문이 없습니다.
+        </p>
       ) : (
         <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto">
           {results.map((o) => (
-            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
+            <li
+              key={o.id}
+              className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm"
+            >
               <span className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs text-muted-foreground">{o.order_number}</span>
                 <span>{o.customers?.name ?? "—"}</span>
@@ -241,47 +254,8 @@ function sizeLabelFor(sizes: ProductSize[], sizeId: string): string {
   return size ? formatProductSizeLabel(size) : "삭제된 사이즈";
 }
 
-/** 각 Product Size별 재료 합산 총중량(g) — 사이즈에 연결된 모든 컴포넌트의 quantity_g 합.
- * 사이즈 미지정 행은 특정 사이즈에 속하지 않으므로 합산에서 제외한다. */
-function sumUsageBySize(rows: ProductComponentRow[]): Record<string, number> {
-  const totals: Record<string, number> = {};
-  for (const row of rows) {
-    if (row.product_size_id && row.quantity_g != null) {
-      totals[row.product_size_id] = (totals[row.product_size_id] ?? 0) + Number(row.quantity_g);
-    }
-  }
-  return totals;
-}
-
-/** 이 사용량 행 1개의 예상 원가(원) — 사용량(g) × g당 단가.
- * COMPONENT 링크는 그 COMPONENT의 CURRENT FORMULA 기준, 재료 직접 링크는 그 재료의 구입가 기준(2026-09-23).
- * 정보가 없으면 null. */
-function rowCost(
-  row: ProductComponentRow,
-  costsByComponent: Record<string, ComponentCostInfo>,
-): number | null {
-  if (row.quantity_g == null) return null;
-  const cpg =
-    row.component_id != null
-      ? (costsByComponent[row.component_id]?.costPerGram ?? null)
-      : costPerGram(row.ingredients);
-  if (cpg == null) return null;
-  return Number(row.quantity_g) * cpg;
-}
-
-/** 사이즈별 예상 원가 합산(원) — sumUsageBySize와 같은 규칙으로 사이즈 지정 행만 합산. */
-function sumCostBySize(
-  rows: ProductComponentRow[],
-  costsByComponent: Record<string, ComponentCostInfo>,
-): Record<string, number> {
-  const totals: Record<string, number> = {};
-  for (const row of rows) {
-    if (!row.product_size_id) continue;
-    const cost = rowCost(row, costsByComponent);
-    if (cost == null) continue;
-    totals[row.product_size_id] = (totals[row.product_size_id] ?? 0) + cost;
-  }
-  return totals;
+function rowCost(row: ProductComponentRow, costs: Record<string, VersionCostInfo>): number | null {
+  return productUsageCost(row, costs);
 }
 
 function ProductDetailPage() {
@@ -303,11 +277,31 @@ function ProductDetailPage() {
     if (da !== db) return da ? -1 : 1;
     return b.created_at.localeCompare(a.created_at);
   });
-  const componentIds = [
-    ...new Set((links.data ?? []).map((l) => l.component_id).filter((id): id is string => id != null)),
+  const versionIds = [
+    ...new Set(
+      (links.data ?? []).map((r) => r.formula_version_id).filter((id): id is string => id != null),
+    ),
   ];
-  const componentCosts = useQuery(componentCostsQuery(componentIds));
+  const componentCosts = useQuery(versionCostsQuery(versionIds));
   const costsByComponent = componentCosts.data ?? {};
+  const [costSizeId, setCostSizeId] = useState("");
+  const summaries = Object.fromEntries(
+    (sizes.data ?? []).map((size) => [
+      size.id,
+      summarizeUsage(links.data ?? [], size.id, (row) => rowCost(row, costsByComponent)),
+    ]),
+  );
+  const selectedSummary = summaries[costSizeId];
+  const usageTotals = Object.fromEntries(
+    Object.entries(summaries)
+      .filter(([, v]) => v.grams != null)
+      .map(([id, v]) => [id, v.grams!]),
+  );
+  const costTotals = Object.fromEntries(
+    Object.entries(summaries)
+      .filter(([, v]) => v.cost != null)
+      .map(([id, v]) => [id, v.cost!]),
+  );
 
   // FULL PRODUCTION COST(2026-09-23) — UTILITY/CONSUMABLE/PACKAGING은 전부 케익(제품) 1개당
   // 고정 배정(Product 단위)이고, OVERHEAD도 월 고정비÷월 케익 개수로 케익 1개당 동일하게 더해진다.
@@ -326,12 +320,7 @@ function ProductDetailPage() {
   const productCostItems = useQuery(productCostItemsQuery(productId));
   const perCakeExtras = sumCostItemAssignments(productCostItems.data ?? []) + overheadPerCake;
 
-  // COST BREAKDOWN 1열 "총원가" 계산식용 — 사이즈 지정된 COMPONENTS 사용량 행 전체 합산(2026-09-24).
-  // 사이즈가 여러 개면 이 값은 사이즈 구분 없는 참고용 합계이고, 사이즈별 정확한 원가는 SIZES
-  // 섹션(costTotals)을 봐야 한다.
-  const totalComponentsCost = (links.data ?? [])
-    .filter((r) => r.product_size_id != null)
-    .reduce((sum, r) => sum + (rowCost(r, costsByComponent) ?? 0), 0);
+  const totalComponentsCost = selectedSummary?.knownCost ?? 0;
 
   const categoryList = categories.data ?? [];
   const path = categoryPath(categoryList, product.data?.category_id ?? null);
@@ -359,15 +348,18 @@ function ProductDetailPage() {
   const invalidateLinks = async () => {
     await queryClient.invalidateQueries({ queryKey: ["product_components", productId] });
     await queryClient.invalidateQueries({ queryKey: ["products"] });
+    await queryClient.invalidateQueries({ queryKey: ["cost_dashboard"] });
+    await queryClient.invalidateQueries({ queryKey: ["product_component_grams_rows", productId] });
   };
 
   // 그룹 전체 UNLINK — 사이즈별로 나뉜 사용량 행이 여러 개여도 그 그룹(COMPONENT 또는 재료)의 모든 행을 지운다.
   const unlink = useMutation({
     mutationFn: async (group: { componentId: string | null; ingredientId: string | null }) => {
       let query = supabase.from("product_components").delete().eq("product_id", productId);
-      query = group.componentId != null
-        ? query.eq("component_id", group.componentId)
-        : query.eq("ingredient_id", group.ingredientId as string);
+      query =
+        group.componentId != null
+          ? query.eq("component_id", group.componentId)
+          : query.eq("ingredient_id", group.ingredientId as string);
       const { error } = await query;
       if (error) throw error;
     },
@@ -385,11 +377,7 @@ function ProductDetailPage() {
       const { error } = await supabase.from("product_components").update(patch).eq("id", linkId);
       if (error) throw error;
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["product_components", productId],
-      });
-    },
+    onSuccess: invalidateLinks,
   });
 
   // 사이즈별 사용량 행 하나만 제거 (컴포넌트 전체 UNLINK와 달리 다른 사이즈 행은 남긴다)
@@ -402,8 +390,7 @@ function ProductDetailPage() {
   });
 
   // 이미 링크된 그룹(COMPONENT 또는 재료)에 특정 Product Size 전용 사용량 행을 추가한다.
-  // 사이즈를 처음 지정하는 순간, 더 이상 쓸모없어지는 "사이즈 미지정" 행은 자동으로 함께 정리한다
-  // (2026-09-24: 두 행이 같이 남아 헷갈린다는 피드백 — 미지정 행은 어차피 원가 계산에도 안 쓰인다).
+  // Preserve common targets; size-specific rows override them without deleting the originals.
   const addSizeUsage = useMutation({
     mutationFn: async ({
       componentId,
@@ -425,16 +412,13 @@ function ProductDetailPage() {
         component_id: componentId,
         ingredient_id: ingredientId,
         product_size_id: productSizeId,
+        formula_version_id:
+          (links.data ?? []).find((r) => r.id === unspecifiedRowId)?.formula_version_id ?? null,
+        quantity_g: (links.data ?? []).find((r) => r.id === unspecifiedRowId)?.quantity_g ?? null,
         sort_order: sortOrder,
       });
       if (error) throw error;
-      if (unspecifiedRowId) {
-        const { error: cleanupError } = await supabase
-          .from("product_components")
-          .delete()
-          .eq("id", unspecifiedRowId);
-        if (cleanupError) throw cleanupError;
-      }
+      // Preserve common rows. Scoped overrides are resolved at read time.
     },
     onSuccess: invalidateLinks,
   });
@@ -464,14 +448,20 @@ function ProductDetailPage() {
   };
   const linkOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      const { error } = await supabase.from("orders").update({ product_id: productId }).eq("id", orderId);
+      const { error } = await supabase
+        .from("orders")
+        .update({ product_id: productId })
+        .eq("id", orderId);
       if (error) throw error;
     },
     onSuccess: invalidateProductOrders,
   });
   const unlinkOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      const { error } = await supabase.from("orders").update({ product_id: null }).eq("id", orderId);
+      const { error } = await supabase
+        .from("orders")
+        .update({ product_id: null })
+        .eq("id", orderId);
       if (error) throw error;
     },
     onSuccess: invalidateProductOrders,
@@ -543,7 +533,8 @@ function ProductDetailPage() {
 
       {editingLayout && (
         <p className="border border-dashed border-border p-2 font-mono text-xs text-muted-foreground">
-          아래 각 섹션 옆의 ▲▼로 순서를 바꿀 수 있습니다 — 모든 PRODUCT 페이지에 공통으로 적용됩니다.
+          아래 각 섹션 옆의 ▲▼로 순서를 바꿀 수 있습니다 — 모든 PRODUCT 페이지에 공통으로
+          적용됩니다.
         </p>
       )}
 
@@ -552,7 +543,22 @@ function ProductDetailPage() {
           IMAGES: <ProductImagesSection productId={productId} product={data} />,
           DESIGN: <ProductDesignSection productId={productId} product={data} />,
           EFFICIENCY: <ProductEfficiencySection productId={productId} />,
-          SIZES: <ProductOrderSizesSection orders={sortedProductOrders} />,
+          SIZES: (
+            <div className="space-y-3">
+              <ProductSizesSection
+                productId={productId}
+                usageTotals={usageTotals}
+                costTotals={costTotals}
+                perCakeExtras={perCakeExtras}
+              />
+              <details>
+                <summary className="cursor-pointer text-sm">
+                  이 제품의 기존 주문 사이즈 이력
+                </summary>
+                <ProductOrderSizesSection orders={sortedProductOrders} />
+              </details>
+            </div>
+          ),
           ORDERS: (
             <SectionCard
               title="ORDERS"
@@ -578,7 +584,8 @@ function ProductDetailPage() {
                 <p className="font-mono text-xs text-muted-foreground">LOADING…</p>
               ) : sortedProductOrders.length === 0 ? (
                 <p className="font-mono text-xs text-muted-foreground">
-                  아직 이 PRODUCT로 들어온 주문이 없습니다. 위 "+ LINK ORDER"로 기존 주문을 연결할 수 있습니다.
+                  아직 이 PRODUCT로 들어온 주문이 없습니다. 위 "+ LINK ORDER"로 기존 주문을 연결할
+                  수 있습니다.
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
@@ -631,7 +638,10 @@ function ProductDetailPage() {
           ),
           NOTES: (
             <SectionCard title="NOTES">
-              <NotesEditor value={data.notes ?? ""} onSave={(notes) => updateProduct.mutate({ notes })} />
+              <NotesEditor
+                value={data.notes ?? ""}
+                onSave={(notes) => updateProduct.mutate({ notes })}
+              />
             </SectionCard>
           ),
           DEVELOPMENT: (
@@ -640,285 +650,333 @@ function ProductDetailPage() {
             </div>
           ),
           COST_ADJUSTMENT: (
-      <div className="space-y-3">
-        {/* 총원가 — 2026-09-30: 2/3열 위에 좁게 끼어있던 걸 상단 풀와이드 배너로 올림(가독성 개선) */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-border bg-card p-4">
-          <div>
-            <p className="label-caps text-muted-foreground">총원가</p>
-            <p className="mt-1 font-mono text-3xl font-semibold tabular-nums text-foreground">
-              {fmtCurrency(totalComponentsCost + perCakeExtras)}
-            </p>
-          </div>
-          <div className="flex-1 min-w-[18rem] space-y-1 font-mono text-xs text-muted-foreground">
-            <p>
-              = COMPONENTS & ADJUSTMENT {fmtCurrency(totalComponentsCost)} + PRODUCTION COST{" "}
-              {fmtCurrency(perCakeExtras)}
-            </p>
-            <p>
-              (PRODUCTION COST = 항목 합계 {fmtCurrency(perCakeExtras - overheadPerCake)} + OVERHEAD{" "}
-              {fmtCurrency(overheadPerCake)} — 아래 PRODUCTION COST 합계와 같아야 합니다)
-            </p>
-            <p>
-              사이즈 구분 없이 지정된 모든 사용량을 합산한 참고값입니다 — 사이즈별 정확한 금액은 SIZES
-              섹션을 확인하세요.
-            </p>
-          </div>
-        </div>
-
-        {/* 아래 2단 — COMPONENTS(더 넓게) + PRODUCTION COST */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3fr_2fr]">
-      <SectionCard
-        title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
-        subtitle={<>합계 {fmtCurrency(totalComponentsCost)}</>}
-        bodyClassName="max-h-[480px] overflow-y-auto"
-        action={
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={buttonClass}
-              onClick={() => {
-                setAdding((v) => !v);
-                setAddingIngredient(false);
-              }}
-            >
-              {adding ? "CLOSE" : "+ ADD COMPONENT"}
-            </button>
-            <button
-              type="button"
-              className={buttonClass}
-              onClick={() => {
-                setAddingIngredient((v) => !v);
-                setAdding(false);
-              }}
-            >
-              {addingIngredient ? "CLOSE" : "+ ADD INGREDIENT"}
-            </button>
-          </div>
-        }
-      >
-        <p className="mb-2 font-mono text-xs text-muted-foreground">
-          여기서 지정하는 FORMULA VERSION/사용량은 이 PRODUCT에만 적용됩니다 — 보통은 해당 COMPONENT의
-          Development Entry에서 "이 PRODUCT에만 적용"으로 저장하면 자동으로 반영되고, COMPONENT의 Current
-          Formula 자체는 바뀌지 않습니다.
-        </p>
-        {adding && (
-          <AddComponentPanel
-            productId={productId}
-            linkedIds={[
-              ...new Set(
-                (links.data ?? []).map((l) => l.component_id).filter((id): id is string => id != null),
-              ),
-            ]}
-            onDone={() => setAdding(false)}
-          />
-        )}
-        {addingIngredient && (
-          <AddIngredientPanel
-            productId={productId}
-            linkedIds={[
-              ...new Set(
-                (links.data ?? []).map((l) => l.ingredient_id).filter((id): id is string => id != null),
-              ),
-            ]}
-            onDone={() => setAddingIngredient(false)}
-          />
-        )}
-        {(links.data ?? []).length === 0 ? (
-          <p className="font-mono text-xs uppercase text-muted-foreground">NO COMPONENTS LINKED</p>
-        ) : (
-          <>
-          <ul className="divide-y divide-border border border-border">
-            {groupComponentLinks(links.data ?? []).map((group) => {
-              // 예상원가 합계는 사이즈가 지정된 행만 합산한다 — 사이즈 미지정 행은 어느 사이즈의
-              // 원가에도 속하지 않아 합산에 넣으면 SIZES 섹션의 사이즈별 원가와 안 맞게 된다.
-              const sizedRows = group.rows.filter((r) => r.product_size_id != null);
-              const groupCosts = sizedRows.map((r) => rowCost(r, costsByComponent));
-              const groupTotal = groupCosts.some((c) => c != null)
-                ? groupCosts.reduce((sum: number, c) => sum + (c ?? 0), 0)
-                : null;
-              const groupHasMissingPrice =
-                group.kind === "component"
-                  ? (costsByComponent[group.componentId as string]?.hasMissingPrice ?? false)
-                  : costPerGram(group.rows[0]?.ingredients) == null;
-              return (
-              <li key={group.key} className="space-y-2 px-3 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  {group.kind === "component" ? (
-                    <Link
-                      to="/components/$componentId"
-                      params={{ componentId: group.componentId as string }}
-                      className="text-base font-medium hover:underline"
-                    >
-                      {group.name}
-                    </Link>
-                  ) : (
-                    <span className="flex items-center gap-2 text-base font-medium">
-                      <Link
-                        to="/ingredients/$ingredientId"
-                        params={{ ingredientId: group.ingredientId as string }}
-                        className="hover:underline"
-                      >
-                        {group.name}
-                      </Link>
-                      <span className="label-caps text-xs text-muted-foreground">재료 직접 링크</span>
-                    </span>
-                  )}
-                  <div className="flex items-center gap-3">
-                    {groupTotal != null && (
-                      <span className="label-caps font-mono text-base font-semibold text-foreground tabular-nums">
-                        예상원가 {fmtCurrency(groupTotal)}
-                        {groupHasMissingPrice ? "*" : ""}
-                      </span>
-                    )}
-                  <button
-                    type="button"
-                    className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          group.kind === "component"
-                            ? "이 COMPONENT의 모든 사이즈별 사용량이 함께 삭제됩니다. UNLINK 할까요?"
-                            : "이 재료의 모든 사이즈별 사용량이 함께 삭제됩니다. UNLINK 할까요?",
-                        )
-                      )
-                        unlink.mutate({ componentId: group.componentId, ingredientId: group.ingredientId });
-                    }}
-                  >
-                    UNLINK
-                  </button>
-                  </div>
+            <div className="space-y-3">
+              <Field label="원가를 확인할 제품 사이즈">
+                <select
+                  className={selectClass}
+                  value={costSizeId}
+                  onChange={(e) => setCostSizeId(e.target.value)}
+                >
+                  <option value="">— 사이즈 선택 —</option>
+                  {(sizes.data ?? []).map((size) => (
+                    <option key={size.id} value={size.id}>
+                      {formatProductSizeLabel(size)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {/* 총원가 — 2026-09-30: 2/3열 위에 좁게 끼어있던 걸 상단 풀와이드 배너로 올림(가독성 개선) */}
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-border bg-card p-4">
+                <div>
+                  <p className="label-caps text-muted-foreground">총원가</p>
+                  <p className="mt-1 font-mono text-3xl font-semibold tabular-nums text-foreground">
+                    {selectedSummary?.complete
+                      ? fmtCurrency(totalComponentsCost + perCakeExtras)
+                      : "사이즈 선택 / 원가 미확정"}
+                  </p>
                 </div>
-                {group.rows.map((link) => (
-                  <div key={link.id} className="space-y-1.5 border border-border bg-muted/20 p-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="label-caps text-xs font-medium text-foreground">
-                        {link.product_size_id
-                          ? sizeLabelFor(sizes.data ?? [], link.product_size_id)
-                          : "전체 (사이즈 미지정)"}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        {(() => {
-                          if (link.product_size_id == null || link.quantity_g == null) return null;
-                          const cost = rowCost(link, costsByComponent);
-                          if (cost == null) return null;
-                          return (
-                            <span className="font-mono text-base font-semibold text-foreground tabular-nums">
-                              예상원가 {fmtCurrency(cost)}
-                            </span>
-                          );
-                        })()}
-                        {group.rows.length > 1 && (
-                          <button
-                            type="button"
-                            className="label-caps px-1 text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => removeUsageRow.mutate(link.id)}
-                          >
-                            이 사이즈 행 제거
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <ComponentUsageEditor
-                      link={link}
-                      onSave={(patch) => updateUsage.mutate({ linkId: link.id, patch })}
-                    />
-                    {(() => {
-                      if (link.product_size_id == null) {
-                        return (
-                          <p className="font-mono text-xs text-destructive">
-                            ⚠ 사이즈 미지정 — 원가 계산에서 제외됩니다. 사이즈를 지정하세요.
-                          </p>
-                        );
-                      }
-                      const cost = rowCost(link, costsByComponent);
-                      if (link.quantity_g == null || cost != null) return null;
-                      return (
-                        <p className="font-mono text-xs text-muted-foreground">
-                          {link.component_id != null
-                            ? "원가 정보 없음 — COMPONENT에 CURRENT FORMULA/재료 구입가를 확인하세요"
-                            : "원가 정보 없음 — 이 재료에 구입가를 확인하세요"}
-                        </p>
-                      );
-                    })()}
-                  </div>
-                ))}
-                {(() => {
-                  const availableSizes = (sizes.data ?? []).filter(
-                    (s) => !group.rows.some((r) => r.product_size_id === s.id),
-                  );
-                  if (availableSizes.length === 0) return null;
-                  return (
-                    <select
-                      className={selectClass + " w-auto"}
-                      value=""
-                      onChange={(e) => {
-                        const sizeId = e.target.value;
-                        if (!sizeId) return;
-                        const unspecifiedRow = group.rows.find((r) => r.product_size_id == null);
-                        addSizeUsage.mutate({
-                          componentId: group.componentId,
-                          ingredientId: group.ingredientId,
-                          productSizeId: sizeId,
-                          sortOrder: group.rows.length,
-                          unspecifiedRowId: unspecifiedRow?.id ?? null,
-                        });
-                      }}
-                    >
-                      <option value="">+ 사이즈별 사용량 추가…</option>
-                      {availableSizes.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {formatProductSizeLabel(s)}
-                          {s.is_default ? " (DEFAULT)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  );
-                })()}
-              </li>
-              );
-            })}
-          </ul>
-          </>
-        )}
-      </SectionCard>
+                <div className="flex-1 min-w-[18rem] space-y-1 font-mono text-xs text-muted-foreground">
+                  <p>
+                    = COMPONENTS & ADJUSTMENT{" "}
+                    {selectedSummary?.complete ? fmtCurrency(totalComponentsCost) : "미확정"} +
+                    PRODUCTION COST {fmtCurrency(perCakeExtras)}
+                  </p>
+                  <p>
+                    (PRODUCTION COST = 항목 합계 {fmtCurrency(perCakeExtras - overheadPerCake)} +
+                    OVERHEAD {fmtCurrency(overheadPerCake)} — 아래 PRODUCTION COST 합계와 같아야
+                    합니다)
+                  </p>
+                  <p>
+                    선택한 사이즈의 공통/개별 사용량을 적용합니다. 미입력 중량·가격·Formula 버전이
+                    있으면 알려진 원가 소계만 표시합니다. 제조 수율·과거 원가 스냅샷은 아직 반영하지
+                    않습니다.
+                  </p>
+                </div>
+              </div>
 
-        {/* 2026-10-06 사용자 요청: Product의 "현재 레시피 정보" — 새 레시피 시스템이 아니라
+              {/* 아래 2단 — COMPONENTS(더 넓게) + PRODUCTION COST */}
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[3fr_2fr]">
+                <SectionCard
+                  title="COMPONENTS & PRODUCT-SPECIFIC ADJUSTMENT"
+                  subtitle={
+                    <>
+                      선택 사이즈의 알려진 원가 소계{" "}
+                      {costSizeId ? fmtCurrency(totalComponentsCost) : "사이즈를 선택하세요"}
+                    </>
+                  }
+                  bodyClassName="max-h-[480px] overflow-y-auto"
+                  action={
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        onClick={() => {
+                          setAdding((v) => !v);
+                          setAddingIngredient(false);
+                        }}
+                      >
+                        {adding ? "CLOSE" : "+ ADD COMPONENT"}
+                      </button>
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        onClick={() => {
+                          setAddingIngredient((v) => !v);
+                          setAdding(false);
+                        }}
+                      >
+                        {addingIngredient ? "CLOSE" : "+ ADD INGREDIENT"}
+                      </button>
+                    </div>
+                  }
+                >
+                  <p className="mb-2 font-mono text-xs text-muted-foreground">
+                    여기서 지정하는 FORMULA VERSION/사용량은 이 PRODUCT에만 적용됩니다 — 보통은 해당
+                    COMPONENT의 Development Entry에서 "이 PRODUCT에만 적용"으로 저장하면 자동으로
+                    반영되고, COMPONENT의 Current Formula 자체는 바뀌지 않습니다.
+                  </p>
+                  {adding && (
+                    <AddComponentPanel
+                      productId={productId}
+                      linkedIds={[
+                        ...new Set(
+                          (links.data ?? [])
+                            .map((l) => l.component_id)
+                            .filter((id): id is string => id != null),
+                        ),
+                      ]}
+                      onDone={() => setAdding(false)}
+                    />
+                  )}
+                  {addingIngredient && (
+                    <AddIngredientPanel
+                      productId={productId}
+                      linkedIds={[
+                        ...new Set(
+                          (links.data ?? [])
+                            .map((l) => l.ingredient_id)
+                            .filter((id): id is string => id != null),
+                        ),
+                      ]}
+                      onDone={() => setAddingIngredient(false)}
+                    />
+                  )}
+                  {(links.data ?? []).length === 0 ? (
+                    <p className="font-mono text-xs uppercase text-muted-foreground">
+                      NO COMPONENTS LINKED
+                    </p>
+                  ) : (
+                    <>
+                      <ul className="divide-y divide-border border border-border">
+                        {groupComponentLinks(links.data ?? []).map((group) => {
+                          // 예상원가 합계는 사이즈가 지정된 행만 합산한다 — 사이즈 미지정 행은 어느 사이즈의
+                          // 원가에도 속하지 않아 합산에 넣으면 SIZES 섹션의 사이즈별 원가와 안 맞게 된다.
+                          const sizedRows =
+                            selectedSummary?.rows.filter((r) =>
+                              group.rows.some((g) => g.id === r.id),
+                            ) ?? [];
+                          const groupCosts = sizedRows.map((r) => rowCost(r, costsByComponent));
+                          const groupTotal = groupCosts.some((c) => c != null)
+                            ? groupCosts.reduce((sum: number, c) => sum + (c ?? 0), 0)
+                            : null;
+                          const groupHasMissingPrice = groupCosts.some((c) => c == null);
+                          return (
+                            <li key={group.key} className="space-y-2 px-3 py-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                {group.kind === "component" ? (
+                                  <Link
+                                    to="/components/$componentId"
+                                    params={{ componentId: group.componentId as string }}
+                                    className="text-base font-medium hover:underline"
+                                  >
+                                    {group.name}
+                                  </Link>
+                                ) : (
+                                  <span className="flex items-center gap-2 text-base font-medium">
+                                    <Link
+                                      to="/ingredients/$ingredientId"
+                                      params={{ ingredientId: group.ingredientId as string }}
+                                      className="hover:underline"
+                                    >
+                                      {group.name}
+                                    </Link>
+                                    <span className="label-caps text-xs text-muted-foreground">
+                                      재료 직접 링크
+                                    </span>
+                                  </span>
+                                )}
+                                <div className="flex items-center gap-3">
+                                  {groupTotal != null && (
+                                    <span className="label-caps font-mono text-base font-semibold text-foreground tabular-nums">
+                                      예상원가 {fmtCurrency(groupTotal)}
+                                      {groupHasMissingPrice ? "*" : ""}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                      if (
+                                        confirm(
+                                          group.kind === "component"
+                                            ? "이 COMPONENT의 모든 사이즈별 사용량이 함께 삭제됩니다. UNLINK 할까요?"
+                                            : "이 재료의 모든 사이즈별 사용량이 함께 삭제됩니다. UNLINK 할까요?",
+                                        )
+                                      )
+                                        unlink.mutate({
+                                          componentId: group.componentId,
+                                          ingredientId: group.ingredientId,
+                                        });
+                                    }}
+                                  >
+                                    UNLINK
+                                  </button>
+                                </div>
+                              </div>
+                              {group.rows.map((link) => (
+                                <div
+                                  key={link.id}
+                                  className="space-y-1.5 border border-border bg-muted/20 p-2"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="label-caps text-xs font-medium text-foreground">
+                                      {link.product_size_id
+                                        ? sizeLabelFor(sizes.data ?? [], link.product_size_id)
+                                        : "전체 (사이즈 미지정)"}
+                                    </span>
+                                    <div className="flex items-center gap-3">
+                                      {(() => {
+                                        if (link.product_size_id == null || link.quantity_g == null)
+                                          return null;
+                                        const cost = rowCost(link, costsByComponent);
+                                        if (cost == null) return null;
+                                        return (
+                                          <span className="font-mono text-base font-semibold text-foreground tabular-nums">
+                                            예상원가 {fmtCurrency(cost)}
+                                          </span>
+                                        );
+                                      })()}
+                                      {group.rows.length > 1 && (
+                                        <button
+                                          type="button"
+                                          className="label-caps px-1 text-xs text-muted-foreground hover:text-foreground"
+                                          onClick={() => removeUsageRow.mutate(link.id)}
+                                        >
+                                          이 사이즈 행 제거
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <ComponentUsageEditor
+                                    link={link}
+                                    onSave={(patch) =>
+                                      updateUsage.mutate({ linkId: link.id, patch })
+                                    }
+                                  />
+                                  {(() => {
+                                    if (link.product_size_id == null) {
+                                      return (
+                                        <p className="font-mono text-xs text-destructive">
+                                          공통 사용량 — 해당 사이즈의 별도 행이 없을 때 적용합니다.
+                                        </p>
+                                      );
+                                    }
+                                    const cost = rowCost(link, costsByComponent);
+                                    if (link.quantity_g == null || cost != null) return null;
+                                    return (
+                                      <p className="font-mono text-xs text-muted-foreground">
+                                        {link.component_id != null
+                                          ? "원가 미확정 — 지정 Formula 버전과 재료 구입가를 확인하세요"
+                                          : "원가 정보 없음 — 이 재료에 구입가를 확인하세요"}
+                                      </p>
+                                    );
+                                  })()}
+                                </div>
+                              ))}
+                              {(() => {
+                                const availableSizes = (sizes.data ?? []).filter(
+                                  (s) => !group.rows.some((r) => r.product_size_id === s.id),
+                                );
+                                if (availableSizes.length === 0) return null;
+                                return (
+                                  <select
+                                    className={selectClass + " w-auto"}
+                                    value=""
+                                    onChange={(e) => {
+                                      const sizeId = e.target.value;
+                                      if (!sizeId) return;
+                                      const unspecifiedRow = group.rows.find(
+                                        (r) => r.product_size_id == null,
+                                      );
+                                      addSizeUsage.mutate({
+                                        componentId: group.componentId,
+                                        ingredientId: group.ingredientId,
+                                        productSizeId: sizeId,
+                                        sortOrder: group.rows.length,
+                                        unspecifiedRowId: unspecifiedRow?.id ?? null,
+                                      });
+                                    }}
+                                  >
+                                    <option value="">+ 사이즈별 사용량 추가…</option>
+                                    {availableSizes.map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {formatProductSizeLabel(s)}
+                                        {s.is_default ? " (DEFAULT)" : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                );
+                              })()}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  )}
+                </SectionCard>
+
+                {/* 2026-10-06 사용자 요청: Product의 "현재 레시피 정보" — 새 레시피 시스템이 아니라
             위 PRODUCT COMPONENTS가 실제로 가리키는 Formula + Formula Version을 보기 좋게 요약만
             한다. 같은 Formula Version을 여러 Component가 쓰더라도 한 번만 보여준다(dedupe). */}
-        <SectionCard title="CURRENT RECIPE INFORMATION">
-          {(() => {
-            const seen = new Map<string, { formulaName: string; versionNumber: number; status: string }>();
-            for (const l of links.data ?? []) {
-              if (l.formula_version_id && l.formula_versions) {
-                seen.set(l.formula_version_id, {
-                  formulaName: l.formula_versions.formulas?.name ?? "—",
-                  versionNumber: l.formula_versions.version_number,
-                  status: l.formula_versions.status,
-                });
-              }
-            }
-            const entries = [...seen.values()];
-            return entries.length === 0 ? (
-              <p className="font-mono text-xs text-muted-foreground">
-                아직 FORMULA VERSION이 지정된 COMPONENT가 없습니다.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {entries.map((e, i) => (
-                  <li key={i} className="py-1.5 text-sm">
-                    {e.formulaName} — v{e.versionNumber}
-                    {e.status !== "DRAFT" && <span className="text-muted-foreground"> ({e.status})</span>}
-                  </li>
-                ))}
-              </ul>
-            );
-          })()}
-        </SectionCard>
+                <SectionCard title="CURRENT RECIPE INFORMATION">
+                  {(() => {
+                    const seen = new Map<
+                      string,
+                      { formulaName: string; versionNumber: number; status: string }
+                    >();
+                    for (const l of links.data ?? []) {
+                      if (l.formula_version_id && l.formula_versions) {
+                        seen.set(l.formula_version_id, {
+                          formulaName: l.formula_versions.formulas?.name ?? "—",
+                          versionNumber: l.formula_versions.version_number,
+                          status: l.formula_versions.status,
+                        });
+                      }
+                    }
+                    const entries = [...seen.values()];
+                    return entries.length === 0 ? (
+                      <p className="font-mono text-xs text-muted-foreground">
+                        아직 FORMULA VERSION이 지정된 COMPONENT가 없습니다.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-border">
+                        {entries.map((e, i) => (
+                          <li key={i} className="py-1.5 text-sm">
+                            {e.formulaName} — v{e.versionNumber}
+                            {e.status !== "DRAFT" && (
+                              <span className="text-muted-foreground"> ({e.status})</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  })()}
+                </SectionCard>
 
-        {/* PRODUCTION COST 항목 */}
-        <ProductCostItemsSection productId={productId} overheadPerCake={overheadPerCake} />
-        </div>
-      </div>
+                {/* PRODUCTION COST 항목 */}
+                <ProductCostItemsSection productId={productId} overheadPerCake={overheadPerCake} />
+              </div>
+            </div>
           ),
         };
 

@@ -8,6 +8,8 @@
  */
 import type { Tables, TablesUpdate } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
+import { selectionIssue } from "@/lib/size-configuration";
+import { sumInputGrams } from "@/lib/product-usage";
 import { generateTitle } from "@/lib/datetime";
 import { ingredientDisplayName } from "@/lib/pilot";
 import type { VersionIngredientRow } from "@/lib/queries";
@@ -199,7 +201,7 @@ export function buildMultiplierSnapshot(
 
 /** BASE(×1) 재료 라인들의 총 무게(g) — %/배수 계산과 동일하게 amount(그램) 합산만 사용한다 */
 export function sumBaseGrams(lines: VersionIngredientRow[]): number {
-  return lines.reduce((sum, line) => sum + Number(line.amount), 0);
+  return sumInputGrams(lines) ?? 0;
 }
 
 const MULTIPLIER_MATCH_EPSILON = 0.01;
@@ -475,11 +477,39 @@ export async function ensureWorkSessionForOrder(orderId: string): Promise<string
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select(
-      "id, user_id, order_number, recipient, pickup_at, event_date, product_id, product_size_id, cake_size_id, products(name)",
+      "id, user_id, order_number, recipient, pickup_at, event_date, product_id, product_size_id, cake_size_id, quantity, products(name)",
     )
     .eq("id", orderId)
     .single();
   if (orderError) throw orderError;
+  if (order.product_size_id) {
+    const { data: size, error: sizeError } = await supabase
+      .from("product_sizes")
+      .select("*")
+      .eq("id", order.product_size_id)
+      .eq("user_id", order.user_id)
+      .single();
+    if (sizeError) throw sizeError;
+    let standard = undefined;
+    if (order.cake_size_id) {
+      const result = await supabase
+        .from("cake_sizes")
+        .select("*")
+        .eq("id", order.cake_size_id)
+        .eq("user_id", order.user_id)
+        .single();
+      if (result.error) throw result.error;
+      standard = result.data;
+    }
+    const issue = selectionIssue(
+      order.product_id,
+      order.product_size_id,
+      order.cake_size_id,
+      size,
+      standard,
+    );
+    if (issue) throw new Error(issue);
+  }
   const delivery = order.pickup_at ? order.pickup_at.slice(0, 10) : order.event_date;
   const baseName =
     (order.products as { name: string } | null)?.name || order.recipient || order.order_number;
@@ -493,6 +523,7 @@ export async function ensureWorkSessionForOrder(orderId: string): Promise<string
       product_id: order.product_id,
       product_size_id: order.product_size_id,
       cake_size_id: order.cake_size_id,
+      target_unit_count: order.quantity != null && order.quantity > 0 ? order.quantity : null,
     })
     .select("id")
     .single();

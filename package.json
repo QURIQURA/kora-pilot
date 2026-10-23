@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test:mould": "node --test tests/mould-dimensions.test.mjs",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:system": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

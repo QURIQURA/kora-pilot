@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, productSizesQuery } from "@/lib/queries";
+import { cakeSizesQuery, currentUserId, productSizesQuery } from "@/lib/queries";
 import {
   calcProductSize,
   cmToMm,
@@ -13,6 +13,7 @@ import {
   type ProductSize,
   type ProductSizeShape,
 } from "@/lib/product-size";
+import { completeGeometry, sameGeometry, sizeLinkIssue } from "@/lib/size-configuration";
 import { fmtCurrency } from "@/lib/cost";
 import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
 
@@ -49,16 +50,46 @@ export function ProductSizesSection({
 }) {
   const queryClient = useQueryClient();
   const sizes = useQuery(productSizesQuery(productId));
+  const cakeSizes = useQuery(cakeSizesQuery());
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["product_sizes", productId] });
+    await queryClient.invalidateQueries({ queryKey: ["cost_dashboard"] });
   };
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("product_sizes").delete().eq("id", id);
+      // Refuse deletion if it could cascade component targets or clear history links.
+      const results = await Promise.all([
+        supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("product_size_id", id),
+        supabase
+          .from("work_sessions")
+          .select("id", { count: "exact", head: true })
+          .eq("product_size_id", id),
+        supabase
+          .from("product_components")
+          .select("id", { count: "exact", head: true })
+          .eq("product_size_id", id),
+        supabase
+          .from("stock_items")
+          .select("id", { count: "exact", head: true })
+          .eq("product_size_id", id),
+      ]);
+      for (const result of results) {
+        if (result.error) throw result.error;
+      }
+      if (results.some((result) => (result.count ?? 0) > 0))
+        throw new Error("오더·세션·컴포넌트·재고에서 사용 중인 사이즈는 삭제할 수 없습니다.");
+      const { error } = await supabase
+        .from("product_sizes")
+        .delete()
+        .eq("id", id)
+        .eq("product_id", productId);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -102,6 +133,10 @@ export function ProductSizesSection({
       }
     >
       <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          공용 완성 규격을 연결하고 제품별 목표량·판매가를 관리합니다. 기존 기록은 자동 매핑하지
+          않습니다. 제품별 사용량은 COMPONENTS에서 입력하세요.
+        </p>
         {adding && (
           <ProductSizeForm
             productId={productId}
@@ -151,8 +186,8 @@ export function ProductSizesSection({
                       // 눈에 띄게 보여준다.
                       const totalWeightLabel =
                         usageTotal != null
-                          ? `총중량 ${usageTotal.toFixed(1).replace(/\.0$/, "")}g (COMPONENT 합산 자동계산)`
-                          : "총중량 미계산 — COMPONENTS에서 이 사이즈에 중량을 지정하세요";
+                          ? `구성 목표 합계 ${usageTotal.toFixed(1).replace(/\.0$/, "")}g (실측 완성 중량과 별도)`
+                          : "구성 목표 미확정 — COMPONENTS에서 사용량을 확인하세요";
                       const costTotal = costTotals?.[size.id];
                       const costLabel =
                         costTotal != null ? `RAW MATERIAL ${fmtCurrency(costTotal)}` : null;
@@ -207,6 +242,23 @@ export function ProductSizesSection({
                         </>
                       );
                     })()}
+                    <p className="text-xs text-muted-foreground">
+                      공용 규격:{" "}
+                      {(cakeSizes.data ?? []).find((c) => c.id === size.cake_size_id)?.name ??
+                        "제품 전용"}
+                    </p>
+                    {size.cake_size_id &&
+                      sizeLinkIssue(
+                        size,
+                        (cakeSizes.data ?? []).find((c) => c.id === size.cake_size_id),
+                      ) && (
+                        <p className="text-xs text-destructive">
+                          {sizeLinkIssue(
+                            size,
+                            (cakeSizes.data ?? []).find((c) => c.id === size.cake_size_id),
+                          )}
+                        </p>
+                      )}
                     {size.notes && <p className="text-xs text-muted-foreground">{size.notes}</p>}
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -270,6 +322,8 @@ export function ProductSizeForm({
   onCreated?: (id: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const cakeSizes = useQuery(cakeSizesQuery());
+  const [cakeSizeId, setCakeSizeId] = useState(existing?.cake_size_id ?? "");
   const [shape, setShape] = useState<ProductSizeShape>(
     (existing?.shape as ProductSizeShape) ?? "ROUND",
   );
@@ -301,6 +355,7 @@ export function ProductSizeForm({
 
       const payload = {
         shape,
+        cake_size_id: cakeSizeId || null,
         diameter_mm: shape === "ROUND" ? toMm(diameterCm) : null,
         length_mm: shape === "RECTANGLE" ? toMm(lengthCm) : null,
         width_mm: shape === "RECTANGLE" ? toMm(widthCm) : null,
@@ -311,6 +366,14 @@ export function ProductSizeForm({
         selling_price: sellingPrice.trim() ? Number(sellingPrice) : null,
       };
 
+      if (!completeGeometry(payload)) throw new Error("완성 형태와 양수 치수를 모두 입력하세요.");
+      const picked = (cakeSizes.data ?? []).find((c) => c.id === cakeSizeId);
+      const changedGeometry =
+        !existing || !sameGeometry(existing, payload) || cakeSizeId !== existing.cake_size_id;
+      if (cakeSizeId && changedGeometry && (!picked || !sameGeometry(payload, picked)))
+        throw new Error(
+          "공용 규격과 치수가 다르거나 누락됐습니다. 규격을 다시 선택하거나 제품 전용으로 분리하세요.",
+        );
       if (existing) {
         // is_default를 켜는 경우: partial unique index 충돌을 피하기 위해 기존 default를 먼저 내린다.
         if (isDefault && !existing.is_default) {
@@ -351,6 +414,7 @@ export function ProductSizeForm({
     },
     onSuccess: async (id) => {
       await queryClient.invalidateQueries({ queryKey: ["product_sizes", productId] });
+      await queryClient.invalidateQueries({ queryKey: ["cost_dashboard"] });
       if (!existing) onCreated?.(id);
       onDone();
     },
@@ -369,6 +433,37 @@ export function ProductSizeForm({
         아님 — MOULD는 FORMULA 배수 계산용 별개 개념입니다).
       </p>
 
+      <Field label="공용 완성 규격 (선택하면 치수 불러오기)">
+        <select
+          className={selectClass}
+          value={cakeSizeId}
+          onChange={(e) => {
+            const id = e.target.value;
+            setCakeSizeId(id);
+            const picked = (cakeSizes.data ?? []).find((c) => c.id === id);
+            const dims = picked ? completeGeometry(picked) : null;
+            if (!dims) return;
+            setShape(dims.shape as ProductSizeShape);
+            setDiameterCm(dims.diameter_mm != null ? String(mmToCm(dims.diameter_mm)) : "");
+            setLengthCm(dims.length_mm != null ? String(mmToCm(dims.length_mm)) : "");
+            setWidthCm(dims.width_mm != null ? String(mmToCm(dims.width_mm)) : "");
+            setHeightCm(dims.height_mm != null ? String(mmToCm(dims.height_mm)) : "");
+          }}
+        >
+          <option value="">— 제품 전용 치수 —</option>
+          {(cakeSizes.data ?? []).map((c) => (
+            <option key={c.id} value={c.id} disabled={!completeGeometry(c) && c.id !== cakeSizeId}>
+              {c.name} · {formatProductSizeLabel({ ...c, shape: c.shape ?? "" })} · #
+              {c.id.slice(0, 8)}
+              {!completeGeometry(c) ? " · 치수 확인 필요" : ""}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <p className="text-xs text-muted-foreground">
+        기존 규격 치수를 수정해도 이 제품의 기록을 자동 변경하지 않습니다. 실제 치수가 다르면 제품
+        전용으로 분리하거나 올바른 규격을 명시적으로 선택하세요.
+      </p>
       <Field label="SHAPE">
         <select
           className={selectClass}

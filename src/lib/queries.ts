@@ -1,4 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
+import { summarizeUsage } from "@/lib/product-usage";
+import { productUsageCost, type VersionCostInfo } from "@/lib/cost";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import {
@@ -210,6 +212,40 @@ export const componentCostsQuery = (componentIds: string[]) =>
       return map;
     },
   });
+
+/** Cost only the exact Formula Version selected on each usage row. */
+export const versionCostsQuery = (versionIds: string[]) =>
+  queryOptions({
+    queryKey: ["formula_version_costs", [...new Set(versionIds)].sort()],
+    enabled: versionIds.length > 0,
+    queryFn: () => fetchVersionCosts(versionIds),
+  });
+
+async function fetchVersionCosts(versionIds: string[]): Promise<Record<string, VersionCostInfo>> {
+  const ids = [...new Set(versionIds)];
+  if (!ids.length) return {};
+  const { data, error } = await supabase
+    .from("formula_versions")
+    .select(
+      "id, formulas(component_id), formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit))",
+    )
+    .in("id", ids);
+  if (error) throw error;
+  const result: Record<string, VersionCostInfo> = {};
+  for (const row of data ?? []) {
+    const diagnostic = analyzeBatch(row.formula_version_ingredients ?? []);
+    result[row.id] = {
+      componentId: row.formulas?.component_id ?? null,
+      costPerGram:
+        diagnostic.hasMissingPrice || diagnostic.hasUnconvertibleUnit || diagnostic.isEmpty
+          ? null
+          : diagnostic.costPerGram,
+      hasMissingPrice:
+        diagnostic.hasMissingPrice || diagnostic.hasUnconvertibleUnit || diagnostic.isEmpty,
+    };
+  }
+  return result;
+}
 
 export const componentsQuery = () =>
   queryOptions({
@@ -1169,6 +1205,8 @@ export const workSessionQuery = (id: string) =>
  * Target Time은 아직 없음 — 실측 데이터가 먼저 쌓이고 나중에 사용자가 직접 설정한다. */
 
 export interface ComponentGramsRow {
+  component_id?: string | null;
+  ingredient_id?: string | null;
   formula_version_id: string | null;
   quantity_g: number | null;
   product_size_id: string | null;
@@ -1185,7 +1223,7 @@ export const productComponentGramsRowsQuery = (productId: string) =>
       unwrap(
         await supabase
           .from("product_components")
-          .select("formula_version_id, quantity_g, product_size_id")
+          .select("component_id, ingredient_id, formula_version_id, quantity_g, product_size_id")
           .eq("product_id", productId),
       ),
   });
@@ -1860,7 +1898,7 @@ export const costDashboardQuery = () =>
         supabase
           .from("product_components")
           .select(
-            "product_id, product_size_id, component_id, ingredient_id, quantity_g, ingredients(purchase_price, purchase_qty, purchase_unit)",
+            "product_id, product_size_id, component_id, ingredient_id, formula_version_id, quantity_g, ingredients(purchase_price, purchase_qty, purchase_unit)",
           ),
         supabase.from("product_cost_items").select("product_id, quantity, cost_items(unit_cost)"),
         supabase.from("pilot_settings").select("*").maybeSingle(),
@@ -1877,6 +1915,7 @@ export const costDashboardQuery = () =>
         product_id: string;
         product_size_id: string | null;
         component_id: string | null;
+        formula_version_id: string | null;
         ingredient_id: string | null;
         quantity_g: number | null;
         ingredients: {
@@ -1886,49 +1925,9 @@ export const costDashboardQuery = () =>
         } | null;
       }[];
 
-      // COMPONENT 링크의 g당 단가 — componentCostsQuery와 동일한 규칙(CURRENT 우선, 없으면 최신 DRAFT/TESTING)
-      const componentIds = [
-        ...new Set(links.map((l) => l.component_id).filter((id): id is string => id != null)),
-      ];
-      const costsByComponent: Record<
-        string,
-        { costPerGram: number | null; hasMissingPrice: boolean }
-      > = {};
-      if (componentIds.length > 0) {
-        const { data: formulaData, error: formulaError } = await supabase
-          .from("formulas")
-          .select(
-            "component_id, formula_versions!inner(status, version_number, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
-          )
-          .in("component_id", componentIds)
-          .in("formula_versions.status", ["CURRENT", "DRAFT", "TESTING"]);
-        if (formulaError) throw formulaError;
-        for (const formula of (formulaData ?? []) as unknown as {
-          component_id: string | null;
-          formula_versions: {
-            status: string;
-            version_number: number;
-            formula_version_ingredients: {
-              amount: number;
-              unit: string;
-              ingredients: {
-                purchase_price: number | null;
-                purchase_qty: number | null;
-                purchase_unit: string | null;
-              } | null;
-            }[];
-          }[];
-        }[]) {
-          if (!formula.component_id) continue;
-          const version = pickEffectiveFormulaVersion(formula.formula_versions);
-          if (!version) continue;
-          const result = computeLineCosts(version.formula_version_ingredients ?? []);
-          costsByComponent[formula.component_id] = {
-            costPerGram: result.costPerGram,
-            hasMissingPrice: result.hasMissingPrice,
-          };
-        }
-      }
+      const versionCosts = await fetchVersionCosts(
+        links.map((r) => r.formula_version_id).filter((id): id is string => id != null),
+      );
 
       const overheadPerCake = overheadPerUnit(settingsRes.data) ?? 0;
 
@@ -1953,30 +1952,17 @@ export const costDashboardQuery = () =>
           sumCostItemAssignments(costItemsByProduct[product.id] ?? []) + overheadPerCake;
       }
 
-      // 사이즈별 Raw Material 원가 — 사이즈가 지정된 행만 합산($productId.tsx의 sumCostBySize와 동일 규칙)
-      const rawCostBySize: Record<string, number> = {};
-      const missingPriceBySize: Record<string, boolean> = {};
-      for (const link of links) {
-        if (!link.product_size_id || link.quantity_g == null) continue;
-        const cpg =
-          link.component_id != null
-            ? (costsByComponent[link.component_id]?.costPerGram ?? null)
-            : costPerGram(link.ingredients);
-        if (cpg == null) {
-          missingPriceBySize[link.product_size_id] = true;
-          continue;
-        }
-        rawCostBySize[link.product_size_id] =
-          (rawCostBySize[link.product_size_id] ?? 0) + Number(link.quantity_g) * cpg;
-      }
-
       const productById = new Map(products.map((p) => [p.id, p]));
       const rows: CostDashboardRow[] = [];
       for (const size of sizes) {
         const product = productById.get(size.product_id);
         if (!product) continue;
-        const hasRawCost = size.id in rawCostBySize;
-        const rawCost = hasRawCost ? (rawCostBySize[size.id] ?? null) : null;
+        const summary = summarizeUsage(
+          links.filter((r) => r.product_id === size.product_id),
+          size.id,
+          (row) => productUsageCost(row, versionCosts),
+        );
+        const rawCost = summary.cost;
         const perCakeExtras = perCakeExtrasByProduct[product.id] ?? 0;
         const fullCost = rawCost != null ? rawCost + perCakeExtras : null;
         const sellingPrice = size.selling_price != null ? Number(size.selling_price) : null;
@@ -1997,7 +1983,7 @@ export const costDashboardQuery = () =>
           rawCost,
           perCakeExtras,
           fullCost,
-          hasMissingPrice: missingPriceBySize[size.id] ?? false,
+          hasMissingPrice: !summary.complete,
           sellingPrice,
           margin,
           marginPct,

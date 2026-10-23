@@ -107,9 +107,6 @@ function SettingsPage() {
         <SettingsSection title="GOOGLE 캘린더 구독 (.ics)">
           <OrdersCalendarFeedSection />
         </SettingsSection>
-        <SettingsSection title="CAKE SIZES" defaultOpen>
-          <CakeSizeManager />
-        </SettingsSection>
         <SettingsSection title="DIETARY TAGS" defaultOpen>
           <DietaryTagManager />
         </SettingsSection>
@@ -118,15 +115,26 @@ function SettingsPage() {
         </SettingsSection>
       </SettingsGroup>
 
+      <SettingsSection title="SIZES · 완성 규격과 제품별 구성" defaultOpen>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            공용 완성 규격은 한 번 등록하고 제품별로 연결합니다. 몰드의 물리 치수·제품별
+            배합량·판매가는 별도로 유지합니다.
+          </p>
+          <details>
+            <summary className="cursor-pointer text-sm">공용 완성 규격 관리</summary>
+            <CakeSizeManager />
+          </details>
+          <ProductSizeManager />
+        </div>
+      </SettingsSection>
+
       <SettingsGroup label="PRODUCTS">
         <SettingsSection title="CATEGORIES" defaultOpen>
           <CategoryManager />
         </SettingsSection>
         <SettingsSection title="MOULDS (시트 사이즈)">
           <MouldManager />
-        </SettingsSection>
-        <SettingsSection title="PRODUCT SIZES (최종 케익 사이즈)">
-          <ProductSizeManager />
         </SettingsSection>
         <SettingsSection title="TECHNIQUE CATEGORIES">
           <TechniqueCategoryManager />

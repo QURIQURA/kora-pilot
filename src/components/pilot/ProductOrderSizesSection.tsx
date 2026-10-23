@@ -24,8 +24,13 @@ export function ProductOrderSizesSection({ orders }: { orders: OrderRow[] }) {
   const nameById = new Map((sizes.data ?? []).map((s) => [s.id, s.name]));
 
   const sizeLabel = (o: OrderRow) =>
-    (o.cake_size_id && nameById.get(o.cake_size_id)) ||
-    (o.cake_size === "Custom" ? (o.custom_size ? `Custom — ${o.custom_size}` : "Custom") : o.cake_size) ||
+    (o.cake_size_id &&
+      `${nameById.get(o.cake_size_id) ?? "규격 확인 필요"} · #${o.cake_size_id.slice(0, 8)}`) ||
+    (o.cake_size === "Custom"
+      ? o.custom_size
+        ? `Custom — ${o.custom_size}`
+        : "Custom"
+      : o.cake_size) ||
     null;
 
   const counts = new Map<string, number>();
@@ -39,9 +44,7 @@ export function ProductOrderSizesSection({ orders }: { orders: OrderRow[] }) {
       title="SIZES"
       subtitle={
         counts.size > 0 ? (
-          <>
-            {[...counts.entries()].map(([label, n]) => `${label} ×${n}`).join(" · ")}
-          </>
+          <>{[...counts.entries()].map(([label, n]) => `${label} ×${n}`).join(" · ")}</>
         ) : undefined
       }
     >
@@ -68,7 +71,9 @@ export function ProductOrderSizesSection({ orders }: { orders: OrderRow[] }) {
                 </span>
                 <span className="label-caps ml-auto text-xs">{label ?? "SIZE NOT SET"}</span>
                 {o.servings != null && (
-                  <span className="font-mono text-xs text-muted-foreground">{o.servings} servings</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {o.servings} servings
+                  </span>
                 )}
               </li>
             );

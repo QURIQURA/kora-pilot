@@ -263,6 +263,8 @@ function FormulaDetailPage() {
   const batchValue = Math.max(parseNumber(batch) || 0, 0) || 1;
 
   const invalidate = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["formula_version_costs"] });
+    await queryClient.invalidateQueries({ queryKey: ["cost_dashboard"] });
     await queryClient.invalidateQueries({ queryKey: ["formulas"] });
     await queryClient.invalidateQueries({ queryKey: ["formulas", formulaId] });
     await queryClient.invalidateQueries({

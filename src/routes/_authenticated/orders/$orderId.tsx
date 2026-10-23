@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   orderQuery,
   productComponentsQuery,
+  productSizesQuery,
   dietaryTagsQuery,
   dietaryBuildsQuery,
   formulaVersionDietaryTagLinksQuery,
@@ -40,6 +41,8 @@ import { DIETARY_ASSEMBLY_ENABLED } from "@/lib/feature-flags";
 import { resolveSlotGroup } from "@/lib/technique";
 import { ensureWorkSessionForOrder } from "@/lib/work-session";
 import { mouldOptionLabel } from "@/components/pilot/MouldSelect";
+import { selectionIssue } from "@/lib/size-configuration";
+import { formatProductSizeLabel } from "@/lib/product-size";
 import { ProductSizeSelect } from "@/components/pilot/ProductSizeSelect";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
@@ -81,7 +84,6 @@ function AutoGrowTextarea({
     />
   );
 }
-
 
 export const Route = createFileRoute("/_authenticated/orders/$orderId")({
   head: () => ({
@@ -221,6 +223,34 @@ function OrderDetailPage() {
   // 그 PRODUCT에 등록된 product_sizes 중 "최종 사이즈"를 FK로 골라둘 수 있게 한다 — Work
   // Session을 이 ORDER에서 만들 때 그대로 넘겨서 PRODUCT SIZE 기준 자동 배수 계산에 쓰인다.
   const [productSizeId, setProductSizeId] = useState("");
+  const productSizes = useQuery({ ...productSizesQuery(productId), enabled: Boolean(productId) });
+  const [sizeChoiceError, setSizeChoiceError] = useState<string | null>(null);
+  const currentSizeIssue = selectionIssue(
+    productId || null,
+    productSizeId || null,
+    cakeSizeId || null,
+    (productSizes.data ?? []).find((s) => s.id === productSizeId),
+    (cakeSizes.data ?? []).find((s) => s.id === cakeSizeId),
+  );
+  const chooseProductSize = async (id: string) => {
+    setSizeChoiceError(null);
+    if (!id) {
+      setProductSizeId("");
+      return;
+    }
+    const options = await queryClient.fetchQuery(productSizesQuery(productId));
+    const picked = options.find((s) => s.id === id);
+    const standard = (cakeSizes.data ?? []).find((c) => c.id === picked?.cake_size_id);
+    const issue = selectionIssue(productId, id, picked?.cake_size_id ?? null, picked, standard);
+    if (issue) {
+      setSizeChoiceError(issue);
+      return;
+    }
+    setProductSizeId(id);
+    setCakeSizeId(picked?.cake_size_id ?? "");
+    if (standard?.servings != null) setServings(String(standard.servings));
+  };
+
   // 2026-10-20 사용자 요청: "최종 케익 사이즈"(위 product_size_id — PRODUCT에 연결, 단가계산용)와는
   // 별개로 "시트 사이즈"를 따로 관리한다 — PRODUCT SIZE 데이터가 없는 제품/커스텀 사이즈 주문이라도
   // 이 몰드만 골라두면 WORK SESSION 생성 시 그 몰드 기준으로 자동 배수 계산이 가능해진다.
@@ -433,6 +463,12 @@ function OrderDetailPage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      const previous = order.data;
+      const changedSize =
+        productId !== (previous?.product_id ?? "") ||
+        productSizeId !== (previous?.product_size_id ?? "") ||
+        cakeSizeId !== (previous?.cake_size_id ?? "");
+      if (changedSize && currentSizeIssue) throw new Error(currentSizeIssue);
       const trimmedOrderNumber = orderNumber.trim();
       if (!trimmedOrderNumber) {
         throw new Error("ORDER NUMBER IS REQUIRED");
@@ -952,37 +988,53 @@ function OrderDetailPage() {
                   onChange={(next) => {
                     setProductId(next);
                     setProductSizeId("");
+                    setCakeSizeId("");
+                    setSizeChoiceError(null);
                   }}
                   emptyLabel="TBD"
                 />
               </Field>
               {productId && (
-                <Field label="PRODUCT SIZE (legacy)">
+                <Field label="PRODUCT SIZE · 제품별 배합·원가 기준">
                   <ProductSizeSelect
                     productId={productId}
                     value={productSizeId}
-                    onChange={setProductSizeId}
+                    onChange={(id) => {
+                      void chooseProductSize(id).catch((e) => setSizeChoiceError(String(e)));
+                    }}
                   />
                 </Field>
               )}
-              <Field label="CAKE SIZE">
-                <select
-                  className={selectClass}
-                  value={cakeSizeId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setCakeSizeId(id);
-                    const picked = (cakeSizes.data ?? []).find((c) => c.id === id);
-                    if (picked?.servings != null) setServings(String(picked.servings));
-                  }}
-                >
-                  <option value="">— SELECT —</option>
-                  {(cakeSizes.data ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+              {(sizeChoiceError || currentSizeIssue) && (
+                <p role="status" className="text-xs text-destructive">
+                  {sizeChoiceError ?? currentSizeIssue} · 기존 기록은 자동 수정하지 않습니다.
+                </p>
+              )}
+              <Field
+                label={
+                  productSizeId ? "연결된 공용 완성 규격" : "공용 완성 규격 (제품 사이즈 미선택)"
+                }
+              >
+                {!productSizeId && (
+                  <select
+                    className={selectClass}
+                    value={cakeSizeId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setCakeSizeId(id);
+                      const picked = (cakeSizes.data ?? []).find((c) => c.id === id);
+                      if (picked?.servings != null) setServings(String(picked.servings));
+                    }}
+                  >
+                    <option value="">— SELECT —</option>
+                    {(cakeSizes.data ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} · {formatProductSizeLabel({ ...c, shape: c.shape ?? "" })} · #
+                        {c.id.slice(0, 8)}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 {(() => {
                   const picked = (cakeSizes.data ?? []).find((c) => c.id === cakeSizeId);
                   const mould = picked?.sheet_mould_id
@@ -995,8 +1047,10 @@ function OrderDetailPage() {
                           ? `${picked.servings} servings`
                           : "servings not set"}{" "}
                         · {mould ? `sheet: ${mouldOptionLabel(mould)}` : "no sheet mould set"} ·{" "}
-                        {picked.cream_g != null ? `cream ${picked.cream_g}g` : "cream not set"} (edit
-                        in SETTINGS → CAKE SIZES)
+                        {picked.cream_g != null
+                          ? `참고 크림 ${picked.cream_g}g`
+                          : "참고 크림 미지정"}{" "}
+                        · 제품별 실제 사용 목표는 COMPONENTS 기준
                       </p>
                     );
                   }
@@ -1120,9 +1174,10 @@ function OrderDetailPage() {
                               {b.name}
                             </option>
                           ))}
-                          {selectedBuild && !productBuilds.some((b) => b.id === selectedBuild.id) && (
-                            <option value={selectedBuild.id}>{selectedBuild.name}</option>
-                          )}
+                          {selectedBuild &&
+                            !productBuilds.some((b) => b.id === selectedBuild.id) && (
+                              <option value={selectedBuild.id}>{selectedBuild.name}</option>
+                            )}
                         </select>
                         <button
                           type="button"
@@ -1139,10 +1194,13 @@ function OrderDetailPage() {
                             const f = (formulas.data ?? []).find((x) =>
                               x.formula_versions.some((v) => v.id === it.formula_version_id),
                             );
-                            const v = f?.formula_versions.find((x) => x.id === it.formula_version_id);
+                            const v = f?.formula_versions.find(
+                              (x) => x.id === it.formula_version_id,
+                            );
                             return (
                               <li key={it.id}>
-                                {f?.components?.name ?? "—"} → {f?.name ?? "—"} v{v?.version_number ?? "?"}
+                                {f?.components?.name ?? "—"} → {f?.name ?? "—"} v
+                                {v?.version_number ?? "?"}
                               </li>
                             );
                           })}

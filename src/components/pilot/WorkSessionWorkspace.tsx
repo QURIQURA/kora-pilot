@@ -26,6 +26,7 @@ import {
   mouldsQuery,
   productsQuery,
   productSizesQuery,
+  cakeSizesQuery,
   productComponentsQuery,
   techniqueCategoriesQuery,
   versionIngredientsBulkQuery,
@@ -43,6 +44,8 @@ import {
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
+import { resolveProductUsage } from "@/lib/product-usage";
+import { selectionIssue } from "@/lib/size-configuration";
 import { resolveSlotGroup } from "@/lib/technique";
 import { fmtNumber, toGrams, versionLabel, UNITS, type Mould } from "@/lib/formula";
 import { formatProductSizeLabel } from "@/lib/product-size";
@@ -684,6 +687,8 @@ function ProductionEfficiencyLinkSection({
 }) {
   const products = useQuery(productsQuery());
   const sizes = useQuery(productSizesQuery(productId ?? ""));
+  const standards = useQuery(cakeSizesQuery());
+  const [sizeError, setSizeError] = useState<string | null>(null);
   const [batchDraft, setBatchDraft] = useState(
     targetUnitCount != null ? String(targetUnitCount) : "",
   );
@@ -693,12 +698,24 @@ function ProductionEfficiencyLinkSection({
 
   return (
     <SectionCard title="PRODUCT / BATCH SIZE (EFFICIENCY)">
+      {sizeError && (
+        <p role="alert" className="text-xs text-destructive">
+          {sizeError}
+        </p>
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <Field label="PRODUCT">
           <select
             className={selectClass + " !w-56"}
             value={productId ?? ""}
-            onChange={(e) => onSave({ product_id: e.target.value || null, product_size_id: null })}
+            onChange={(e) => {
+              setSizeError(null);
+              onSave({
+                product_id: e.target.value || null,
+                product_size_id: null,
+                cake_size_id: null,
+              });
+            }}
           >
             <option value="">— 연결 안 함(순수 계량 세션) —</option>
             {(products.data ?? []).map((p) => (
@@ -713,7 +730,21 @@ function ProductionEfficiencyLinkSection({
             <select
               className={selectClass + " !w-40"}
               value={productSizeId ?? ""}
-              onChange={(e) => onSave({ product_size_id: e.target.value || null })}
+              onChange={(e) => {
+                const id = e.target.value || null;
+                const picked = (sizes.data ?? []).find((s) => s.id === id);
+                const standard = (standards.data ?? []).find((c) => c.id === picked?.cake_size_id);
+                const issue = selectionIssue(
+                  productId,
+                  id,
+                  picked?.cake_size_id ?? null,
+                  picked,
+                  standard,
+                );
+                setSizeError(issue);
+                if (!issue)
+                  onSave({ product_size_id: id, cake_size_id: picked?.cake_size_id ?? null });
+              }}
             >
               <option value="">(전체/미지정)</option>
               {(sizes.data ?? []).map((s) => (
@@ -878,15 +909,23 @@ export function AddFormulaVersionForm({
     ...productComponentsQuery(productId ?? ""),
     enabled: Boolean(productId && productSizeId),
   });
-  const sizeMatch = formula?.components?.id
-    ? (productComponents.data ?? []).find(
-        (pc) => pc.component_id === formula.components!.id && pc.product_size_id === productSizeId,
-      )
-    : undefined;
-  const sizeTargetGrams = sizeMatch?.quantity_g != null ? Number(sizeMatch.quantity_g) : null;
+  const session = useQuery(workSessionQuery(sessionId));
+  const batchCount = session.data?.target_unit_count;
+  const targetRows = resolveProductUsage(productComponents.data ?? [], productSizeId).filter(
+    (row) =>
+      row.component_id === formula?.components?.id &&
+      row.formula_version_id === selectedVersion?.id,
+  );
+  const sizeTargetGrams =
+    targetRows.length &&
+    targetRows.every((r) => r.quantity_g != null) &&
+    batchCount != null &&
+    batchCount > 0
+      ? targetRows.reduce((sum, r) => sum + Number(r.quantity_g), 0) * batchCount
+      : null;
   const versionIngredients = useQuery({
     ...versionIngredientsBulkQuery(selectedVersion ? [selectedVersion.id] : []),
-    enabled: Boolean(selectedVersion && sizeTargetGrams != null),
+    enabled: Boolean(selectedVersion),
   });
   const baseTotalGrams = selectedVersion
     ? sumBaseGrams(versionIngredients.data?.[selectedVersion.id] ?? [])
@@ -894,13 +933,16 @@ export function AddFormulaVersionForm({
 
   useEffect(() => {
     setMouldId(selectedVersion?.default_mould_id ?? "");
+    setUseManual(false);
+    setManualMultiplier("1");
+    setTargetGrams("");
     // PRODUCT SIZE 목표중량을 알 수 있으면 몰드 개수 대신 그 중량 기준 배수를 기본값으로 채운다
     // — 사용자가 매번 몰드개수/배수를 직접 입력하지 않아도 되게.
     if (sizeTargetGrams != null && baseTotalGrams > 0) {
       const suggested = suggestedMultiplierFromTarget(sizeTargetGrams, 1, baseTotalGrams);
       if (suggested != null) {
         setUseManual(true);
-        setManualMultiplier(fmtNumber(suggested, 2));
+        setManualMultiplier(String(Number(suggested.toFixed(6))));
         setTargetGrams(fmtNumber(sizeTargetGrams, 0));
       }
     }
@@ -923,7 +965,9 @@ export function AddFormulaVersionForm({
       // 2026-10-07 사용자 요청: 같은 FORMULA VERSION도 이 WORK SESSION에 중복으로 추가할 수
       // 있다(예: 같은 레시피를 다른 몰드/배치로 각각) — 더 이상 막지 않는다.
       const user_id = await currentUserId();
-      const finalMultiplier = usingMould ? computedMultiplier : Number(manualMultiplier) || 1;
+      const finalMultiplier = usingMould ? computedMultiplier : Number(manualMultiplier);
+      if (!Number.isFinite(finalMultiplier) || finalMultiplier <= 0)
+        throw new Error("배수는 0보다 큰 수로 입력하세요.");
       const { error } = await supabase.from("work_session_formula_versions").insert({
         user_id,
         work_session_id: sessionId,
@@ -1056,9 +1100,9 @@ export function AddFormulaVersionForm({
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="number"
-              inputMode="numeric"
-              step="1"
-              min="1"
+              inputMode="decimal"
+              step="any"
+              min="0.001"
               className={`${inputClass} !w-24`}
               value={manualMultiplier}
               onChange={(e) => {
@@ -1084,14 +1128,15 @@ export function AddFormulaVersionForm({
                     const grams = Number(e.target.value);
                     if (!Number.isFinite(grams) || grams <= 0) return;
                     const next = suggestedMultiplierFromTarget(grams, 1, baseTotalGrams);
-                    if (next != null) setManualMultiplier(fmtNumber(next, 2));
+                    if (next != null) setManualMultiplier(String(Number(next.toFixed(6))));
                   }}
                 />
               </label>
             )}
             {sizeTargetGrams != null && (
               <span className="font-mono text-[11px] text-muted-foreground">
-                PRODUCT SIZE 목표: {fmtNumber(sizeTargetGrams, 0)}g 기준 자동 적용됨
+                제품 목표 × {batchCount}개: {fmtNumber(sizeTargetGrams, 0)}g (레시피 투입량 기준
+                제안)
               </span>
             )}
             {scalingMode === "MOULD" && (
@@ -1329,7 +1374,7 @@ function FormulaVersionRow({
                       if (!Number.isFinite(grams) || grams <= 0) return;
                       const next = suggestedMultiplierFromTarget(grams, 1, baseTotalGrams);
                       if (next == null) return;
-                      setManualMultiplier(fmtNumber(next, 2));
+                      setManualMultiplier(String(Number(next.toFixed(6))));
                       applyBatch.mutate({
                         multiplier: next,
                         mouldId: scalingMode === "MOULD" ? mouldId || null : null,

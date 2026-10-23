@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cakeSizesQuery, currentUserId, type CakeSize } from "@/lib/queries";
 import { cmToMm, mmToCm } from "@/lib/product-size";
 import { CAKE_SIZE_INCHES, CAKE_SIZE_SHAPES, buildCakeSizeName } from "@/lib/cake-size";
+import { completeGeometry } from "@/lib/size-configuration";
 import { MouldSelect } from "./MouldSelect";
 import { SectionCard, buttonClass, inputClass, selectClass } from "./ui";
 
@@ -57,7 +58,13 @@ export function CakeSizeManager() {
   const update = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<CakeSize> }) => {
       const current = (sizes.data ?? []).find((r) => r.id === id);
-      const merged = { ...(current as CakeSize), ...patch };
+      if (!current) throw new Error("규격을 다시 불러오세요.");
+      for (const key of ["diameter_mm", "length_mm", "width_mm", "height_mm"] as const) {
+        const value = patch[key];
+        if (value != null && (!Number.isFinite(value) || value <= 0))
+          throw new Error("치수는 양수 cm로 입력하세요.");
+      }
+      const merged = { ...current, ...patch };
       // 사이즈/모양/치수가 바뀌면 이름을 자동으로 다시 만든다.
       const touchesName = ["shape", "size_inch", "length_mm", "width_mm", "height_mm"].some(
         (k) => k in patch,
@@ -101,6 +108,22 @@ export function CakeSizeManager() {
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      const results = await Promise.all([
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("cake_size_id", id),
+        supabase
+          .from("work_sessions")
+          .select("id", { count: "exact", head: true })
+          .eq("cake_size_id", id),
+        supabase
+          .from("product_sizes")
+          .select("id", { count: "exact", head: true })
+          .eq("cake_size_id", id),
+      ]);
+      for (const result of results) {
+        if (result.error) throw result.error;
+      }
+      if (results.some((result) => (result.count ?? 0) > 0))
+        throw new Error("오더·세션·제품 사이즈에서 사용 중인 규격은 삭제할 수 없습니다.");
       const { error } = await supabase.from("cake_sizes").delete().eq("id", id);
       if (error) throw error;
     },
@@ -110,7 +133,11 @@ export function CakeSizeManager() {
   const rows = sizes.data ?? [];
   const usageMap = usage.data ?? {};
 
-  const dimInput = (row: CakeSize, key: "length_mm" | "width_mm" | "height_mm", label: string) => (
+  const dimInput = (
+    row: CakeSize,
+    key: "diameter_mm" | "length_mm" | "width_mm" | "height_mm",
+    label: string,
+  ) => (
     <div className="flex items-center gap-1">
       <input
         type="number"
@@ -131,11 +158,16 @@ export function CakeSizeManager() {
   );
 
   return (
-    <SectionCard title="CAKE SIZES">
+    <SectionCard title="공용 완성 규격">
+      {(update.isError || remove.isError || create.isError) && (
+        <p role="alert" className="text-xs text-destructive">
+          {((update.error ?? remove.error ?? create.error) as Error).message}
+        </p>
+      )}
       <p className="mb-3 font-mono text-[11px] text-muted-foreground">
-        The name is built automatically: size + shape + height (e.g. 8&quot; Round 10cm). Round /
-        Square: pick 4–12 inch. Rectangle: enter length × width × height in cm. Servings and the
-        sheet mould are filled into an order when it selects the size.
+        인치는 표시용 이름입니다. 실제 완성 지름 또는 가로·세로·높이(cm)를 별도로 확인하세요. 몰드
+        치수를 완성 치수로 자동 복사하지 않습니다. CREAM g은 공용 참고값이며 제품별 목표량을
+        대체하지 않습니다.
       </p>
 
       <div className="mb-3">
@@ -216,7 +248,17 @@ export function CakeSizeManager() {
                     ))}
                   </select>
                 )}
+                {row.shape === "ROUND" && dimInput(row, "diameter_mm", "Ø")}
+                {row.shape === "SQUARE" && (
+                  <>
+                    {dimInput(row, "length_mm", "L")}
+                    {dimInput(row, "width_mm", "W")}
+                  </>
+                )}
                 {dimInput(row, "height_mm", "H")}
+                {!completeGeometry(row) && (
+                  <span className="text-xs text-destructive">실제 치수 확인 필요</span>
+                )}
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
@@ -262,15 +304,10 @@ export function CakeSizeManager() {
                 <button
                   type="button"
                   className={buttonClass}
+                  disabled={used > 0}
+                  title={used > 0 ? "주문에 사용 중인 규격은 삭제할 수 없습니다." : undefined}
                   onClick={() => {
-                    if (
-                      confirm(
-                        used > 0
-                          ? `${used} order(s) use this size. Delete anyway?`
-                          : "Delete this size?",
-                      )
-                    )
-                      remove.mutate(row.id);
+                    if (confirm("Delete this unused size?")) remove.mutate(row.id);
                   }}
                 >
                   DELETE
