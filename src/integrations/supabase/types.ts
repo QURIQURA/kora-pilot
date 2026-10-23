@@ -2651,6 +2651,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      packaging_items: {
+        Row: {
+          created_at: string;
+          height_mm: number | null;
+          id: string;
+          kind: string;
+          length_mm: number;
+          note: string | null;
+          quantity: number;
+          updated_at: string;
+          user_id: string;
+          width_mm: number;
+        };
+        Insert: {
+          created_at?: string;
+          height_mm?: number | null;
+          id?: string;
+          kind: string;
+          length_mm: number;
+          note?: string | null;
+          quantity?: number;
+          updated_at?: string;
+          user_id?: string;
+          width_mm: number;
+        };
+        Update: {
+          created_at?: string;
+          height_mm?: number | null;
+          id?: string;
+          kind?: string;
+          length_mm?: number;
+          note?: string | null;
+          quantity?: number;
+          updated_at?: string;
+          user_id?: string;
+          width_mm?: number;
+        };
+        Relationships: [];
+      };
       stock_item_lines: {
         Row: {
           created_at: string;
