@@ -62,6 +62,7 @@ const RAIL_W = 6;
 interface FormulaOption {
   formulaVersionId: string;
   formulaName: string;
+  multiplier?: number;
 }
 
 const GENERAL_KEY = "__general__";
@@ -137,7 +138,20 @@ export function WorkflowView({
   // TASK까지 함께 지우게 고치기 전에 생긴 것들)를 위한 안전장치 — TASK LIST에는 항상 보이는데
   // 타임라인 그리드에서만 조용히 사라지는 걸 막는다.
   const columns = useMemo(() => {
-    const cols = formulaOptions.map((f) => ({ key: f.formulaVersionId, label: f.formulaName }));
+    const grouped = new Map<string, { key: string; label: string; multiplier: number }>();
+    for (const f of formulaOptions) {
+      const entry = grouped.get(f.formulaVersionId) ?? {
+        key: f.formulaVersionId,
+        label: f.formulaName,
+        multiplier: 0,
+      };
+      entry.multiplier += f.multiplier ?? 0;
+      grouped.set(f.formulaVersionId, entry);
+    }
+    const cols = [...grouped.values()].map((f) => ({
+      key: f.key,
+      label: f.multiplier > 0 ? `${f.label} · ×${Number(f.multiplier.toFixed(3))}` : f.label,
+    }));
     const knownKeys = new Set(cols.map((c) => c.key));
     for (const t of tasks) {
       if (t.formula_version_id && !knownKeys.has(t.formula_version_id)) {

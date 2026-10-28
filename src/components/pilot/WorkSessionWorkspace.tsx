@@ -44,6 +44,7 @@ import {
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
+import { groupProductionSelections, rescaleProductionSelections } from "@/lib/production-quantity";
 import { resolveProductUsage } from "@/lib/product-usage";
 import { selectionIssue } from "@/lib/size-configuration";
 import { resolveSlotGroup } from "@/lib/technique";
@@ -407,7 +408,7 @@ export function WorkSessionWorkspace({
         // 2026-10-22: 대시보드에서는 "생산량 조절" 공간이라는 뜻으로 ADJUST QUANTITY, 평소엔 접어둔 드롭다운.
         <details className="order-2 border border-border bg-card">
           <summary className="label-caps cursor-pointer px-3 py-2 text-xs">
-            ADJUST QUANTITY — SHEET / CREAM / FILLING
+            INDIVIDUAL SETTINGS / ADD COMPONENT
           </summary>
           <div className="p-3">
             <ul className="divide-y divide-border border border-border">
@@ -614,6 +615,7 @@ export function WorkSessionWorkspace({
               formulaOptions={orderedSelections.map((s) => ({
                 formulaVersionId: s.formulaVersionId,
                 formulaName: s.formulaName,
+                multiplier: s.multiplier,
               }))}
               ingredientsByVersion={ingredientsByVersion}
               taskIngredients={taskIngredients.data ?? {}}
@@ -1273,6 +1275,8 @@ function FormulaVersionRow({
       await queryClient.invalidateQueries({
         queryKey: ["work_session_multiplier_history", sessionId, row.id],
       });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
+      await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
     },
   });
 
@@ -1449,6 +1453,7 @@ type WeighingColumn = {
   sortOrder: number;
   /** 여러 세션을 한 표에 합칠 때(대시보드 DayWorkView) 이 열이 속한 세션 */
   sessionId?: string;
+  members?: { selectionId: string; sessionId: string }[];
 };
 
 const DEFAULT_MATRIX_COL_WIDTH = 150;
@@ -1663,7 +1668,9 @@ function WeighingView({
                     formulaName={col.formulaName}
                     multiplier={col.multiplier}
                     onResizeStart={(clientX) => startColumnResize(col.selectionId, clientX)}
-                    onEdit={() => onEditColumn(col)}
+                    onEdit={
+                      col.members && col.members.length > 1 ? undefined : () => onEditColumn(col)
+                    }
                   />
                 ))}
               </SortableContext>
@@ -1727,7 +1734,7 @@ function MatrixColumnHeader({
   formulaName: string;
   multiplier: number;
   onResizeStart: (clientX: number) => void;
-  onEdit: () => void;
+  onEdit: (() => void) | undefined;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -1764,6 +1771,8 @@ function MatrixColumnHeader({
           type="button"
           className="label-caps shrink-0 px-1 py-0.5 text-[10px] text-muted-foreground hover:border hover:border-border hover:text-foreground"
           onClick={onEdit}
+          disabled={!onEdit}
+          title={!onEdit ? "UNMERGE 후 개별 레시피를 수정하세요" : undefined}
         >
           EDIT
         </button>
@@ -1897,14 +1906,23 @@ function WeighingMatrixCell({
     mutationFn: async (patch: { status?: WorkSessionProgressStatus; note?: string | null }) => {
       const user_id = await currentUserId();
       const { error } = await supabase.from("work_session_progress").upsert(
-        {
+        (
+          cell.members ?? [
+            {
+              selectionId: cell.selectionId,
+              sessionId,
+              status: cell.progressStatus,
+              note: cell.note,
+            },
+          ]
+        ).map((member) => ({
           user_id,
-          work_session_id: sessionId,
-          work_session_formula_version_id: cell.selectionId,
+          work_session_id: member.sessionId,
+          work_session_formula_version_id: member.selectionId,
           formula_version_ingredient_id: cell.ingredientLineId,
-          status: patch.status ?? cell.progressStatus,
-          note: patch.note !== undefined ? patch.note : cell.note,
-        },
+          status: patch.status ?? member.status,
+          note: patch.note !== undefined ? patch.note : member.note,
+        })),
         { onConflict: "work_session_formula_version_id,formula_version_ingredient_id" },
       );
       if (error) throw error;
@@ -2778,7 +2796,13 @@ function StockReflectSection({
  * 대시보드용 합쳐진 WORK VIEW(2026-10-22) — 그날 타임라인에 배정된 컴포넌트를 오더(세션)와 상관없이
  * 한 계량표에 나란히 보여준다(예전 WORK SESSION 화면처럼). items는 타임라인 시간순.
  */
-export function DayWorkView({ items }: { items: { sessionId: string; rowId: string }[] }) {
+export function DayWorkView({
+  items,
+  labels = {},
+}: {
+  items: { sessionId: string; rowId: string }[];
+  labels?: Record<string, string>;
+}) {
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<"WEIGHING" | "FORMULA">("WEIGHING");
   const [editingColumn, setEditingColumn] = useState<WeighingColumn | null>(null);
@@ -2828,20 +2852,48 @@ export function DayWorkView({ items }: { items: { sessionId: string; rowId: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressQs.map((q) => q.dataUpdatedAt).join(",")]);
 
+  const [mergedVersions, setMergedVersions] = useState<Set<string>>(new Set());
+  const mergeStorageKey = `pilot:production-merge:${items
+    .map((i) => i.rowId)
+    .sort()
+    .join(":")}`;
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(mergeStorageKey) ?? "[]");
+      setMergedVersions(
+        new Set(
+          Array.isArray(stored) ? stored.filter((s): s is string => typeof s === "string") : [],
+        ),
+      );
+    } catch {
+      setMergedVersions(new Set());
+    }
+  }, [mergeStorageKey]);
+  const quantityGroups = useMemo(
+    () =>
+      groupProductionSelections(
+        ordered.map(({ row, sessionId }) => ({ ...row, sessionId })),
+        mergedVersions,
+      ),
+    [ordered, mergedVersions],
+  );
   const columns: WeighingColumn[] = useMemo(
     () =>
-      ordered.map(({ row: r, sessionId }, idx) => ({
-        selectionId: r.id,
-        formulaVersionId: r.formula_version_id,
-        formulaId: r.formula_versions.formulas.id,
-        formulaName:
-          r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name,
-        versionNumber: r.formula_versions.version_number,
-        multiplier: Number(r.multiplier),
-        sortOrder: idx,
-        sessionId,
-      })),
-    [ordered],
+      quantityGroups.map((group, idx) => {
+        const r = group.members[0]!;
+        return {
+          selectionId: r.id,
+          formulaVersionId: r.formula_version_id,
+          formulaId: r.formula_versions.formulas.id,
+          formulaName: `${r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name}${group.members.length > 1 ? ` · MERGED ${group.members.length}` : ""}`,
+          versionNumber: r.formula_versions.version_number,
+          multiplier: group.multiplier,
+          sortOrder: idx,
+          sessionId: r.sessionId,
+          members: group.members.map((m) => ({ selectionId: m.id, sessionId: m.sessionId })),
+        };
+      }),
+    [quantityGroups],
   );
   const groups = useMemo(
     () =>
@@ -2849,7 +2901,29 @@ export function DayWorkView({ items }: { items: { sessionId: string; rowId: stri
         selections: columns,
         ingredientsByVersion,
         progressBySelectionAndLine,
-      }),
+      }).map((group) => ({
+        ...group,
+        cells: group.cells.map((cell) => {
+          const col = columns.find((c) => c.selectionId === cell.selectionId)!;
+          const members = (col.members ?? []).map((m) => {
+            const progress =
+              progressBySelectionAndLine[`${m.selectionId}:${cell.ingredientLineId}`];
+            return {
+              ...m,
+              status: (progress?.status ?? "NOT_STARTED") as WorkSessionProgressStatus,
+              note: progress?.note ?? null,
+            };
+          });
+          const status = members.every((m) => m.status === "DONE")
+            ? "DONE"
+            : members.some((m) => m.status === "SHORTAGE")
+              ? "SHORTAGE"
+              : members.every((m) => m.status === "SKIPPED")
+                ? "SKIPPED"
+                : "NOT_STARTED";
+          return { ...cell, members, progressStatus: status as WorkSessionProgressStatus };
+        }),
+      })),
     [columns, ingredientsByVersion, progressBySelectionAndLine],
   );
 
@@ -2861,6 +2935,42 @@ export function DayWorkView({ items }: { items: { sessionId: string; rowId: stri
   if (ordered.length === 0) return null;
   return (
     <div className="border-t border-border pt-4">
+      <details open className="mb-4 border border-border bg-card">
+        <summary className="label-caps cursor-pointer px-3 py-2 text-xs">ADJUST QUANTITY</summary>
+        <p className="px-3 text-xs text-muted-foreground">
+          WORK VIEW와 같은 날짜·품목 기준입니다. MERGE는 같은 버전의 총량을 합치며, 수량 변경은 기존
+          주문별 비율로 배분됩니다.
+        </p>
+        <ul className="divide-y divide-border">
+          {quantityGroups.map((group) => (
+            <ProductionQuantityRow
+              key={group.key}
+              members={group.members}
+              labels={labels}
+              lines={ingredientsByVersion[group.members[0]!.formula_version_id] ?? []}
+              canMerge={
+                ordered.filter(
+                  (o) => o.row.formula_version_id === group.members[0]!.formula_version_id,
+                ).length > 1
+              }
+              onToggleMerge={() =>
+                setMergedVersions((prev) => {
+                  const next = new Set(prev);
+                  const id = group.members[0]!.formula_version_id;
+                  if (next.has(id)) next.delete(id);
+                  else next.add(id);
+                  try {
+                    localStorage.setItem(mergeStorageKey, JSON.stringify([...next]));
+                  } catch {
+                    /* View still works with storage disabled. */
+                  }
+                  return next;
+                })
+              }
+            />
+          ))}
+        </ul>
+      </details>
       <SectionCard
         title="WORK VIEW"
         action={
@@ -2892,7 +3002,7 @@ export function DayWorkView({ items }: { items: { sessionId: string; rowId: stri
           />
         ) : (
           <FormulaView
-            rows={ordered.map((o) => o.row)}
+            rows={quantityGroups.map((g) => ({ ...g.members[0]!, multiplier: g.multiplier }))}
             ingredientsByVersion={ingredientsByVersion}
           />
         )}
@@ -2914,5 +3024,169 @@ export function DayWorkView({ items }: { items: { sessionId: string; rowId: stri
         />
       )}
     </div>
+  );
+}
+
+/** Quantity controls and weighing columns share the exact same selection groups. */
+function ProductionQuantityRow({
+  members,
+  lines,
+  canMerge,
+  onToggleMerge,
+  labels,
+}: {
+  labels: Record<string, string>;
+  members: (WorkSessionFormulaVersionRow & { sessionId: string })[];
+  lines: VersionIngredientRow[];
+  canMerge: boolean;
+  onToggleMerge: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const first = members[0]!;
+  const total = members.reduce((n, m) => n + Number(m.multiplier), 0);
+  const base = sumBaseGrams(lines);
+  const [draft, setDraft] = useState(String(total));
+  const [grams, setGrams] = useState(String(base * total));
+  const [historyWarning, setHistoryWarning] = useState<string | null>(null);
+  useEffect(() => {
+    setDraft(String(total));
+    setGrams(String(base * total));
+  }, [total, base]);
+  const save = useMutation({
+    mutationFn: async (target: number) => {
+      const user_id = await currentUserId();
+      if (members.some((m) => m.user_id !== user_id))
+        throw new Error("선택한 작업에 접근할 수 없습니다.");
+      const plan = rescaleProductionSelections(members, target);
+      // Reject stale selections before submitting the grouped quantity update.
+      const { data: fresh, error: readError } = await supabase
+        .from("work_session_formula_versions")
+        .select("id, multiplier, updated_at")
+        .eq("user_id", user_id)
+        .in(
+          "id",
+          members.map((m) => m.id),
+        );
+      if (readError) throw readError;
+      if (
+        fresh?.length !== members.length ||
+        members.some((m) => !fresh.some((f) => f.id === m.id && f.updated_at === m.updated_at))
+      )
+        throw new Error("작업 수량이 변경되었습니다. 새로고침 후 다시 적용해 주세요.");
+      // A single statement makes the whole group update atomic. Omitted fields (IDs, order,
+      // slot, workflow links) are untouched; capacity quantities follow the allocation ratio.
+      const { error } = await supabase.from("work_session_formula_versions").upsert(
+        plan.map(({ row, multiplier }) => {
+          const ratio = multiplier / Number(row.multiplier);
+          return {
+            id: row.id,
+            user_id,
+            work_session_id: row.sessionId,
+            formula_version_id: row.formula_version_id,
+            multiplier,
+            mould_qty: row.mould_qty == null ? null : Number(row.mould_qty) * ratio,
+            base_weight_qty:
+              row.base_weight_qty == null ? null : Number(row.base_weight_qty) * ratio,
+            capacity_qty: row.capacity_qty == null ? null : Number(row.capacity_qty) * ratio,
+          };
+        }),
+        { onConflict: "id" },
+      );
+      if (error) throw error;
+      const { error: historyError } = await supabase.from("work_session_multiplier_history").insert(
+        plan.map(({ row, multiplier }) => ({
+          user_id,
+          work_session_id: row.sessionId,
+          formula_version_id: row.formula_version_id,
+          work_session_formula_version_id: row.id,
+          previous_multiplier: Number(row.multiplier),
+          applied_multiplier: multiplier,
+          resulting_working_quantity_snapshot: buildMultiplierSnapshot(lines, multiplier),
+        })),
+      );
+      setHistoryWarning(historyError ? "수량은 저장됐지만 변경 이력 저장에 실패했습니다." : null);
+    },
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["work_session_formula_versions"] }),
+        queryClient.invalidateQueries({ queryKey: ["work_session_multiplier_history"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard_components"] }),
+        queryClient.invalidateQueries({ queryKey: ["work_blocks"] }),
+      ]);
+    },
+  });
+  const apply = (value: number) => {
+    if (value !== total) save.mutate(value);
+  };
+  return (
+    <li className="space-y-2 p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm">
+          {first.formula_versions.formulas.components?.name ?? first.formula_versions.formulas.name}{" "}
+          · v{first.formula_versions.version_number}
+        </span>
+        <span className="font-mono text-xs">
+          {members.length > 1 ? `MERGED ${members.length}` : (first.slot ?? first.kind)}
+        </span>
+        <label className="flex items-center gap-1 text-xs">
+          배수 ×
+          <input
+            aria-label="생산 배수"
+            className={`${inputClass} !w-24`}
+            type="number"
+            step="any"
+            min="0.000001"
+            disabled={save.isPending}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => apply(Number(draft))}
+          />
+        </label>
+        {base > 0 && (
+          <label className="flex items-center gap-1 text-xs">
+            총량 g
+            <input
+              aria-label="생산 총량 g"
+              className={`${inputClass} !w-28`}
+              type="number"
+              step="any"
+              min="0.000001"
+              disabled={save.isPending}
+              value={grams}
+              onChange={(e) => setGrams(e.target.value)}
+              onBlur={() => apply(Number(grams) / base)}
+            />
+          </label>
+        )}
+        {canMerge && (
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={save.isPending}
+            onClick={onToggleMerge}
+          >
+            {members.length > 1 ? "UNMERGE" : "MERGE SAME FORMULA"}
+          </button>
+        )}
+      </div>
+      <p className="font-mono text-[10px] text-muted-foreground">
+        {members
+          .map(
+            (m) =>
+              `${labels[m.id] ?? `${m.slot ?? m.kind} · ${m.sessionId.slice(0, 8)}`} · ×${fmtNumber(Number(m.multiplier), 3)}`,
+          )
+          .join(" + ")}
+      </p>
+      {save.isError && (
+        <p role="alert" className="text-xs text-destructive">
+          {(save.error as Error).message}
+        </p>
+      )}
+      {historyWarning && (
+        <p role="alert" className="text-xs text-destructive">
+          {historyWarning}
+        </p>
+      )}
+    </li>
   );
 }

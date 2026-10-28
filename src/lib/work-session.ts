@@ -58,6 +58,12 @@ export function workingAmount(originalAmount: number, multiplier: number): numbe
 /* ── Weighing View grouping (Ingredient Master ID 기준) ─────────── */
 
 export interface WeighingCell {
+  members?: {
+    selectionId: string;
+    sessionId: string;
+    status: WorkSessionProgressStatus;
+    note: string | null;
+  }[];
   /** work_session_formula_versions.id — 열(컬럼)의 실제 식별자. 같은 FORMULA VERSION이 두 번
    * 이상 선택돼도(2026-10-07, 동일 포뮬라 중복 추가 허용) 각 선택마다 고유하다. */
   selectionId: string;

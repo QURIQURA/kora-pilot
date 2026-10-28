@@ -220,6 +220,9 @@ export function BlockTaskDetails({
     <div className="space-y-3 border border-border bg-card p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="label-caps text-xs">TASK DETAILS · {title}</p>
+        <p className="font-mono text-xs text-muted-foreground">
+          목표 배수 ×{Number(row.multiplier.toFixed(3))} · ADJUST QUANTITY 연동
+        </p>
         <div className="flex items-center gap-2">
           <span className="label-caps text-[11px] text-muted-foreground">TEMPLATE</span>
           <select

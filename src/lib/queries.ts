@@ -1089,6 +1089,8 @@ export const dailyTasksQuery = () =>
 /** 대시보드가 다루는 "오더의 컴포넌트" 한 줄 — 오더에 연결된 WORK SESSION의 CORE 행. */
 export interface DashboardComponentRow {
   id: string; // work_session_formula_versions.id
+  multiplier: number;
+  formulaVersionId: string;
   slot: string | null;
   work_session_id: string;
   planner_task_id: string | null;
@@ -1119,12 +1121,14 @@ export const dashboardComponentsQuery = () =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, products(name), customers(name)))",
+            "id, multiplier, formula_version_id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, products(name), customers(name)))",
           )
           .eq("kind", "CORE")
           .order("sort_order", { ascending: true }),
       ) as unknown as {
         id: string;
+        multiplier: number;
+        formula_version_id: string;
         slot: string | null;
         work_session_id: string;
         planner_task_id: string | null;
@@ -1163,6 +1167,8 @@ export const dashboardComponentsQuery = () =>
         const formula = r.formula_versions?.formulas ?? null;
         rows.push({
           id: r.id,
+          multiplier: Number(r.multiplier),
+          formulaVersionId: r.formula_version_id,
           slot: r.slot,
           work_session_id: r.work_session_id,
           planner_task_id: r.planner_task_id,

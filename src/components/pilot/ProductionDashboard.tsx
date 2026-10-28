@@ -1474,7 +1474,13 @@ export function ProductionDashboard() {
       {/* ── 그날 작업의 WORK VIEW(계량) 등 — 블록이 속한 세션별로 ── */}
       {workspaceSessions.length > 0 ? (
         <>
-          <DayWorkView items={dayWorkItems} />
+          <DayWorkView
+            key={date}
+            items={dayWorkItems}
+            labels={Object.fromEntries(
+              rows.map((r) => [r.id, `${r.order.order_number} · ${r.slot ?? ""}`]),
+            )}
+          />
           {workspaceSessions.map(({ sid, rowIds }) => (
             <div key={sid} className="space-y-3 border-t border-border pt-4">
               <WorkSessionWorkspace sessionId={sid} rowIds={rowIds} embedded />
