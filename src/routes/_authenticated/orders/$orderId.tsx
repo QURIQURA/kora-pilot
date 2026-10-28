@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { shouldHydrateDraftField } from "@/lib/production-sync";
 import { supabase } from "@/integrations/supabase/client";
 import {
   orderQuery,
@@ -12,6 +13,7 @@ import {
   orderDietaryTagLinksQuery,
   pilotSettingsQuery,
   workSessionByOrderQuery,
+  workSessionFormulaVersionsQuery,
   formulasQuery,
   mouldsQuery,
   cakeSizesQuery,
@@ -146,6 +148,9 @@ function OrderDetailPage() {
   const order = useQuery(orderQuery(orderId));
   const pilotSettings = useQuery(pilotSettingsQuery());
   const workSession = useQuery(workSessionByOrderQuery(orderId));
+  const productionSelections = useQuery(
+    workSessionFormulaVersionsQuery(workSession.data?.id ?? ""),
+  );
   // 2026-10-22: 모든 오더는 WORK SESSION을 기본으로 가진다 — 아직 없으면(예전 오더) 여기서 자동으로 만든다.
   useEffect(() => {
     if (!order.data || workSession.isLoading || workSession.data) return;
@@ -372,45 +377,76 @@ function OrderDetailPage() {
 
   const [savedSnapshot, setSavedSnapshot] = useState("");
 
+  const hydrationRef = useRef({ previous: "", draft: "" });
   const hydrateFromOrder = (o: OrderListRow) => {
-    setOrderNumber(o.order_number ?? "");
-    setCustomerId(o.customer_id ?? "");
-    setRecipient(o.recipient ?? "");
-    setRecipientRelationship(o.recipient_relationship ?? "");
-    setRecipientRelationshipOtherNote(o.recipient_relationship_other_note ?? "");
-    setOccasion(o.occasion ?? "");
-    setOccasionOtherNote(o.occasion_other_note ?? "");
-    setOccasionCategory(
-      o.occasion ? ORDER_OCCASION_CATEGORY_MAP[o.occasion] : ORDER_OCCASION_CATEGORIES[0],
+    const previous: Record<string, unknown> = JSON.parse(hydrationRef.current.previous || "{}");
+    const local: Record<string, unknown> = JSON.parse(hydrationRef.current.draft || "{}");
+    const assign = <T,>(key: string, setter: (value: T) => void, value: T) => {
+      if (!hydrationRef.current.previous || shouldHydrateDraftField(previous[key], local[key]))
+        setter(value);
+    };
+    assign("orderNumber", setOrderNumber, o.order_number ?? "");
+    assign("customerId", setCustomerId, o.customer_id ?? "");
+    assign("recipient", setRecipient, o.recipient ?? "");
+    assign("recipientRelationship", setRecipientRelationship, o.recipient_relationship ?? "");
+    assign(
+      "recipientRelationshipOtherNote",
+      setRecipientRelationshipOtherNote,
+      o.recipient_relationship_other_note ?? "",
     );
-    setProductLine((o.product_line as OrderProductLineKey | null) ?? "");
-    setEventDate(o.event_date ?? "");
-    setPickupAt(isoToDatetimeLocal(o.pickup_at));
-    setCakeSize(o.cake_size ?? "");
-    setCustomSize(o.custom_size ?? "");
-    setCustomSizeCm(o.custom_size_cm != null ? String(o.custom_size_cm) : "");
-    setServings(o.servings != null ? String(o.servings) : "");
-    setPrice(o.price != null ? String(o.price) : "");
-    setPaymentStatus(o.payment_status ?? "");
-    setStatus((o.status as OrderStatus) ?? "INTAKE");
-    setProductId(o.product_id ?? "");
-    setCakeSizeId(o.cake_size_id ?? "");
-    setProductSizeId(o.product_size_id ?? "");
-    setSheetMouldId(o.sheet_mould_id ?? "");
-    setFlavoringSheetFormulaId(o.flavoring_sheet_formula_id ?? "");
-    setFlavoringCreamFormulaId(o.flavoring_cream_formula_id ?? "");
-    setFlavoringFillingFormulaId(o.flavoring_filling_formula_id ?? "");
-    setDesignNote(o.design_notes ?? "");
-    setOrderNote(o.notes ?? "");
-    setDietaryRequirements(o.dietary_requirements ?? "");
-    setLeastLikedFlavours(o.least_liked_flavours ?? "");
-    setDietaryBuildId(o.dietary_build_id ?? "");
-    setAudience(o.audience ?? "");
-    setDeliveryAddress(o.delivery_address ?? "");
-    setMakerSatisfaction(o.maker_satisfaction ?? "");
-    setCustomerSatisfaction(o.customer_satisfaction ?? "");
-    setCustomerFeedback(o.customer_feedback ?? "");
-    setMakerNotes(o.maker_notes ?? "");
+    assign("occasion", setOccasion, o.occasion ?? "");
+    assign("occasionOtherNote", setOccasionOtherNote, o.occasion_other_note ?? "");
+    if (
+      !hydrationRef.current.previous ||
+      shouldHydrateDraftField(previous["occasion"], local["occasion"])
+    )
+      setOccasionCategory(
+        o.occasion ? ORDER_OCCASION_CATEGORY_MAP[o.occasion] : ORDER_OCCASION_CATEGORIES[0],
+      );
+    assign("productLine", setProductLine, (o.product_line as OrderProductLineKey | null) ?? "");
+    assign("eventDate", setEventDate, o.event_date ?? "");
+    assign("pickupAt", setPickupAt, isoToDatetimeLocal(o.pickup_at));
+    assign("cakeSize", setCakeSize, o.cake_size ?? "");
+    assign("customSize", setCustomSize, o.custom_size ?? "");
+    assign(
+      "customSizeCm",
+      setCustomSizeCm,
+      o.custom_size_cm != null ? String(o.custom_size_cm) : "",
+    );
+    assign("servings", setServings, o.servings != null ? String(o.servings) : "");
+    assign("price", setPrice, o.price != null ? String(o.price) : "");
+    assign("paymentStatus", setPaymentStatus, o.payment_status ?? "");
+    assign("status", setStatus, (o.status as OrderStatus) ?? "INTAKE");
+    assign("productId", setProductId, o.product_id ?? "");
+    assign("cakeSizeId", setCakeSizeId, o.cake_size_id ?? "");
+    assign("productSizeId", setProductSizeId, o.product_size_id ?? "");
+    assign("sheetMouldId", setSheetMouldId, o.sheet_mould_id ?? "");
+    assign(
+      "flavoringSheetFormulaId",
+      setFlavoringSheetFormulaId,
+      o.flavoring_sheet_formula_id ?? "",
+    );
+    assign(
+      "flavoringCreamFormulaId",
+      setFlavoringCreamFormulaId,
+      o.flavoring_cream_formula_id ?? "",
+    );
+    assign(
+      "flavoringFillingFormulaId",
+      setFlavoringFillingFormulaId,
+      o.flavoring_filling_formula_id ?? "",
+    );
+    assign("designNote", setDesignNote, o.design_notes ?? "");
+    assign("orderNote", setOrderNote, o.notes ?? "");
+    assign("dietaryRequirements", setDietaryRequirements, o.dietary_requirements ?? "");
+    assign("leastLikedFlavours", setLeastLikedFlavours, o.least_liked_flavours ?? "");
+    assign("dietaryBuildId", setDietaryBuildId, o.dietary_build_id ?? "");
+    assign("audience", setAudience, o.audience ?? "");
+    assign("deliveryAddress", setDeliveryAddress, o.delivery_address ?? "");
+    assign("makerSatisfaction", setMakerSatisfaction, o.maker_satisfaction ?? "");
+    assign("customerSatisfaction", setCustomerSatisfaction, o.customer_satisfaction ?? "");
+    assign("customerFeedback", setCustomerFeedback, o.customer_feedback ?? "");
+    assign("makerNotes", setMakerNotes, o.maker_notes ?? "");
   };
 
   useEffect(() => {
@@ -459,11 +495,14 @@ function OrderDetailPage() {
     customerFeedback,
     makerNotes,
   });
+  hydrationRef.current = { previous: savedSnapshot, draft: currentSnapshot };
   const isDirty = Boolean(order.data) && (currentSnapshot !== savedSnapshot || dietaryTagsDirty);
 
   const save = useMutation({
     mutationFn: async () => {
       const previous = order.data;
+      if (!previous) throw new Error("ORDER NOT FOUND");
+      const userId = await currentUserId();
       const changedSize =
         productId !== (previous?.product_id ?? "") ||
         productSizeId !== (previous?.product_size_id ?? "") ||
@@ -515,8 +554,15 @@ function OrderDetailPage() {
           customer_feedback: customerFeedback.trim() || null,
           maker_notes: makerNotes.trim() || null,
         })
-        .eq("id", orderId);
-      if (error) throw error;
+        .eq("id", orderId)
+        .eq("user_id", userId)
+        .eq("updated_at", previous.updated_at)
+        .select("id")
+        .single();
+      if (error)
+        throw new Error(
+          `저장되지 않았습니다. 다른 화면의 최신 변경을 확인한 뒤 다시 저장해 주세요. (${error.message})`,
+        );
 
       // DIETARY 태그 연결: 서버 값과 비교해 빠진 것만 지우고 새로 고른 것만 추가한다.
       if (dietaryTagIds !== null) {
@@ -1080,9 +1126,8 @@ function OrderDetailPage() {
             <div className="mt-3">
               <Field label="FLAVORING FORMULAS">
                 {/* 2026-10-06 사용자 재확인: 자유 텍스트만으론 부족 — Sheet/Cream/Filling 각각 실제
-                FORMULA까지 링크할 수 있어야 한다. FORMULA VERSION은 아직 안 정함 — WORK SESSION
-                생성 시 pickEffectiveFormulaVersion으로 시작값만 자동 채우고, 그 뒤엔 WORK SESSION
-                쪽에서 바꾼다. */}
+                FORMULA까지 링크하고 Order와 Production에서 같은 CORE 선택을 갱신한다.
+                실제 버전과 배수는 아래 Production 선택 목록을 함께 표시한다. */}
                 <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
                   {(
                     [
@@ -1090,26 +1135,49 @@ function OrderDetailPage() {
                       ["CREAM", flavoringCreamFormulaId, setFlavoringCreamFormulaId],
                       ["FILLING", flavoringFillingFormulaId, setFlavoringFillingFormulaId],
                     ] as const
-                  ).map(([slot, value, setValue]) => (
-                    <label key={slot} className="flex flex-col gap-1">
-                      <span className="label-caps text-[10px] text-muted-foreground">
-                        {CORE_SLOT_LABELS[slot]}
-                      </span>
-                      <select
-                        className={selectClass}
-                        value={value}
-                        onChange={(e) => setValue(e.target.value)}
-                      >
-                        <option value="">— NO FORMULA LINKED —</option>
-                        {formulasForSlot(slot, value).map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.components?.name ?? f.name}
+                  ).map(([slot, value, setValue]) => {
+                    const actual = (productionSelections.data ?? []).filter(
+                      (r) => r.kind === "CORE" && r.slot === slot,
+                    );
+                    const multiple =
+                      new Set(actual.map((r) => r.formula_versions.formulas.id)).size > 1;
+                    return (
+                      <label key={slot} className="flex flex-col gap-1">
+                        <span className="label-caps text-[10px] text-muted-foreground">
+                          {CORE_SLOT_LABELS[slot]}
+                        </span>
+                        <select
+                          className={selectClass}
+                          value={value}
+                          disabled={multiple}
+                          onChange={(e) => setValue(e.target.value)}
+                        >
+                          <option value="">
+                            {multiple
+                              ? "여러 Formula — Production에서 개별 편집"
+                              : "— NO FORMULA LINKED —"}
                           </option>
+                          {formulasForSlot(slot, value).map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.components?.name ?? f.name}
+                            </option>
+                          ))}
+                        </select>
+                        {actual.map((r) => (
+                          <span key={r.id} className="font-mono text-[10px] text-muted-foreground">
+                            Production: {r.formula_versions.formulas.name} · V
+                            {r.formula_versions.version_number} · ×
+                            {Number(Number(r.multiplier).toFixed(4))}
+                          </span>
                         ))}
-                      </select>
-                    </label>
-                  ))}
+                      </label>
+                    );
+                  })}
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  저장하면 Order ↔ Production에 함께 반영됩니다. 생산량은 Production의 ADJUST
+                  QUANTITY에서 조절하세요.
+                </p>
                 {(() => {
                   const productBuilds = (dietaryBuilds.data ?? []).filter(
                     (b) => !productId || b.product_id === productId,

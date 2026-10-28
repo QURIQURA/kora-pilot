@@ -1301,6 +1301,7 @@ export interface WorkSessionFormulaVersionRow extends WorkSessionFormulaVersion 
 export const workSessionFormulaVersionsQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ["work_session_formula_versions", sessionId],
+    enabled: Boolean(sessionId),
     queryFn: async (): Promise<WorkSessionFormulaVersionRow[]> =>
       unwrap(
         await supabase
@@ -1352,17 +1353,27 @@ export const workSessionTaskIngredientsQuery = (sessionId: string) =>
         await supabase
           .from("work_session_task_ingredients")
           .select(
-            "task_id, formula_version_ingredient_id, formula_version_ingredients(sort_order, ingredients(name))",
+            "task_id, formula_version_ingredient_id, formula_version_ingredients(formula_version_id, sort_order, ingredients(name)), work_session_tasks!inner(formula_version_id)",
           )
           .eq("work_session_id", sessionId)
           .order("sort_order", { referencedTable: "formula_version_ingredients" }),
       ) as unknown as {
         task_id: string;
         formula_version_ingredient_id: string;
-        formula_version_ingredients: { ingredients: { name: string } | null } | null;
+        formula_version_ingredients: {
+          formula_version_id: string;
+          ingredients: { name: string } | null;
+        } | null;
+        work_session_tasks: { formula_version_id: string | null };
       }[];
       const map: Record<string, { lineId: string; name: string }[]> = {};
       for (const row of rows) {
+        // Historical ingredient links remain stored, but may not describe a newly selected recipe.
+        if (
+          row.formula_version_ingredients?.formula_version_id !==
+          row.work_session_tasks.formula_version_id
+        )
+          continue;
         const name = row.formula_version_ingredients?.ingredients?.name ?? "—";
         (map[row.task_id] ??= []).push({ lineId: row.formula_version_ingredient_id, name });
       }

@@ -27,7 +27,6 @@ import {
   productsQuery,
   productSizesQuery,
   cakeSizesQuery,
-  productComponentsQuery,
   techniqueCategoriesQuery,
   versionIngredientsBulkQuery,
   versionIngredientsQuery,
@@ -45,13 +44,10 @@ import {
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
 import { groupProductionSelections, rescaleProductionSelections } from "@/lib/production-quantity";
-import { resolveProductUsage } from "@/lib/product-usage";
 import { selectionIssue } from "@/lib/size-configuration";
 import { resolveSlotGroup } from "@/lib/technique";
 import { fmtNumber, toGrams, versionLabel, UNITS, type Mould } from "@/lib/formula";
 import { formatProductSizeLabel } from "@/lib/product-size";
-import { mouldBatchMultiplier } from "@/lib/formula-calc";
-import { MouldSelect } from "@/components/pilot/MouldSelect";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
 import { formatDateTime } from "@/lib/datetime";
 import {
@@ -61,7 +57,6 @@ import {
   PROGRESS_STATUS_LABEL,
   workingAmount,
   sumBaseGrams,
-  suggestedMultiplierFromTarget,
   syncWorkSessionToPlanner,
   type WorkSessionProgressStatus,
 } from "@/lib/work-session";
@@ -408,7 +403,7 @@ export function WorkSessionWorkspace({
         // 2026-10-22: 대시보드에서는 "생산량 조절" 공간이라는 뜻으로 ADJUST QUANTITY, 평소엔 접어둔 드롭다운.
         <details className="order-2 border border-border bg-card">
           <summary className="label-caps cursor-pointer px-3 py-2 text-xs">
-            INDIVIDUAL SETTINGS / ADD COMPONENT
+            COMPONENTS / HISTORY / ADD
           </summary>
           <div className="p-3">
             <ul className="divide-y divide-border border border-border">
@@ -427,6 +422,7 @@ export function WorkSessionWorkspace({
                           <FormulaVersionRow
                             key={row.id}
                             row={row}
+                            readOnlyQuantity={embedded}
                             sessionId={sessionId}
                             lines={ingredientsByVersion[row.formula_version_id] ?? []}
                             onRemove={() => removeFormulaVersion.mutate(row)}
@@ -483,6 +479,7 @@ export function WorkSessionWorkspace({
                           <FormulaVersionRow
                             key={row.id}
                             row={row}
+                            readOnlyQuantity={embedded}
                             sessionId={sessionId}
                             lines={ingredientsByVersion[row.formula_version_id] ?? []}
                             onRemove={() => removeFormulaVersion.mutate(row)}
@@ -886,80 +883,14 @@ export function AddFormulaVersionForm({
     const catId = f.components?.technique_category_id ?? f.technique_category_id ?? null;
     return resolveSlotGroup(techniqueCategories.data ?? [], catId) === slot;
   });
-  const moulds = useQuery(mouldsQuery());
   const [formulaId, setFormulaId] = useState("");
   const [versionId, setVersionId] = useState("");
-  // 2026-09-30: 몰드+개수 기준 자동 배수 계산을 되살렸다(FORMULA 페이지의 mouldBatchMultiplier()와
-  // 동일 로직) — "6인치 3개"처럼 실제 만들 몰드/개수를 입력하면 배수가 자동 계산된다. 같은 몰드면
-  // 개수 그대로가 배수, 다른 몰드면 기준중량 비율로 환산(기준중량 미등록이면 개수를 그대로 쓰고
-  // ⚠ 표시). BASE_WEIGHT 방식 Component는 몰드 개념이 없어 기존처럼 배수 직접입력만 가능하다.
-  const [mouldId, setMouldId] = useState("");
-  const [mouldCount, setMouldCount] = useState("1");
-  const [manualMultiplier, setManualMultiplier] = useState("1");
-  const [targetGrams, setTargetGrams] = useState("");
-  const [useManual, setUseManual] = useState(false);
-
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
   const versionOptions = [...(formula?.formula_versions ?? [])].sort(
     (a, b) => b.version_number - a.version_number,
   );
   const selectedVersion = versionOptions.find((v) => v.id === versionId) ?? null;
-
-  // 2026-10-12 사용자 요청: PRODUCT SIZE가 연결돼 있으면 그 사이즈의 product_components.quantity_g
-  // (COMPONENT별 목표중량)를 읽어와서 배수를 자동으로 미리 채운다.
-  const productComponents = useQuery({
-    ...productComponentsQuery(productId ?? ""),
-    enabled: Boolean(productId && productSizeId),
-  });
-  const session = useQuery(workSessionQuery(sessionId));
-  const batchCount = session.data?.target_unit_count;
-  const targetRows = resolveProductUsage(productComponents.data ?? [], productSizeId).filter(
-    (row) =>
-      row.component_id === formula?.components?.id &&
-      row.formula_version_id === selectedVersion?.id,
-  );
-  const sizeTargetGrams =
-    targetRows.length &&
-    targetRows.every((r) => r.quantity_g != null) &&
-    batchCount != null &&
-    batchCount > 0
-      ? targetRows.reduce((sum, r) => sum + Number(r.quantity_g), 0) * batchCount
-      : null;
-  const versionIngredients = useQuery({
-    ...versionIngredientsBulkQuery(selectedVersion ? [selectedVersion.id] : []),
-    enabled: Boolean(selectedVersion),
-  });
-  const baseTotalGrams = selectedVersion
-    ? sumBaseGrams(versionIngredients.data?.[selectedVersion.id] ?? [])
-    : 0;
-
-  useEffect(() => {
-    setMouldId(selectedVersion?.default_mould_id ?? "");
-    setUseManual(false);
-    setManualMultiplier("1");
-    setTargetGrams("");
-    // PRODUCT SIZE 목표중량을 알 수 있으면 몰드 개수 대신 그 중량 기준 배수를 기본값으로 채운다
-    // — 사용자가 매번 몰드개수/배수를 직접 입력하지 않아도 되게.
-    if (sizeTargetGrams != null && baseTotalGrams > 0) {
-      const suggested = suggestedMultiplierFromTarget(sizeTargetGrams, 1, baseTotalGrams);
-      if (suggested != null) {
-        setUseManual(true);
-        setManualMultiplier(String(Number(suggested.toFixed(6))));
-        setTargetGrams(fmtNumber(sizeTargetGrams, 0));
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedVersion?.id, sizeTargetGrams, baseTotalGrams]);
-
   const scalingMode = formula?.components?.scaling_mode ?? null;
-  const usingMould = scalingMode === "MOULD" && !useManual;
-  const baseMould = moulds.data?.find((m) => m.id === selectedVersion?.default_mould_id) ?? null;
-  const targetMould = moulds.data?.find((m) => m.id === mouldId) ?? null;
-  const { multiplier: computedMultiplier, mismatch } = mouldBatchMultiplier(
-    Number(mouldCount) || 1,
-    targetMould,
-    baseMould,
-  );
 
   const add = useMutation({
     mutationFn: async () => {
@@ -967,27 +898,16 @@ export function AddFormulaVersionForm({
       // 2026-10-07 사용자 요청: 같은 FORMULA VERSION도 이 WORK SESSION에 중복으로 추가할 수
       // 있다(예: 같은 레시피를 다른 몰드/배치로 각각) — 더 이상 막지 않는다.
       const user_id = await currentUserId();
-      const finalMultiplier = usingMould ? computedMultiplier : Number(manualMultiplier);
-      if (!Number.isFinite(finalMultiplier) || finalMultiplier <= 0)
-        throw new Error("배수는 0보다 큰 수로 입력하세요.");
       const { error } = await supabase.from("work_session_formula_versions").insert({
         user_id,
         work_session_id: sessionId,
         formula_version_id: versionId,
-        multiplier: finalMultiplier,
-        // 2026-10-27 사용자 요청("몰드·용량 시스템 통합 개선안" 3단계 선반영): PRODUCT SIZE
-        // 기반으로 배수를 자동 계산(useManual=true)하는 경로여도 scaling_mode가 MOULD인
-        // Component라면 몰드 정체성(mould_id)은 계속 채워 넣는다. 예전에는 usingMould가 false가
-        // 되는 순간 mould_id/mould_qty를 통째로 null로 지웠는데, 그러면 사이즈 기준으로 만든
-        // 행은 어떤 몰드를 썼는지 화면에서 보이지 않고 SETTINGS 몰드 사용 현황에서도 빠졌다.
-        mould_id: scalingMode === "MOULD" ? mouldId || null : null,
-        mould_qty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
-        base_weight_id: null,
-        base_weight_qty: null,
-        // 2026-10-19 "테이블 통합" 1단계: moulds/base_weight_presets를 capacities로 통합한
-        // 신규 참조 컬럼도 함께 채운다(전환 기간 dual-write — 기존 mould_id 등은 그대로 유지).
-        capacity_id: scalingMode === "MOULD" ? mouldId || null : null,
-        capacity_qty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
+        // New selections start at one recipe batch. Only ADJUST QUANTITY changes the multiplier.
+        multiplier: 1,
+        mould_id: scalingMode === "MOULD" ? (selectedVersion?.default_mould_id ?? null) : null,
+        mould_qty: null,
+        capacity_id: scalingMode === "MOULD" ? (selectedVersion?.default_mould_id ?? null) : null,
+        capacity_qty: null,
         sort_order: nextSort,
         kind,
         slot,
@@ -1063,96 +983,9 @@ export function AddFormulaVersionForm({
           </select>
         </Field>
       </div>
-      <Field label={usingMould ? "몰드 + 개수" : "배수 ×N"}>
-        {usingMould ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <MouldSelect
-              className={`${selectClass} !w-40`}
-              value={mouldId}
-              onChange={setMouldId}
-              emptyLabel="몰드 미지정"
-            />
-            <span className="label-caps text-xs text-muted-foreground">×</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              step="1"
-              min="1"
-              className={`${inputClass} !w-20 text-center`}
-              value={mouldCount}
-              onChange={(e) => setMouldCount(e.target.value)}
-            />
-            <span className="font-mono text-xs text-muted-foreground">
-              = ×{fmtNumber(computedMultiplier, Number.isInteger(computedMultiplier) ? 0 : 2)}
-            </span>
-            {mismatch && (
-              <span className="label-caps text-xs text-destructive">⚠ 기준중량 없음</span>
-            )}
-            {scalingMode === "MOULD" && (
-              <button
-                type="button"
-                className="label-caps text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setUseManual(true)}
-              >
-                배수 직접입력으로
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="any"
-              min="0.001"
-              className={`${inputClass} !w-24`}
-              value={manualMultiplier}
-              onChange={(e) => {
-                setManualMultiplier(e.target.value);
-                const next = Number(e.target.value);
-                if (baseTotalGrams > 0 && Number.isFinite(next) && next > 0) {
-                  setTargetGrams(fmtNumber(baseTotalGrams * next, 0));
-                }
-              }}
-            />
-            {baseTotalGrams > 0 && (
-              <label className="flex items-center gap-2">
-                <span className="label-caps text-xs text-muted-foreground">또는 총 중량(g)</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  step="1"
-                  min="0"
-                  className={`${inputClass} !w-24 text-center`}
-                  value={targetGrams}
-                  onChange={(e) => {
-                    setTargetGrams(e.target.value);
-                    const grams = Number(e.target.value);
-                    if (!Number.isFinite(grams) || grams <= 0) return;
-                    const next = suggestedMultiplierFromTarget(grams, 1, baseTotalGrams);
-                    if (next != null) setManualMultiplier(String(Number(next.toFixed(6))));
-                  }}
-                />
-              </label>
-            )}
-            {sizeTargetGrams != null && (
-              <span className="font-mono text-[11px] text-muted-foreground">
-                제품 목표 × {batchCount}개: {fmtNumber(sizeTargetGrams, 0)}g (레시피 투입량 기준
-                제안)
-              </span>
-            )}
-            {scalingMode === "MOULD" && (
-              <button
-                type="button"
-                className="label-caps text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setUseManual(false)}
-              >
-                몰드 기준으로
-              </button>
-            )}
-          </div>
-        )}
-      </Field>
+      <p className="text-xs text-muted-foreground">
+        기본 배합 ×1로 추가합니다. 생산 배수는 ADJUST QUANTITY 한 곳에서 조절하세요.
+      </p>
       {add.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
           {(add.error as Error).message}
@@ -1175,264 +1008,65 @@ function FormulaVersionRow({
   sessionId,
   lines,
   onRemove,
+  readOnlyQuantity = false,
 }: {
   row: WorkSessionFormulaVersionRow;
   sessionId: string;
   lines: VersionIngredientRow[];
   onRemove: () => void;
+  readOnlyQuantity?: boolean;
 }) {
-  const queryClient = useQueryClient();
   const [showHistory, setShowHistory] = useState(false);
   const history = useQuery({
     ...workSessionMultiplierHistoryQuery(sessionId, row.id),
     enabled: showHistory,
   });
-  const moulds = useQuery(mouldsQuery());
-
   const formula = row.formula_versions.formulas;
-  const scalingMode = formula.components?.scaling_mode ?? null;
-
-  // 2026-09-30: 몰드+개수 기준 자동 배수 계산 복원(FORMULA 페이지와 동일 mouldBatchMultiplier()).
-  // 예전(2026-09-24)에 저장된 행은 mould_id/mould_qty가 null일 수 있어, 이 경우 기본 몰드 +
-  // 기존 배수를 그대로 개수로 간주해 자연스럽게 이어받는다.
-  const [mouldId, setMouldId] = useState(
-    row.mould_id ?? row.formula_versions.default_mould_id ?? "",
-  );
-  const [mouldCount, setMouldCount] = useState(
-    row.mould_qty != null ? String(row.mould_qty) : String(Number(row.multiplier)),
-  );
-  const [manualMultiplier, setManualMultiplier] = useState(String(Number(row.multiplier)));
-  const [useManual, setUseManual] = useState(scalingMode !== "MOULD");
-  // 2026-10-12 사용자 요청: "배수 직접입력" 대신 원하는 총 반죽량(g)을 입력하면 역산해서
-  // 배수를 자동 적용 — 배수 = 목표 총g ÷ BASE(×1) 총g. 배수 입력칸과 서로 양방향으로
-  // 동기화(한쪽을 바꾸면 다른 쪽도 같이 갱신)된다.
-  const baseTotalGrams = sumBaseGrams(lines);
-  const [targetGrams, setTargetGrams] = useState(
-    baseTotalGrams > 0 ? fmtNumber(baseTotalGrams * Number(row.multiplier), 0) : "",
-  );
-  useEffect(() => {
-    setMouldId(row.mould_id ?? row.formula_versions.default_mould_id ?? "");
-    setMouldCount(row.mould_qty != null ? String(row.mould_qty) : String(Number(row.multiplier)));
-    setManualMultiplier(String(Number(row.multiplier)));
-    setTargetGrams(baseTotalGrams > 0 ? fmtNumber(baseTotalGrams * Number(row.multiplier), 0) : "");
-  }, [row.id, row.multiplier, row.mould_id, row.mould_qty, baseTotalGrams]);
-
-  const usingMould = scalingMode === "MOULD" && !useManual;
-  const baseMould =
-    moulds.data?.find((m) => m.id === row.formula_versions.default_mould_id) ?? null;
-  const targetMould = moulds.data?.find((m) => m.id === mouldId) ?? null;
-  const { multiplier: computedMultiplier, mismatch } = mouldBatchMultiplier(
-    Number(mouldCount) || 1,
-    targetMould,
-    baseMould,
-  );
-
-  const applyBatch = useMutation({
-    mutationFn: async (next: {
-      multiplier: number;
-      mouldId: string | null;
-      mouldQty: number | null;
-    }) => {
-      const previous = Number(row.multiplier);
-      if (
-        next.multiplier === previous &&
-        next.mouldId === (row.mould_id ?? null) &&
-        next.mouldQty === (row.mould_qty ?? null)
-      )
-        return;
-      const user_id = await currentUserId();
-      const snapshot = buildMultiplierSnapshot(lines, next.multiplier);
-      const { error: historyError } = await supabase
-        .from("work_session_multiplier_history")
-        .insert({
-          user_id,
-          work_session_id: sessionId,
-          formula_version_id: row.formula_version_id,
-          // 2026-10-07: 같은 FORMULA VERSION 중복 추가 시 히스토리가 섞이지 않도록 선택 단위로도 남긴다.
-          work_session_formula_version_id: row.id,
-          previous_multiplier: previous,
-          applied_multiplier: next.multiplier,
-          resulting_working_quantity_snapshot: snapshot,
-        });
-      if (historyError) throw historyError;
-      const { error: updateError } = await supabase
-        .from("work_session_formula_versions")
-        .update({
-          multiplier: next.multiplier,
-          mould_id: next.mouldId,
-          mould_qty: next.mouldQty,
-          // 2026-10-19 "테이블 통합" 1단계: 통합 capacity_id/capacity_qty도 함께 갱신(dual-write).
-          capacity_id: next.mouldId,
-          capacity_qty: next.mouldQty,
-        })
-        .eq("id", row.id);
-      if (updateError) throw updateError;
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["work_session_formula_versions", sessionId],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["work_session_multiplier_history", sessionId, row.id],
-      });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
-      await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
-    },
-  });
-
+  const base = sumBaseGrams(lines);
   return (
     <li className="space-y-2 px-3 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {readOnlyQuantity ? (
         <div>
-          <p className="text-sm">{formula.components?.name ?? formula.name}</p>
+          <p className="text-sm">
+            {formula.components?.name ?? formula.name} · V{row.formula_versions.version_number}
+          </p>
           <p className="font-mono text-xs text-muted-foreground">
-            {versionLabel(row.formula_versions.version_number)} · {row.formula_versions.status}
+            {fmtNumber(base, 1)}g × {fmtNumber(Number(row.multiplier), 4)} ={" "}
+            {fmtNumber(base * Number(row.multiplier), 1)}g — ADJUST QUANTITY에서 조절
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {usingMould ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <MouldSelect
-                className={`${selectClass} !w-36`}
-                value={mouldId}
-                onChange={(id) => {
-                  setMouldId(id);
-                  const count = Number(mouldCount) || 1;
-                  const target = moulds.data?.find((m) => m.id === id) ?? null;
-                  const { multiplier } = mouldBatchMultiplier(count, target, baseMould);
-                  applyBatch.mutate({ multiplier, mouldId: id || null, mouldQty: count });
-                }}
-                emptyLabel="몰드 미지정"
-              />
-              <span className="label-caps text-xs text-muted-foreground">×</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                step="1"
-                min="1"
-                className={`${inputClass} !w-16 text-center`}
-                value={mouldCount}
-                onChange={(e) => setMouldCount(e.target.value)}
-                onBlur={(e) => {
-                  const count = Number(e.target.value) || 1;
-                  applyBatch.mutate({
-                    multiplier: computedMultiplier,
-                    mouldId: mouldId || null,
-                    mouldQty: count,
-                  });
-                }}
-              />
-              <span className="font-mono text-xs text-muted-foreground">
-                = ×{fmtNumber(computedMultiplier, Number.isInteger(computedMultiplier) ? 0 : 2)}
-              </span>
-              {mismatch && (
-                <span className="label-caps text-xs text-destructive">⚠ 기준중량 없음</span>
-              )}
-              <button
-                type="button"
-                className="label-caps text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setUseManual(true)}
-              >
-                배수 직접입력으로
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2">
-                <span className="label-caps text-xs text-muted-foreground">개수(배수) ×</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  step="1"
-                  min="1"
-                  className={`${inputClass} !w-24 text-center`}
-                  value={manualMultiplier}
-                  onChange={(e) => setManualMultiplier(e.target.value)}
-                  onBlur={(e) => {
-                    const next = Number(e.target.value);
-                    if (!Number.isFinite(next) || next <= 0) return;
-                    // 2026-10-27: "개수(배수) 직접입력" 모드여도 MOULD Component라면 몰드
-                    // 정체성은 유지한다(추가 폼과 동일 원칙 — 위 add 참고).
-                    applyBatch.mutate({
-                      multiplier: next,
-                      mouldId: scalingMode === "MOULD" ? mouldId || null : null,
-                      mouldQty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
-                    });
-                    if (baseTotalGrams > 0) setTargetGrams(fmtNumber(baseTotalGrams * next, 0));
-                  }}
-                />
-              </label>
-              {baseTotalGrams > 0 && (
-                <label className="flex items-center gap-2">
-                  <span className="label-caps text-xs text-muted-foreground">또는 총 중량(g)</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    step="1"
-                    min="0"
-                    className={`${inputClass} !w-24 text-center`}
-                    value={targetGrams}
-                    onChange={(e) => setTargetGrams(e.target.value)}
-                    onBlur={(e) => {
-                      const grams = Number(e.target.value);
-                      if (!Number.isFinite(grams) || grams <= 0) return;
-                      const next = suggestedMultiplierFromTarget(grams, 1, baseTotalGrams);
-                      if (next == null) return;
-                      setManualMultiplier(String(Number(next.toFixed(6))));
-                      applyBatch.mutate({
-                        multiplier: next,
-                        mouldId: scalingMode === "MOULD" ? mouldId || null : null,
-                        mouldQty: scalingMode === "MOULD" ? Number(mouldCount) || 1 : null,
-                      });
-                    }}
-                  />
-                </label>
-              )}
-              {scalingMode === "MOULD" && (
-                <button
-                  type="button"
-                  className="label-caps text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => setUseManual(false)}
-                >
-                  몰드 기준으로
-                </button>
-              )}
-            </div>
-          )}
-          <div className="flex items-center gap-1 border-l border-border pl-3">
-            <button
-              type="button"
-              className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setShowHistory((v) => !v)}
-            >
-              {showHistory ? "HIDE HISTORY" : "HISTORY"}
-            </button>
-            <button
-              type="button"
-              className="label-caps px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                if (confirm(`REMOVE "${formula.name}" FROM THIS WORK SESSION?`)) onRemove();
-              }}
-            >
-              REMOVE
-            </button>
-          </div>
-        </div>
-      </div>
-      {applyBatch.isError && (
-        <p className="font-mono text-xs uppercase text-destructive">
-          {(applyBatch.error as Error).message}
-        </p>
+      ) : (
+        <ProductionQuantityRow
+          members={[{ ...row, sessionId }]}
+          lines={lines}
+          canMerge={false}
+          onToggleMerge={() => {}}
+          labels={{}}
+        />
       )}
+      <div className="flex gap-3">
+        <button type="button" className={buttonClass} onClick={() => setShowHistory((v) => !v)}>
+          {showHistory ? "HIDE HISTORY" : "HISTORY"}
+        </button>
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() => {
+            if (confirm(`REMOVE "${formula.name}" FROM THIS WORK SESSION?`)) onRemove();
+          }}
+        >
+          REMOVE
+        </button>
+      </div>
       {showHistory && (
         <ul className="space-y-1 border border-dashed border-border p-2">
           {(history.data ?? []).length === 0 ? (
-            <li className="font-mono text-xs text-muted-foreground">NO MULTIPLIER CHANGES YET</li>
+            <li className="text-xs text-muted-foreground">NO MULTIPLIER CHANGES YET</li>
           ) : (
             (history.data ?? []).map((h) => (
               <li key={h.id} className="font-mono text-xs text-muted-foreground">
-                {formatDateTime(h.applied_at)} · ×{fmtNumber(Number(h.previous_multiplier), 2)} → ×
-                {fmtNumber(Number(h.applied_multiplier), 2)}
+                {formatDateTime(h.applied_at)} · ×{fmtNumber(Number(h.previous_multiplier), 3)} → ×
+                {fmtNumber(Number(h.applied_multiplier), 3)}
               </li>
             ))
           )}
@@ -1761,7 +1395,7 @@ function MatrixColumnHeader({
         <div className="min-w-0 flex-1">
           <p className="whitespace-nowrap text-xs leading-tight">{formulaName}</p>
           <p className="label-caps whitespace-nowrap text-[11px] text-muted-foreground">
-            ×{fmtNumber(multiplier, 0)}
+            ×{fmtNumber(multiplier, 3)}
           </p>
         </div>
         {/* 2026-10-14 사용자 요청: "work session에서 재료 추가하고 추가된 재료로 새로운 버전
@@ -2021,7 +1655,7 @@ function FormulaView({
               <span className="label-caps text-sm">
                 {row.formula_versions.formulas.name} ·{" "}
                 {versionLabel(row.formula_versions.version_number)}
-                {multiplier !== 1 ? ` · ×${fmtNumber(multiplier, 0)}` : ""}
+                {multiplier !== 1 ? ` · ×${fmtNumber(multiplier, 3)}` : ""}
               </span>
             </div>
             <ul className="divide-y divide-border">
@@ -2941,7 +2575,7 @@ export function DayWorkView({
           WORK VIEW와 같은 날짜·품목 기준입니다. MERGE는 같은 버전의 총량을 합치며, 수량 변경은 기존
           주문별 비율로 배분됩니다.
         </p>
-        <ul className="divide-y divide-border">
+        <div role="list" className="divide-y divide-border">
           {quantityGroups.map((group) => (
             <ProductionQuantityRow
               key={group.key}
@@ -2969,7 +2603,7 @@ export function DayWorkView({
               }
             />
           ))}
-        </ul>
+        </div>
       </details>
       <SectionCard
         title="WORK VIEW"
@@ -3027,7 +2661,7 @@ export function DayWorkView({
   );
 }
 
-/** Quantity controls and weighing columns share the exact same selection groups. */
+/** Recipe multiples are the only production input. Mould weights never rewrite this value. */
 function ProductionQuantityRow({
   members,
   lines,
@@ -3046,22 +2680,22 @@ function ProductionQuantityRow({
   const total = members.reduce((n, m) => n + Number(m.multiplier), 0);
   const base = sumBaseGrams(lines);
   const [draft, setDraft] = useState(String(total));
-  const [grams, setGrams] = useState(String(base * total));
+  const [inputError, setInputError] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
   useEffect(() => {
     setDraft(String(total));
-    setGrams(String(base * total));
-  }, [total, base]);
+  }, [total]);
   const save = useMutation({
     mutationFn: async (target: number) => {
+      if (!Number.isInteger(target) || target < 1)
+        throw new Error("생산 배수는 1 이상의 정수로 입력하세요.");
       const user_id = await currentUserId();
       if (members.some((m) => m.user_id !== user_id))
         throw new Error("선택한 작업에 접근할 수 없습니다.");
       const plan = rescaleProductionSelections(members, target);
-      // Reject stale selections before submitting the grouped quantity update.
       const { data: fresh, error: readError } = await supabase
         .from("work_session_formula_versions")
-        .select("id, multiplier, updated_at")
+        .select("id,updated_at")
         .eq("user_id", user_id)
         .in(
           "id",
@@ -3072,24 +2706,18 @@ function ProductionQuantityRow({
         fresh?.length !== members.length ||
         members.some((m) => !fresh.some((f) => f.id === m.id && f.updated_at === m.updated_at))
       )
-        throw new Error("작업 수량이 변경되었습니다. 새로고침 후 다시 적용해 주세요.");
-      // A single statement makes the whole group update atomic. Omitted fields (IDs, order,
-      // slot, workflow links) are untouched; capacity quantities follow the allocation ratio.
+        throw new Error(
+          "다른 화면에서 작업이 변경되었습니다. 최신 값을 확인한 뒤 다시 적용해 주세요.",
+        );
+      // One statement updates the entire allocation. Physical mould counts and order IDs stay intact.
       const { error } = await supabase.from("work_session_formula_versions").upsert(
-        plan.map(({ row, multiplier }) => {
-          const ratio = multiplier / Number(row.multiplier);
-          return {
-            id: row.id,
-            user_id,
-            work_session_id: row.sessionId,
-            formula_version_id: row.formula_version_id,
-            multiplier,
-            mould_qty: row.mould_qty == null ? null : Number(row.mould_qty) * ratio,
-            base_weight_qty:
-              row.base_weight_qty == null ? null : Number(row.base_weight_qty) * ratio,
-            capacity_qty: row.capacity_qty == null ? null : Number(row.capacity_qty) * ratio,
-          };
-        }),
+        plan.map(({ row, multiplier }) => ({
+          id: row.id,
+          user_id,
+          work_session_id: row.sessionId,
+          formula_version_id: row.formula_version_id,
+          multiplier,
+        })),
         { onConflict: "id" },
       );
       if (error) throw error;
@@ -3116,48 +2744,55 @@ function ProductionQuantityRow({
     },
   });
   const apply = (value: number) => {
+    if (!Number.isInteger(value) || value < 1) {
+      setInputError("×1・×2・×3・×4처럼 정수 배수를 선택하세요.");
+      setDraft(String(total));
+      return;
+    }
+    setInputError(null);
     if (value !== total) save.mutate(value);
   };
   return (
-    <li className="space-y-2 p-3">
+    <div role="listitem" className="space-y-2 p-3">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm">
           {first.formula_versions.formulas.components?.name ?? first.formula_versions.formulas.name}{" "}
-          · v{first.formula_versions.version_number}
+          · V{first.formula_versions.version_number}
         </span>
         <span className="font-mono text-xs">
           {members.length > 1 ? `MERGED ${members.length}` : (first.slot ?? first.kind)}
         </span>
         <label className="flex items-center gap-1 text-xs">
-          배수 ×
+          레시피 배수 ×
           <input
             aria-label="생산 배수"
             className={`${inputClass} !w-24`}
             type="number"
-            step="any"
-            min="0.000001"
+            step="1"
+            min="1"
             disabled={save.isPending}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => apply(Number(draft))}
           />
         </label>
-        {base > 0 && (
-          <label className="flex items-center gap-1 text-xs">
-            총량 g
-            <input
-              aria-label="생산 총량 g"
-              className={`${inputClass} !w-28`}
-              type="number"
-              step="any"
-              min="0.000001"
+        <div className="flex gap-1">
+          {[1, 2, 3, 4].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={total === n ? primaryButtonClass : buttonClass}
               disabled={save.isPending}
-              value={grams}
-              onChange={(e) => setGrams(e.target.value)}
-              onBlur={() => apply(Number(grams) / base)}
-            />
-          </label>
-        )}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setDraft(String(n));
+                apply(n);
+              }}
+            >
+              ×{n}
+            </button>
+          ))}
+        </div>
         {canMerge && (
           <button
             type="button"
@@ -3169,14 +2804,31 @@ function ProductionQuantityRow({
           </button>
         )}
       </div>
+      <p className="font-mono text-sm">
+        기본 배합 {fmtNumber(base, 1)}g × {fmtNumber(total, 4)} ={" "}
+        <strong>{fmtNumber(base * total, 1)}g</strong>
+      </p>
+      <p className="text-xs text-muted-foreground">
+        총중량은 계산 결과입니다. 몰드중량·주문 개수가 레시피 배수를 자동 변경하지 않습니다.
+      </p>
+      {!Number.isInteger(total) && (
+        <p className="text-xs text-muted-foreground">
+          기존 소수 배수가 저장돼 있습니다. 위에서 원하는 정수 배수를 선택하면 바뀝니다.
+        </p>
+      )}
       <p className="font-mono text-[10px] text-muted-foreground">
         {members
           .map(
             (m) =>
-              `${labels[m.id] ?? `${m.slot ?? m.kind} · ${m.sessionId.slice(0, 8)}`} · ×${fmtNumber(Number(m.multiplier), 3)}`,
+              `${labels[m.id] ?? `${m.slot ?? m.kind} · ${m.sessionId.slice(0, 8)}`} · ×${fmtNumber(Number(m.multiplier), 4)}`,
           )
           .join(" + ")}
       </p>
+      {inputError && (
+        <p role="alert" className="text-xs text-destructive">
+          {inputError}
+        </p>
+      )}
       {save.isError && (
         <p role="alert" className="text-xs text-destructive">
           {(save.error as Error).message}
@@ -3187,6 +2839,6 @@ function ProductionQuantityRow({
           {historyWarning}
         </p>
       )}
-    </li>
+    </div>
   );
 }

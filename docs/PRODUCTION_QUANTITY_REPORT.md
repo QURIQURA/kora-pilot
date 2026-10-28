@@ -1,13 +1,29 @@
-# Production quantity and workflow alignment
+# Production 수량·Formula 동기화 수정
 
-Production dashboard now builds Adjust Quantity and both Work View modes from the same date-scoped selection groups, in timeline order. Split blocks count a selection once. Previous per-session mould controls and component creation remain under Individual Settings / Add Component.
+## 최종 수량 원칙
 
-MERGE SAME FORMULA combines only identical formula_version_id values, including across order sessions and usage slots. UNMERGE restores the individual columns. This is a reversible production grouping, not deletion or consolidation of order rows. Grouping preference is stored in this browser for the current set of selection IDs; saved quantities live in the existing database rows.
+생산 수량의 기준은 원본 Formula × 레시피 배수입니다. Adjust Quantity에서 ×1·×2·×3·×4 등의 정수 배수를 입력합니다. 총중량은 계산 결과로만 표시합니다. 몰드 기준중량, 제품 사이즈 목표 g, 주문 개수는 배수를 자동 변경하지 않습니다. 새 Component는 기본 배합 ×1로 추가됩니다.
 
-Editing the total multiplier or grams distributes it in the original allocation ratio. The client checks ownership and stale rows, submits all quantity allocations in one bulk upsert, and writes selection-specific multiplier history. A history failure is shown separately from a successful quantity save. Mould/base-weight/capacity counts scale proportionally; their IDs, order links, tasks and schedules remain unchanged.
+Production 대시보드의 COMPONENTS / HISTORY / ADD에는 별도 수량 입력을 두지 않습니다. 기존에 저장된 소수 배수는 임의로 반올림하지 않고, 사용자가 새 배수를 고를 때 바뀝니다. 같은 Formula 버전을 MERGE하면 합산 배수를 입력하고, 주문별 내부 배분 비율은 보존합니다. 몰드 ID와 몰드 개수는 배수 변경으로 바뀌지 않습니다.
 
-Merged weighing completion updates every source selection in a single upsert. A merged cell is DONE only when every member is DONE. Individual notes are preserved on completion changes. Split the group before editing an individual source recipe.
+## 동기화
 
-Workflow timeline columns deduplicate formula version IDs and display their total multiplier. Dashboard task details show the target multiplier from the same selection used by Adjust Quantity. Actual output quantities remain independently recorded observations.
+- Order의 Sheet/Cream/Filling Formula 변경은 같은 user_id·order_id·CORE slot의 정확한 Work Session 선택에 같은 트랜잭션으로 반영합니다. 연결된 세션이 여러 개이면 임의로 고르지 않습니다.
+- Production에서 Formula 선택을 변경·추가·삭제하면 Order의 해당 슬롯에도 반영합니다. 서로 다른 Formula가 여러 개일 때 Order는 전체 실제 선택 목록을 표시하며, 단일 드롭다운으로 임의 통합하지 않습니다.
+- CURRENT 버전 승격은 완료되지 않은 주문/세션의 같은 Formula를 갱신합니다. 식이 Build가 지정한 버전과 완료 기록은 유지합니다. 배수는 유지하고, 새 레시피의 실제 총량을 다시 계산합니다.
+- Task ID·실제 시간·생산량·Work Block 연결을 보존합니다. 새 레시피와 맞지 않는 과거 재료 링크는 기록을 보존하되 현재 화면에서는 제외합니다.
+- RLS를 사용하는 변경 이력 테이블에 선택 변경 전후 값을 남깁니다. DB 이벤트와 같은 브라우저의 다른 탭에서도 관련 캐시를 갱신합니다. 원격 변경이 와도 작성 중인 Order 필드는 덮어쓰지 않습니다.
 
-Validation: 24 unit/regression tests, TypeScript noEmit, production build and changed-file ESLint (no errors; one pre-existing effect dependency warning). Authenticated live UI and live database writes were not exercised. No schema migration or existing-data update was applied during development.
+## 시폰 배합 확인
+
+| 버전 | 기본 총량 | ×4 총량 |
+|---|---:|---:|
+| 최초 기본 시폰: 우유 50g | 340.5g | 1,362g |
+| 현재 기본 시폰: 그릭 요거트 52g | 342.5g | 1,370g |
+| GF 얼그레이 V2: 요거트 52g + 차 2g | 344.5g | 1,378g |
+
+GF V1에는 쌀가루·전분·코코넛 요거트가 0g으로 남아 있었습니다. V2는 이 재료들이 입력돼 있습니다. V2에서 누락된 노른자·흰자 보조 계량(각 3개)을 동일 재료 ID·동일 g의 V1과 대조하여 복원했고 변경 이력도 남겼습니다. 원재료 g과 배합은 바꾸지 않았습니다. 1,280g으로 강제 환산하지 않았습니다.
+
+## 검증
+
+27개 Node 회귀 테스트, TypeScript 검사, production build, 변경 파일 ESLint를 수행했습니다. DB 통합 테스트는 authenticated 역할로 별도 테스트 주문·세션·Formula를 만들고 전체 ROLLBACK하여 실행했습니다. Order→Production, 역방향, CURRENT 승격 시 배수 유지, Task 시간/ID 보존, 복수 Formula 충돌, 완료 기록 보존, 소유자 범위 및 변경 이력을 확인했습니다. 실제 사용자 로그인 UI 클릭 테스트는 수행하지 않았습니다.
