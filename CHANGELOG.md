@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-11-04 — 버그 수정: WORK VIEW의 EDIT 버튼
+
+- WEIGHING MATRIX 컬럼 헤더의 **EDIT**(레시피 수정)이 눌리지 않던 문제를 고쳤어요. 세션 페이지와 대시보드 WORK VIEW 모두 EDIT이 다시 열려요. (합쳐진 컬럼은 UNMERGE 후 수정)
+
+---
+
 ## 2026-11-04 — 버그 수정: 오더의 NEW PRODUCT 이름 입력
 
 - **오더에서 구성 먼저 → 새 PRODUCT**: PASTRY BASE / CREAM / FILLING을 먼저 고른 뒤 PRODUCT 드롭다운의 **+ NEW PRODUCT**를 누르면, 창에 "이 오더의 구성이 새 PRODUCT에 함께 연결돼요" 목록이 보이고(이름은 컴포넌트 이름으로 자동 제안, 수정 가능) 만들면 그 컴포넌트들이 새 PRODUCT의 COMPONENTS로 같이 연결돼요. 오더에는 그 PRODUCT가 바로 선택됩니다.
