@@ -17,7 +17,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -40,10 +40,15 @@ import {
   CORE_SLOTS,
   CORE_SLOT_LABELS,
   type CoreSlot,
+  type DashboardComponentRow,
   type VersionIngredientRow,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
-import { groupProductionSelections, rescaleProductionSelections } from "@/lib/production-quantity";
+import {
+  applySavedQuantities,
+  groupProductionSelections,
+  rescaleProductionSelections,
+} from "@/lib/production-quantity";
 import { selectionIssue } from "@/lib/size-configuration";
 import { resolveSlotGroup } from "@/lib/technique";
 import { fmtNumber, toGrams, versionLabel, UNITS, type Mould } from "@/lib/formula";
@@ -403,7 +408,7 @@ export function WorkSessionWorkspace({
         // 2026-10-22: 대시보드에서는 "생산량 조절" 공간이라는 뜻으로 ADJUST QUANTITY, 평소엔 접어둔 드롭다운.
         <details className="order-2 border border-border bg-card">
           <summary className="label-caps cursor-pointer px-3 py-2 text-xs">
-            COMPONENTS / HISTORY / ADD
+            컴포넌트 구성 · 추가 / 제거
           </summary>
           <div className="p-3">
             <ul className="divide-y divide-border border border-border">
@@ -626,7 +631,7 @@ export function WorkSessionWorkspace({
       )}
 
       <div className="order-4">
-        <SectionCard title="NOTES">
+        <SectionCard title={`세션 전체 메모 · ${data.name}`}>
           <NotesEditor
             value={data.notes ?? ""}
             onSave={(notes) => updateSession.mutate({ notes })}
@@ -1045,9 +1050,11 @@ function FormulaVersionRow({
         />
       )}
       <div className="flex gap-3">
-        <button type="button" className={buttonClass} onClick={() => setShowHistory((v) => !v)}>
-          {showHistory ? "HIDE HISTORY" : "HISTORY"}
-        </button>
+        {!readOnlyQuantity && (
+          <button type="button" className={buttonClass} onClick={() => setShowHistory((v) => !v)}>
+            {showHistory ? "HIDE HISTORY" : "HISTORY"}
+          </button>
+        )}
         <button
           type="button"
           className={buttonClass}
@@ -2433,7 +2440,13 @@ function StockReflectSection({
 export function DayWorkView({
   items,
   labels = {},
+  renderRecords,
+  focusedRowId,
+  focusKey,
 }: {
+  renderRecords?: (selectionIds: string[]) => React.ReactNode;
+  focusedRowId?: string | null;
+  focusKey?: string | null;
   items: { sessionId: string; rowId: string }[];
   labels?: Record<string, string>;
 }) {
@@ -2569,42 +2582,53 @@ export function DayWorkView({
   if (ordered.length === 0) return null;
   return (
     <div className="border-t border-border pt-4">
-      <details open className="mb-4 border border-border bg-card">
-        <summary className="label-caps cursor-pointer px-3 py-2 text-xs">ADJUST QUANTITY</summary>
-        <p className="px-3 text-xs text-muted-foreground">
-          WORK VIEW와 같은 날짜·품목 기준입니다. MERGE는 같은 버전의 총량을 합치며, 수량 변경은 기존
-          주문별 비율로 배분됩니다.
-        </p>
-        <div role="list" className="divide-y divide-border">
+      <section className="mb-4 border border-border bg-card" aria-label="컴포넌트 생산 리스트">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <h2 className="label-caps text-xs">COMPONENTS · PRODUCTION</h2>
+          <span className="text-xs text-muted-foreground">
+            수량은 바로 조절 · 행을 펼쳐 생산 기록
+          </span>
+        </div>
+        <div className="divide-y divide-border">
           {quantityGroups.map((group) => (
-            <ProductionQuantityRow
+            <ComponentProductionRow
               key={group.key}
               members={group.members}
               labels={labels}
-              lines={ingredientsByVersion[group.members[0]!.formula_version_id] ?? []}
-              canMerge={
-                ordered.filter(
-                  (o) => o.row.formula_version_id === group.members[0]!.formula_version_id,
-                ).length > 1
-              }
-              onToggleMerge={() =>
-                setMergedVersions((prev) => {
-                  const next = new Set(prev);
-                  const id = group.members[0]!.formula_version_id;
-                  if (next.has(id)) next.delete(id);
-                  else next.add(id);
-                  try {
-                    localStorage.setItem(mergeStorageKey, JSON.stringify([...next]));
-                  } catch {
-                    /* View still works with storage disabled. */
+              focused={group.members.some((m) => m.id === focusedRowId)}
+              focusKey={focusKey ?? null}
+              renderRecords={renderRecords}
+              quantity={
+                <ProductionQuantityRow
+                  compact
+                  members={group.members}
+                  labels={labels}
+                  lines={ingredientsByVersion[group.members[0]!.formula_version_id] ?? []}
+                  canMerge={
+                    ordered.filter(
+                      (o) => o.row.formula_version_id === group.members[0]!.formula_version_id,
+                    ).length > 1
                   }
-                  return next;
-                })
+                  onToggleMerge={() =>
+                    setMergedVersions((prev) => {
+                      const next = new Set(prev);
+                      const id = group.members[0]!.formula_version_id;
+                      if (next.has(id)) next.delete(id);
+                      else next.add(id);
+                      try {
+                        localStorage.setItem(mergeStorageKey, JSON.stringify([...next]));
+                      } catch {
+                        /* optional view preference */
+                      }
+                      return next;
+                    })
+                  }
+                />
               }
             />
           ))}
         </div>
-      </details>
+      </section>
       <SectionCard
         title="WORK VIEW"
         action={
@@ -2661,14 +2685,112 @@ export function DayWorkView({
   );
 }
 
+function ComponentProductionRow({
+  members,
+  labels,
+  quantity,
+  focused,
+  focusKey,
+  renderRecords,
+}: {
+  members: (WorkSessionFormulaVersionRow & { sessionId: string })[];
+  labels: Record<string, string>;
+  quantity: React.ReactNode;
+  focused: boolean;
+  focusKey: string | null;
+  renderRecords: ((ids: string[]) => React.ReactNode) | undefined;
+}) {
+  const [expanded, setExpanded] = useState(focused);
+  const [showHistory, setShowHistory] = useState(false);
+  useEffect(() => {
+    if (focused) setExpanded(true);
+  }, [focused, focusKey]);
+  const first = members[0]!;
+  return (
+    <article>
+      <button
+        type="button"
+        className="flex w-full flex-wrap items-center gap-2 bg-secondary/40 px-3 py-2 text-left"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <span className="flex-1 text-sm">
+          {first.formula_versions.formulas.components?.name ?? first.formula_versions.formulas.name}
+        </span>
+        <span className="font-mono text-[11px] text-muted-foreground">
+          V{first.formula_versions.version_number} ·{" "}
+          {members.length > 1 ? `MERGED ${members.length}` : (first.slot ?? first.kind)}
+        </span>
+        <span className="text-xs text-muted-foreground">생산 기록</span>
+      </button>
+      <div className="pt-2">{quantity}</div>
+      {expanded && (
+        <div className="ml-5 space-y-3 border-l border-border px-3 pb-3 sm:ml-8">
+          {renderRecords?.(members.map((m) => m.id))}
+          <details
+            className="border-t border-dashed border-border pt-2"
+            onToggle={(e) => setShowHistory(e.currentTarget.open)}
+          >
+            <summary className="cursor-pointer text-xs text-muted-foreground">
+              수량 변경 이력
+            </summary>
+            {showHistory &&
+              members.map((m) => (
+                <SelectionQuantityHistory
+                  key={m.id}
+                  member={m}
+                  label={labels[m.id] ?? m.sessionId.slice(0, 8)}
+                />
+              ))}
+          </details>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function SelectionQuantityHistory({
+  member,
+  label,
+}: {
+  member: WorkSessionFormulaVersionRow & { sessionId: string };
+  label: string;
+}) {
+  const history = useQuery(workSessionMultiplierHistoryQuery(member.sessionId, member.id));
+  return (
+    <div className="mt-2 text-xs">
+      <p className="font-mono text-muted-foreground">{label}</p>
+      {history.isLoading ? (
+        <p>불러오는 중…</p>
+      ) : history.isError ? (
+        <p className="text-destructive">이력을 불러오지 못했습니다.</p>
+      ) : !(history.data ?? []).length ? (
+        <p>변경 이력 없음</p>
+      ) : (
+        <ul>
+          {history.data!.map((h) => (
+            <li key={h.id}>
+              {formatDateTime(h.applied_at)} · ×{fmtNumber(Number(h.previous_multiplier), 3)} → ×
+              {fmtNumber(Number(h.applied_multiplier), 3)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** Recipe multiples are the only production input. Mould weights never rewrite this value. */
 function ProductionQuantityRow({
+  compact = false,
   members,
   lines,
   canMerge,
   onToggleMerge,
   labels,
 }: {
+  compact?: boolean;
   labels: Record<string, string>;
   members: (WorkSessionFormulaVersionRow & { sessionId: string })[];
   lines: VersionIngredientRow[];
@@ -2710,17 +2832,36 @@ function ProductionQuantityRow({
           "다른 화면에서 작업이 변경되었습니다. 최신 값을 확인한 뒤 다시 적용해 주세요.",
         );
       // One statement updates the entire allocation. Physical mould counts and order IDs stay intact.
-      const { error } = await supabase.from("work_session_formula_versions").upsert(
-        plan.map(({ row, multiplier }) => ({
-          id: row.id,
-          user_id,
-          work_session_id: row.sessionId,
-          formula_version_id: row.formula_version_id,
-          multiplier,
-        })),
-        { onConflict: "id" },
-      );
+      const { data: saved, error } = await supabase
+        .from("work_session_formula_versions")
+        .upsert(
+          plan.map(({ row, multiplier }) => ({
+            id: row.id,
+            user_id,
+            work_session_id: row.sessionId,
+            formula_version_id: row.formula_version_id,
+            multiplier,
+          })),
+          { onConflict: "id" },
+        )
+        .select("id,multiplier,updated_at");
       if (error) throw error;
+      if (!saved || saved.length !== plan.length)
+        throw new Error("저장 결과를 확인하지 못했습니다. 새로고침 후 확인하세요.");
+      // Do not leave old totals on screen while unrelated mounted session queries refetch.
+      // Cancel in-flight reads so a pre-save response cannot overwrite this confirmation.
+      await queryClient.cancelQueries({ queryKey: ["work_session_formula_versions"] });
+      await queryClient.cancelQueries({ queryKey: ["dashboard_components"] });
+      for (const sid of new Set(members.map((m) => m.sessionId))) {
+        queryClient.setQueryData(
+          ["work_session_formula_versions", sid],
+          (old: WorkSessionFormulaVersionRow[] | undefined) => applySavedQuantities(old, saved),
+        );
+      }
+      queryClient.setQueriesData(
+        { queryKey: ["dashboard_components"] },
+        (old: DashboardComponentRow[] | undefined) => applySavedQuantities(old, saved),
+      );
       const { error: historyError } = await supabase.from("work_session_multiplier_history").insert(
         plan.map(({ row, multiplier }) => ({
           user_id,
@@ -2734,9 +2875,11 @@ function ProductionQuantityRow({
       );
       setHistoryWarning(historyError ? "수량은 저장됐지만 변경 이력 저장에 실패했습니다." : null);
     },
-    onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["work_session_formula_versions"] }),
+    onSettled: () => {
+      void Promise.all([
+        ...[...new Set(members.map((m) => m.sessionId))].map((sid) =>
+          queryClient.invalidateQueries({ queryKey: ["work_session_formula_versions", sid] }),
+        ),
         queryClient.invalidateQueries({ queryKey: ["work_session_multiplier_history"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard_components"] }),
         queryClient.invalidateQueries({ queryKey: ["work_blocks"] }),
@@ -2753,15 +2896,25 @@ function ProductionQuantityRow({
     if (value !== total) save.mutate(value);
   };
   return (
-    <div role="listitem" className="space-y-2 p-3">
+    <div role="listitem" className={compact ? "space-y-1 px-3 pb-3 sm:pl-8" : "space-y-2 p-3"}>
+      {save.isPending && (
+        <p role="status" className="text-xs text-muted-foreground">
+          수량 저장 중…
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm">
-          {first.formula_versions.formulas.components?.name ?? first.formula_versions.formulas.name}{" "}
-          · V{first.formula_versions.version_number}
-        </span>
-        <span className="font-mono text-xs">
-          {members.length > 1 ? `MERGED ${members.length}` : (first.slot ?? first.kind)}
-        </span>
+        {!compact && (
+          <span className="text-sm">
+            {first.formula_versions.formulas.components?.name ??
+              first.formula_versions.formulas.name}{" "}
+            · V{first.formula_versions.version_number}
+          </span>
+        )}
+        {!compact && (
+          <span className="font-mono text-xs">
+            {members.length > 1 ? `MERGED ${members.length}` : (first.slot ?? first.kind)}
+          </span>
+        )}
         <label className="flex items-center gap-1 text-xs">
           레시피 배수 ×
           <input
@@ -2808,9 +2961,11 @@ function ProductionQuantityRow({
         기본 배합 {fmtNumber(base, 1)}g × {fmtNumber(total, 4)} ={" "}
         <strong>{fmtNumber(base * total, 1)}g</strong>
       </p>
-      <p className="text-xs text-muted-foreground">
-        총중량은 계산 결과입니다. 몰드중량·주문 개수가 레시피 배수를 자동 변경하지 않습니다.
-      </p>
+      {!compact && (
+        <p className="text-xs text-muted-foreground">
+          총중량은 계산 결과입니다. 몰드중량·주문 개수가 레시피 배수를 자동 변경하지 않습니다.
+        </p>
+      )}
       {!Number.isInteger(total) && (
         <p className="text-xs text-muted-foreground">
           기존 소수 배수가 저장돼 있습니다. 위에서 원하는 정수 배수를 선택하면 바뀝니다.

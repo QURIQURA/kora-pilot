@@ -1,3 +1,4 @@
+import { BlendSourcesPanel } from "@/components/pilot/BlendSourcesPanel";
 import { FormulaVersionDietaryTags } from "@/components/pilot/FormulaVersionDietaryTags";
 import { DIETARY_ASSEMBLY_ENABLED } from "@/lib/feature-flags";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -86,6 +87,8 @@ import {
 } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/formulas/$formulaId")({
+  validateSearch: (search: Record<string, unknown>): { version?: string } =>
+    typeof search["version"] === "string" ? { version: search["version"] } : {},
   head: () => ({
     meta: [
       { title: "PILOT — Formula Detail" },
@@ -157,6 +160,7 @@ const compactPrimaryButtonClass =
 
 function FormulaDetailPage() {
   const { formulaId } = Route.useParams();
+  const { version: requestedVersion } = Route.useSearch();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -170,7 +174,7 @@ function FormulaDetailPage() {
   const ingredientGroups = useQuery(ingredientGroupsQuery());
 
   const versionList = useMemo(() => versions.data ?? [], [versions.data]);
-  const [versionId, setVersionId] = useState<string | null>(null);
+  const [versionId, setVersionId] = useState<string | null>(requestedVersion ?? null);
   const [batch, setBatch] = useState("1");
   const [basisId, setBasisId] = useState(""); // baker's % 기준 재료
   const [adding, setAdding] = useState(false);
@@ -193,6 +197,10 @@ function FormulaDetailPage() {
   const [draft, setDraft] = useState<PageDraft | null>(null);
   const editing = Boolean(draft);
   const initializedVersionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setVersionId(requestedVersion ?? null);
+  }, [formulaId, requestedVersion]);
 
   useEffect(() => {
     if (versionList.length === 0) return;
@@ -726,6 +734,8 @@ function FormulaDetailPage() {
           default_base_weight_id: version?.default_base_weight_id ?? null,
           default_capacity_id: version?.default_capacity_id ?? null,
           yield_quantity: version?.yield_quantity ?? null,
+          component_sources: version?.component_sources ?? [],
+          notes: version?.notes ?? null,
           change_summary: summary || null,
           change_reason: reason || null,
           bath_water_g: version?.bath_water_g ?? null,
@@ -1043,6 +1053,8 @@ function FormulaDetailPage() {
           </ul>
         </div>
       )}
+
+      <BlendSourcesPanel sources={version?.component_sources} multiplier={batchValue} />
 
       {/* INGREDIENTS — BASE ×1 vs 저장된 배수 프리셋을 한 표 안에서 박스로 구분해 보여준다 */}
       {reorderError && (

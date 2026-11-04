@@ -1,9 +1,42 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadTs } from "./load-ts.mjs";
-const { groupProductionSelections, rescaleProductionSelections } = await loadTs(
-  "src/lib/production-quantity.ts",
-);
+const { applySavedQuantities, groupProductionSelections, rescaleProductionSelections } =
+  await loadTs("src/lib/production-quantity.ts");
+test("MERGED ×4 publishes confirmed quantities to both rows and weighing data before refetch", () => {
+  const cached = [
+    { id: "a", formula_version_id: "v2", multiplier: 1, updated_at: "old-a", sessionId: "order-a" },
+    { id: "b", formula_version_id: "v2", multiplier: 1, updated_at: "old-b", sessionId: "order-b" },
+    {
+      id: "c",
+      formula_version_id: "other",
+      multiplier: 3,
+      updated_at: "old-c",
+      sessionId: "order-c",
+    },
+  ];
+  const plan = rescaleProductionSelections(cached.slice(0, 2), 4);
+  const response = plan.map(({ row, multiplier }) => ({
+    id: row.id,
+    multiplier,
+    updated_at: "server-time",
+  }));
+  const selectionCache = applySavedQuantities(cached, response);
+  const dashboardCache = applySavedQuantities(
+    cached.map((r) => ({ id: r.id, multiplier: r.multiplier })),
+    response,
+  );
+  assert.equal(groupProductionSelections(selectionCache, new Set(["v2"]))[0].multiplier, 4);
+  assert.equal(selectionCache[0].updated_at, "server-time");
+  assert.equal(dashboardCache[0].multiplier + dashboardCache[1].multiplier, 4);
+  assert.equal(
+    342.5 * groupProductionSelections(selectionCache, new Set(["v2"]))[0].multiplier,
+    1370,
+  );
+  assert.equal(selectionCache[2], cached[2]);
+  assert.equal(cached[0].multiplier, 1);
+  assert.equal(applySavedQuantities(undefined, response), undefined);
+});
 const rows = [
   {
     id: "sandwich",

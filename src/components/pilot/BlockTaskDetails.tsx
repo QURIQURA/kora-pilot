@@ -46,10 +46,12 @@ export function BlockTaskDetails({
   row,
   title,
   onStarted,
+  embedded = false,
 }: {
   block: WorkBlock;
   row: DashboardComponentRow;
   title: string;
+  embedded?: boolean;
   /** TASK 시작시각이 기록되면 세션이 PLANNED일 때 IN_PROGRESS로 올리도록 알린다 */
   onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
 }) {
@@ -151,10 +153,12 @@ export function BlockTaskDetails({
   }
 
   const update = async (patch: Record<string, unknown>, label: string) => {
+    const userId = await currentUserId();
     const { error: e } = await supabase
       .from("work_session_tasks")
       .update(patch as never)
-      .eq("id", task.id);
+      .eq("id", task.id)
+      .eq("user_id", userId);
     if (e) setError(`${label} 저장 실패 — ${e.message}`);
     else setError(null);
     await refresh();
@@ -217,11 +221,13 @@ export function BlockTaskDetails({
   const k = task.updated_at; // 저장 뒤 입력칸 defaultValue를 새로 반영
 
   return (
-    <div className="space-y-3 border border-border bg-card p-3">
+    <div
+      className={embedded ? "space-y-3 pb-3 pl-4" : "space-y-3 border border-border bg-card p-3"}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="label-caps text-xs">TASK DETAILS · {title}</p>
+        {!embedded && <p className="label-caps text-xs">TASK DETAILS · {title}</p>}
         <p className="font-mono text-xs text-muted-foreground">
-          목표 배수 ×{Number(row.multiplier.toFixed(3))} · ADJUST QUANTITY 연동
+          이 주문 배정 ×{Number(row.multiplier.toFixed(3))} · 생산 배수 연동
         </p>
         <div className="flex items-center gap-2">
           <span className="label-caps text-[11px] text-muted-foreground">TEMPLATE</span>
@@ -320,7 +326,7 @@ export function BlockTaskDetails({
             <input
               key={`t-${k}`}
               className={`${smallInput} w-28`}
-              list="block-task-type-suggestions"
+              list={`block-task-type-${block.id}`}
               placeholder="TYPE"
               defaultValue={task.task_type ?? ""}
               onBlur={(e) => {
@@ -328,7 +334,7 @@ export function BlockTaskDetails({
                   void update({ task_type: e.target.value.trim() || null }, "TYPE");
               }}
             />
-            <datalist id="block-task-type-suggestions">
+            <datalist id={`block-task-type-${block.id}`}>
               {TASK_TYPE_SUGGESTIONS.map((s) => (
                 <option key={s} value={s} />
               ))}
@@ -431,6 +437,20 @@ export function BlockTaskDetails({
       </div>
 
       {/* 체크리스트 */}
+      <label className="block space-y-1">
+        <span className="label-caps text-[11px] text-muted-foreground">
+          이 생산 단계 메모 · {title}
+        </span>
+        <textarea
+          key={`note-${k}`}
+          className="min-h-16 w-full border border-border bg-background p-2 text-xs"
+          defaultValue={task.note ?? ""}
+          onBlur={(e) => {
+            if ((e.target.value.trim() || null) !== task.note)
+              void update({ note: e.target.value.trim() || null }, "메모");
+          }}
+        />
+      </label>
       {checklist.length > 0 && (
         <div className="flex flex-col gap-1">
           {checklist.map((item, idx) => (

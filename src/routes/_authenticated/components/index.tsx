@@ -8,6 +8,7 @@ import { buildTechniqueTree, techniquePath, type TechniqueCategory } from "@/lib
 import { formatDateTime } from "@/lib/datetime";
 import type { Component } from "@/lib/pilot";
 import { EmptyState } from "@/components/EmptyState";
+import { ComponentBlendModal } from "@/components/pilot/ComponentBlendModal";
 import { ComponentCreateModal } from "@/components/pilot/ComponentCreateModal";
 import { Field, PageHeader, inputClass, primaryButtonClass } from "@/components/pilot/ui";
 
@@ -29,6 +30,7 @@ function ComponentsPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [combining, setCombining] = useState(false);
 
   const togglePin = useMutation({
     mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
@@ -66,7 +68,12 @@ function ComponentsPage() {
   /** 그룹 헤더로 이미 보여준 최상위 TECHNIQUE CATEGORY 이름은 빼고, 그 아래 경로만 라벨로 표시 */
   const subPathLabel = (componentId: string | null): string => {
     const path = techniquePath(techList, componentId);
-    return path.length > 1 ? path.slice(1).map((p) => p.name).join(" / ") : "—";
+    return path.length > 1
+      ? path
+          .slice(1)
+          .map((p) => p.name)
+          .join(" / ")
+      : "—";
   };
 
   return (
@@ -74,9 +81,14 @@ function ComponentsPage() {
       <PageHeader
         title="COMPONENTS"
         action={
-          <button type="button" className={primaryButtonClass} onClick={() => setCreating(true)}>
-            + CREATE COMPONENT
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={primaryButtonClass} onClick={() => setCombining(true)}>
+              COMBINE COMPONENTS
+            </button>
+            <button type="button" className={primaryButtonClass} onClick={() => setCreating(true)}>
+              + CREATE COMPONENT
+            </button>
+          </div>
         }
       />
       <div className="border border-border bg-card p-4">
@@ -147,6 +159,7 @@ function ComponentsPage() {
         </div>
       )}
 
+      {combining && <ComponentBlendModal onClose={() => setCombining(false)} />}
       {creating && <ComponentCreateModal onClose={() => setCreating(false)} />}
     </div>
   );
