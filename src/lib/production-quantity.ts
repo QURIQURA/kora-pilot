@@ -5,6 +5,21 @@ export interface QuantitySelection {
   multiplier: number;
 }
 
+/** Publish the server-confirmed values to quantity rows and weighing columns together. */
+export function applySavedQuantities<T extends { id: string; multiplier: number }>(
+  rows: T[] | undefined,
+  saved: { id: string; multiplier: number; updated_at: string }[],
+): T[] | undefined {
+  if (!rows) return rows;
+  const byId = new Map(saved.map((r) => [r.id, r]));
+  return rows.map((row) => {
+    const update = byId.get(row.id);
+    return update
+      ? { ...row, multiplier: Number(update.multiplier), updated_at: update.updated_at }
+      : row;
+  });
+}
+
 export function groupProductionSelections<T extends QuantitySelection>(
   rows: T[],
   mergedVersions: ReadonlySet<string>,

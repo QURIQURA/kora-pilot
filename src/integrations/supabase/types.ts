@@ -894,6 +894,7 @@ export type Database = {
       formula_versions: {
         Row: {
           basis_overrides: Json;
+          component_sources: Json;
           bath_water_g: number | null;
           change_reason: string | null;
           change_summary: string | null;
@@ -912,6 +913,7 @@ export type Database = {
         };
         Insert: {
           basis_overrides?: Json;
+          component_sources?: Json;
           bath_water_g?: number | null;
           change_reason?: string | null;
           change_summary?: string | null;
@@ -930,6 +932,7 @@ export type Database = {
         };
         Update: {
           basis_overrides?: Json;
+          component_sources?: Json;
           bath_water_g?: number | null;
           change_reason?: string | null;
           change_summary?: string | null;
@@ -3738,6 +3741,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      create_component_blend: {
+        Args: { p_name: string; p_sources: Json; p_technique_category_id?: string };
+        Returns: Json;
+      };
       _tmp_delete_formula: { Args: { p_id: string }; Returns: undefined };
       _tmp_delete_formula_version: {
         Args: { p_id: string };

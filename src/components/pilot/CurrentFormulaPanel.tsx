@@ -94,7 +94,9 @@ export function CurrentFormulaPanel({
 
       const { data: baseVersionFull, error: bvError } = await supabase
         .from("formula_versions")
-        .select("default_mould_id, yield_quantity, bath_water_g, basis_overrides")
+        .select(
+          "default_mould_id, yield_quantity, bath_water_g, basis_overrides, component_sources, notes",
+        )
         .eq("id", baseVersionSummary.id)
         .single();
       if (bvError) throw bvError;
@@ -128,28 +130,32 @@ export function CurrentFormulaPanel({
           yield_quantity: baseVersionFull.yield_quantity,
           bath_water_g: baseVersionFull.bath_water_g,
           basis_overrides: baseVersionFull.basis_overrides,
+          component_sources: baseVersionFull.component_sources,
+          notes: baseVersionFull.notes,
         })
         .select("id")
         .single();
       if (versionError) throw versionError;
 
       if ((baseIngredients ?? []).length > 0) {
-        const { error: ingredientsError } = await supabase.from("formula_version_ingredients").insert(
-          (baseIngredients ?? []).map((row) => ({
-            user_id,
-            formula_version_id: newVersion.id,
-            ingredient_id: row.ingredient_id,
-            amount: row.amount,
-            unit: row.unit,
-            note: row.note,
-            sort_order: row.sort_order,
-            // 2026-10-07 사용자 정정: "버전 복사해도 동일하게 적용되게" — 보조 계량(예: 계란 3개)도
-            // 다른 복제 경로($formulaId.tsx의 새 버전 만들기)와 동일하게 함께 복사한다.
-            secondary_amount: row.secondary_amount,
-            secondary_unit: row.secondary_unit,
-            amount_source: "copied",
-          })),
-        );
+        const { error: ingredientsError } = await supabase
+          .from("formula_version_ingredients")
+          .insert(
+            (baseIngredients ?? []).map((row) => ({
+              user_id,
+              formula_version_id: newVersion.id,
+              ingredient_id: row.ingredient_id,
+              amount: row.amount,
+              unit: row.unit,
+              note: row.note,
+              sort_order: row.sort_order,
+              // 2026-10-07 사용자 정정: "버전 복사해도 동일하게 적용되게" — 보조 계량(예: 계란 3개)도
+              // 다른 복제 경로($formulaId.tsx의 새 버전 만들기)와 동일하게 함께 복사한다.
+              secondary_amount: row.secondary_amount,
+              secondary_unit: row.secondary_unit,
+              amount_source: "copied",
+            })),
+          );
         if (ingredientsError) throw ingredientsError;
       }
       return newFormula.id;
@@ -298,8 +304,8 @@ export function CurrentFormulaPanel({
         </p>
         {cost.hasMissingPrice && (
           <p className="font-mono text-[11px] text-muted-foreground">
-            * 일부 재료에 구입가 정보가 없어 원가가 실제보다 낮게 계산됐을 수 있습니다 —
-            INGREDIENTS 상세에서 구입가를 입력하세요.
+            * 일부 재료에 구입가 정보가 없어 원가가 실제보다 낮게 계산됐을 수 있습니다 — INGREDIENTS
+            상세에서 구입가를 입력하세요.
           </p>
         )}
 

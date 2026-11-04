@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -123,6 +124,7 @@ export function ProductionDashboard() {
   const stepsQuery = useQuery(workflowTemplateStepsQuery());
   const [date, setDate] = useState(() => toLocalDateString());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showManagement, setShowManagement] = useState(false);
   // 타임라인 아래 작업 박스(계량/워크플로 등)가 보여줄 세션 — 블록 선택 또는 대기공간 카드 클릭으로 정해진다.
   const [focusRowId, setFocusRowId] = useState<string | null>(null);
   const [poolOver, setPoolOver] = useState(false);
@@ -1460,38 +1462,123 @@ export function ProductionDashboard() {
         </section>
       </div>
 
-      {/* ── 선택한 블록(TASK)의 상세: 시간·타이머·효율·생산량·단위·체크리스트·템플릿 ── */}
-      {selected && selectedRow && (
-        <BlockTaskDetails
-          key={selected.id}
-          block={selected}
-          row={selectedRow}
-          title={blockTitle(selected, selectedRow)}
-          onStarted={ensureSessionStarted}
-        />
-      )}
-
       {/* ── 그날 작업의 WORK VIEW(계량) 등 — 블록이 속한 세션별로 ── */}
       {workspaceSessions.length > 0 ? (
         <>
           <DayWorkView
             key={date}
             items={dayWorkItems}
+            focusedRowId={selected?.work_session_formula_version_id ?? null}
+            focusKey={selected?.id ?? null}
+            renderRecords={(selectionIds) =>
+              selectionIds.map((id) => {
+                const row = rowById.get(id);
+                if (!row) return null;
+                const recordBlocks = dayBlocks
+                  .filter((b) => b.work_session_formula_version_id === id)
+                  .sort((a, b) => a.start_time.localeCompare(b.start_time));
+                return (
+                  <div key={id} className="space-y-1">
+                    <p className="font-mono text-[11px] text-muted-foreground">
+                      {row.order.order_number} · {row.componentName}
+                    </p>
+                    {recordBlocks.length ? (
+                      recordBlocks.map((block) => (
+                        <ProductionBlockRecord
+                          key={block.id}
+                          block={block}
+                          row={row}
+                          title={blockTitle(block, row)}
+                          active={selected?.id === block.id}
+                          onStarted={ensureSessionStarted}
+                        />
+                      ))
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        타임라인에 배정하면 생산 기록을 입력할 수 있어요.
+                      </p>
+                    )}
+                  </div>
+                );
+              })
+            }
             labels={Object.fromEntries(
               rows.map((r) => [r.id, `${r.order.order_number} · ${r.slot ?? ""}`]),
             )}
           />
-          {workspaceSessions.map(({ sid, rowIds }) => (
-            <div key={sid} className="space-y-3 border-t border-border pt-4">
-              <WorkSessionWorkspace sessionId={sid} rowIds={rowIds} embedded />
-            </div>
-          ))}
+          <details
+            className="border border-border bg-card"
+            onToggle={(e) => setShowManagement(e.currentTarget.open)}
+          >
+            <summary className="label-caps cursor-pointer px-3 py-2 text-xs">
+              구성 관리 · 세션 메모
+            </summary>
+            <p className="px-3 pb-2 text-xs text-muted-foreground">
+              컴포넌트 추가·제거와 세션 전체 메모입니다. 생산 수량과 기록은 위 컴포넌트 행에서
+              관리하세요.
+            </p>
+            {showManagement &&
+              workspaceSessions.map(({ sid, rowIds }) => (
+                <div key={sid} className="border-t border-border p-3">
+                  <p className="mb-2 font-mono text-xs">
+                    {[
+                      ...new Set(
+                        rows
+                          .filter((r) => r.work_session_id === sid)
+                          .map((r) => r.order.order_number),
+                      ),
+                    ].join(" / ")}
+                  </p>
+                  <WorkSessionWorkspace sessionId={sid} rowIds={rowIds} embedded />
+                </div>
+              ))}
+          </details>
         </>
       ) : (
         <p className="border-t border-border pt-3 font-mono text-[11px] text-muted-foreground">
           이 날짜에 배정된 작업이 없어요. 컴포넌트를 타임라인에 배정하면 아래에 계량(WORK VIEW)이
           열려요.
         </p>
+      )}
+    </div>
+  );
+}
+
+/** WANN project/task hierarchy: production records mount only when their row is open. */
+function ProductionBlockRecord({
+  block,
+  row,
+  title,
+  active,
+  onStarted,
+}: {
+  block: WorkBlock;
+  row: DashboardComponentRow;
+  title: string;
+  active: boolean;
+  onStarted: (sessionId: string, iso: string) => void | Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(active);
+  useEffect(() => {
+    if (active) setExpanded(true);
+  }, [active]);
+  return (
+    <div className="border-b border-border/50 last:border-0">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 py-2 text-left text-xs"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span aria-hidden="true">{expanded ? "▾" : "▸"}</span>
+        <span>
+          {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
+        </span>
+        <span className="flex-1">{block.step_name ?? `${block.part_no}차 생산`}</span>
+        <span className="text-muted-foreground">기록</span>
+      </button>
+      {expanded && (
+        <BlockTaskDetails block={block} row={row} title={title} onStarted={onStarted} embedded />
       )}
     </div>
   );
