@@ -53,7 +53,31 @@ export function readBlendSources(value: unknown): BlendSource[] {
       typeof s.version_id === "string" &&
       Number.isFinite(s.amount_g) &&
       Number.isFinite(s.base_weight_g) &&
-      s.amount_g > 0 &&
+      s.amount_g >= 0 &&
       s.base_weight_g > 0,
   );
+}
+
+/** Changing one percentage redistributes the remainder while preserving 100%. */
+export function adjustBlendPercentages(values: number[], index: number, percent: number): number[] {
+  if (
+    values.length < 2 ||
+    index < 0 ||
+    index >= values.length ||
+    !Number.isInteger(index) ||
+    !Number.isFinite(percent) ||
+    percent < 0 ||
+    percent > 100 ||
+    values.some((v) => !Number.isFinite(v) || v < 0)
+  ) {
+    throw new Error("비율은 0–100%로 입력하세요");
+  }
+  const others = values.reduce((sum, v, i) => sum + (i === index ? 0 : v), 0);
+  const next = values.map((v, i) =>
+    i === index ? percent : (100 - percent) * (others > 0 ? v / others : 1 / (values.length - 1)),
+  );
+  // Assign floating point residue to another component, never to the edited value.
+  const last = index === values.length - 1 ? values.length - 2 : values.length - 1;
+  next[last] = Math.max(0, 100 - next.reduce((sum, v, i) => sum + (i === last ? 0 : v), 0));
+  return next;
 }

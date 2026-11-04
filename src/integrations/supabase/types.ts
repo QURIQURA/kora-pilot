@@ -3762,6 +3762,15 @@ export type Database = {
         Args: { p_name: string; p_sources: Json; p_technique_category_id?: string };
         Returns: Json;
       };
+      revise_component_blend: {
+        Args: {
+          p_version_id: string;
+          p_expected_updated_at: string;
+          p_percentages: Json;
+          p_reason?: string;
+        };
+        Returns: Json;
+      };
       _tmp_delete_formula: { Args: { p_id: string }; Returns: undefined };
       _tmp_delete_formula_version: {
         Args: { p_id: string };

@@ -1054,7 +1054,24 @@ function FormulaDetailPage() {
         </div>
       )}
 
-      <BlendSourcesPanel sources={version?.component_sources} multiplier={batchValue} />
+      <BlendSourcesPanel
+        key={version?.id}
+        sources={version?.component_sources}
+        multiplier={batchValue}
+        revision={
+          version
+            ? {
+                versionId: version.id,
+                updatedAt: version.updated_at,
+                disabled: isDirty || saveAll.isPending,
+                onCreated: async (id) => {
+                  await invalidate();
+                  setVersionId(id);
+                },
+              }
+            : undefined
+        }
+      />
 
       {/* INGREDIENTS — BASE ×1 vs 저장된 배수 프리셋을 한 표 안에서 박스로 구분해 보여준다 */}
       {reorderError && (
