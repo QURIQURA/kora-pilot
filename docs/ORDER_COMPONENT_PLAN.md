@@ -41,7 +41,7 @@ Order와 Production은 기존 user_id 스코프 Realtime/BroadcastChannel/캐시
 - 기존 `tests/order-production-sync.sql`과 신규 `tests/order-component-plan.sql`을 롤백 트랜잭션으로 실행했다.
 - 목표/배수 공유, 역방향 새 Formula 연결, 고정 DRAFT 유지, 기존 작업 기록 보존,
   타 사용자 접근/오래된 수정/음수 목표/새 소수 배수/완료 주문 차단을 확인했다.
-- 운영 DB migration은 자동 승인 검토에서 차단되어 미적용 상태다. 브라우저 실사용 검증은 미실시다.
+- 2026-11-04 사용자 명시 승인 후 운영 DB에 migration을 적용하고, 기존/신규 SQL 통합 테스트를 롤백 트랜잭션으로 재검증했다. 주문·세션·선택·작업·블록 수가 모두 보존됐고 익명 RPC 실행이 차단됨을 확인했다. 브라우저 실사용 검증은 미실시다.
 
 ## 적용·되돌리기
 
