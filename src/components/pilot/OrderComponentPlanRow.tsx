@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
   formulasQuery,
+  mouldsQuery,
   techniqueCategoriesQuery,
   versionIngredientsQuery,
   type WorkSessionFormulaVersionRow,
@@ -13,6 +14,7 @@ import { parseComponentPlan, productionDemandSummary } from "@/lib/order-compone
 import { resolveSlotGroup } from "@/lib/technique";
 import { sumBaseGrams } from "@/lib/work-session";
 import { fmtNumber } from "@/lib/formula";
+import { mouldAbbr, mouldMultiplier, mouldQty } from "@/lib/component-size";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { syncWorkSessionToPlanner } from "@/lib/work-session";
 import { buttonClass, inputClass, selectClass } from "./ui";
@@ -23,6 +25,9 @@ const fromRow = (row: WorkSessionFormulaVersionRow) => ({
   multiplier: String(row.multiplier),
   target: row.target_quantity_g == null ? "" : String(row.target_quantity_g),
   pinned: row.version_pinned,
+  // 몰드 기준 생산: 목표 몰드 id / 개수(""이면 저장된 배수에서 계산)
+  mould: row.mould_id ?? "",
+  qty: "",
 });
 
 /** Order and Production edit one selection record; this is not a second recipe copy. */
@@ -65,7 +70,7 @@ export function OrderComponentPlanRow({
       const uid = await currentUserId();
       const { data, error } = await supabase
         .from("formula_versions")
-        .select("id,version_number,status")
+        .select("id,version_number,status,default_mould_id")
         .eq("user_id", uid)
         .eq("formula_id", draft.formula)
         .order("version_number", { ascending: false });
@@ -75,26 +80,48 @@ export function OrderComponentPlanRow({
   });
   const ingredients = useQuery(versionIngredientsQuery(draft.version));
   const base = sumBaseGrams(ingredients.data ?? []);
-  let preview = null;
-  try {
-    preview = productionDemandSummary(
-      [parseComponentPlan(draft.multiplier, draft.target, row.multiplier)],
-      base,
-    );
-  } catch {
-    /* shown on save */
-  }
+  // 몰드 기준: 레시피 기본 몰드(예: 6인치)와 이 주문에서 만들 목표 몰드(예: 8인치)의 기준중량 비율로 배수를 정한다.
+  const moulds = useQuery(mouldsQuery());
+  const defaultMouldId =
+    (versions.data ?? []).find((v) => v.id === draft.version)?.default_mould_id ??
+    row.formula_versions.default_mould_id;
+  const baseMould = (moulds.data ?? []).find((m) => m.id === defaultMouldId);
+  const targetMould = (moulds.data ?? []).find((m) => m.id === draft.mould);
+  const mouldMode = Boolean(baseMould?.reference_weight_g);
+  const derivedQty = targetMould ? (mouldQty(row.multiplier, baseMould, targetMould) ?? 1) : 1;
+  const qtyText = draft.qty !== "" ? draft.qty : String(derivedQty);
+  const useMould = mouldMode && Boolean(targetMould?.reference_weight_g);
+  const effectiveMultiplier = useMould
+    ? (mouldMultiplier(Number(qtyText), baseMould, targetMould) ?? Number.NaN)
+    : Number(draft.multiplier);
+  const parsedTarget = draft.target.trim() ? Number(draft.target) : null;
+  const preview =
+    Number.isFinite(effectiveMultiplier) && effectiveMultiplier > 0
+      ? productionDemandSummary(
+          [{ multiplier: effectiveMultiplier, target_quantity_g: parsedTarget }],
+          base,
+        )
+      : null;
   const save = useMutation({
     mutationFn: async () => {
       if (!draft.version) throw new Error("레시피 버전을 선택하세요");
-      const plan = parseComponentPlan(draft.multiplier, draft.target, row.multiplier);
-      const { data, error } = await supabase.rpc("save_order_component_plan", {
+      if (useMould && !(Number(qtyText) > 0))
+        throw new Error("몰드 개수는 0보다 큰 숫자여야 합니다");
+      // 몰드 없이 직접 입력하는 경우만 정수 배수 규칙을 적용한다.
+      const plan = useMould
+        ? { multiplier: effectiveMultiplier, target_quantity_g: parsedTarget }
+        : parseComponentPlan(draft.multiplier, draft.target, row.multiplier);
+      if (!Number.isFinite(plan.multiplier) || plan.multiplier <= 0)
+        throw new Error("생산 배수를 계산할 수 없어요 — 몰드의 기준중량을 확인하세요");
+      const { data, error } = await supabase.rpc("save_order_component_plan_v2", {
         p_selection_id: row.id,
         p_expected_updated_at: baseline.current.updatedAt,
         p_version_id: draft.version,
         p_multiplier: plan.multiplier,
         p_target_quantity_g: plan.target_quantity_g,
         p_version_pinned: draft.pinned,
+        p_mould_id: useMould ? draft.mould : null,
+        p_mould_qty: useMould ? Number(qtyText) : null,
       });
       if (error) throw error;
       return data as {
@@ -103,6 +130,8 @@ export function OrderComponentPlanRow({
         multiplier: number;
         target_quantity_g: number | null;
         version_pinned: boolean;
+        mould_id: string | null;
+        mould_qty: number | null;
         updated_at: string;
       };
     },
@@ -113,6 +142,8 @@ export function OrderComponentPlanRow({
         multiplier: String(saved.multiplier),
         target: saved.target_quantity_g == null ? "" : String(saved.target_quantity_g),
         pinned: saved.version_pinned,
+        mould: saved.mould_id ?? "",
+        qty: "",
       };
       baseline.current = { draft: next, updatedAt: saved.updated_at };
       setDraft(next);
@@ -182,20 +213,90 @@ export function OrderComponentPlanRow({
               ))}
           </select>
         </label>
-        <div className="grid grid-cols-1 gap-2">
-          <label className="text-[11px]">
-            생산 배수 ×
-            <input
-              aria-label="주문 생산 배수"
-              type="number"
-              min="1"
-              step="1"
-              className={inputClass}
-              value={draft.multiplier}
-              onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
-            />
-          </label>
-        </div>
+        {mouldMode ? (
+          <div className="space-y-1 border border-border p-2">
+            <p className="text-[11px] text-muted-foreground">
+              레시피 기본 몰드: {baseMould ? mouldAbbr(baseMould) : "—"} (
+              {fmtNumber(Number(baseMould?.reference_weight_g ?? 0))}g)
+            </p>
+            <div className="grid grid-cols-[1fr_5rem] gap-2">
+              <label className="text-[11px]">
+                생산 몰드
+                <select
+                  aria-label="생산 몰드"
+                  className={selectClass}
+                  value={draft.mould}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      mould: e.target.value,
+                      qty: d.mould ? qtyText : "1",
+                    }))
+                  }
+                >
+                  <option value="">몰드 없이 배수로 직접 입력</option>
+                  {(moulds.data ?? []).map((m) => (
+                    <option key={m.id} value={m.id} disabled={!m.reference_weight_g}>
+                      {mouldAbbr(m)}
+                      {m.reference_weight_g
+                        ? ` · ${fmtNumber(Number(m.reference_weight_g))}g`
+                        : " · 기준중량 없음"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {useMould && (
+                <label className="text-[11px]">
+                  개수
+                  <input
+                    aria-label="생산 몰드 개수"
+                    type="number"
+                    min="0"
+                    step="any"
+                    className={inputClass}
+                    value={qtyText}
+                    onChange={(e) => setDraft((d) => ({ ...d, qty: e.target.value }))}
+                  />
+                </label>
+              )}
+            </div>
+            {useMould ? (
+              <p className="font-mono text-[11px]">
+                {mouldAbbr(targetMould!)} ×{fmtNumber(Number(qtyText), 2)} = 레시피(
+                {baseMould ? mouldAbbr(baseMould) : "기본"} 기준) ×
+                {Number.isFinite(effectiveMultiplier) ? fmtNumber(effectiveMultiplier, 4) : "?"}
+              </p>
+            ) : (
+              <label className="block text-[11px]">
+                생산 배수 ×
+                <input
+                  aria-label="주문 생산 배수"
+                  type="number"
+                  min="1"
+                  step="1"
+                  className={inputClass}
+                  value={draft.multiplier}
+                  onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
+                />
+              </label>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2">
+            <label className="text-[11px]">
+              생산 배수 ×
+              <input
+                aria-label="주문 생산 배수"
+                type="number"
+                min="1"
+                step="1"
+                className={inputClass}
+                value={draft.multiplier}
+                onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
+              />
+            </label>
+          </div>
+        )}
         {!Number.isInteger(row.multiplier) && (
           <p className="text-[11px] text-muted-foreground">
             MERGE에서 나눈 주문 배정분입니다. 배수를 직접 바꿀 때는 정수로 입력하세요.
@@ -211,7 +312,8 @@ export function OrderComponentPlanRow({
         </label>
         {ingredients.isSuccess && preview && (
           <p className="font-mono text-[11px]">
-            기본 {fmtNumber(base)}g × {draft.multiplier} = 생산 {fmtNumber(preview.production)}g
+            기본 {fmtNumber(base)}g × {fmtNumber(effectiveMultiplier, 4)} = 생산{" "}
+            {fmtNumber(preview.production)}g
           </p>
         )}
         <button

@@ -3778,6 +3778,19 @@ export type Database = {
         Args: { p_order_id: string; p_item_id: string; p_expected_updated_at: string };
         Returns: Json;
       };
+      save_order_component_plan_v2: {
+        Args: {
+          p_selection_id: string;
+          p_expected_updated_at: string;
+          p_version_id: string;
+          p_multiplier: number;
+          p_target_quantity_g: number | null;
+          p_version_pinned: boolean;
+          p_mould_id: string | null;
+          p_mould_qty: number | null;
+        };
+        Returns: Json;
+      };
       create_component_blend: {
         Args: { p_name: string; p_sources: Json; p_technique_category_id?: string };
         Returns: Json;

@@ -55,9 +55,11 @@ type CoreRow = {
   planner_task_id: string | null;
   multiplier: number | string | null;
   capacity_qty: number | string | null;
+  mould_id?: string | null;
   base_weight_qty: number | string | null;
   capacities: { name: string; weight_g: number | null } | null;
-  moulds: MouldDims | null;
+  moulds: (MouldDims & { reference_weight_g?: number | null }) | null;
+  formula_version_base_mould?: { reference_weight_g: number | null } | null;
   base_weight_presets: { name: string; weight_g: number | null } | null;
   formula_versions: {
     formulas: { name: string; components: { name: string } | null } | null;
@@ -162,7 +164,14 @@ const taskTitle = (row: CoreRow): string => {
           }
         : null);
     if (mould) {
-      const qty = Number(row.capacity_qty ?? row.multiplier ?? 1);
+      // 몰드 기준: 개수 = 배수 × (레시피 기본 몰드 기준중량 ÷ 목표 몰드 기준중량) → "8인치 ×1" (6인치 ×2 아님)
+      const target = row.moulds?.reference_weight_g ?? null;
+      const baseRef = row.formula_version_base_mould?.reference_weight_g ?? null;
+      const byRef =
+        target && baseRef && target > 0 && baseRef > 0
+          ? Math.round(((Number(row.multiplier ?? 1) * baseRef) / target) * 100) / 100
+          : null;
+      const qty = byRef ?? Number(row.capacity_qty ?? row.multiplier ?? 1);
       return `${name} ${sizeAbbr(mould)} ×${fmt(qty)}`;
     }
     return `${name} ×${fmt(Number(row.multiplier ?? 1))}`;
@@ -421,14 +430,37 @@ Deno.serve(async (req: Request) => {
     const { data: coreRowsRaw, error: coreRowsError } = await kora
       .from("work_session_formula_versions")
       .select(
-        "id, slot, formula_version_id, planner_task_id, multiplier, capacity_qty, base_weight_qty, " +
-          "capacities(name, weight_g), moulds(name, diameter_mm, width_mm, length_mm, height_mm), base_weight_presets(name, weight_g), " +
-          "formula_versions(formulas(name, components(name)))",
+        "id, slot, formula_version_id, planner_task_id, multiplier, capacity_qty, mould_id, base_weight_qty, " +
+          "capacities(name, weight_g), moulds(name, diameter_mm, width_mm, length_mm, height_mm, reference_weight_g), base_weight_presets(name, weight_g), " +
+          "formula_versions(default_mould_id, formulas(name, components(name)))",
       )
       .eq("work_session_id", sessionId)
       .eq("kind", "CORE");
     if (coreRowsError) throw coreRowsError;
     const coreRows = (coreRowsRaw ?? []) as unknown as CoreRow[];
+    // 레시피 기본 몰드 기준중량(예: 6인치 340g) — 제목의 몰드 개수 역산용
+    const baseMouldIds = [
+      ...new Set(
+        coreRows
+          .map(
+            (r) =>
+              (r.formula_versions as { default_mould_id?: string | null } | null)?.default_mould_id,
+          )
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (baseMouldIds.length > 0) {
+      const { data: baseMoulds } = await kora
+        .from("moulds")
+        .select("id, reference_weight_g")
+        .in("id", baseMouldIds);
+      const refById = new Map((baseMoulds ?? []).map((m) => [m.id, m.reference_weight_g]));
+      for (const r of coreRows) {
+        const id = (r.formula_versions as { default_mould_id?: string | null } | null)
+          ?.default_mould_id;
+        r.formula_version_base_mould = id ? { reference_weight_g: refById.get(id) ?? null } : null;
+      }
+    }
 
     // 기준중량 프리셋이 없는 비-SHEET 품목의 제목용 — 레시피 BASE(×1) 재료 합계(g).
     const versionIds = [...new Set(coreRows.map((r) => r.formula_version_id))];
