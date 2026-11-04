@@ -110,7 +110,9 @@ export function DashboardComponentCopyForm({
         // 2) 새 FORMULA + 최신 버전 하나만 V1(CURRENT)으로
         const { data: srcVersion, error: svErr } = await supabase
           .from("formula_versions")
-          .select("default_mould_id, yield_quantity, bath_water_g, basis_overrides, notes")
+          .select(
+            "default_mould_id, yield_quantity, bath_water_g, basis_overrides, notes, component_sources",
+          )
           .eq("id", latest.id)
           .single();
         if (svErr) throw svErr;
@@ -146,6 +148,7 @@ export function DashboardComponentCopyForm({
             bath_water_g: srcVersion.bath_water_g,
             basis_overrides: srcVersion.basis_overrides,
             notes: srcVersion.notes,
+            component_sources: srcVersion.component_sources,
           })
           .select("id")
           .single();
@@ -178,6 +181,7 @@ export function DashboardComponentCopyForm({
           kind: "CORE",
           slot,
           multiplier: 1,
+          version_pinned: true,
           mould_id: isMould ? srcVersion.default_mould_id : null,
           mould_qty: isMould ? 1 : null,
           base_weight_id: null,
@@ -315,6 +319,7 @@ export function DashboardComponentNewForm({
           kind: "CORE",
           slot,
           multiplier: 1,
+          version_pinned: true,
           sort_order: nextSort,
         });
         if (rowErr) throw rowErr;

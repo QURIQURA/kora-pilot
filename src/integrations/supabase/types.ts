@@ -3107,6 +3107,8 @@ export type Database = {
           mould_id: string | null;
           mould_qty: number | null;
           multiplier: number;
+          target_quantity_g: number | null;
+          version_pinned: boolean;
           planner_task_id: string | null;
           slot: string | null;
           sort_order: number;
@@ -3126,6 +3128,8 @@ export type Database = {
           mould_id?: string | null;
           mould_qty?: number | null;
           multiplier?: number;
+          target_quantity_g?: number | null;
+          version_pinned?: boolean;
           planner_task_id?: string | null;
           slot?: string | null;
           sort_order?: number;
@@ -3145,6 +3149,8 @@ export type Database = {
           mould_id?: string | null;
           mould_qty?: number | null;
           multiplier?: number;
+          target_quantity_g?: number | null;
+          version_pinned?: boolean;
           planner_task_id?: string | null;
           slot?: string | null;
           sort_order?: number;
@@ -3741,6 +3747,17 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      save_order_component_plan: {
+        Args: {
+          p_selection_id: string;
+          p_expected_updated_at: string;
+          p_version_id: string;
+          p_multiplier: number;
+          p_target_quantity_g: number | null;
+          p_version_pinned?: boolean;
+        };
+        Returns: Json;
+      };
       create_component_blend: {
         Args: { p_name: string; p_sources: Json; p_technique_category_id?: string };
         Returns: Json;
