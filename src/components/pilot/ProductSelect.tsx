@@ -17,18 +17,28 @@ export function ProductSelect({
   emptyLabel = "NO PRODUCT",
   className,
   disabled,
+  linkedParts,
 }: {
   value: string;
   onChange: (id: string) => void;
   emptyLabel?: string;
   className?: string;
   disabled?: boolean;
+  /** 2026-11-04 사용자 요청: ORDER에서는 SHEET/CREAM/FILLING부터 정하고 그 구성으로 새 PRODUCT를 만든다.
+   * 값이 있으면 새 PRODUCT를 만들 때 이 구성(product_components)을 함께 연결하고 이름도 제안한다. */
+  linkedParts?: {
+    label: string;
+    name: string;
+    componentId: string;
+    formulaVersionId: string | null;
+  }[];
 }) {
   const products = useQuery(productsQuery());
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
+  const parts = linkedParts ?? [];
 
   // 2026-11-04 버그 리포트: "order detail new product 이름 타이핑이 안 돼" — 드롭다운(select)에서 + NEW PRODUCT를
   // 고르는 순간 select가 닫히면서 포커스를 되가져가 autoFocus가 무시되고, 키 입력이 select로 들어갔다.
@@ -48,6 +58,19 @@ export function ProductSelect({
         .select("id")
         .single();
       if (error) throw error;
+      if (parts.length > 0) {
+        const { error: linkErr } = await supabase.from("product_components").insert(
+          parts.map((p, i) => ({
+            user_id,
+            product_id: data.id,
+            component_id: p.componentId,
+            formula_version_id: p.formulaVersionId,
+            sort_order: i,
+          })),
+        );
+        if (linkErr) throw linkErr;
+        await queryClient.invalidateQueries({ queryKey: ["product_components"] });
+      }
       return data.id;
     },
     onSuccess: async (id) => {
@@ -67,6 +90,8 @@ export function ProductSelect({
         onChange={(e) => {
           if (e.target.value === NEW_VALUE) {
             e.target.blur();
+            // 오더에서 정한 구성이 있으면 그 컴포넌트 이름으로 PRODUCT 이름을 제안한다(고칠 수 있음)
+            if (parts.length > 0 && !name) setName(parts.map((p) => p.name).join(" + "));
             setCreating(true);
             return;
           }
@@ -123,6 +148,20 @@ export function ProductSelect({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
+                {parts.length > 0 && (
+                  <div className="border border-dashed border-border p-2">
+                    <p className="label-caps mb-1 text-[10px] text-muted-foreground">
+                      이 오더의 구성이 새 PRODUCT에 함께 연결돼요
+                    </p>
+                    <ul className="space-y-0.5 font-mono text-[11px]">
+                      {parts.map((p) => (
+                        <li key={p.label}>
+                          {p.label} · {p.name}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {create.isError && (
                   <p className="font-mono text-xs uppercase text-destructive">
                     {(create.error as Error).message}

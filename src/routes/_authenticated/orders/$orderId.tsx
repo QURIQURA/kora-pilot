@@ -45,6 +45,7 @@ import { ensureWorkSessionForOrder } from "@/lib/work-session";
 import { mouldOptionLabel } from "@/components/pilot/MouldSelect";
 import { selectionIssue } from "@/lib/size-configuration";
 import { formatProductSizeLabel } from "@/lib/product-size";
+import { pickEffectiveFormulaVersion } from "@/lib/formula";
 import { ProductSizeSelect } from "@/components/pilot/ProductSizeSelect";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
@@ -1030,6 +1031,30 @@ function OrderDetailPage() {
               <div className="hidden md:block" aria-hidden />
               <Field label="PRODUCT">
                 <ProductSelect
+                  linkedParts={(
+                    [
+                      ["SHEET", flavoringSheetFormulaId],
+                      ["CREAM", flavoringCreamFormulaId],
+                      ["FILLING", flavoringFillingFormulaId],
+                    ] as const
+                  ).flatMap(([slot, formulaId]) => {
+                    const f = (formulas.data ?? []).find((x) => x.id === formulaId);
+                    if (!f?.component_id) return [];
+                    // Production에서 이미 고른 버전이 있으면 그 버전, 없으면 현재(유효) 버전
+                    const chosen = (productionSelections.data ?? []).find(
+                      (r) => r.kind === "CORE" && r.slot === slot,
+                    );
+                    const version =
+                      chosen?.formula_version_id ?? pickEffectiveFormulaVersion(f.formula_versions)?.id ?? null;
+                    return [
+                      {
+                        label: CORE_SLOT_LABELS[slot],
+                        name: f.components?.name ?? f.name,
+                        componentId: f.component_id,
+                        formulaVersionId: version,
+                      },
+                    ];
+                  })}
                   value={productId}
                   onChange={(next) => {
                     setProductId(next);
