@@ -385,6 +385,7 @@ export function WorkSessionWorkspace({
                 groups={weighingGroups}
                 columns={orderedSelections}
                 onProgressChanged={invalidateProgress}
+                onEditColumn={setEditingColumn}
               />,
             )
           ) : (
@@ -2480,6 +2481,7 @@ export function DayWorkView({
             groups={groups}
             columns={columns}
             onProgressChanged={invalidateProgress}
+            onEditColumn={setEditingColumn}
           />
         ) : (
           <FormulaView
