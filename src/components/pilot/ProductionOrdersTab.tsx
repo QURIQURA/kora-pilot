@@ -1,3 +1,8 @@
+import { toast } from "sonner";
+import { ComponentPlanReadout } from "./ComponentPlanReadout";
+import { ProductionOrderSizeEditor } from "./ProductionOrderSizeEditor";
+import { removePlannedComponent } from "@/lib/production-plan-actions";
+import { invalidateProductionSync } from "@/lib/production-sync";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,9 +14,12 @@ import {
   ordersQuery,
   workBlocksQuery,
   workSessionsQuery,
+  workSessionFormulaVersionsQuery,
   type CoreSlot,
   type DashboardComponentRow,
 } from "@/lib/queries";
+import { buildProductionOrderCards } from "@/lib/production-orders";
+import { OrderComponentPlanRow } from "./OrderComponentPlanRow";
 import { formatDelivery } from "@/lib/datetime";
 import { ensureWorkSessionForOrder } from "@/lib/work-session";
 import { cn } from "@/lib/utils";
@@ -36,17 +44,9 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
   const blocks = useQuery(workBlocksQuery());
   const [adding, setAdding] = useState<{ orderId: string; slot: CoreSlot } | null>(null);
   const dietaryOf = useOrderDietaryNames();
+  const [sessionErrors, setSessionErrors] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<"pick" | "copy" | "new">("pick");
 
-  const rowsByOrder = useMemo(() => {
-    const map = new Map<string, DashboardComponentRow[]>();
-    for (const r of components.data ?? []) {
-      const list = map.get(r.order.id) ?? [];
-      list.push(r);
-      map.set(r.order.id, list);
-    }
-    return map;
-  }, [components.data]);
   const firstBlockByRow = useMemo(() => {
     const map = new Map<string, { date: string; time: string; count: number }>();
     for (const b of [...(blocks.data ?? [])].sort(
@@ -67,25 +67,13 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
 
   const list = useMemo(
     () =>
-      (orders.data ?? [])
-        .filter((o) => (o.status === "COMPLETED") === completed)
-        .map((o) => ({
-          order: o,
-          rows: rowsByOrder.get(o.id) ?? [],
-          session:
-            (sessions.data ?? []).find((s) => s.order_id === o.id && s.status !== "CANCELLED") ??
-            null,
-        }))
-        // 컴포넌트가 아직 없는 오더를 위에(지정이 필요한 것부터), 그 다음 오더 번호순
-        .sort((a, b) =>
-          completed
-            ? (b.order.pickup_at ?? b.order.event_date ?? "").localeCompare(
-                a.order.pickup_at ?? a.order.event_date ?? "",
-              )
-            : Number(a.rows.length > 0) - Number(b.rows.length > 0) ||
-              a.order.order_number.localeCompare(b.order.order_number),
-        ),
-    [orders.data, rowsByOrder, sessions.data, completed],
+      buildProductionOrderCards(
+        orders.data ?? [],
+        components.data ?? [],
+        sessions.data ?? [],
+        completed,
+      ),
+    [orders.data, components.data, sessions.data, completed],
   );
 
   const refresh = async (sessionId?: string) => {
@@ -104,36 +92,57 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
     mutationFn: async (order: NonNullable<typeof orders.data>[number]) => {
       await ensureWorkSessionForOrder(order.id);
     },
-    onSuccess: () => refresh(),
+    onSuccess: async (_, order) => {
+      setSessionErrors((all) => {
+        const next = { ...all };
+        delete next[order.id];
+        return next;
+      });
+      await refresh();
+    },
+    onError: (error, order) =>
+      setSessionErrors((all) => ({ ...all, [order.id]: (error as Error).message })),
   });
 
   // 모든 진행 중 오더는 WORK SESSION을 기본으로 가진다 — 없는 오더가 보이면 자동으로 채운다.
   const ensuredRef = useRef(new Set<string>());
   useEffect(() => {
-    if (completed || !orders.data || !sessions.data) return;
+    if (completed || orders.isError || sessions.isError || !orders.data || !sessions.data) return;
     const missing = orders.data.filter(
       (o) =>
         o.status !== "COMPLETED" &&
+        o.status !== "CANCELLED" &&
         !ensuredRef.current.has(o.id) &&
         !sessions.data.some((s) => s.order_id === o.id),
     );
     if (missing.length === 0) return;
     for (const o of missing) ensuredRef.current.add(o.id);
     void (async () => {
+      let prepared = false;
       for (const o of missing) {
         try {
           await ensureWorkSessionForOrder(o.id);
-        } catch {
-          ensuredRef.current.delete(o.id);
+          prepared = true;
+        } catch (error) {
+          setSessionErrors((all) => ({ ...all, [o.id]: (error as Error).message }));
         }
       }
-      await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
+      if (prepared) await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
     })();
   }, [orders.data, sessions.data, queryClient, completed]);
 
-  if (orders.isLoading || components.isLoading) {
+  if (orders.isLoading) {
     return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
   }
+  if (orders.isError)
+    return (
+      <div role="alert" className="space-y-2 text-sm text-destructive">
+        주문 목록을 불러오지 못했습니다.{" "}
+        <button type="button" className={buttonClass} onClick={() => void orders.refetch()}>
+          다시 불러오기
+        </button>
+      </div>
+    );
   if (list.length === 0) {
     return (
       <p className="font-mono text-xs text-muted-foreground">
@@ -147,15 +156,23 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
       <p className="font-mono text-[11px] text-muted-foreground">
         {completed
           ? `완료된 오더 ${list.length}개 · 오더가 COMPLETED가 되면 ORDERS에서 자동으로 여기로 옮겨져요.`
-          : `진행 중인 오더 ${list.length}개 · 여기서 컴포넌트를 지정하면 DASHBOARD의 작업 대기공간(시간 배정 전)으로 올라가요.`}
+          : `진행 중인 오더 ${list.length}개 · 여기서 컴포넌트·레시피·사용 목표·생산 배수를 설정해요. 지정한 항목은 DASHBOARD 작업 대기공간으로 올라가고, Order 상세에는 읽기 전용으로 표시돼요.`}
       </p>
+      {(sessions.isError || components.isError || blocks.isError) && (
+        <p role="alert" className="text-xs text-destructive">
+          주문 카드는 표시했지만 일부 생산 정보를 불러오지 못했습니다.{" "}
+          <button type="button" className="underline" onClick={() => void refresh()}>
+            생산 정보 재시도
+          </button>
+        </p>
+      )}
       {createSession.isError && (
         <p className="font-mono text-xs text-destructive">
           {(createSession.error as Error).message}
         </p>
       )}
       <div className="grid gap-3 lg:grid-cols-2">
-        {list.map(({ order, rows, session }) => (
+        {list.map(({ order, rows, session, ambiguousSession }) => (
           <section key={order.id} className="space-y-2 border border-border bg-card p-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="label-caps border border-foreground px-1.5 py-0.5 text-[11px]">
@@ -179,32 +196,51 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
               )}
             </div>
 
-            {rows.length === 0 ? (
-              <p className="font-mono text-[11px] text-destructive">컴포넌트 미지정</p>
-            ) : (
-              <ul className="divide-y divide-border border border-border">
-                {rows.map((r) => {
-                  const b = firstBlockByRow.get(r.id);
-                  return (
-                    <li key={r.id} className="flex items-center gap-2 px-2 py-1.5">
-                      <span className="label-caps w-14 shrink-0 text-[10px] text-muted-foreground">
-                        {r.slot ?? "CORE"}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm">{r.componentName}</span>
-                      {r.unmodifiedCopy && <CopyWarning formulaId={r.formulaId} />}
-                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                        {b
-                          ? `${b.date.slice(5)} ${b.time}${b.count > 1 ? ` +${b.count - 1}` : ""}`
-                          : "시간 미배정"}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+            <ProductionOrderSizeEditor
+              order={order}
+              sessionId={session?.id ?? ""}
+              readOnly={completed || order.status === "CANCELLED" || ambiguousSession}
+            />
+            {ambiguousSession && (
+              <p role="alert" className="text-xs text-destructive">
+                연결된 Work Session이 여러 개입니다. 임의로 선택하지 않았어요. 세션 연결을 먼저
+                확인하세요.
+              </p>
             )}
+            {!session && !ambiguousSession && !completed && order.status !== "CANCELLED" && (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span
+                  className={sessionErrors[order.id] ? "text-destructive" : "text-muted-foreground"}
+                >
+                  {sessionErrors[order.id]
+                    ? `생산 준비 실패: ${sessionErrors[order.id]}`
+                    : sessions.isLoading
+                      ? "생산 정보를 불러오는 중…"
+                      : "생산 준비 중 · 주문은 목록에 유지됩니다."}
+                </span>
+                {!sessions.isLoading && (
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={createSession.isPending}
+                    onClick={() => createSession.mutate(order)}
+                  >
+                    생산 준비 재시도
+                  </button>
+                )}
+              </div>
+            )}
+            <ProductionOrderComponentList
+              sessionId={session?.id ?? ""}
+              dashboardRows={rows}
+              firstBlockByRow={firstBlockByRow}
+              readOnly={completed || order.status === "CANCELLED"}
+            />
 
             {/* 슬롯 버튼은 세션 유무와 상관없이 항상 — 세션이 없으면 누르는 순간 자동으로 만든다 */}
-            <div className={cn("space-y-1.5", completed && "hidden")}>
+            <div
+              className={cn("space-y-1.5", (completed || order.status === "CANCELLED") && "hidden")}
+            >
               <div className="flex flex-wrap gap-1">
                 {CORE_SLOTS.map((slot) => (
                   <button
@@ -215,13 +251,24 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
                       "!min-h-[26px] px-1.5 text-[11px]",
                       adding?.orderId === order.id && adding.slot === slot && "bg-secondary",
                     )}
-                    disabled={createSession.isPending}
+                    disabled={
+                      createSession.isPending ||
+                      ambiguousSession ||
+                      sessions.isError ||
+                      sessions.isLoading
+                    }
                     onClick={async () => {
                       if (adding?.orderId === order.id && adding.slot === slot) {
                         setAdding(null);
                         return;
                       }
-                      if (!session) await createSession.mutateAsync(order);
+                      if (!session) {
+                        try {
+                          await createSession.mutateAsync(order);
+                        } catch {
+                          return;
+                        }
+                      }
                       setAdding({ orderId: order.id, slot });
                     }}
                   >
@@ -295,5 +342,128 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
         ))}
       </div>
     </div>
+  );
+}
+
+function ProductionOrderComponentList({
+  sessionId,
+  dashboardRows,
+  firstBlockByRow,
+  readOnly,
+}: {
+  sessionId: string;
+  dashboardRows: DashboardComponentRow[];
+  firstBlockByRow: Map<string, { date: string; time: string; count: number }>;
+  readOnly: boolean;
+}) {
+  const selections = useQuery(workSessionFormulaVersionsQuery(sessionId));
+  if (!sessionId) return null;
+  if (selections.isLoading)
+    return <p className="text-xs text-muted-foreground">컴포넌트 불러오는 중…</p>;
+  if (selections.isError)
+    return (
+      <p role="alert" className="text-xs text-destructive">
+        컴포넌트를 불러오지 못했습니다.{" "}
+        <button type="button" className="underline" onClick={() => void selections.refetch()}>
+          재시도
+        </button>
+      </p>
+    );
+  const rows = (selections.data ?? []).filter((r) => r.kind === "CORE");
+  if (!rows.length)
+    return <p className="text-xs text-muted-foreground">컴포넌트 미지정 · 아래에서 추가하세요.</p>;
+  return (
+    <ul className="divide-y divide-border border border-border">
+      {rows.map((r) => (
+        <ProductionOrderComponentItem
+          key={r.id}
+          row={r}
+          dashboardRow={dashboardRows.find((d) => d.id === r.id)}
+          block={firstBlockByRow.get(r.id)}
+          readOnly={readOnly}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function ProductionOrderComponentItem({
+  row,
+  dashboardRow,
+  block,
+  readOnly,
+}: {
+  row: import("@/lib/queries").WorkSessionFormulaVersionRow;
+  dashboardRow: DashboardComponentRow | undefined;
+  block: { date: string; time: string; count: number } | undefined;
+  readOnly: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const client = useQueryClient();
+  const [removeWarning, setRemoveWarning] = useState<string | null>(null);
+  const remove = useMutation({
+    mutationFn: () => removePlannedComponent(row),
+    onSuccess: (warning) => {
+      setRemoveWarning(warning);
+      if (warning) toast.error(warning);
+    },
+    onError: (error) => toast.error(error.message),
+    onSettled: () => {
+      void invalidateProductionSync(client);
+    },
+  });
+  return (
+    <li className="px-2 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="label-caps text-[10px] text-muted-foreground">{row.slot ?? "CORE"}</span>
+        <span className="min-w-0 flex-1 text-sm">
+          {row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name}
+        </span>
+        {dashboardRow?.unmodifiedCopy && <CopyWarning formulaId={dashboardRow.formulaId} />}
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {block
+            ? `${block.date.slice(5)} ${block.time}${block.count > 1 ? ` +${block.count - 1}` : ""}`
+            : "시간 미배정"}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+        <ComponentPlanReadout row={row} />
+        {!readOnly && (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            className="ml-auto underline"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "설정 닫기" : "레시피·수량 설정"}
+          </button>
+        )}
+      </div>
+      {expanded && !readOnly && (
+        <div className="space-y-2">
+          <OrderComponentPlanRow row={row} allowFormulaChange />
+          <button
+            type="button"
+            className={buttonClass + " text-xs text-destructive"}
+            disabled={remove.isPending}
+            onClick={() => {
+              if (
+                confirm(
+                  `이 주문의 ${row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name} 지정을 삭제할까요? 예정 블록도 제거되며 원본 레시피는 유지됩니다.`,
+                )
+              )
+                remove.mutate();
+            }}
+          >
+            {remove.isPending ? "삭제 중…" : "이 주문에서 컴포넌트 삭제"}
+          </button>
+          {(remove.isError || removeWarning) && (
+            <p role="alert" className="text-xs text-destructive">
+              {remove.error?.message ?? removeWarning}
+            </p>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

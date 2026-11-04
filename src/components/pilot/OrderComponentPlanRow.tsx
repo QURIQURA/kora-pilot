@@ -4,16 +4,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
+  formulasQuery,
+  techniqueCategoriesQuery,
   versionIngredientsQuery,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
 import { parseComponentPlan, productionDemandSummary } from "@/lib/order-component-plan";
+import { resolveSlotGroup } from "@/lib/technique";
 import { sumBaseGrams } from "@/lib/work-session";
 import { fmtNumber } from "@/lib/formula";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { buttonClass, inputClass, selectClass } from "./ui";
 
 const fromRow = (row: WorkSessionFormulaVersionRow) => ({
+  formula: row.formula_versions.formulas.id,
   version: row.formula_version_id,
   multiplier: String(row.multiplier),
   target: row.target_quantity_g == null ? "" : String(row.target_quantity_g),
@@ -24,9 +28,11 @@ const fromRow = (row: WorkSessionFormulaVersionRow) => ({
 export function OrderComponentPlanRow({
   row,
   disabled = false,
+  allowFormulaChange = false,
 }: {
   row: WorkSessionFormulaVersionRow;
   disabled?: boolean;
+  allowFormulaChange?: boolean;
 }) {
   const client = useQueryClient();
   const [draft, setDraft] = useState(() => fromRow(row));
@@ -42,15 +48,25 @@ export function OrderComponentPlanRow({
     // Remote refresh must not overwrite a locally edited production plan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row.updated_at]);
+  const formulas = useQuery({ ...formulasQuery(), enabled: allowFormulaChange });
+  const techniques = useQuery({ ...techniqueCategoriesQuery(), enabled: allowFormulaChange });
+  const choices = (formulas.data ?? []).filter(
+    (f) =>
+      f.id === draft.formula ||
+      resolveSlotGroup(
+        techniques.data ?? [],
+        f.components?.technique_category_id ?? f.technique_category_id,
+      ) === row.slot,
+  );
   const versions = useQuery({
-    queryKey: ["formula_versions", "order-plan", row.formula_versions.formulas.id],
+    queryKey: ["formula_versions", "order-plan", draft.formula],
     queryFn: async () => {
       const uid = await currentUserId();
       const { data, error } = await supabase
         .from("formula_versions")
         .select("id,version_number,status")
         .eq("user_id", uid)
-        .eq("formula_id", row.formula_versions.formulas.id)
+        .eq("formula_id", draft.formula)
         .order("version_number", { ascending: false });
       if (error) throw error;
       return data;
@@ -69,6 +85,7 @@ export function OrderComponentPlanRow({
   }
   const save = useMutation({
     mutationFn: async () => {
+      if (!draft.version) throw new Error("레시피 버전을 선택하세요");
       const plan = parseComponentPlan(draft.multiplier, draft.target, row.multiplier);
       const { data, error } = await supabase.rpc("save_order_component_plan", {
         p_selection_id: row.id,
@@ -90,6 +107,7 @@ export function OrderComponentPlanRow({
     },
     onSuccess: (saved) => {
       const next = {
+        formula: draft.formula,
         version: saved.formula_version_id,
         multiplier: String(saved.multiplier),
         target: saved.target_quantity_g == null ? "" : String(saved.target_quantity_g),
@@ -97,11 +115,12 @@ export function OrderComponentPlanRow({
       };
       baseline.current = { draft: next, updatedAt: saved.updated_at };
       setDraft(next);
-      client.setQueryData(
-        ["work_session_formula_versions", row.work_session_id],
-        (old: WorkSessionFormulaVersionRow[] | undefined) =>
-          old?.map((r) => (r.id === saved.id ? { ...r, ...saved } : r)),
-      );
+      if (saved.formula_version_id === row.formula_version_id)
+        client.setQueryData(
+          ["work_session_formula_versions", row.work_session_id],
+          (old: WorkSessionFormulaVersionRow[] | undefined) =>
+            old?.map((r) => (r.id === saved.id ? { ...r, ...saved } : r)),
+        );
       void invalidateProductionSync(client);
     },
   });
@@ -111,6 +130,31 @@ export function OrderComponentPlanRow({
         {row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name}
       </p>
       <fieldset disabled={disabled || save.isPending} className="space-y-2">
+        {allowFormulaChange && (
+          <label className="block text-[11px]">
+            컴포넌트 / FORMULA 교체
+            <select
+              aria-label="컴포넌트 교체"
+              className={selectClass}
+              value={draft.formula}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, formula: e.target.value, version: "", pinned: true }))
+              }
+            >
+              {!choices.some((f) => f.id === draft.formula) && (
+                <option value={draft.formula}>
+                  {row.formula_versions.formulas.components?.name ??
+                    row.formula_versions.formulas.name}
+                </option>
+              )}
+              {choices.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.components?.name ?? f.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block text-[11px]">
           레시피 버전
           <select
@@ -119,7 +163,8 @@ export function OrderComponentPlanRow({
             value={draft.version}
             onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value, pinned: true }))}
           >
-            {versions.isLoading && (
+            {!draft.version && <option value="">버전 선택…</option>}
+            {versions.isLoading && draft.version && (
               <option value={draft.version}>V{row.formula_versions.version_number}</option>
             )}
             {(versions.data ?? [])

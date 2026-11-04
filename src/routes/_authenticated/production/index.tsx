@@ -18,6 +18,10 @@ import {
 } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/production/")({
+  validateSearch: (search: Record<string, unknown>): { tab?: MainTab } =>
+    ["DASHBOARD", "ORDERS", "ORDER HISTORY", "HISTORY"].includes(String(search["tab"]))
+      ? { tab: search["tab"] as MainTab }
+      : {},
   head: () => ({
     meta: [
       { title: "PILOT — Production" },
@@ -44,19 +48,19 @@ const STATUS_LABEL: Record<string, string> = {
 type MainTab = "DASHBOARD" | "ORDERS" | "ORDER HISTORY" | "HISTORY";
 
 function ProductionDashboardPage() {
-  const [tab, setTab] = useState<MainTab>("DASHBOARD");
+  const tab = Route.useSearch().tab ?? "DASHBOARD";
 
   return (
     <div className="space-y-4">
       <PageHeader title="PRODUCTION" />
       <div className="flex gap-4 border-b border-border" role="tablist">
         {(["DASHBOARD", "ORDERS", "ORDER HISTORY", "HISTORY"] as const).map((t) => (
-          <button
+          <Link
             key={t}
-            type="button"
+            to="/production"
+            search={{ tab: t }}
             role="tab"
             aria-selected={tab === t}
-            onClick={() => setTab(t)}
             className={
               "label-caps -mb-px border-b-2 px-1 pb-2 text-xs " +
               (tab === t
@@ -65,7 +69,7 @@ function ProductionDashboardPage() {
             }
           >
             {t}
-          </button>
+          </Link>
         ))}
       </div>
       {tab === "DASHBOARD" ? (

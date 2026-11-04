@@ -1,4 +1,4 @@
-import { productionDemandSummary } from "@/lib/order-component-plan";
+import { parseComponentPlan, productionDemandSummary } from "@/lib/order-component-plan";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -385,7 +385,6 @@ export function WorkSessionWorkspace({
                 groups={weighingGroups}
                 columns={orderedSelections}
                 onProgressChanged={invalidateProgress}
-                onEditColumn={setEditingColumn}
               />,
             )
           ) : (
@@ -678,6 +677,8 @@ export function AddFormulaVersionForm({
   });
   const [formulaId, setFormulaId] = useState("");
   const [versionId, setVersionId] = useState("");
+  const [planMultiplier, setPlanMultiplier] = useState("1");
+  const [planTarget, setPlanTarget] = useState("");
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
   const versionOptions = [...(formula?.formula_versions ?? [])].sort(
     (a, b) => b.version_number - a.version_number,
@@ -688,6 +689,7 @@ export function AddFormulaVersionForm({
   const add = useMutation({
     mutationFn: async () => {
       if (!versionId) throw new Error("Select a formula version");
+      const plan = parseComponentPlan(planMultiplier, planTarget);
       // 2026-10-07 사용자 요청: 같은 FORMULA VERSION도 이 WORK SESSION에 중복으로 추가할 수
       // 있다(예: 같은 레시피를 다른 몰드/배치로 각각) — 더 이상 막지 않는다.
       const user_id = await currentUserId();
@@ -696,7 +698,9 @@ export function AddFormulaVersionForm({
         work_session_id: sessionId,
         formula_version_id: versionId,
         // New selections start at one recipe batch. Only ADJUST QUANTITY changes the multiplier.
-        multiplier: 1,
+        multiplier: plan.multiplier,
+        target_quantity_g: plan.target_quantity_g,
+        version_pinned: true,
         mould_id: scalingMode === "MOULD" ? (selectedVersion?.default_mould_id ?? null) : null,
         mould_qty: null,
         capacity_id: scalingMode === "MOULD" ? (selectedVersion?.default_mould_id ?? null) : null,
@@ -777,8 +781,31 @@ export function AddFormulaVersionForm({
         </Field>
       </div>
       <p className="text-xs text-muted-foreground">
-        기본 배합 ×1로 추가합니다. 생산 배수는 ADJUST QUANTITY 한 곳에서 조절하세요.
+        이 주문의 계획으로 저장합니다. 다른 화면에는 같은 계획이 표시됩니다.
       </p>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="사용 목표 (g)">
+          <input
+            className={inputClass}
+            type="number"
+            min="0"
+            step="any"
+            placeholder="미지정"
+            value={planTarget}
+            onChange={(e) => setPlanTarget(e.target.value)}
+          />
+        </Field>
+        <Field label="생산 배수 ×">
+          <input
+            className={inputClass}
+            type="number"
+            min="1"
+            step="1"
+            value={planMultiplier}
+            onChange={(e) => setPlanMultiplier(e.target.value)}
+          />
+        </Field>
+      </div>
       {add.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
           {(add.error as Error).message}
@@ -880,7 +907,7 @@ function WeighingView({
   groups: ReturnType<typeof buildWeighingGroups>;
   columns: WeighingColumn[];
   onProgressChanged: () => void;
-  onEditColumn: (column: WeighingColumn) => void;
+  onEditColumn?: (column: WeighingColumn) => void;
 }) {
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [rowOrder, setRowOrder] = useState<string[]>([]);
@@ -1067,7 +1094,9 @@ function WeighingView({
                     multiplier={col.multiplier}
                     onResizeStart={(clientX) => startColumnResize(col.selectionId, clientX)}
                     onEdit={
-                      col.members && col.members.length > 1 ? undefined : () => onEditColumn(col)
+                      !onEditColumn || (col.members && col.members.length > 1)
+                        ? undefined
+                        : () => onEditColumn(col)
                     }
                   />
                 ))}
@@ -2451,7 +2480,6 @@ export function DayWorkView({
             groups={groups}
             columns={columns}
             onProgressChanged={invalidateProgress}
-            onEditColumn={setEditingColumn}
           />
         ) : (
           <FormulaView
@@ -2578,12 +2606,12 @@ function SelectionQuantityHistory({
 
 /** Recipe multiples are the only production input. Mould weights never rewrite this value. */
 function ProductionQuantityRow({
-  compact = false,
   members,
   lines,
   canMerge,
   onToggleMerge,
   labels,
+  compact = false,
 }: {
   compact?: boolean;
   labels: Record<string, string>;
@@ -2592,213 +2620,46 @@ function ProductionQuantityRow({
   canMerge: boolean;
   onToggleMerge: () => void;
 }) {
-  const queryClient = useQueryClient();
   const first = members[0]!;
-  const total = members.reduce((n, m) => n + Number(m.multiplier), 0);
+  const total = members.reduce((sum, row) => sum + Number(row.multiplier), 0);
   const base = sumBaseGrams(lines);
   const demand = productionDemandSummary(members, base);
-  const [draft, setDraft] = useState(String(total));
-  const [inputError, setInputError] = useState<string | null>(null);
-  const [historyWarning, setHistoryWarning] = useState<string | null>(null);
-  useEffect(() => {
-    setDraft(String(total));
-  }, [total]);
-  const save = useMutation({
-    mutationFn: async (target: number) => {
-      if (!Number.isInteger(target) || target < 1)
-        throw new Error("생산 배수는 1 이상의 정수로 입력하세요.");
-      const user_id = await currentUserId();
-      if (members.some((m) => m.user_id !== user_id))
-        throw new Error("선택한 작업에 접근할 수 없습니다.");
-      const plan = rescaleProductionSelections(members, target);
-      const { data: fresh, error: readError } = await supabase
-        .from("work_session_formula_versions")
-        .select("id,updated_at")
-        .eq("user_id", user_id)
-        .in(
-          "id",
-          members.map((m) => m.id),
-        );
-      if (readError) throw readError;
-      if (
-        fresh?.length !== members.length ||
-        members.some((m) => !fresh.some((f) => f.id === m.id && f.updated_at === m.updated_at))
-      )
-        throw new Error(
-          "다른 화면에서 작업이 변경되었습니다. 최신 값을 확인한 뒤 다시 적용해 주세요.",
-        );
-      // One statement updates the entire allocation. Physical mould counts and order IDs stay intact.
-      const { data: saved, error } = await supabase
-        .from("work_session_formula_versions")
-        .upsert(
-          plan.map(({ row, multiplier }) => ({
-            id: row.id,
-            user_id,
-            work_session_id: row.sessionId,
-            formula_version_id: row.formula_version_id,
-            multiplier,
-          })),
-          { onConflict: "id" },
-        )
-        .select("id,multiplier,updated_at");
-      if (error) throw error;
-      if (!saved || saved.length !== plan.length)
-        throw new Error("저장 결과를 확인하지 못했습니다. 새로고침 후 확인하세요.");
-      // Do not leave old totals on screen while unrelated mounted session queries refetch.
-      // Cancel in-flight reads so a pre-save response cannot overwrite this confirmation.
-      await queryClient.cancelQueries({ queryKey: ["work_session_formula_versions"] });
-      await queryClient.cancelQueries({ queryKey: ["dashboard_components"] });
-      for (const sid of new Set(members.map((m) => m.sessionId))) {
-        queryClient.setQueryData(
-          ["work_session_formula_versions", sid],
-          (old: WorkSessionFormulaVersionRow[] | undefined) => applySavedQuantities(old, saved),
-        );
-      }
-      queryClient.setQueriesData(
-        { queryKey: ["dashboard_components"] },
-        (old: DashboardComponentRow[] | undefined) => applySavedQuantities(old, saved),
-      );
-      const { error: historyError } = await supabase.from("work_session_multiplier_history").insert(
-        plan.map(({ row, multiplier }) => ({
-          user_id,
-          work_session_id: row.sessionId,
-          formula_version_id: row.formula_version_id,
-          work_session_formula_version_id: row.id,
-          previous_multiplier: Number(row.multiplier),
-          applied_multiplier: multiplier,
-          resulting_working_quantity_snapshot: buildMultiplierSnapshot(lines, multiplier),
-        })),
-      );
-      setHistoryWarning(historyError ? "수량은 저장됐지만 변경 이력 저장에 실패했습니다." : null);
-    },
-    onSettled: () => {
-      void Promise.all([
-        ...[...new Set(members.map((m) => m.sessionId))].map((sid) =>
-          queryClient.invalidateQueries({ queryKey: ["work_session_formula_versions", sid] }),
-        ),
-        queryClient.invalidateQueries({ queryKey: ["work_session_multiplier_history"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard_components"] }),
-        queryClient.invalidateQueries({ queryKey: ["work_blocks"] }),
-      ]);
-    },
-  });
-  const apply = (value: number) => {
-    if (!Number.isInteger(value) || value < 1) {
-      setInputError("×1・×2・×3・×4처럼 정수 배수를 선택하세요.");
-      setDraft(String(total));
-      return;
-    }
-    setInputError(null);
-    if (value !== total) save.mutate(value);
-  };
   return (
-    <div role="listitem" className={compact ? "space-y-1 px-3 pb-3 sm:pl-8" : "space-y-2 p-3"}>
-      {save.isPending && (
-        <p role="status" className="text-xs text-muted-foreground">
-          수량 저장 중…
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-3">
-        {!compact && (
-          <span className="text-sm">
-            {first.formula_versions.formulas.components?.name ??
-              first.formula_versions.formulas.name}{" "}
-            · V{first.formula_versions.version_number}
-          </span>
-        )}
-        {!compact && (
-          <span className="font-mono text-xs">
-            {members.length > 1 ? `MERGED ${members.length}` : (first.slot ?? first.kind)}
-          </span>
-        )}
-        <label className="flex items-center gap-1 text-xs">
-          레시피 배수 ×
-          <input
-            aria-label="생산 배수"
-            className={`${inputClass} !w-24`}
-            type="number"
-            step="1"
-            min="1"
-            disabled={save.isPending}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => apply(Number(draft))}
-          />
-        </label>
-        <div className="flex gap-1">
-          {[1, 2, 3, 4].map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={total === n ? primaryButtonClass : buttonClass}
-              disabled={save.isPending}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                setDraft(String(n));
-                apply(n);
-              }}
-            >
-              ×{n}
-            </button>
-          ))}
-        </div>
-        {canMerge && (
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={save.isPending}
-            onClick={onToggleMerge}
-          >
-            {members.length > 1 ? "UNMERGE" : "MERGE SAME FORMULA"}
-          </button>
-        )}
-      </div>
-      <p className="font-mono text-sm">
-        기본 배합 {fmtNumber(base, 1)}g × {fmtNumber(total, 4)} ={" "}
-        <strong>{fmtNumber(base * total, 1)}g</strong>
-      </p>
-      <p className="font-mono text-[11px] text-muted-foreground">
-        주문 사용 목표 {demand.required === null ? "미지정 포함" : `${fmtNumber(demand.required)}g`}
-        {demand.remaining !== null && (
-          <span className={demand.remaining < 0 ? "text-destructive" : ""}>
-            {" "}
-            · {demand.remaining < 0 ? "부족" : "예상 잔량"} {fmtNumber(Math.abs(demand.remaining))}g
-          </span>
-        )}
-      </p>
+    <div className="space-y-1 px-3 pb-3 pt-2 text-xs">
       {!compact && (
-        <p className="text-xs text-muted-foreground">
-          총중량은 계산 결과입니다. 몰드중량·주문 개수가 레시피 배수를 자동 변경하지 않습니다.
+        <p>
+          {first.formula_versions.formulas.components?.name ?? first.formula_versions.formulas.name}{" "}
+          · V{first.formula_versions.version_number}
         </p>
       )}
-      {!Number.isInteger(total) && (
-        <p className="text-xs text-muted-foreground">
-          기존 소수 배수가 저장돼 있습니다. 위에서 원하는 정수 배수를 선택하면 바뀝니다.
-        </p>
-      )}
+      <p className="font-mono">
+        기본 배합 {fmtNumber(base)}g × {fmtNumber(total, 4)} ={" "}
+        <strong>{fmtNumber(base * total)}g</strong>
+      </p>
+      <p className="text-muted-foreground">
+        사용 목표 {demand.required === null ? "미지정 포함" : `${fmtNumber(demand.required)}g`}
+        {demand.remaining !== null
+          ? ` · ${demand.remaining < 0 ? "부족" : "예상 잔량"} ${fmtNumber(Math.abs(demand.remaining))}g`
+          : ""}
+      </p>
       <p className="font-mono text-[10px] text-muted-foreground">
         {members
           .map(
             (m) =>
-              `${labels[m.id] ?? `${m.slot ?? m.kind} · ${m.sessionId.slice(0, 8)}`} · ×${fmtNumber(Number(m.multiplier), 4)}`,
+              `${labels[m.id] ?? m.sessionId.slice(0, 8)} · ×${fmtNumber(Number(m.multiplier), 4)}`,
           )
           .join(" + ")}
       </p>
-      {inputError && (
-        <p role="alert" className="text-xs text-destructive">
-          {inputError}
-        </p>
-      )}
-      {save.isError && (
-        <p role="alert" className="text-xs text-destructive">
-          {(save.error as Error).message}
-        </p>
-      )}
-      {historyWarning && (
-        <p role="alert" className="text-xs text-destructive">
-          {historyWarning}
-        </p>
-      )}
+      <div className="flex flex-wrap gap-2">
+        <Link to="/production" search={{ tab: "ORDERS" }} className="underline">
+          읽기 전용 · ORDERS에서 계획 수정 →
+        </Link>
+        {canMerge && (
+          <button type="button" className="underline" onClick={onToggleMerge}>
+            {members.length > 1 ? "UNMERGE" : "MERGE SAME FORMULA"} (보기)
+          </button>
+        )}
+      </div>
     </div>
   );
 }

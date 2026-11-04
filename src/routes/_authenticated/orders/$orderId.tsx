@@ -1,4 +1,4 @@
-import { OrderComponentPlanRow } from "@/components/pilot/OrderComponentPlanRow";
+import { ComponentPlanReadout } from "@/components/pilot/ComponentPlanReadout";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -232,6 +232,7 @@ function OrderDetailPage() {
   const [productSizeId, setProductSizeId] = useState("");
   const productSizes = useQuery({ ...productSizesQuery(productId), enabled: Boolean(productId) });
   const [sizeChoiceError, setSizeChoiceError] = useState<string | null>(null);
+  const sizeChoiceRequest = useRef(0);
   const currentSizeIssue = selectionIssue(
     productId || null,
     productSizeId || null,
@@ -240,17 +241,19 @@ function OrderDetailPage() {
     (cakeSizes.data ?? []).find((s) => s.id === cakeSizeId),
   );
   const chooseProductSize = async (id: string) => {
+    const request = ++sizeChoiceRequest.current;
     setSizeChoiceError(null);
     if (!id) {
       setProductSizeId("");
       return;
     }
     const options = await queryClient.fetchQuery(productSizesQuery(productId));
+    if (request !== sizeChoiceRequest.current) return;
     const picked = options.find((s) => s.id === id);
     const standard = (cakeSizes.data ?? []).find((c) => c.id === picked?.cake_size_id);
     const issue = selectionIssue(productId, id, picked?.cake_size_id ?? null, picked, standard);
     if (issue) {
-      setSizeChoiceError(issue);
+      setSizeChoiceError(`이 제품 사이즈를 적용하지 못했습니다: ${issue}`);
       return;
     }
     setProductSizeId(id);
@@ -529,21 +532,9 @@ function OrderDetailPage() {
           product_line: productLine || null,
           event_date: eventDate || null,
           pickup_at: datetimeLocalToIso(pickupAt),
-          cake_size: cakeSize || null,
-          cake_size_id: cakeSizeId || null,
-          custom_size: cakeSize === "Custom" ? customSize.trim() || null : null,
-          custom_size_cm:
-            cakeSize === "Custom" && customSizeCm.trim() ? Number(customSizeCm) : null,
-          servings: servings.trim() ? Number(servings) : null,
           price: price.trim() ? Number(price) : null,
           payment_status: paymentStatus || null,
           status,
-          product_id: productId || null,
-          product_size_id: productSizeId || null,
-          sheet_mould_id: sheetMouldId || null,
-          flavoring_sheet_formula_id: flavoringSheetFormulaId || null,
-          flavoring_cream_formula_id: flavoringCreamFormulaId || null,
-          flavoring_filling_formula_id: flavoringFillingFormulaId || null,
           design_notes: designNote.trim() || null,
           notes: orderNote.trim() || null,
           dietary_requirements: dietaryRequirements.trim() || null,
@@ -1030,125 +1021,31 @@ function OrderDetailPage() {
                 </p>
               </Field>
               <div className="hidden md:block" aria-hidden />
-              <Field label="PRODUCT">
-                <ProductSelect
-                  linkedParts={(
-                    [
-                      ["SHEET", flavoringSheetFormulaId],
-                      ["CREAM", flavoringCreamFormulaId],
-                      ["FILLING", flavoringFillingFormulaId],
-                    ] as const
-                  ).flatMap(([slot, formulaId]) => {
-                    const f = (formulas.data ?? []).find((x) => x.id === formulaId);
-                    if (!f?.component_id) return [];
-                    // Production에서 이미 고른 버전이 있으면 그 버전, 없으면 현재(유효) 버전
-                    const chosen = (productionSelections.data ?? []).find(
-                      (r) => r.kind === "CORE" && r.slot === slot,
-                    );
-                    const version =
-                      chosen?.formula_version_id ??
-                      pickEffectiveFormulaVersion(f.formula_versions)?.id ??
-                      null;
-                    return [
-                      {
-                        label: CORE_SLOT_LABELS[slot],
-                        name: f.components?.name ?? f.name,
-                        componentId: f.component_id,
-                        formulaVersionId: version,
-                      },
-                    ];
-                  })}
-                  value={productId}
-                  onChange={(next) => {
-                    setProductId(next);
-                    setProductSizeId("");
-                    setCakeSizeId("");
-                    setSizeChoiceError(null);
-                  }}
-                  emptyLabel="TBD"
-                />
+              <Field label="PRODUCT · 읽기 전용">
+                <p className="text-sm">{order.data?.products?.name ?? "미지정"}</p>
               </Field>
-              {productId && (
-                <Field label="PRODUCT SIZE · 제품별 배합·원가 기준">
-                  <ProductSizeSelect
-                    productId={productId}
-                    value={productSizeId}
-                    onChange={(id) => {
-                      void chooseProductSize(id).catch((e) => setSizeChoiceError(String(e)));
-                    }}
-                  />
-                </Field>
-              )}
-              {(sizeChoiceError || currentSizeIssue) && (
-                <p role="status" className="text-xs text-destructive">
-                  {sizeChoiceError ?? currentSizeIssue} · 기존 기록은 자동 수정하지 않습니다.
+              <Field label="완성 사이즈 · 읽기 전용">
+                <p className="text-sm">
+                  {(() => {
+                    const c = (cakeSizes.data ?? []).find((v) => v.id === cakeSizeId);
+                    return c
+                      ? `${c.name} · ${formatProductSizeLabel({ ...c, shape: c.shape ?? "" })}`
+                      : "미지정";
+                  })()}
                 </p>
-              )}
-              <Field
-                label={
-                  productSizeId ? "연결된 공용 완성 규격" : "공용 완성 규격 (제품 사이즈 미선택)"
-                }
-              >
-                {!productSizeId && (
-                  <select
-                    className={selectClass}
-                    value={cakeSizeId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setCakeSizeId(id);
-                      const picked = (cakeSizes.data ?? []).find((c) => c.id === id);
-                      if (picked?.servings != null) setServings(String(picked.servings));
-                    }}
-                  >
-                    <option value="">— SELECT —</option>
-                    {(cakeSizes.data ?? []).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} · {formatProductSizeLabel({ ...c, shape: c.shape ?? "" })} · #
-                        {c.id.slice(0, 8)}
-                      </option>
-                    ))}
-                  </select>
+                {currentSizeIssue && (
+                  <p className="text-xs text-destructive">저장된 사이즈 연결: {currentSizeIssue}</p>
                 )}
-                {(() => {
-                  const picked = (cakeSizes.data ?? []).find((c) => c.id === cakeSizeId);
-                  const mould = picked?.sheet_mould_id
-                    ? (moulds.data ?? []).find((m) => m.id === picked.sheet_mould_id)
-                    : undefined;
-                  if (picked) {
-                    return (
-                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        {picked.servings != null
-                          ? `${picked.servings} servings`
-                          : "servings not set"}{" "}
-                        · {mould ? `sheet: ${mouldOptionLabel(mould)}` : "no sheet mould set"} ·{" "}
-                        {picked.cream_g != null
-                          ? `참고 크림 ${picked.cream_g}g`
-                          : "참고 크림 미지정"}{" "}
-                        · 제품별 실제 사용 목표는 COMPONENTS 기준
-                      </p>
-                    );
-                  }
-                  if (cakeSize) {
-                    return (
-                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        Previously entered: {cakeSize}
-                        {cakeSize === "Custom" && customSize ? ` — ${customSize}` : ""}
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
+                <Link
+                  to="/production"
+                  search={{ tab: status === "COMPLETED" ? "ORDER HISTORY" : "ORDERS" }}
+                  className="text-xs underline"
+                >
+                  PRODUCTION에서 제품·사이즈 설정 →
+                </Link>
               </Field>
-              <Field label="SERVINGS">
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  className={inputClass}
-                  placeholder="e.g. 10"
-                  value={servings}
-                  onChange={(e) => setServings(e.target.value)}
-                />
+              <Field label="SERVINGS · 읽기 전용">
+                <p className="text-sm">{order.data?.servings ?? "미지정"}</p>
               </Field>
             </div>
             <div className="mt-3">
@@ -1157,66 +1054,52 @@ function OrderDetailPage() {
                 FORMULA까지 링크하고 Order와 Production에서 같은 CORE 선택을 갱신한다.
                 실제 버전과 배수는 아래 Production 선택 목록을 함께 표시한다. */}
                 <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
-                  {(
-                    [
-                      ["SHEET", flavoringSheetFormulaId, setFlavoringSheetFormulaId],
-                      ["CREAM", flavoringCreamFormulaId, setFlavoringCreamFormulaId],
-                      ["FILLING", flavoringFillingFormulaId, setFlavoringFillingFormulaId],
-                    ] as const
-                  ).map(([slot, value, setValue]) => {
+                  {(["SHEET", "CREAM", "FILLING"] as const).map((slot) => {
                     const actual = (productionSelections.data ?? []).filter(
                       (r) => r.kind === "CORE" && r.slot === slot,
                     );
-                    const multiple =
-                      new Set(actual.map((r) => r.formula_versions.formulas.id)).size > 1;
                     return (
-                      <div key={slot} className="flex flex-col gap-1">
-                        <span className="label-caps text-[10px] text-muted-foreground">
+                      <div key={slot} className="space-y-2 border border-border p-2">
+                        <p className="label-caps text-[10px] text-muted-foreground">
                           {CORE_SLOT_LABELS[slot]}
-                        </span>
-                        <select
-                          className={selectClass}
-                          value={value}
-                          disabled={multiple}
-                          onChange={(e) => setValue(e.target.value)}
-                        >
-                          <option value="">
-                            {multiple
-                              ? "여러 Formula — Production에서 개별 편집"
-                              : "— NO FORMULA LINKED —"}
-                          </option>
-                          {formulasForSlot(slot, value).map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.components?.name ?? f.name}
-                            </option>
-                          ))}
-                        </select>
-                        {actual.map((r) => (
-                          <OrderComponentPlanRow
-                            key={r.id}
-                            row={r}
-                            disabled={
-                              (!multiple && value !== r.formula_versions.formulas.id) ||
-                              ["COMPLETED", "CANCELLED"].includes(status)
-                            }
-                          />
-                        ))}
-                        {!multiple &&
-                          actual.length > 0 &&
-                          actual.some((r) => value !== r.formula_versions.formulas.id) && (
-                            <p className="text-xs text-muted-foreground">
-                              먼저 Order SAVE로 레시피 선택을 저장하세요.
-                            </p>
-                          )}
+                        </p>
+                        {actual.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            미지정 · Production에서 설정
+                          </p>
+                        ) : (
+                          actual.map((r) => (
+                            <div key={r.id} className="space-y-1 text-xs">
+                              <Link
+                                className="underline"
+                                to="/formulas/$formulaId"
+                                params={{ formulaId: r.formula_versions.formulas.id }}
+                                search={{ version: r.formula_version_id }}
+                              >
+                                {r.formula_versions.formulas.components?.name ??
+                                  r.formula_versions.formulas.name}{" "}
+                                · V{r.formula_versions.version_number}
+                              </Link>
+                              <p>
+                                <ComponentPlanReadout row={r} />
+                              </p>
+                            </div>
+                          ))
+                        )}
                       </div>
                     );
                   })}
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Formula 선택은 Order SAVE로 저장하고, 버전·사용 목표·배수는 각 항목의 생산 계획
-                  저장으로 즉시 반영합니다. Order와 Production은 같은 계획을 공유합니다. 사용
-                  목표(g)는 주문에 쓸 양이며 생산 배수를 자동 변경하지 않습니다.
+                  읽기 전용 · Production → ORDERS에서 지정한 계획입니다.
                 </p>
+                <Link
+                  to="/production"
+                  search={{ tab: status === "COMPLETED" ? "ORDER HISTORY" : "ORDERS" }}
+                  className={buttonClass + " mt-2"}
+                >
+                  PRODUCTION에서 컴포넌트·수량 설정 →
+                </Link>
                 {(() => {
                   const productBuilds = (dietaryBuilds.data ?? []).filter(
                     (b) => !productId || b.product_id === productId,
