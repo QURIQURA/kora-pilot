@@ -1,3 +1,4 @@
+import { newPopupPlan, readPopupPlan } from "@/lib/popup";
 import {
   useEffect,
   useMemo,
@@ -9,6 +10,7 @@ import { GripVertical, Flame } from "lucide-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import {
   currentUserId,
   ordersQuery,
@@ -73,6 +75,27 @@ function OrdersPage() {
     },
   });
 
+  const createPopup = useMutation({
+    mutationFn: async () => {
+      const uid = await currentUserId();
+      const { data, error } = await supabase
+        .from("orders")
+        .insert({
+          user_id: uid,
+          order_kind: "POPUP",
+          popup_plan: newPopupPlan() as unknown as Json,
+        } as never)
+        .select("id")
+        .single();
+      if (error) throw error;
+      return data.id;
+    },
+    onSuccess: async (id) => {
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      void navigate({ to: "/orders/$orderId", params: { orderId: id } });
+    },
+  });
+
   // 2026-10-06 사용자 요청: PICK UP/DELIVERY 날짜 역순(최신 날짜가 위) — pickup_at 있으면
   // 그걸, 없으면 event_date, 둘 다 없으면 맨 뒤로(날짜 없는 건 역순 기준이 없으므로 그대로 둠).
   const rows = useMemo(() => {
@@ -105,6 +128,14 @@ function OrdersPage() {
             </button>
             <button
               type="button"
+              className={buttonClass}
+              disabled={createPopup.isPending}
+              onClick={() => createPopup.mutate()}
+            >
+              {createPopup.isPending ? "CREATING…" : "+ NEW POP UP"}
+            </button>
+            <button
+              type="button"
               className={primaryButtonClass}
               disabled={createOrder.isPending}
               onClick={() => createOrder.mutate()}
@@ -114,6 +145,12 @@ function OrdersPage() {
           </div>
         }
       />
+
+      {(createPopup.isError || createOrder.isError) && (
+        <p role="alert" className="text-sm text-destructive">
+          {(createPopup.error ?? createOrder.error)?.message}
+        </p>
+      )}
 
       {orders.isLoading ? (
         <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
@@ -515,12 +552,25 @@ function OrderRow({
     ),
     product: (
       <span className="text-sm text-muted-foreground">
-        {o.products?.name || (
-          // 2026-10-06 사용자 요청: 행 전체를 칠하면 미감이 안 좋다 — PRODUCT CATEGORY의
-          // 색상 배지(CategoryBadge)처럼 TBD 텍스트에만 작은 배지로 강조.
-          <span className="label-caps inline-block bg-destructive px-2 py-0.5 text-[11px] text-destructive-foreground">
-            TBD
+        {o.order_kind === "POPUP" ? (
+          <span className="space-y-1">
+            <span className="label-caps block text-xs text-foreground">
+              POP UP · {readPopupPlan(o.popup_plan).title}
+            </span>
+            {readPopupPlan(o.popup_plan).items.map((i) => (
+              <span key={i.id} className="block">
+                {i.label} × {i.quantity} {i.unit}
+              </span>
+            ))}
           </span>
+        ) : (
+          o.products?.name || (
+            // 2026-10-06 사용자 요청: 행 전체를 칠하면 미감이 안 좋다 — PRODUCT CATEGORY의
+            // 색상 배지(CategoryBadge)처럼 TBD 텍스트에만 작은 배지로 강조.
+            <span className="label-caps inline-block bg-destructive px-2 py-0.5 text-[11px] text-destructive-foreground">
+              TBD
+            </span>
+          )
         )}
       </span>
     ),
@@ -684,6 +734,9 @@ function OrdersCalendar({ rows }: { rows: OrderListRow[] }) {
                         title={`${o.order_number} ${o.customers?.name ?? ""}`}
                       >
                         {o.order_number}
+                        {o.order_kind === "POPUP"
+                          ? ` · POP UP · ${readPopupPlan(o.popup_plan).title}`
+                          : ""}
                       </Link>
                     </li>
                   ))}

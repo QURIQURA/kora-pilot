@@ -2,6 +2,11 @@ import type { QueryClient } from "@tanstack/react-query";
 
 export const PRODUCTION_SYNC_QUERY_KEYS = [
   "orders",
+  "product_sizes",
+  "cake_sizes",
+  "cost_dashboard",
+  "stock_items",
+  "stock_candidates",
   "work_sessions",
   "work_session_formula_versions",
   "dashboard_components",

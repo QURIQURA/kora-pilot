@@ -1692,6 +1692,8 @@ export type Database = {
       };
       orders: {
         Row: {
+          order_kind: string;
+          popup_plan: Json;
           allergy_notes: string | null;
           audience: string | null;
           cake_size: Database["public"]["Enums"]["order_cake_size"] | null;
@@ -1749,6 +1751,8 @@ export type Database = {
           wann_project_id: string | null;
         };
         Insert: {
+          order_kind?: string;
+          popup_plan?: Json;
           allergy_notes?: string | null;
           audience?: string | null;
           cake_size?: Database["public"]["Enums"]["order_cake_size"] | null;
@@ -1806,6 +1810,8 @@ export type Database = {
           wann_project_id?: string | null;
         };
         Update: {
+          order_kind?: string;
+          popup_plan?: Json;
           allergy_notes?: string | null;
           audience?: string | null;
           cake_size?: Database["public"]["Enums"]["order_cake_size"] | null;
@@ -3756,6 +3762,20 @@ export type Database = {
           p_target_quantity_g: number | null;
           p_version_pinned?: boolean;
         };
+        Returns: Json;
+      };
+      save_popup_order: {
+        Args: {
+          p_order_id: string;
+          p_expected_updated_at: string;
+          p_plan: Json;
+          p_start: string | null;
+          p_status: string;
+        };
+        Returns: Json;
+      };
+      create_popup_item_session: {
+        Args: { p_order_id: string; p_item_id: string; p_expected_updated_at: string };
         Returns: Json;
       };
       create_component_blend: {

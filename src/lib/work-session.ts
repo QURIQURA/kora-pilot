@@ -482,11 +482,12 @@ export async function ensureWorkSessionForOrder(orderId: string): Promise<string
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select(
-      "id, user_id, order_number, recipient, pickup_at, event_date, product_id, product_size_id, cake_size_id, quantity, products(name)",
+      "id, user_id, order_number, recipient, pickup_at, event_date, order_kind, product_id, product_size_id, cake_size_id, quantity, products(name)",
     )
     .eq("id", orderId)
     .single();
   if (orderError) throw orderError;
+  if (order.order_kind === "POPUP") throw new Error("팝업은 품목별로 생산 세션을 생성하세요");
   if (order.product_size_id) {
     const { data: size, error: sizeError } = await supabase
       .from("product_sizes")

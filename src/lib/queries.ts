@@ -1,3 +1,4 @@
+import { readPopupPlan } from "@/lib/popup";
 import { queryOptions } from "@tanstack/react-query";
 import { summarizeUsage } from "@/lib/product-usage";
 import { canonicalProfile, sharedStandardOptions } from "@/lib/shared-standard";
@@ -1166,9 +1167,34 @@ export const dashboardComponentsQuery = () =>
           } | null;
         } | null;
       }[];
+      type DashboardOrder = NonNullable<
+        NonNullable<(typeof data)[number]["work_sessions"]>["orders"]
+      >;
+      const popupBySession = new Map<string, DashboardOrder>();
+      const popupOrders = unwrap(
+        await supabase
+          .from("orders")
+          .select("id,order_number,status,pickup_at,event_date,popup_plan")
+          .eq("order_kind", "POPUP"),
+      );
+      for (const popup of popupOrders) {
+        const plan = readPopupPlan(popup.popup_plan);
+        for (const item of plan.items)
+          if (item.work_session_id)
+            popupBySession.set(item.work_session_id, {
+              id: popup.id,
+              order_number: popup.order_number,
+              status: popup.status,
+              pickup_at: popup.pickup_at,
+              event_date: popup.event_date,
+              least_liked_flavours: null,
+              products: { name: `POP UP · ${plan.title}` },
+              customers: null,
+            });
+      }
       const rows: DashboardComponentRow[] = [];
       for (const r of data) {
-        const order = r.work_sessions?.orders;
+        const order = r.work_sessions?.orders ?? popupBySession.get(r.work_session_id);
         if (!order) continue; // 오더에 연결 안 된 세션은 대시보드 대상이 아니다
         const formula = r.formula_versions?.formulas ?? null;
         rows.push({

@@ -1,3 +1,4 @@
+import { PopupOrderWorkspace } from "@/components/pilot/PopupOrderWorkspace";
 import { ComponentPlanReadout } from "@/components/pilot/ComponentPlanReadout";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -153,7 +154,13 @@ function OrderDetailPage() {
   );
   // 2026-10-22: 모든 오더는 WORK SESSION을 기본으로 가진다 — 아직 없으면(예전 오더) 여기서 자동으로 만든다.
   useEffect(() => {
-    if (!order.data || workSession.isLoading || workSession.data) return;
+    if (
+      !order.data ||
+      order.data.order_kind === "POPUP" ||
+      workSession.isLoading ||
+      workSession.data
+    )
+      return;
     void ensureWorkSessionForOrder(orderId).then(() =>
       queryClient.invalidateQueries({ queryKey: ["work_sessions"] }),
     );
@@ -191,7 +198,7 @@ function OrderDetailPage() {
   // (ORDER DETAIL)을 탭으로 분리. SAVE/DELETE 바는 둘 다에 적용되므로 탭 밖(페이지 하단)에 둔다.
   // 2026-10-15 사용자 재요청: "visuals가 먼저 뜨게해줘" — 탭 순서도 VISUALS를 앞으로, 페이지
   // 진입 시 기본 선택 탭도 VISUALS로.
-  const [activeTab, setActiveTab] = useState<"ORDER DETAIL" | "VISUALS">("VISUALS");
+  const [activeTab, setActiveTab] = useState<"ORDER DETAIL" | "VISUALS">("ORDER DETAIL");
 
   const [orderNumber, setOrderNumber] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -642,6 +649,9 @@ function OrderDetailPage() {
     );
   }
 
+  if (order.data.order_kind === "POPUP")
+    return <PopupOrderWorkspace key={order.data.id} order={order.data} />;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
@@ -685,7 +695,7 @@ function OrderDetailPage() {
       </div>
 
       <div className="flex items-center gap-2 border-b border-border">
-        {(["VISUALS", "ORDER DETAIL"] as const).map((tab) => (
+        {(["ORDER DETAIL", "VISUALS"] as const).map((tab) => (
           <button
             key={tab}
             type="button"

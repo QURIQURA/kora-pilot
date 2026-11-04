@@ -1,3 +1,4 @@
+import { PopupProductionCard } from "./PopupProductionCard";
 import { toast } from "sonner";
 import { ComponentPlanReadout } from "./ComponentPlanReadout";
 import { ProductionOrderSizeEditor } from "./ProductionOrderSizeEditor";
@@ -113,6 +114,7 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
     if (completed || orders.isError || sessions.isError || !orders.data || !sessions.data) return;
     const missing = orders.data.filter(
       (o) =>
+        o.order_kind !== "POPUP" &&
         o.status !== "COMPLETED" &&
         o.status !== "CANCELLED" &&
         !ensuredRef.current.has(o.id) &&
@@ -132,7 +134,7 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
       }
       if (prepared) await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
     })();
-  }, [orders.data, sessions.data, queryClient, completed]);
+  }, [orders.data, orders.isError, sessions.data, sessions.isError, queryClient, completed]);
 
   if (orders.isLoading) {
     return <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>;
@@ -175,177 +177,186 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
         </p>
       )}
       <div className="grid gap-3 lg:grid-cols-2">
-        {list.map(({ order, rows, session, ambiguousSession }) => (
-          <section key={order.id} className="space-y-2 border border-border bg-card p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="label-caps border border-foreground px-1.5 py-0.5 text-[11px]">
-                {order.order_number}
-              </span>
-              <Link
-                to="/orders/$orderId"
-                params={{ orderId: order.id }}
-                className="text-sm underline-offset-2 hover:underline"
-              >
-                {orderTitle(order.customers?.name, order.products?.name, order.recipient ?? "")}
-              </Link>
-              <OrderFlagBoxes
-                dietary={dietaryOf(order.id)}
-                leastLiked={order.least_liked_flavours}
-              />
-              <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                {orderStatusLabel(order.status)}
-              </span>
-              {formatDelivery(order.pickup_at, order.event_date) && (
-                <span className="ml-auto font-mono text-[11px]">
-                  🚚 {formatDelivery(order.pickup_at, order.event_date)}
+        {list.map(({ order, rows, session, ambiguousSession }) =>
+          order.order_kind === "POPUP" ? (
+            <PopupProductionCard key={order.id} order={order} />
+          ) : (
+            <section key={order.id} className="space-y-2 border border-border bg-card p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="label-caps border border-foreground px-1.5 py-0.5 text-[11px]">
+                  {order.order_number}
                 </span>
-              )}
-            </div>
-
-            <ProductionOrderSizeEditor
-              order={order}
-              sessionId={session?.id ?? ""}
-              readOnly={completed || order.status === "CANCELLED" || ambiguousSession}
-            />
-            {ambiguousSession && (
-              <p role="alert" className="text-xs text-destructive">
-                연결된 Work Session이 여러 개입니다. 임의로 선택하지 않았어요. 세션 연결을 먼저
-                확인하세요.
-              </p>
-            )}
-            {!session && !ambiguousSession && !completed && order.status !== "CANCELLED" && (
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span
-                  className={sessionErrors[order.id] ? "text-destructive" : "text-muted-foreground"}
+                <Link
+                  to="/orders/$orderId"
+                  params={{ orderId: order.id }}
+                  className="text-sm underline-offset-2 hover:underline"
                 >
-                  {sessionErrors[order.id]
-                    ? `생산 준비 실패: ${sessionErrors[order.id]}`
-                    : sessions.isLoading
-                      ? "생산 정보를 불러오는 중…"
-                      : "생산 준비 중 · 주문은 목록에 유지됩니다."}
+                  {orderTitle(order.customers?.name, order.products?.name, order.recipient ?? "")}
+                </Link>
+                <OrderFlagBoxes
+                  dietary={dietaryOf(order.id)}
+                  leastLiked={order.least_liked_flavours}
+                />
+                <span className="font-mono text-[10px] uppercase text-muted-foreground">
+                  {orderStatusLabel(order.status)}
                 </span>
-                {!sessions.isLoading && (
-                  <button
-                    type="button"
-                    className={buttonClass}
-                    disabled={createSession.isPending}
-                    onClick={() => createSession.mutate(order)}
-                  >
-                    생산 준비 재시도
-                  </button>
+                {formatDelivery(order.pickup_at, order.event_date) && (
+                  <span className="ml-auto font-mono text-[11px]">
+                    🚚 {formatDelivery(order.pickup_at, order.event_date)}
+                  </span>
                 )}
               </div>
-            )}
-            <ProductionOrderComponentList
-              sessionId={session?.id ?? ""}
-              dashboardRows={rows}
-              firstBlockByRow={firstBlockByRow}
-              readOnly={completed || order.status === "CANCELLED"}
-            />
 
-            {/* 슬롯 버튼은 세션 유무와 상관없이 항상 — 세션이 없으면 누르는 순간 자동으로 만든다 */}
-            <div
-              className={cn("space-y-1.5", (completed || order.status === "CANCELLED") && "hidden")}
-            >
-              <div className="flex flex-wrap gap-1">
-                {CORE_SLOTS.map((slot) => (
-                  <button
-                    key={slot}
-                    type="button"
-                    className={cn(
-                      buttonClass,
-                      "!min-h-[26px] px-1.5 text-[11px]",
-                      adding?.orderId === order.id && adding.slot === slot && "bg-secondary",
-                    )}
-                    disabled={
-                      createSession.isPending ||
-                      ambiguousSession ||
-                      sessions.isError ||
-                      sessions.isLoading
+              <ProductionOrderSizeEditor
+                order={order}
+                sessionId={session?.id ?? ""}
+                readOnly={completed || order.status === "CANCELLED" || ambiguousSession}
+              />
+              {ambiguousSession && (
+                <p role="alert" className="text-xs text-destructive">
+                  연결된 Work Session이 여러 개입니다. 임의로 선택하지 않았어요. 세션 연결을 먼저
+                  확인하세요.
+                </p>
+              )}
+              {!session && !ambiguousSession && !completed && order.status !== "CANCELLED" && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span
+                    className={
+                      sessionErrors[order.id] ? "text-destructive" : "text-muted-foreground"
                     }
-                    onClick={async () => {
-                      if (adding?.orderId === order.id && adding.slot === slot) {
-                        setAdding(null);
-                        return;
-                      }
-                      if (!session) {
-                        try {
-                          await createSession.mutateAsync(order);
-                        } catch {
-                          return;
-                        }
-                      }
-                      setAdding({ orderId: order.id, slot });
-                    }}
                   >
-                    + {CORE_SLOT_LABELS[slot].toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              {adding?.orderId === order.id && (
-                <div className="flex gap-1">
-                  {(["pick", "copy", "new"] as const).map((m) => (
+                    {sessionErrors[order.id]
+                      ? `생산 준비 실패: ${sessionErrors[order.id]}`
+                      : sessions.isLoading
+                        ? "생산 정보를 불러오는 중…"
+                        : "생산 준비 중 · 주문은 목록에 유지됩니다."}
+                  </span>
+                  {!sessions.isLoading && (
                     <button
-                      key={m}
+                      type="button"
+                      className={buttonClass}
+                      disabled={createSession.isPending}
+                      onClick={() => createSession.mutate(order)}
+                    >
+                      생산 준비 재시도
+                    </button>
+                  )}
+                </div>
+              )}
+              <ProductionOrderComponentList
+                sessionId={session?.id ?? ""}
+                dashboardRows={rows}
+                firstBlockByRow={firstBlockByRow}
+                readOnly={completed || order.status === "CANCELLED"}
+              />
+
+              {/* 슬롯 버튼은 세션 유무와 상관없이 항상 — 세션이 없으면 누르는 순간 자동으로 만든다 */}
+              <div
+                className={cn(
+                  "space-y-1.5",
+                  (completed || order.status === "CANCELLED") && "hidden",
+                )}
+              >
+                <div className="flex flex-wrap gap-1">
+                  {CORE_SLOTS.map((slot) => (
+                    <button
+                      key={slot}
                       type="button"
                       className={cn(
                         buttonClass,
-                        "!min-h-[24px] px-1.5 text-[10px]",
-                        mode === m && "bg-secondary",
+                        "!min-h-[26px] px-1.5 text-[11px]",
+                        adding?.orderId === order.id && adding.slot === slot && "bg-secondary",
                       )}
-                      onClick={() => setMode(m)}
+                      disabled={
+                        createSession.isPending ||
+                        ambiguousSession ||
+                        sessions.isError ||
+                        sessions.isLoading
+                      }
+                      onClick={async () => {
+                        if (adding?.orderId === order.id && adding.slot === slot) {
+                          setAdding(null);
+                          return;
+                        }
+                        if (!session) {
+                          try {
+                            await createSession.mutateAsync(order);
+                          } catch {
+                            return;
+                          }
+                        }
+                        setAdding({ orderId: order.id, slot });
+                      }}
                     >
-                      {m === "pick"
-                        ? "기존 컴포넌트 지정"
-                        : m === "copy"
-                          ? "복사해서 새로 만들기"
-                          : "빈 컴포넌트 새로 만들기"}
+                      + {CORE_SLOT_LABELS[slot].toUpperCase()}
                     </button>
                   ))}
                 </div>
-              )}
-              {session && adding?.orderId === order.id && mode === "new" && (
-                <DashboardComponentNewForm
-                  key={`new-${adding.slot}`}
-                  sessionId={session.id}
-                  slot={adding.slot}
-                  nextSort={rows.length}
-                  onDone={async () => {
-                    setAdding(null);
-                    await refresh(session.id);
-                  }}
-                />
-              )}
-              {session && adding?.orderId === order.id && mode === "copy" && (
-                <DashboardComponentCopyForm
-                  key={`copy-${adding.slot}`}
-                  sessionId={session.id}
-                  slot={adding.slot}
-                  nextSort={rows.length}
-                  onDone={async () => {
-                    setAdding(null);
-                    await refresh(session.id);
-                  }}
-                />
-              )}
-              {session && adding?.orderId === order.id && mode === "pick" && (
-                <AddFormulaVersionForm
-                  key={adding.slot}
-                  sessionId={session.id}
-                  nextSort={rows.length}
-                  kind="CORE"
-                  slot={adding.slot}
-                  productId={session.product_id}
-                  productSizeId={session.product_size_id}
-                  onDone={async () => {
-                    setAdding(null);
-                    await refresh(session.id);
-                  }}
-                />
-              )}
-            </div>
-          </section>
-        ))}
+                {adding?.orderId === order.id && (
+                  <div className="flex gap-1">
+                    {(["pick", "copy", "new"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={cn(
+                          buttonClass,
+                          "!min-h-[24px] px-1.5 text-[10px]",
+                          mode === m && "bg-secondary",
+                        )}
+                        onClick={() => setMode(m)}
+                      >
+                        {m === "pick"
+                          ? "기존 컴포넌트 지정"
+                          : m === "copy"
+                            ? "복사해서 새로 만들기"
+                            : "빈 컴포넌트 새로 만들기"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {session && adding?.orderId === order.id && mode === "new" && (
+                  <DashboardComponentNewForm
+                    key={`new-${adding.slot}`}
+                    sessionId={session.id}
+                    slot={adding.slot}
+                    nextSort={rows.length}
+                    onDone={async () => {
+                      setAdding(null);
+                      await refresh(session.id);
+                    }}
+                  />
+                )}
+                {session && adding?.orderId === order.id && mode === "copy" && (
+                  <DashboardComponentCopyForm
+                    key={`copy-${adding.slot}`}
+                    sessionId={session.id}
+                    slot={adding.slot}
+                    nextSort={rows.length}
+                    onDone={async () => {
+                      setAdding(null);
+                      await refresh(session.id);
+                    }}
+                  />
+                )}
+                {session && adding?.orderId === order.id && mode === "pick" && (
+                  <AddFormulaVersionForm
+                    key={adding.slot}
+                    sessionId={session.id}
+                    nextSort={rows.length}
+                    kind="CORE"
+                    slot={adding.slot}
+                    productId={session.product_id}
+                    productSizeId={session.product_size_id}
+                    onDone={async () => {
+                      setAdding(null);
+                      await refresh(session.id);
+                    }}
+                  />
+                )}
+              </div>
+            </section>
+          ),
+        )}
       </div>
     </div>
   );
