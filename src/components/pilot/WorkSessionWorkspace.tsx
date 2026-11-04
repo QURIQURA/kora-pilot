@@ -1,3 +1,5 @@
+import { productionDemandSummary } from "@/lib/order-component-plan";
+import { invalidateProductionSync } from "@/lib/production-sync";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -849,7 +851,7 @@ type WeighingColumn = {
   sortOrder: number;
   /** 여러 세션을 한 표에 합칠 때(대시보드 DayWorkView) 이 열이 속한 세션 */
   sessionId?: string;
-  members?: { selectionId: string; sessionId: string }[];
+  members?: { selectionId: string; sessionId: string; label?: string }[];
 };
 
 const DEFAULT_MATRIX_COL_WIDTH = 150;
@@ -1524,6 +1526,7 @@ function EditFormulaVersionModal({
   const [saveMode, setSaveMode] = useState<"new" | "overwrite" | "new_formula">("new");
   const [newFormulaName, setNewFormulaName] = useState("");
   const [reason, setReason] = useState("");
+  const [targetSelectionId, setTargetSelectionId] = useState(column.selectionId);
   const [error, setError] = useState<string | null>(null);
 
   // 모달이 열릴 때 딱 한 번만 현재 버전의 재료 목록으로 초안을 채운다 — refetch가 와도 사용자가
@@ -1612,7 +1615,7 @@ function EditFormulaVersionModal({
         const { data: baseVersion, error: baseError } = await supabase
           .from("formula_versions")
           .select(
-            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id, default_capacity_id",
+            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id, default_capacity_id, component_sources, notes",
           )
           .eq("id", column.formulaVersionId)
           .single();
@@ -1638,6 +1641,8 @@ function EditFormulaVersionModal({
             // 2026-10-19 "테이블 통합" 1단계: 통합 default_capacity_id도 함께 복사(dual-write).
             default_capacity_id: baseVersion.default_capacity_id,
             yield_quantity: baseVersion.yield_quantity,
+            component_sources: baseVersion.component_sources,
+            notes: baseVersion.notes,
             change_summary: autoSummary,
             change_reason: reason.trim() || null,
             bath_water_g: baseVersion.bath_water_g,
@@ -1674,15 +1679,17 @@ function EditFormulaVersionModal({
         // 이 WORK SESSION 선택(열)이 새 버전을 바로 쓰도록 전환 — multiplier/sort_order는 그대로 둔다.
         const { error: selectionError } = await supabase
           .from("work_session_formula_versions")
-          .update({ formula_version_id: newVersion.id })
-          .eq("id", column.selectionId);
+          .update({ formula_version_id: newVersion.id, version_pinned: true })
+          .eq("id", targetSelectionId)
+          .eq("user_id", user_id);
         if (selectionError) throw selectionError;
 
         // 재료 라인 id가 전부 바뀌므로 이 열의 기존 계량 진행상태는 더 이상 의미가 없다 — 지운다.
         const { error: progressError } = await supabase
           .from("work_session_progress")
           .delete()
-          .eq("work_session_formula_version_id", column.selectionId);
+          .eq("work_session_formula_version_id", targetSelectionId)
+          .eq("user_id", user_id);
         if (progressError) throw progressError;
 
         return newVersion.id;
@@ -1737,7 +1744,7 @@ function EditFormulaVersionModal({
         const { data: baseVersion, error: baseError } = await supabase
           .from("formula_versions")
           .select(
-            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id, default_capacity_id",
+            "yield_quantity, bath_water_g, basis_overrides, default_mould_id, default_base_weight_id, default_capacity_id, component_sources, notes",
           )
           .eq("id", column.formulaVersionId)
           .single();
@@ -1769,6 +1776,8 @@ function EditFormulaVersionModal({
             // 2026-10-19 "테이블 통합" 1단계: 통합 default_capacity_id도 함께 복사(dual-write).
             default_capacity_id: baseVersion.default_capacity_id,
             yield_quantity: baseVersion.yield_quantity,
+            component_sources: baseVersion.component_sources,
+            notes: baseVersion.notes,
             change_summary: autoSummary,
             change_reason: reason.trim() || null,
             bath_water_g: baseVersion.bath_water_g,
@@ -1805,15 +1814,17 @@ function EditFormulaVersionModal({
         // 이 WORK SESSION 선택(열)이 새 포뮬라의 새 버전을 바로 쓰도록 전환.
         const { error: selectionError } = await supabase
           .from("work_session_formula_versions")
-          .update({ formula_version_id: newVersion.id })
-          .eq("id", column.selectionId);
+          .update({ formula_version_id: newVersion.id, version_pinned: true })
+          .eq("id", targetSelectionId)
+          .eq("user_id", user_id);
         if (selectionError) throw selectionError;
 
         // 재료 라인 id가 전부 바뀌므로 이 열의 기존 계량 진행상태는 더 이상 의미가 없다 — 지운다.
         const { error: progressError } = await supabase
           .from("work_session_progress")
           .delete()
-          .eq("work_session_formula_version_id", column.selectionId);
+          .eq("work_session_formula_version_id", targetSelectionId)
+          .eq("user_id", user_id);
         if (progressError) throw progressError;
 
         return newVersion.id;
@@ -1891,6 +1902,7 @@ function EditFormulaVersionModal({
         await queryClient.invalidateQueries({ queryKey: ["formulas_by_component"] });
         await queryClient.invalidateQueries({ queryKey: ["components"] });
       }
+      void invalidateProductionSync(queryClient);
       await onSaved();
     },
     onError: (e: unknown) => {
@@ -1963,6 +1975,30 @@ function EditFormulaVersionModal({
             )}
           </div>
 
+          {(column.members?.length ?? 0) > 1 && (
+            <div className="space-y-2 border border-border p-2">
+              <p className="text-xs">
+                MERGE는 계량 보기입니다. 새 버전·새 포뮬라는 아래에서 선택한 주문 항목 하나에
+                연결됩니다. 덮어쓰기는 같은 버전을 쓰는 모든 작업에 영향을 줍니다.
+              </p>
+              {saveMode !== "overwrite" && (
+                <label className="block text-xs">
+                  변경할 주문 항목
+                  <select
+                    className={selectClass}
+                    value={targetSelectionId}
+                    onChange={(e) => setTargetSelectionId(e.target.value)}
+                  >
+                    {column.members?.map((m) => (
+                      <option key={m.selectionId} value={m.selectionId}>
+                        {m.label ?? m.sessionId.slice(0, 8)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
           {baseIngredients.isLoading && (
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
           )}
@@ -2292,7 +2328,11 @@ export function DayWorkView({
           multiplier: group.multiplier,
           sortOrder: idx,
           sessionId: r.sessionId,
-          members: group.members.map((m) => ({ selectionId: m.id, sessionId: m.sessionId })),
+          members: group.members.map((m) => ({
+            selectionId: m.id,
+            sessionId: m.sessionId,
+            label: labels[m.id] ?? m.sessionId.slice(0, 8),
+          })),
         };
       }),
     [quantityGroups],
@@ -2556,6 +2596,7 @@ function ProductionQuantityRow({
   const first = members[0]!;
   const total = members.reduce((n, m) => n + Number(m.multiplier), 0);
   const base = sumBaseGrams(lines);
+  const demand = productionDemandSummary(members, base);
   const [draft, setDraft] = useState(String(total));
   const [inputError, setInputError] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
@@ -2715,6 +2756,15 @@ function ProductionQuantityRow({
       <p className="font-mono text-sm">
         기본 배합 {fmtNumber(base, 1)}g × {fmtNumber(total, 4)} ={" "}
         <strong>{fmtNumber(base * total, 1)}g</strong>
+      </p>
+      <p className="font-mono text-[11px] text-muted-foreground">
+        주문 사용 목표 {demand.required === null ? "미지정 포함" : `${fmtNumber(demand.required)}g`}
+        {demand.remaining !== null && (
+          <span className={demand.remaining < 0 ? "text-destructive" : ""}>
+            {" "}
+            · {demand.remaining < 0 ? "부족" : "예상 잔량"} {fmtNumber(Math.abs(demand.remaining))}g
+          </span>
+        )}
       </p>
       {!compact && (
         <p className="text-xs text-muted-foreground">

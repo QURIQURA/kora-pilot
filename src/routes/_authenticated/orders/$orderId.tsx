@@ -1,3 +1,4 @@
+import { OrderComponentPlanRow } from "@/components/pilot/OrderComponentPlanRow";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1045,7 +1046,9 @@ function OrderDetailPage() {
                       (r) => r.kind === "CORE" && r.slot === slot,
                     );
                     const version =
-                      chosen?.formula_version_id ?? pickEffectiveFormulaVersion(f.formula_versions)?.id ?? null;
+                      chosen?.formula_version_id ??
+                      pickEffectiveFormulaVersion(f.formula_versions)?.id ??
+                      null;
                     return [
                       {
                         label: CORE_SLOT_LABELS[slot],
@@ -1167,7 +1170,7 @@ function OrderDetailPage() {
                     const multiple =
                       new Set(actual.map((r) => r.formula_versions.formulas.id)).size > 1;
                     return (
-                      <label key={slot} className="flex flex-col gap-1">
+                      <div key={slot} className="flex flex-col gap-1">
                         <span className="label-caps text-[10px] text-muted-foreground">
                           {CORE_SLOT_LABELS[slot]}
                         </span>
@@ -1189,19 +1192,30 @@ function OrderDetailPage() {
                           ))}
                         </select>
                         {actual.map((r) => (
-                          <span key={r.id} className="font-mono text-[10px] text-muted-foreground">
-                            Production: {r.formula_versions.formulas.name} · V
-                            {r.formula_versions.version_number} · ×
-                            {Number(Number(r.multiplier).toFixed(4))}
-                          </span>
+                          <OrderComponentPlanRow
+                            key={r.id}
+                            row={r}
+                            disabled={
+                              (!multiple && value !== r.formula_versions.formulas.id) ||
+                              ["COMPLETED", "CANCELLED"].includes(status)
+                            }
+                          />
                         ))}
-                      </label>
+                        {!multiple &&
+                          actual.length > 0 &&
+                          actual.some((r) => value !== r.formula_versions.formulas.id) && (
+                            <p className="text-xs text-muted-foreground">
+                              먼저 Order SAVE로 레시피 선택을 저장하세요.
+                            </p>
+                          )}
+                      </div>
                     );
                   })}
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  저장하면 Order ↔ Production에 함께 반영됩니다. 생산량은 Production의 ADJUST
-                  QUANTITY에서 조절하세요.
+                  Formula 선택은 Order SAVE로 저장하고, 버전·사용 목표·배수는 각 항목의 생산 계획
+                  저장으로 즉시 반영합니다. Order와 Production은 같은 계획을 공유합니다. 사용
+                  목표(g)는 주문에 쓸 양이며 생산 배수를 자동 변경하지 않습니다.
                 </p>
                 {(() => {
                   const productBuilds = (dietaryBuilds.data ?? []).filter(
