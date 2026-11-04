@@ -124,7 +124,7 @@ export function ProductionDashboard() {
   const stepsQuery = useQuery(workflowTemplateStepsQuery());
   const [date, setDate] = useState(() => toLocalDateString());
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showManagement, setShowManagement] = useState(false);
+  const [showSessionNotes, setShowSessionNotes] = useState(false);
   // 타임라인 아래 작업 박스(계량/워크플로 등)가 보여줄 세션 — 블록 선택 또는 대기공간 카드 클릭으로 정해진다.
   const [focusRowId, setFocusRowId] = useState<string | null>(null);
   const [poolOver, setPoolOver] = useState(false);
@@ -1508,16 +1508,15 @@ export function ProductionDashboard() {
           />
           <details
             className="border border-border bg-card"
-            onToggle={(e) => setShowManagement(e.currentTarget.open)}
+            onToggle={(e) => setShowSessionNotes(e.currentTarget.open)}
           >
             <summary className="label-caps cursor-pointer px-3 py-2 text-xs">
-              구성 관리 · 세션 메모
+              세션 메모
             </summary>
             <p className="px-3 pb-2 text-xs text-muted-foreground">
-              컴포넌트 추가·제거와 세션 전체 메모입니다. 생산 수량과 기록은 위 컴포넌트 행에서
-              관리하세요.
+              세션 전체 메모입니다. 생산 수량과 기록은 위 컴포넌트 행에서 관리하세요.
             </p>
-            {showManagement &&
+            {showSessionNotes &&
               workspaceSessions.map(({ sid, rowIds }) => (
                 <div key={sid} className="border-t border-border p-3">
                   <p className="mb-2 font-mono text-xs">
