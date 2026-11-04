@@ -1,3 +1,4 @@
+import { ensureStandardProfile } from "@/lib/standard-profile";
 import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -346,6 +347,7 @@ function ProductDetailPage() {
   });
 
   const invalidateLinks = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["product_sizes", productId] });
     await queryClient.invalidateQueries({ queryKey: ["product_components", productId] });
     await queryClient.invalidateQueries({ queryKey: ["products"] });
     await queryClient.invalidateQueries({ queryKey: ["cost_dashboard"] });
@@ -406,12 +408,18 @@ function ProductDetailPage() {
       unspecifiedRowId: string | null;
     }) => {
       const userId = await currentUserId();
+      const option = (sizes.data ?? []).find((s) => s.id === productSizeId);
+      const profileId = productSizeId
+        ? await ensureStandardProfile(productId, option?.cake_size_id ?? "", productSizeId)
+        : null;
+      if (productSizeId && !profileId)
+        throw new Error("공용 규격의 형태를 SETTINGS에서 지정하세요");
       const { error } = await supabase.from("product_components").insert({
         user_id: userId,
         product_id: productId,
         component_id: componentId,
         ingredient_id: ingredientId,
-        product_size_id: productSizeId,
+        product_size_id: profileId,
         formula_version_id:
           (links.data ?? []).find((r) => r.id === unspecifiedRowId)?.formula_version_id ?? null,
         quantity_g: (links.data ?? []).find((r) => r.id === unspecifiedRowId)?.quantity_g ?? null,
@@ -651,7 +659,7 @@ function ProductDetailPage() {
           ),
           COST_ADJUSTMENT: (
             <div className="space-y-3">
-              <Field label="원가를 확인할 제품 사이즈">
+              <Field label="원가를 확인할 공용 완성 규격">
                 <select
                   className={selectClass}
                   value={costSizeId}

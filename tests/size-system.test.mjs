@@ -178,11 +178,12 @@ test("legacy Cacao without product size stays unmapped when creating a session",
   assert.equal(state.inserted[0].product_size_id, null);
   assert.ok(!state.calls.includes("product_sizes"));
 });
-test("mismatched geometry blocks a new session without writing", async () => {
+test("shared standard link is authoritative despite obsolete copied product geometry", async () => {
   reset();
   state.size = { ...productSize, diameter_mm: 250 };
-  await assert.rejects(work.ensureWorkSessionForOrder("order-a"));
-  assert.equal(state.inserted.length, 0);
+  assert.equal(await work.ensureWorkSessionForOrder("order-a"), "new-session");
+  assert.equal(state.inserted[0].cake_size_id, "standard-a");
+  assert.equal(state.size.diameter_mm, 250);
 });
 test("production target converts a gram total into a fractional recipe multiplier", () => {
   assert.equal(work.suggestedMultiplierFromTarget(800, 3, 1500), 1.6);

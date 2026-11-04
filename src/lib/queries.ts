@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { summarizeUsage } from "@/lib/product-usage";
+import { canonicalProfile, sharedStandardOptions } from "@/lib/shared-standard";
 import { productUsageCost, type VersionCostInfo } from "@/lib/cost";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -110,15 +111,18 @@ export const productQuery = (id: string) =>
 export const productSizesQuery = (productId: string) =>
   queryOptions({
     queryKey: ["product_sizes", productId],
-    queryFn: async (): Promise<ProductSize[]> =>
-      unwrap(
+    queryFn: async (): Promise<ProductSize[]> => {
+      const standards = unwrap(await supabase.from("cake_sizes").select("*").order("sort_order"));
+      const profiles = unwrap(
         await supabase
           .from("product_sizes")
           .select("*")
           .eq("product_id", productId)
           .order("is_default", { ascending: false })
           .order("created_at", { ascending: true }),
-      ),
+      );
+      return sharedStandardOptions(standards, profiles, productId);
+    },
   });
 
 export interface ProductComponentRow {
@@ -1912,17 +1916,19 @@ export const costDashboardQuery = () =>
   queryOptions({
     queryKey: ["cost_dashboard"],
     queryFn: async (): Promise<CostDashboardRow[]> => {
-      const [productsRes, sizesRes, linksRes, costItemsRes, settingsRes] = await Promise.all([
-        supabase.from("products").select("id, name"),
-        supabase.from("product_sizes").select("*"),
-        supabase
-          .from("product_components")
-          .select(
-            "product_id, product_size_id, component_id, ingredient_id, formula_version_id, quantity_g, ingredients(purchase_price, purchase_qty, purchase_unit)",
-          ),
-        supabase.from("product_cost_items").select("product_id, quantity, cost_items(unit_cost)"),
-        supabase.from("pilot_settings").select("*").maybeSingle(),
-      ]);
+      const [productsRes, sizesRes, linksRes, costItemsRes, settingsRes, standardsRes] =
+        await Promise.all([
+          supabase.from("products").select("id, name"),
+          supabase.from("product_sizes").select("*"),
+          supabase
+            .from("product_components")
+            .select(
+              "product_id, product_size_id, component_id, ingredient_id, formula_version_id, quantity_g, ingredients(purchase_price, purchase_qty, purchase_unit)",
+            ),
+          supabase.from("product_cost_items").select("product_id, quantity, cost_items(unit_cost)"),
+          supabase.from("pilot_settings").select("*").maybeSingle(),
+          supabase.from("cake_sizes").select("*"),
+        ]);
       if (productsRes.error) throw productsRes.error;
       if (sizesRes.error) throw sizesRes.error;
       if (linksRes.error) throw linksRes.error;
@@ -1930,7 +1936,11 @@ export const costDashboardQuery = () =>
       if (settingsRes.error) throw settingsRes.error;
 
       const products = (productsRes.data ?? []) as { id: string; name: string }[];
-      const sizes = (sizesRes.data ?? []) as ProductSize[];
+      if (standardsRes.error) throw standardsRes.error;
+      const sizes = (sizesRes.data ?? []).flatMap((p) => {
+        const standard = (standardsRes.data ?? []).find((c) => c.id === p.cake_size_id);
+        return standard ? [canonicalProfile(p, standard)] : [];
+      });
       const links = (linksRes.data ?? []) as unknown as {
         product_id: string;
         product_size_id: string | null;
@@ -2199,7 +2209,7 @@ export const stockItemsQuery = () =>
         await supabase
           .from("stock_items")
           .select(
-            "*, stock_item_lines(*), product_sizes(id, shape, diameter_mm, length_mm, width_mm, height_mm, is_default, products(id, name)), components(id, name)",
+            "*, stock_item_lines(*), product_sizes(*, products(id, name)), components(id, name)",
           ),
       ) as unknown as Array<{
         id: string;
@@ -2214,8 +2224,17 @@ export const stockItemsQuery = () =>
         product_sizes: (ProductSize & { products: { id: string; name: string } | null }) | null;
         components: Component | null;
       }>;
+      const standards = unwrap(await supabase.from("cake_sizes").select("*"));
       return rows
         .map((r) => {
+          if (r.product_sizes) {
+            const standard = standards.find((c) => c.id === r.product_sizes?.cake_size_id);
+            if (standard)
+              r.product_sizes = {
+                ...r.product_sizes,
+                ...canonicalProfile(r.product_sizes, standard),
+              };
+          }
           const groupLabel =
             r.item_type === "PRODUCT" && r.product_sizes
               ? (r.product_sizes.products?.name ?? "?")
@@ -2270,30 +2289,33 @@ export const stockCandidatesQuery = () =>
   queryOptions({
     queryKey: ["stock_candidates"],
     queryFn: async () => {
-      const [sizesRes, componentsRes, existingRes] = await Promise.all([
-        supabase.from("product_sizes").select("*, products(id, name)"),
+      const [productsRes, standardsRes, sizesRes, componentsRes, existingRes] = await Promise.all([
+        supabase.from("products").select("id, name"),
+        supabase.from("cake_sizes").select("*"),
+        supabase.from("product_sizes").select("*"),
         supabase.from("components").select("*").order("name"),
         supabase.from("stock_items").select("product_size_id, component_id"),
       ]);
-      if (sizesRes.error) throw sizesRes.error;
-      if (componentsRes.error) throw componentsRes.error;
-      if (existingRes.error) throw existingRes.error;
+      for (const result of [productsRes, standardsRes, sizesRes, componentsRes, existingRes])
+        if (result.error) throw result.error;
       const usedSizeIds = new Set(
         (existingRes.data ?? []).map((r) => r.product_size_id).filter(Boolean),
       );
       const usedComponentIds = new Set(
         (existingRes.data ?? []).map((r) => r.component_id).filter(Boolean),
       );
-      const sizes = (
-        sizesRes.data as unknown as Array<
-          ProductSize & { products: { id: string; name: string } | null }
-        >
-      )
-        .filter((s) => !usedSizeIds.has(s.id))
-        .map((s) => ({
-          id: s.id,
-          label: `${s.products?.name ?? "?"} · ${formatProductSizeLabel(s)}`,
-        }))
+      const sizes = (productsRes.data ?? [])
+        .flatMap((product) =>
+          sharedStandardOptions(standardsRes.data ?? [], sizesRes.data ?? [], product.id)
+            .filter((s) => !usedSizeIds.has(s.id))
+            .map((s) => ({
+              id: `${product.id}:${s.cake_size_id}`,
+              productId: product.id,
+              standardId: s.cake_size_id!,
+              profileId: s.id,
+              label: `${product.name} · ${formatProductSizeLabel(s)}`,
+            })),
+        )
         .sort((a, b) => a.label.localeCompare(b.label));
       // 같은 컴포넌트도 사이즈가 다르면 또 추가할 수 있어야 하므로 이미 재고에 있어도 목록에 둔다.
       void usedComponentIds;

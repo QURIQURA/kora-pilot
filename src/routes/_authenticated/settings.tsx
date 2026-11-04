@@ -5,7 +5,6 @@ import { MouldManager } from "@/components/pilot/MouldManager";
 import { PastryMeasurementGuide } from "@/components/pilot/PastryMeasurementGuide";
 import { CakeSizeManager } from "@/components/pilot/CakeSizeManager";
 import { DietaryTagManager } from "@/components/pilot/DietaryTagManager";
-import { ProductSizeManager } from "@/components/pilot/ProductSizeManager";
 import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
@@ -115,18 +114,12 @@ function SettingsPage() {
         </SettingsSection>
       </SettingsGroup>
 
-      <SettingsSection title="SIZES · 완성 규격과 제품별 구성" defaultOpen>
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            공용 완성 규격은 한 번 등록하고 제품별로 연결합니다. 몰드의 물리 치수·제품별
-            배합량·판매가는 별도로 유지합니다.
-          </p>
-          <details>
-            <summary className="cursor-pointer text-sm">공용 완성 규격 관리</summary>
-            <CakeSizeManager />
-          </details>
-          <ProductSizeManager />
-        </div>
+      <SettingsSection title="공용 완성 규격" defaultOpen>
+        <p className="mb-3 text-sm text-muted-foreground">
+          주문·제품·작업 세션·생산·원가·재고에서 같은 규격을 사용합니다. 제품별 판매가와 사용량은
+          제품 화면에서 설정하세요.
+        </p>
+        <CakeSizeManager />
       </SettingsSection>
 
       <SettingsGroup label="PRODUCTS">

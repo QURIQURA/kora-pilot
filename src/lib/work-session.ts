@@ -8,7 +8,6 @@
  */
 import type { Tables, TablesUpdate } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
-import { selectionIssue } from "@/lib/size-configuration";
 import { sumInputGrams } from "@/lib/product-usage";
 import { generateTitle } from "@/lib/datetime";
 import { ingredientDisplayName } from "@/lib/pilot";
@@ -507,14 +506,10 @@ export async function ensureWorkSessionForOrder(orderId: string): Promise<string
       if (result.error) throw result.error;
       standard = result.data;
     }
-    const issue = selectionIssue(
-      order.product_id,
-      order.product_size_id,
-      order.cake_size_id,
-      size,
-      standard,
-    );
-    if (issue) throw new Error(issue);
+    if (size.product_id !== order.product_id) throw new Error("제품 가격·구성 연결이 다릅니다");
+    if (order.cake_size_id && size.cake_size_id !== order.cake_size_id)
+      throw new Error("공용 규격 연결을 다시 확인하세요");
+    void standard;
   }
   const delivery = order.pickup_at ? order.pickup_at.slice(0, 10) : order.event_date;
   const baseName =

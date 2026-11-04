@@ -3762,6 +3762,10 @@ export type Database = {
         Args: { p_name: string; p_sources: Json; p_technique_category_id?: string };
         Returns: Json;
       };
+      ensure_product_standard_profile: {
+        Args: { p_product_id: string; p_cake_size_id: string; p_preferred_id?: string };
+        Returns: string | null;
+      };
       revise_component_blend: {
         Args: {
           p_version_id: string;

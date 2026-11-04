@@ -44,10 +44,8 @@ import { DIETARY_ASSEMBLY_ENABLED } from "@/lib/feature-flags";
 import { resolveSlotGroup } from "@/lib/technique";
 import { ensureWorkSessionForOrder } from "@/lib/work-session";
 import { mouldOptionLabel } from "@/components/pilot/MouldSelect";
-import { selectionIssue } from "@/lib/size-configuration";
 import { formatProductSizeLabel } from "@/lib/product-size";
 import { pickEffectiveFormulaVersion } from "@/lib/formula";
-import { ProductSizeSelect } from "@/components/pilot/ProductSizeSelect";
 import { formatDateTime, generateTitle } from "@/lib/datetime";
 import { CustomerSelect } from "@/components/pilot/CustomerSelect";
 import { ProductSelect } from "@/components/pilot/ProductSelect";
@@ -231,36 +229,6 @@ function OrderDetailPage() {
   // Session을 이 ORDER에서 만들 때 그대로 넘겨서 PRODUCT SIZE 기준 자동 배수 계산에 쓰인다.
   const [productSizeId, setProductSizeId] = useState("");
   const productSizes = useQuery({ ...productSizesQuery(productId), enabled: Boolean(productId) });
-  const [sizeChoiceError, setSizeChoiceError] = useState<string | null>(null);
-  const sizeChoiceRequest = useRef(0);
-  const currentSizeIssue = selectionIssue(
-    productId || null,
-    productSizeId || null,
-    cakeSizeId || null,
-    (productSizes.data ?? []).find((s) => s.id === productSizeId),
-    (cakeSizes.data ?? []).find((s) => s.id === cakeSizeId),
-  );
-  const chooseProductSize = async (id: string) => {
-    const request = ++sizeChoiceRequest.current;
-    setSizeChoiceError(null);
-    if (!id) {
-      setProductSizeId("");
-      return;
-    }
-    const options = await queryClient.fetchQuery(productSizesQuery(productId));
-    if (request !== sizeChoiceRequest.current) return;
-    const picked = options.find((s) => s.id === id);
-    const standard = (cakeSizes.data ?? []).find((c) => c.id === picked?.cake_size_id);
-    const issue = selectionIssue(productId, id, picked?.cake_size_id ?? null, picked, standard);
-    if (issue) {
-      setSizeChoiceError(`이 제품 사이즈를 적용하지 못했습니다: ${issue}`);
-      return;
-    }
-    setProductSizeId(id);
-    setCakeSizeId(picked?.cake_size_id ?? "");
-    if (standard?.servings != null) setServings(String(standard.servings));
-  };
-
   // 2026-10-20 사용자 요청: "최종 케익 사이즈"(위 product_size_id — PRODUCT에 연결, 단가계산용)와는
   // 별개로 "시트 사이즈"를 따로 관리한다 — PRODUCT SIZE 데이터가 없는 제품/커스텀 사이즈 주문이라도
   // 이 몰드만 골라두면 WORK SESSION 생성 시 그 몰드 기준으로 자동 배수 계산이 가능해진다.
@@ -512,7 +480,6 @@ function OrderDetailPage() {
         productId !== (previous?.product_id ?? "") ||
         productSizeId !== (previous?.product_size_id ?? "") ||
         cakeSizeId !== (previous?.cake_size_id ?? "");
-      if (changedSize && currentSizeIssue) throw new Error(currentSizeIssue);
       const trimmedOrderNumber = orderNumber.trim();
       if (!trimmedOrderNumber) {
         throw new Error("ORDER NUMBER IS REQUIRED");
@@ -1033,9 +1000,6 @@ function OrderDetailPage() {
                       : "미지정";
                   })()}
                 </p>
-                {currentSizeIssue && (
-                  <p className="text-xs text-destructive">저장된 사이즈 연결: {currentSizeIssue}</p>
-                )}
                 <Link
                   to="/production"
                   search={{ tab: status === "COMPLETED" ? "ORDER HISTORY" : "ORDERS" }}

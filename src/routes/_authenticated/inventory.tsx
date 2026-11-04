@@ -1,3 +1,4 @@
+import { ensureStandardProfile } from "@/lib/standard-profile";
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -394,9 +395,20 @@ function AddStockForm({ onDone }: { onDone: () => void }) {
       const qty = Number(form.qty || "0");
       if (!Number.isFinite(qty)) throw new Error("수량이 올바르지 않아요");
       const v = lineValues(form);
+      const candidate = candidates.data?.sizes.find((s) => s.id === targetId);
+      const profileId =
+        itemType === "PRODUCT" && candidate
+          ? await ensureStandardProfile(
+              candidate.productId,
+              candidate.standardId,
+              candidate.profileId,
+            )
+          : null;
+      if (itemType === "PRODUCT" && !profileId)
+        throw new Error("공용 규격의 형태를 SETTINGS에서 확인하세요");
       await adjustStock({
         itemType,
-        productSizeId: itemType === "PRODUCT" ? targetId : null,
+        productSizeId: profileId,
         componentId: itemType === "COMPONENT" ? targetId : null,
         quantityDelta: qty,
         reason: "MANUAL_ADJUST",

@@ -4,11 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   cakeSizesQuery,
   currentUserId,
-  productSizesQuery,
   workSessionFormulaVersionsQuery,
   type OrderListRow,
 } from "@/lib/queries";
-import { completeGeometry, selectionIssue } from "@/lib/size-configuration";
+import { ensureStandardProfile } from "@/lib/standard-profile";
 import { formatProductSizeLabel } from "@/lib/product-size";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { ProductSelect } from "./ProductSelect";
@@ -58,27 +57,8 @@ export function ProductionOrderSizeEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.updated_at]);
   const standards = useQuery(cakeSizesQuery());
-  const sizes = useQuery({ ...productSizesQuery(draft.product), enabled: Boolean(draft.product) });
   const selections = useQuery(workSessionFormulaVersionsQuery(sessionId));
   const selected = (standards.data ?? []).find((c) => c.id === draft.standard);
-  const issue = selectionIssue(
-    draft.product || null,
-    draft.size || null,
-    draft.standard || null,
-    (sizes.data ?? []).find((s) => s.id === draft.size),
-    selected,
-  );
-  const invalidStandard =
-    draft.standard &&
-    !completeGeometry(
-      selected ?? {
-        shape: null,
-        diameter_mm: null,
-        width_mm: null,
-        length_mm: null,
-        height_mm: null,
-      },
-    );
   /** 주문(+진행 중 세션)에 제품/사이즈를 저장한다. 저장하는 값은 next — 제품만 바꿀 때는 마지막 저장값 + 제품. */
   const persist = async (next: typeof draft) => {
     {
@@ -86,11 +66,12 @@ export function ProductionOrderSizeEditor({
       if (servings !== null && (!Number.isInteger(servings) || servings < 0))
         throw new Error("인분은 0 이상의 정수로 입력하세요");
       const uid = await currentUserId();
+      const profileId = await ensureStandardProfile(next.product, next.standard, next.size);
       const { data, error } = await supabase
         .from("orders")
         .update({
           product_id: next.product || null,
-          product_size_id: next.size || null,
+          product_size_id: profileId,
           cake_size_id: next.standard || null,
           servings,
         })
@@ -101,12 +82,14 @@ export function ProductionOrderSizeEditor({
         .single();
       if (error) throw new Error(`주문 사이즈 저장 실패 — 최신 값을 확인하세요: ${error.message}`);
       // Persist the saved order before mirroring optional session metadata. Never change recipe quantities.
+      next = { ...next, size: profileId ?? "" };
       baseline.current = { state: next, updatedAt: data.updated_at };
+      setDraft(next);
       const { error: sessionError } = await supabase
         .from("work_sessions")
         .update({
           product_id: next.product || null,
-          product_size_id: next.size || null,
+          product_size_id: profileId,
           cake_size_id: next.standard || null,
         })
         .eq("order_id", order.id)
@@ -120,9 +103,6 @@ export function ProductionOrderSizeEditor({
   };
   const save = useMutation({
     mutationFn: async () => {
-      if (issue) throw new Error(issue);
-      if (invalidStandard)
-        throw new Error("이 공용 규격의 치수가 비어 있습니다. 유효한 규격을 선택하세요.");
       await persist(draft);
     },
     onSettled: () => {
@@ -161,7 +141,7 @@ export function ProductionOrderSizeEditor({
         <div className="min-w-0 flex-1 basis-56">
           <ProductSelect
             value={baseline.current.state.product}
-            disabled={readOnly || changeProduct.isPending}
+            disabled={readOnly || changeProduct.isPending || save.isPending}
             onChange={(id) => changeProduct.mutate(id)}
             linkedParts={linkedParts}
           />
@@ -190,7 +170,10 @@ export function ProductionOrderSizeEditor({
         )}
       </div>
       {open && !readOnly && (
-        <fieldset disabled={save.isPending} className="mt-2 space-y-2 border border-border p-2">
+        <fieldset
+          disabled={save.isPending || changeProduct.isPending}
+          className="mt-2 space-y-2 border border-border p-2"
+        >
           <label className="block">
             제품
             <ProductSelect
@@ -200,48 +183,25 @@ export function ProductionOrderSizeEditor({
             />
           </label>
           <label className="block">
-            제품 전용 사이즈 (선택)
-            <select
-              className={selectClass}
-              value={draft.size}
-              disabled={!draft.product || sizes.isLoading}
-              onChange={(e) => {
-                const size = (sizes.data ?? []).find((s) => s.id === e.target.value);
-                setDraft((d) => ({
-                  ...d,
-                  size: e.target.value,
-                  standard: size?.cake_size_id ?? d.standard,
-                }));
-              }}
-            >
-              <option value="">사용 안 함 · 공용 완성 규격 직접 선택</option>
-              {(sizes.data ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {formatProductSizeLabel(s)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
             공용 완성 규격
             <select
               className={selectClass}
               value={draft.standard}
-              disabled={!!draft.size || standards.isLoading}
+              disabled={standards.isLoading}
               onChange={(e) => {
                 const size = (standards.data ?? []).find((s) => s.id === e.target.value);
                 setDraft((d) => ({
                   ...d,
                   standard: e.target.value,
+                  size: "",
                   servings: size?.servings == null ? d.servings : String(size.servings),
                 }));
               }}
             >
               <option value="">미지정</option>
               {(standards.data ?? []).map((s) => (
-                <option key={s.id} value={s.id} disabled={!completeGeometry(s)}>
+                <option key={s.id} value={s.id}>
                   {sizeText(s)} · #{s.id.slice(0, 8)}
-                  {completeGeometry(s) ? "" : " · 치수 확인 필요"}
                 </option>
               ))}
             </select>
@@ -257,12 +217,6 @@ export function ProductionOrderSizeEditor({
               onChange={(e) => setDraft((d) => ({ ...d, servings: e.target.value }))}
             />
           </label>
-          {issue && (
-            <p className="text-destructive">
-              선택한 제품 사이즈: {issue} 제품 전용 사이즈를 해제하면 공용 규격을 직접 고를 수
-              있어요.
-            </p>
-          )}
           {conflict && (
             <p className="text-destructive">
               다른 화면에서 주문이 변경됐습니다.{" "}
@@ -287,14 +241,7 @@ export function ProductionOrderSizeEditor({
           <button
             type="button"
             className={buttonClass}
-            disabled={
-              (!dirty && !save.isError) ||
-              conflict ||
-              !!issue ||
-              !!invalidStandard ||
-              sizes.isError ||
-              standards.isError
-            }
+            disabled={(!dirty && !save.isError) || conflict || standards.isError}
             onClick={() => save.mutate()}
           >
             사이즈 저장

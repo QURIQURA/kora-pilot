@@ -1,3 +1,4 @@
+import { ensureStandardProfile } from "@/lib/standard-profile";
 import { parseComponentPlan } from "@/lib/order-component-plan";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { Link } from "@tanstack/react-router";
@@ -27,7 +28,6 @@ import {
   formulasQuery,
   mouldsQuery,
   productsQuery,
-  productSizesQuery,
   cakeSizesQuery,
   techniqueCategoriesQuery,
   versionIngredientsBulkQuery,
@@ -49,7 +49,6 @@ import {
   groupProductionSelections,
   rescaleProductionSelections,
 } from "@/lib/production-quantity";
-import { selectionIssue } from "@/lib/size-configuration";
 import { resolveSlotGroup } from "@/lib/technique";
 import { fmtNumber, toGrams, versionLabel, UNITS, type Mould } from "@/lib/formula";
 import { formatProductSizeLabel } from "@/lib/product-size";
@@ -334,6 +333,7 @@ export function WorkSessionWorkspace({
         <ProductionEfficiencyLinkSection
           productId={data.product_id}
           productSizeId={data.product_size_id}
+          cakeSizeId={data.cake_size_id}
           targetUnitCount={data.target_unit_count}
           onSave={(patch) => updateSession.mutate(patch)}
         />
@@ -467,16 +467,17 @@ function InlineName({ value, onSave }: { value: string; onSave: (value: string) 
 function ProductionEfficiencyLinkSection({
   productId,
   productSizeId,
+  cakeSizeId,
   targetUnitCount,
   onSave,
 }: {
   productId: string | null;
   productSizeId: string | null;
+  cakeSizeId: string | null;
   targetUnitCount: number | null;
   onSave: (patch: TablesUpdate<"work_sessions">) => void;
 }) {
   const products = useQuery(productsQuery());
-  const sizes = useQuery(productSizesQuery(productId ?? ""));
   const standards = useQuery(cakeSizesQuery());
   const [sizeError, setSizeError] = useState<string | null>(null);
   const [batchDraft, setBatchDraft] = useState(
@@ -487,7 +488,7 @@ function ProductionEfficiencyLinkSection({
   }, [targetUnitCount]);
 
   return (
-    <SectionCard title="PRODUCT / BATCH SIZE (EFFICIENCY)">
+    <SectionCard title="제품 / 공용 완성 규격 (EFFICIENCY)">
       {sizeError && (
         <p role="alert" className="text-xs text-destructive">
           {sizeError}
@@ -515,31 +516,26 @@ function ProductionEfficiencyLinkSection({
             ))}
           </select>
         </Field>
-        {productId && (sizes.data ?? []).length > 0 && (
-          <Field label="SIZE">
+        {productId && (standards.data ?? []).length > 0 && (
+          <Field label="공용 완성 규격">
             <select
-              className={selectClass + " !w-40"}
-              value={productSizeId ?? ""}
-              onChange={(e) => {
-                const id = e.target.value || null;
-                const picked = (sizes.data ?? []).find((s) => s.id === id);
-                const standard = (standards.data ?? []).find((c) => c.id === picked?.cake_size_id);
-                const issue = selectionIssue(
-                  productId,
-                  id,
-                  picked?.cake_size_id ?? null,
-                  picked,
-                  standard,
-                );
-                setSizeError(issue);
-                if (!issue)
-                  onSave({ product_size_id: id, cake_size_id: picked?.cake_size_id ?? null });
+              className={selectClass + " !w-56"}
+              value={cakeSizeId ?? ""}
+              onChange={async (e) => {
+                const id = e.target.value;
+                try {
+                  const profile = await ensureStandardProfile(productId, id, productSizeId);
+                  setSizeError(null);
+                  onSave({ product_size_id: profile, cake_size_id: id || null });
+                } catch (error) {
+                  setSizeError((error as Error).message);
+                }
               }}
             >
-              <option value="">(전체/미지정)</option>
-              {(sizes.data ?? []).map((s) => (
+              <option value="">미지정</option>
+              {(standards.data ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
-                  {formatProductSizeLabel(s)}
+                  {s.name}
                 </option>
               ))}
             </select>

@@ -32,6 +32,16 @@ export function CakeSizeManager() {
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["cake_sizes"] });
     await queryClient.invalidateQueries({ queryKey: ["cake_size_usage"] });
+    await Promise.all(
+      [
+        "product_sizes",
+        "cost_dashboard",
+        "stock_items",
+        "stock_candidates",
+        "orders",
+        "work_sessions",
+      ].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
+    );
   };
 
   const create = useMutation({
@@ -123,7 +133,7 @@ export function CakeSizeManager() {
         if (result.error) throw result.error;
       }
       if (results.some((result) => (result.count ?? 0) > 0))
-        throw new Error("오더·세션·제품 사이즈에서 사용 중인 규격은 삭제할 수 없습니다.");
+        throw new Error("오더·세션·제품 가격·구성에서 사용 중인 규격은 삭제할 수 없습니다.");
       const { error } = await supabase.from("cake_sizes").delete().eq("id", id);
       if (error) throw error;
     },
