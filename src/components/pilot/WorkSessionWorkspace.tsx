@@ -1,4 +1,4 @@
-import { parseComponentPlan, productionDemandSummary } from "@/lib/order-component-plan";
+import { parseComponentPlan } from "@/lib/order-component-plan";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -783,17 +783,6 @@ export function AddFormulaVersionForm({
         이 주문의 계획으로 저장합니다. 다른 화면에는 같은 계획이 표시됩니다.
       </p>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="사용 목표 (g)">
-          <input
-            className={inputClass}
-            type="number"
-            min="0"
-            step="any"
-            placeholder="미지정"
-            value={planTarget}
-            onChange={(e) => setPlanTarget(e.target.value)}
-          />
-        </Field>
         <Field label="생산 배수 ×">
           <input
             className={inputClass}
@@ -2260,10 +2249,13 @@ export function DayWorkView({
   items,
   labels = {},
   renderRecords,
+  renderHeaderExtra,
   focusedRowId,
   focusKey,
 }: {
   renderRecords?: (selectionIds: string[]) => React.ReactNode;
+  /** 컴포넌트 행 제목 옆(접어도 보임)에 붙는 것 — 타이머 */
+  renderHeaderExtra?: (selectionIds: string[]) => React.ReactNode;
   focusedRowId?: string | null;
   focusKey?: string | null;
   items: { sessionId: string; rowId: string }[];
@@ -2421,6 +2413,7 @@ export function DayWorkView({
               focused={group.members.some((m) => m.id === focusedRowId)}
               focusKey={focusKey ?? null}
               renderRecords={renderRecords}
+              renderHeaderExtra={renderHeaderExtra}
               quantity={
                 <ProductionQuantityRow
                   compact
@@ -2515,6 +2508,7 @@ function ComponentProductionRow({
   focused,
   focusKey,
   renderRecords,
+  renderHeaderExtra,
 }: {
   members: (WorkSessionFormulaVersionRow & { sessionId: string })[];
   labels: Record<string, string>;
@@ -2522,6 +2516,7 @@ function ComponentProductionRow({
   focused: boolean;
   focusKey: string | null;
   renderRecords: ((ids: string[]) => React.ReactNode) | undefined;
+  renderHeaderExtra: ((ids: string[]) => React.ReactNode) | undefined;
 }) {
   // 기본으로 열어 둔다 — 사용자가 닫지 않는 한 유지.
   const [expanded, setExpanded] = useState(true);
@@ -2532,22 +2527,34 @@ function ComponentProductionRow({
   const first = members[0]!;
   return (
     <article>
-      <button
-        type="button"
-        className="flex w-full flex-wrap items-center gap-2 bg-secondary/40 px-3 py-2 text-left"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
-      >
-        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        <span className="flex-1 text-sm">
-          {first.formula_versions.formulas.components?.name ?? first.formula_versions.formulas.name}
-        </span>
-        <span className="font-mono text-[11px] text-muted-foreground">
-          V{first.formula_versions.version_number} ·{" "}
-          {members.length > 1 ? `MERGED ${members.length}` : (first.slot ?? first.kind)}
-        </span>
-        <span className="text-xs text-muted-foreground">생산 기록</span>
-      </button>
+      <div className="flex w-full flex-wrap items-center gap-2 bg-secondary/40 px-3 py-2">
+        <button
+          type="button"
+          className="flex min-w-0 items-center gap-2 text-left"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          <span className="text-sm">
+            {first.formula_versions.formulas.components?.name ??
+              first.formula_versions.formulas.name}
+          </span>
+        </button>
+        {/* 타이머: 제목 바로 옆에 — 접어도 시작/카운트다운이 보인다 */}
+        {renderHeaderExtra?.(members.map((m) => m.id))}
+        <button
+          type="button"
+          className="ml-auto flex items-center gap-2 text-left"
+          tabIndex={-1}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <span className="font-mono text-[11px] text-muted-foreground">
+            V{first.formula_versions.version_number} ·{" "}
+            {members.length > 1 ? `MERGED ${members.length}` : (first.slot ?? first.kind)}
+          </span>
+          <span className="text-xs text-muted-foreground">생산 기록</span>
+        </button>
+      </div>
       <div className="pt-2">{quantity}</div>
       {expanded && (
         <div className="ml-5 space-y-3 border-l border-border px-3 pb-3 sm:ml-8">
@@ -2624,7 +2631,6 @@ function ProductionQuantityRow({
   const first = members[0]!;
   const total = members.reduce((sum, row) => sum + Number(row.multiplier), 0);
   const base = sumBaseGrams(lines);
-  const demand = productionDemandSummary(members, base);
   return (
     <div className="space-y-1 px-3 pb-3 pt-2 text-xs">
       {!compact && (
@@ -2636,12 +2642,6 @@ function ProductionQuantityRow({
       <p className="font-mono">
         기본 배합 {fmtNumber(base)}g × {fmtNumber(total, 4)} ={" "}
         <strong>{fmtNumber(base * total)}g</strong>
-      </p>
-      <p className="text-muted-foreground">
-        사용 목표 {demand.required === null ? "미지정 포함" : `${fmtNumber(demand.required)}g`}
-        {demand.remaining !== null
-          ? ` · ${demand.remaining < 0 ? "부족" : "예상 잔량"} ${fmtNumber(Math.abs(demand.remaining))}g`
-          : ""}
       </p>
       <p className="font-mono text-[10px] text-muted-foreground">
         {members

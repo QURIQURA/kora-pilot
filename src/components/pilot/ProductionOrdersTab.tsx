@@ -156,7 +156,7 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
       <p className="font-mono text-[11px] text-muted-foreground">
         {completed
           ? `완료된 오더 ${list.length}개 · 오더가 COMPLETED가 되면 ORDERS에서 자동으로 여기로 옮겨져요.`
-          : `진행 중인 오더 ${list.length}개 · 여기서 컴포넌트·레시피·사용 목표·생산 배수를 설정해요. 지정한 항목은 DASHBOARD 작업 대기공간으로 올라가고, Order 상세에는 읽기 전용으로 표시돼요.`}
+          : `진행 중인 오더 ${list.length}개 · 여기서 컴포넌트·레시피·생산 배수를 설정해요. 지정한 항목은 DASHBOARD 작업 대기공간으로 올라가고, Order 상세에는 읽기 전용으로 표시돼요.`}
       </p>
       {(sessions.isError || components.isError || blocks.isError) && (
         <p role="alert" className="text-xs text-destructive">

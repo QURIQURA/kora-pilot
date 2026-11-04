@@ -257,7 +257,7 @@ export function ProductionOrderSizeEditor({
             사이즈 저장
           </button>
           <p className="text-muted-foreground">
-            사이즈를 바꿔도 컴포넌트 사용 목표·생산 배수는 자동 변경하지 않습니다.
+            사이즈를 바꿔도 컴포넌트 생산 배수는 자동 변경하지 않습니다.
           </p>
         </fieldset>
       )}

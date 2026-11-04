@@ -1,4 +1,5 @@
 import type { Tables } from "@/integrations/supabase/types";
+import { sizeAbbr } from "@/lib/size-label";
 
 /**
  * PRODUCT SIZE / DIMENSION SYSTEM — 순수 계산/표시 헬퍼.
@@ -77,11 +78,7 @@ function formatNum(n: number): string {
   return Number(n.toFixed(1)).toString();
 }
 
-/**
- * 사람이 읽을 수 있는 사이즈 표기.
- * ROUND → "Ø15 × H3 cm"
- * RECTANGLE → "32 × 24 × H3 cm"
- */
+/** 사이즈 약어(모양-사이즈-높이) — 규칙은 src/lib/size-label.ts. 예: Ø6″-H3, ▬32×24-H3 */
 export function formatProductSizeLabel(size: {
   shape: string;
   diameter_mm: number | null;
@@ -89,18 +86,7 @@ export function formatProductSizeLabel(size: {
   width_mm: number | null;
   height_mm: number | null;
 }): string {
-  if (size.shape === "ROUND") {
-    const d = size.diameter_mm != null ? formatNum(mmToCm(size.diameter_mm)) : "?";
-    const h = size.height_mm != null ? formatNum(mmToCm(size.height_mm)) : "?";
-    return `Ø${d} × H${h} cm`;
-  }
-  if (size.shape === "RECTANGLE") {
-    const l = size.length_mm != null ? formatNum(mmToCm(size.length_mm)) : "?";
-    const w = size.width_mm != null ? formatNum(mmToCm(size.width_mm)) : "?";
-    const h = size.height_mm != null ? formatNum(mmToCm(size.height_mm)) : "?";
-    return `${l} × ${w} × H${h} cm`;
-  }
-  return size.shape;
+  return size.shape ? sizeAbbr(size) : size.shape;
 }
 
 export function formatAreaCm2(areaCm2: number): string {

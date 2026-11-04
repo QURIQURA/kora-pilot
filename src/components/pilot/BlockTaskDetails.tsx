@@ -487,10 +487,13 @@ export function BlockTimerInline({
   block,
   row,
   onStarted,
+  label,
 }: {
   block: WorkBlock;
   row: DashboardComponentRow;
   onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
+  /** 단계/차수 표시(여러 타이머가 한 줄에 있을 때) */
+  label?: string | undefined;
 }) {
   const queryClient = useQueryClient();
   const sessionId = row.work_session_id;
@@ -523,7 +526,8 @@ export function BlockTimerInline({
   const remainSec = task.timer_minutes != null ? task.timer_minutes * 60 - elapsedSec : null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 pb-1 pl-5 text-xs">
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      {label && <span className="font-mono text-[11px] text-muted-foreground">{label}</span>}
       <span className="label-caps border border-border px-1.5 py-0.5 text-[10px]">
         {task.status === "IN_PROGRESS" ? "ACTIVE" : task.status === "DONE" ? "DONE" : "READY"}
       </span>

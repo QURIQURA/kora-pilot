@@ -57,6 +57,7 @@ type CoreRow = {
   capacity_qty: number | string | null;
   base_weight_qty: number | string | null;
   capacities: { name: string; weight_g: number | null } | null;
+  moulds: MouldDims | null;
   base_weight_presets: { name: string; weight_g: number | null } | null;
   formula_versions: {
     formulas: { name: string; components: { name: string } | null } | null;
@@ -84,11 +85,59 @@ const json = (body: unknown, status = 200) =>
 /** 숫자를 소수 둘째 자리까지, 끝의 0은 떼고 표기. */
 const fmt = (n: number) => String(Math.round(n * 100) / 100);
 
-/** 몰드 이름 → 사람이 읽는 사이즈. 예: `ROUND 6"` / `ROUND8"` → "6inch round". 패턴이 아니면 이름 그대로. */
-const mouldLabel = (name: string): string => {
-  const m = name.trim().match(/^(.*?)\s*(\d+(?:\.\d+)?)\s*(?:"|''|”|inch|in|인치)?$/i);
-  if (!m || !m[1]?.trim()) return name.trim();
-  return `${m[2]}inch ${m[1].trim().toLowerCase()}`;
+/**
+ * 사이즈 약어 체계: 모양-사이즈-높이 — Ø8″-H5 (원형) / ■6″-H5 (정사각) / ▬30×20-H4 (직사각, cm).
+ * src/lib/size-label.ts와 같은 규칙의 복제본 — 바꾸면 함께 바꾼다.
+ */
+type MouldDims = {
+  name: string;
+  diameter_mm: number | null;
+  width_mm: number | null;
+  length_mm: number | null;
+  height_mm: number | null;
+};
+const pos = (v: number | string | null | undefined): number | null => {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const cmStr = (mm: number) => String(Math.round((mm / 10) * 10) / 10);
+const mmToInch = (mm: number): number | null => {
+  const inch = mm / 25.4;
+  const half = Math.round(inch * 2) / 2;
+  return Math.abs(inch - half) <= 0.15 ? half : null;
+};
+const sizeAbbr = (m: MouldDims): string => {
+  const n = m.name.toLowerCase();
+  const w = pos(m.width_mm);
+  const l = pos(m.length_mm);
+  const d = pos(m.diameter_mm);
+  const shape: "ROUND" | "SQUARE" | "RECTANGLE" | null = /round|원형|라운드/.test(n)
+    ? "ROUND"
+    : /square|정사각|스퀘어/.test(n)
+      ? "SQUARE"
+      : /rect|직사각/.test(n)
+        ? "RECTANGLE"
+        : d
+          ? "ROUND"
+          : w && l
+            ? w === l
+              ? "SQUARE"
+              : "RECTANGLE"
+            : null;
+  const h = pos(m.height_mm);
+  const height = h ? `-H${cmStr(h)}` : "";
+  if (shape === "RECTANGLE") return `▬${l ? cmStr(l) : "?"}×${w ? cmStr(w) : "?"}${height}`;
+  if (shape) {
+    const side = shape === "ROUND" ? d : (w ?? l);
+    const nameInch =
+      m.name.match(/(\d+(?:\.\d+)?)\s*(?:"|''|″|”|inch|in\b|인치)/i) ??
+      m.name.match(/(\d+(?:\.\d+)?)\s*$/);
+    const inch = (side ? mmToInch(side) : null) ?? (nameInch ? Number(nameInch[1]) : null);
+    const size = inch != null ? `${inch}″` : side ? `${cmStr(side)}cm` : "?";
+    return `${shape === "ROUND" ? "Ø" : "■"}${size}${height}`;
+  }
+  return m.name.trim();
 };
 
 /**
@@ -101,9 +150,20 @@ const taskTitle = (row: CoreRow): string => {
   const formula = row.formula_versions?.formulas ?? null;
   const name = formula?.components?.name ?? formula?.name ?? "—";
   if (row.slot === "SHEET") {
-    if (row.capacities?.name) {
+    const mould =
+      row.moulds ??
+      (row.capacities
+        ? {
+            name: row.capacities.name,
+            diameter_mm: null,
+            width_mm: null,
+            length_mm: null,
+            height_mm: null,
+          }
+        : null);
+    if (mould) {
       const qty = Number(row.capacity_qty ?? row.multiplier ?? 1);
-      return `${name} ${mouldLabel(row.capacities.name)} ×${fmt(qty)}`;
+      return `${name} ${sizeAbbr(mould)} ×${fmt(qty)}`;
     }
     return `${name} ×${fmt(Number(row.multiplier ?? 1))}`;
   }
@@ -362,7 +422,7 @@ Deno.serve(async (req: Request) => {
       .from("work_session_formula_versions")
       .select(
         "id, slot, formula_version_id, planner_task_id, multiplier, capacity_qty, base_weight_qty, " +
-          "capacities(name, weight_g), base_weight_presets(name, weight_g), " +
+          "capacities(name, weight_g), moulds(name, diameter_mm, width_mm, length_mm, height_mm), base_weight_presets(name, weight_g), " +
           "formula_versions(formulas(name, components(name)))",
       )
       .eq("work_session_id", sessionId)
@@ -379,8 +439,17 @@ Deno.serve(async (req: Request) => {
         .in("formula_version_id", versionIds);
       if (ingError) throw ingError;
       const totals = new Map<string, number | null>();
-      for (const ing of (ingRaw ?? []) as { formula_version_id: string; amount: number; unit: string }[]) {
-        const factor = ing.unit === "g" || ing.unit === "ml" ? 1 : ing.unit === "kg" || ing.unit === "l" ? 1000 : null;
+      for (const ing of (ingRaw ?? []) as {
+        formula_version_id: string;
+        amount: number;
+        unit: string;
+      }[]) {
+        const factor =
+          ing.unit === "g" || ing.unit === "ml"
+            ? 1
+            : ing.unit === "kg" || ing.unit === "l"
+              ? 1000
+              : null;
         const prev = totals.get(ing.formula_version_id);
         if (prev === null) continue;
         if (factor == null) {

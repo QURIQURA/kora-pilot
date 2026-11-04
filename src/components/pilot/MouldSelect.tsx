@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { mouldsQuery } from "@/lib/queries";
 import type { Mould } from "@/lib/formula";
 import { selectClass } from "./ui";
+import { mouldAbbr } from "@/lib/component-size";
 import { MouldCreateForm } from "./MouldCreateForm";
 
 const NEW_VALUE = "__new_mould__";
@@ -12,8 +13,13 @@ const NEW_VALUE = "__new_mould__";
 // 드롭다운/표시 어디서도 몰드의 기준중량(reference_weight_g, SETTINGS > MOULDS에서 등록)이
 // 안 보여서 어떤 용량 기준인지 알 수 없었던 문제. 이 라벨 포맷을 한 곳에 모아서 MouldSelect와
 // 그걸 쓰는 화면(FORMULA 상세, Component CURRENT FORMULA 요약 등) 전체에서 공유한다.
-export function mouldOptionLabel(mould: Pick<Mould, "name" | "shape_size" | "reference_weight_g">): string {
-  const parts = [mould.name];
+export function mouldOptionLabel(
+  mould: Pick<Mould, "name" | "shape_size" | "reference_weight_g"> &
+    Partial<Pick<Mould, "diameter_mm" | "height_mm">>,
+): string {
+  // 약어 체계(모양-사이즈-높이, 예: Ø8″-H5)를 맨 앞에 — 규칙은 src/lib/size-label.ts
+  const abbr = mouldAbbr(mould);
+  const parts = abbr && abbr !== mould.name.trim() ? [abbr, mould.name] : [mould.name];
   if (mould.shape_size) parts.push(mould.shape_size);
   const label = parts.join(" · ");
   return mould.reference_weight_g != null ? `${label} (ref. ${mould.reference_weight_g}g)` : label;

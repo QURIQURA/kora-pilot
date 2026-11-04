@@ -5,7 +5,7 @@ import {
   versionIngredientsQuery,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
-import { mouldSizeLabel } from "@/lib/component-size";
+import { mouldAbbr } from "@/lib/component-size";
 import { sumBaseGrams } from "@/lib/work-session";
 import { fmtNumber } from "@/lib/formula";
 
@@ -23,7 +23,7 @@ export function ComponentPlanReadout({ row }: { row: WorkSessionFormulaVersionRo
   const sizeText =
     row.slot === "SHEET"
       ? mould
-        ? `${mouldSizeLabel(mould.name)} ×${fmtNumber(Number(row.mould_qty ?? row.multiplier), 2)}`
+        ? `${mouldAbbr(mould)} ×${fmtNumber(Number(row.mould_qty ?? row.multiplier), 2)}`
         : null
       : (preset?.weight_g ?? (ingredients.isSuccess && baseGrams > 0 ? baseGrams : null)) != null
         ? `기준 ${fmtNumber(Number(preset?.weight_g ?? baseGrams))}g ×${fmtNumber(Number(row.base_weight_qty ?? row.multiplier), 2)}`
@@ -37,7 +37,6 @@ export function ComponentPlanReadout({ row }: { row: WorkSessionFormulaVersionRo
         : ingredients.isError
           ? " · 생산량 조회 실패"
           : ""}
-      {` · 사용 목표 ${row.target_quantity_g == null ? "미지정" : `${fmtNumber(row.target_quantity_g)}g`}`}
       {row.version_pinned ? " · 버전 고정" : ""}
     </span>
   );

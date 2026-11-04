@@ -179,20 +179,7 @@ export function OrderComponentPlanRow({
               ))}
           </select>
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-[11px]">
-            이 주문 사용 목표 (g)
-            <input
-              aria-label="주문 사용 목표 g"
-              type="number"
-              min="0"
-              step="any"
-              placeholder="미지정"
-              className={inputClass}
-              value={draft.target}
-              onChange={(e) => setDraft((d) => ({ ...d, target: e.target.value }))}
-            />
-          </label>
+        <div className="grid grid-cols-1 gap-2">
           <label className="text-[11px]">
             생산 배수 ×
             <input
@@ -222,13 +209,6 @@ export function OrderComponentPlanRow({
         {ingredients.isSuccess && preview && (
           <p className="font-mono text-[11px]">
             기본 {fmtNumber(base)}g × {draft.multiplier} = 생산 {fmtNumber(preview.production)}g
-            {preview.remaining !== null && (
-              <span className={preview.remaining < 0 ? "text-destructive" : ""}>
-                {" "}
-                · {preview.remaining < 0 ? "부족" : "예상 잔량"}{" "}
-                {fmtNumber(Math.abs(preview.remaining))}g
-              </span>
-            )}
           </p>
         )}
         <button
