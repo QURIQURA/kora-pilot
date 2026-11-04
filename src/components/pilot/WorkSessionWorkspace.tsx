@@ -379,15 +379,13 @@ export function WorkSessionWorkspace({
           }
         >
           {viewMode === "WEIGHING" ? (
-            lock(
-              <WeighingView
-                sessionId={sessionId}
-                groups={weighingGroups}
-                columns={orderedSelections}
-                onProgressChanged={invalidateProgress}
-                onEditColumn={setEditingColumn}
-              />,
-            )
+            <WeighingView
+              sessionId={sessionId}
+              groups={weighingGroups}
+              columns={orderedSelections}
+              onProgressChanged={invalidateProgress}
+              onEditColumn={setEditingColumn}
+            />
           ) : (
             <FormulaView rows={visibleRows} ingredientsByVersion={ingredientsByVersion} />
           )}
