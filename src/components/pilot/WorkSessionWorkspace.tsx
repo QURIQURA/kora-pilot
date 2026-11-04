@@ -2245,8 +2245,44 @@ function StockReflectSection({
  * 대시보드용 합쳐진 WORK VIEW(2026-10-22) — 그날 타임라인에 배정된 컴포넌트를 오더(세션)와 상관없이
  * 한 계량표에 나란히 보여준다(예전 WORK SESSION 화면처럼). items는 타임라인 시간순.
  */
+/**
+ * 같은 레시피 버전 MERGE 보기 설정 — 대시보드 타임라인과 DayWorkView가 함께 쓴다(localStorage, 보기 설정).
+ * rowIds가 바뀌면 그 조합의 저장값을 다시 읽는다.
+ */
+export function useProductionMerge(rowIds: string[]) {
+  const [mergedVersions, setMergedVersions] = useState<Set<string>>(new Set());
+  const mergeStorageKey = `pilot:production-merge:${[...rowIds].sort().join(":")}`;
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(mergeStorageKey) ?? "[]");
+      setMergedVersions(
+        new Set(
+          Array.isArray(stored) ? stored.filter((s): s is string => typeof s === "string") : [],
+        ),
+      );
+    } catch {
+      setMergedVersions(new Set());
+    }
+  }, [mergeStorageKey]);
+  const toggleMerge = (versionId: string) =>
+    setMergedVersions((prev) => {
+      const next = new Set(prev);
+      if (next.has(versionId)) next.delete(versionId);
+      else next.add(versionId);
+      try {
+        localStorage.setItem(mergeStorageKey, JSON.stringify([...next]));
+      } catch {
+        /* optional view preference */
+      }
+      return next;
+    });
+  return { mergedVersions, toggleMerge };
+}
+
 export function DayWorkView({
   items,
+  mergedVersions,
+  onToggleMerge,
   labels = {},
   renderRecords,
   renderHeaderExtra,
@@ -2258,6 +2294,8 @@ export function DayWorkView({
   renderHeaderExtra?: (selectionIds: string[]) => React.ReactNode;
   focusedRowId?: string | null;
   focusKey?: string | null;
+  mergedVersions: Set<string>;
+  onToggleMerge: (versionId: string) => void;
   items: { sessionId: string; rowId: string }[];
   labels?: Record<string, string>;
 }) {
@@ -2310,23 +2348,6 @@ export function DayWorkView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressQs.map((q) => q.dataUpdatedAt).join(",")]);
 
-  const [mergedVersions, setMergedVersions] = useState<Set<string>>(new Set());
-  const mergeStorageKey = `pilot:production-merge:${items
-    .map((i) => i.rowId)
-    .sort()
-    .join(":")}`;
-  useEffect(() => {
-    try {
-      const stored: unknown = JSON.parse(localStorage.getItem(mergeStorageKey) ?? "[]");
-      setMergedVersions(
-        new Set(
-          Array.isArray(stored) ? stored.filter((s): s is string => typeof s === "string") : [],
-        ),
-      );
-    } catch {
-      setMergedVersions(new Set());
-    }
-  }, [mergeStorageKey]);
   const quantityGroups = useMemo(
     () =>
       groupProductionSelections(
@@ -2425,20 +2446,7 @@ export function DayWorkView({
                       (o) => o.row.formula_version_id === group.members[0]!.formula_version_id,
                     ).length > 1
                   }
-                  onToggleMerge={() =>
-                    setMergedVersions((prev) => {
-                      const next = new Set(prev);
-                      const id = group.members[0]!.formula_version_id;
-                      if (next.has(id)) next.delete(id);
-                      else next.add(id);
-                      try {
-                        localStorage.setItem(mergeStorageKey, JSON.stringify([...next]));
-                      } catch {
-                        /* optional view preference */
-                      }
-                      return next;
-                    })
-                  }
+                  onToggleMerge={() => onToggleMerge(group.members[0]!.formula_version_id)}
                 />
               }
             />

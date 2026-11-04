@@ -6,7 +6,11 @@ import {
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { DayWorkView, WorkSessionWorkspace } from "@/components/pilot/WorkSessionWorkspace";
+import {
+  DayWorkView,
+  WorkSessionWorkspace,
+  useProductionMerge,
+} from "@/components/pilot/WorkSessionWorkspace";
 import {
   CopyWarning,
   DietaryChips,
@@ -197,15 +201,6 @@ export function ProductionDashboard() {
     [blocks, date, rowById],
   );
   const effectiveEnd = (b: WorkBlock) => (resize?.id === b.id ? resize.endMin : toMin(b.end_time));
-  const lanes = useMemo(
-    () =>
-      layoutLanes(
-        dayBlocks.map((b) => ({ id: b.id, start: toMin(b.start_time), end: effectiveEnd(b) })),
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dayBlocks, resize],
-  );
-
   const dailyTemplates = useMemo(() => dailyTemplatesQuery.data ?? [], [dailyTemplatesQuery.data]);
   const dayDailies = useMemo(
     () => (dailyQuery.data ?? []).filter((t) => t.task_date === date),
@@ -259,6 +254,48 @@ export function ProductionDashboard() {
           return first(a.rowId).localeCompare(first(b.rowId));
         }),
     [workspaceSessions, dayBlocks],
+  );
+  // 같은 레시피 버전 MERGE — 타임라인도 한 블록으로 합쳐 보여준다(같은 반죽을 함께 굽는 것).
+  const { mergedVersions, toggleMerge } = useProductionMerge(dayWorkItems.map((i) => i.rowId));
+  const stepKey = (b: WorkBlock) => b.step_name ?? `part-${b.part_no}`;
+  /** 병합 그룹: 같은 버전 + 같은 단계의 블록들. 대표(가장 이른 블록)만 그리고 나머지는 숨긴다. */
+  const mergeGroups = useMemo(() => {
+    const byKey = new Map<string, WorkBlock[]>();
+    for (const b of dayBlocks) {
+      const row = rowById.get(b.work_session_formula_version_id);
+      if (!row || !mergedVersions.has(row.formulaVersionId)) continue;
+      const key = `${row.formulaVersionId}|${stepKey(b)}`;
+      byKey.set(key, [...(byKey.get(key) ?? []), b]);
+    }
+    const hidden = new Set<string>();
+    const primaries = new Map<string, { siblings: WorkBlock[]; orders: string[] }>();
+    for (const list of byKey.values()) {
+      const sorted = [...list].sort((a, b) => a.start_time.localeCompare(b.start_time));
+      if (new Set(sorted.map((b) => b.work_session_formula_version_id)).size < 2) continue;
+      const [primary, ...rest] = sorted as [WorkBlock, ...WorkBlock[]];
+      rest.forEach((b) => hidden.add(b.id));
+      primaries.set(primary.id, {
+        siblings: rest,
+        orders: [
+          ...new Set(
+            sorted.map((b) => rowById.get(b.work_session_formula_version_id)?.order.order_number),
+          ),
+        ].filter((o): o is string => !!o),
+      });
+    }
+    return { hidden, primaries };
+  }, [dayBlocks, rowById, mergedVersions]);
+  const visibleBlocks = useMemo(
+    () => dayBlocks.filter((b) => !mergeGroups.hidden.has(b.id)),
+    [dayBlocks, mergeGroups],
+  );
+  const lanes = useMemo(
+    () =>
+      layoutLanes(
+        visibleBlocks.map((b) => ({ id: b.id, start: toMin(b.start_time), end: effectiveEnd(b) })),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleBlocks, resize],
   );
 
   const refresh = async () => {
@@ -362,10 +399,78 @@ export function ProductionDashboard() {
         })
         .eq("id", v.block.id);
       if (error) throw error;
-      if (row) await syncAfter(row.work_session_id);
+      // 병합된 블록의 대표를 옮기면 같이 굽는 나머지 블록도 같은 시간으로 따라간다.
+      const merged = mergeGroups.primaries.get(v.block.id);
+      const sessions = new Set<string>(row ? [row.work_session_id] : []);
+      if (merged) {
+        for (const sib of merged.siblings) {
+          const { error: sibError } = await supabase
+            .from("work_blocks")
+            .update({
+              block_date: v.day ?? v.block.block_date,
+              start_time: v.startMin !== undefined ? toTime(v.startMin) : v.block.start_time,
+              end_time: v.endMin !== undefined ? toTime(v.endMin) : v.block.end_time,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", sib.id);
+          if (sibError) throw sibError;
+          const sibRow = rowById.get(sib.work_session_formula_version_id);
+          if (sibRow) sessions.add(sibRow.work_session_id);
+        }
+      }
+      for (const sid of sessions) await syncAfter(sid);
     },
     onSuccess: refresh,
   });
+
+  /** 타이머 실제 시작시각에 맞춰 블록을 이동(길이 유지). 병합 대표면 같이 굽는 블록도 따라간다. */
+  const retimeBlock = async (block: WorkBlock, iso: string) => {
+    const d = new Date(iso);
+    const startMin = d.getHours() * 60 + d.getMinutes();
+    const oldStart = toMin(block.start_time);
+    if (startMin === oldStart) return;
+    const duration = toMin(block.end_time) - oldStart;
+    await updateBlock.mutateAsync({ block, startMin, endMin: startMin + duration });
+  };
+
+  /** MERGE를 켜는 순간 같은 단계의 블록들을 가장 이른 블록의 시간으로 맞춘다. */
+  const toggleMergeAndAlign = async (versionId: string) => {
+    const turningOn = !mergedVersions.has(versionId);
+    toggleMerge(versionId);
+    if (!turningOn) return;
+    const byStep = new Map<string, WorkBlock[]>();
+    for (const b of dayBlocks) {
+      const row = rowById.get(b.work_session_formula_version_id);
+      if (!row || row.formulaVersionId !== versionId) continue;
+      byStep.set(stepKey(b), [...(byStep.get(stepKey(b)) ?? []), b]);
+    }
+    const sessions = new Set<string>();
+    for (const list of byStep.values()) {
+      const sorted = [...list].sort((a, b) => a.start_time.localeCompare(b.start_time));
+      const primary = sorted[0];
+      if (!primary || new Set(sorted.map((b) => b.work_session_formula_version_id)).size < 2)
+        continue;
+      for (const sib of sorted.slice(1)) {
+        if (sib.start_time === primary.start_time && sib.end_time === primary.end_time) continue;
+        const { error } = await supabase
+          .from("work_blocks")
+          .update({
+            start_time: primary.start_time,
+            end_time: primary.end_time,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", sib.id);
+        if (error) {
+          setWarning(`블록 시간 맞추기 실패: ${error.message}`);
+          return;
+        }
+        const sibRow = rowById.get(sib.work_session_formula_version_id);
+        if (sibRow) sessions.add(sibRow.work_session_id);
+      }
+    }
+    for (const sid of sessions) await syncAfter(sid);
+    await refresh();
+  };
 
   const splitBlock = useMutation({
     mutationFn: async (block: WorkBlock) => {
@@ -684,23 +789,18 @@ export function ProductionDashboard() {
       updateDaily.mutate({ task, endMin }),
     );
 
-  // 터치/클릭용 빠른 배정 — 그날 마지막 블록 뒤(없으면 09:00)에 기본 1시간으로 넣는다.
+  // 터치/클릭용 빠른 배정 — 지금 현재 시각(5분 단위 내림)에 기본 1시간으로 넣는다(2026-11-04 요청).
   const quickAdd = (row: DashboardComponentRow) => {
-    const lastEnd = dayBlocks.reduce((m, b) => Math.max(m, toMin(b.end_time)), 0);
-    const startMin = clamp(
-      lastEnd > 0 ? lastEnd : 9 * 60,
-      DAY_START_MIN,
-      DAY_END_MIN - DEFAULT_DURATION_MIN,
-    );
+    const now = new Date();
+    const nowMin = Math.floor((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
+    const startMin = clamp(nowMin, DAY_START_MIN, DAY_END_MIN - DEFAULT_DURATION_MIN);
     createBlock.mutate({ row, startMin, endMin: startMin + DEFAULT_DURATION_MIN, day: date });
   };
 
-  // 시간 배정 전 컴포넌트 여러 개를 그날 마지막 블록 뒤부터 차례로 이어서 넣는다(템플릿 단계가 있으면 단계 합계만큼 차지).
+  // 시간 배정 전 컴포넌트 여러 개를 지금 현재 시각부터 차례로 이어서 넣는다(템플릿 단계가 있으면 단계 합계만큼 차지).
   const addRowsToDay = async (rowIds: string[]) => {
-    let cursor = Math.max(
-      9 * 60,
-      dayBlocks.reduce((m, b) => Math.max(m, toMin(b.end_time)), 0),
-    );
+    const now = new Date();
+    let cursor = Math.floor((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
     for (const id of rowIds) {
       const row = rowById.get(id);
       if (!row) continue;
@@ -1059,9 +1159,10 @@ export function ProductionDashboard() {
                   setSelectedDailyId(null);
                 }}
               >
-                {dayBlocks.map((b) => {
+                {visibleBlocks.map((b) => {
                   const row = rowById.get(b.work_session_formula_version_id);
                   if (!row) return null;
+                  const merged = mergeGroups.primaries.get(b.id);
                   const color = orderColor(row.order.id);
                   const start = toMin(b.start_time);
                   const end = effectiveEnd(b);
@@ -1119,7 +1220,10 @@ export function ProductionDashboard() {
                         {blockTitle(b, row)}
                       </p>
                       <p className="truncate font-mono text-[11px] opacity-80">
-                        {row.order.order_number} · {hm(start)}–{hm(end)}
+                        {merged
+                          ? `MERGED ${merged.orders.length} · ${merged.orders.join(" + ")}`
+                          : row.order.order_number}{" "}
+                        · {hm(start)}–{hm(end)}
                       </p>
                       <div
                         className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
@@ -1470,6 +1574,8 @@ export function ProductionDashboard() {
             items={dayWorkItems}
             focusedRowId={selected?.work_session_formula_version_id ?? null}
             focusKey={selected?.id ?? null}
+            mergedVersions={mergedVersions}
+            onToggleMerge={(versionId) => void toggleMergeAndAlign(versionId)}
             renderHeaderExtra={(selectionIds) => {
               const memberBlocks = selectionIds
                 .flatMap((id) => {
@@ -1498,6 +1604,7 @@ export function ProductionDashboard() {
                       block={block}
                       row={row}
                       onStarted={ensureSessionStarted}
+                      onRetime={retimeBlock}
                       label={
                         primaries.length > 1 ? (block.step_name ?? `${block.part_no}차`) : undefined
                       }
@@ -1527,6 +1634,7 @@ export function ProductionDashboard() {
                           title={blockTitle(block, row)}
                           active={selected?.id === block.id}
                           onStarted={ensureSessionStarted}
+                          onRetime={retimeBlock}
                         />
                       ))
                     ) : (
@@ -1572,6 +1680,7 @@ export function ProductionDashboard() {
                     title={blockTitle(primary.block, primary.row)}
                     active={items.some((i) => selected?.id === i.block.id)}
                     onStarted={ensureSessionStarted}
+                    onRetime={retimeBlock}
                     mergedLabel={orders.join(" + ")}
                   />
                 );
@@ -1623,6 +1732,7 @@ function ProductionBlockRecord({
   title,
   active,
   onStarted,
+  onRetime,
   mergedLabel,
 }: {
   block: WorkBlock;
@@ -1630,6 +1740,7 @@ function ProductionBlockRecord({
   title: string;
   active: boolean;
   onStarted: (sessionId: string, iso: string) => void | Promise<void>;
+  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
   /** 병합 컴포넌트의 한 벌 기록 — 이 기록이 함께 다루는 오더들 */
   mergedLabel?: string;
 }) {
@@ -1659,7 +1770,14 @@ function ProductionBlockRecord({
         <span className="text-muted-foreground">기록</span>
       </button>
       {expanded && (
-        <BlockTaskDetails block={block} row={row} title={title} onStarted={onStarted} embedded />
+        <BlockTaskDetails
+          block={block}
+          row={row}
+          title={title}
+          onStarted={onStarted}
+          onRetime={onRetime}
+          embedded
+        />
       )}
     </div>
   );

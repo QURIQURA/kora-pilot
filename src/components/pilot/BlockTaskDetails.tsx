@@ -46,6 +46,7 @@ export function BlockTaskDetails({
   row,
   title,
   onStarted,
+  onRetime,
   embedded = false,
 }: {
   block: WorkBlock;
@@ -54,6 +55,8 @@ export function BlockTaskDetails({
   embedded?: boolean;
   /** TASK 시작시각이 기록되면 세션이 PLANNED일 때 IN_PROGRESS로 올리도록 알린다 */
   onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
+  /** 실제 시작시각이 정해지면 타임라인 블록을 그 시각에 맞춘다 */
+  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
 }) {
   const queryClient = useQueryClient();
   const sessionId = row.work_session_id;
@@ -176,6 +179,7 @@ export function BlockTaskDetails({
     const iso = new Date().toISOString();
     await update({ status: "IN_PROGRESS", actual_started_at: iso, completed_at: null }, "START");
     await onStarted?.(sessionId, iso);
+    await onRetime?.(block, iso);
   };
   const complete = () =>
     update({ status: "DONE", completed_at: new Date().toISOString() }, "COMPLETE");
@@ -185,7 +189,10 @@ export function BlockTaskDetails({
   const setTime = async (field: "actual_started_at" | "completed_at", value: string) => {
     const iso = value ? localDateTimeToISO(block.block_date, value) : null;
     await update({ [field]: iso }, "시간");
-    if (field === "actual_started_at" && iso) await onStarted?.(sessionId, iso);
+    if (field === "actual_started_at" && iso) {
+      await onStarted?.(sessionId, iso);
+      await onRetime?.(block, iso);
+    }
   };
 
   const applyTemplate = async (templateId: string) => {
@@ -487,11 +494,13 @@ export function BlockTimerInline({
   block,
   row,
   onStarted,
+  onRetime,
   label,
 }: {
   block: WorkBlock;
   row: DashboardComponentRow;
   onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
+  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
   /** 단계/차수 표시(여러 타이머가 한 줄에 있을 때) */
   label?: string | undefined;
 }) {
@@ -542,6 +551,7 @@ export function BlockTimerInline({
             const iso = new Date().toISOString();
             await update({ status: "IN_PROGRESS", actual_started_at: iso, completed_at: null });
             await onStarted?.(sessionId, iso);
+            await onRetime?.(block, iso);
           }}
         >
           {task.timer_minutes != null ? "▶ START TIMER" : "▶ START"}
