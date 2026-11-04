@@ -14,6 +14,19 @@ import { invalidateProductionSync } from "@/lib/production-sync";
 import { ProductSelect } from "./ProductSelect";
 import { buttonClass, inputClass, selectClass } from "./ui";
 
+/** 이름이 이미 약어(Ø8″-H10)면 한 번만 보여준다 */
+const sizeText = (c: {
+  name: string;
+  shape: string | null;
+  diameter_mm: number | null;
+  length_mm: number | null;
+  width_mm: number | null;
+  height_mm: number | null;
+}) => {
+  const abbr = formatProductSizeLabel({ ...c, shape: c.shape ?? "" });
+  return c.name === abbr ? abbr : `${c.name} · ${abbr}`;
+};
+
 const stateFor = (order: OrderListRow) => ({
   product: order.product_id ?? "",
   size: order.product_size_id ?? "",
@@ -66,21 +79,19 @@ export function ProductionOrderSizeEditor({
         height_mm: null,
       },
     );
-  const save = useMutation({
-    mutationFn: async () => {
-      if (issue) throw new Error(issue);
-      if (invalidStandard)
-        throw new Error("이 공용 규격의 치수가 비어 있습니다. 유효한 규격을 선택하세요.");
-      const servings = draft.servings.trim() ? Number(draft.servings) : null;
+  /** 주문(+진행 중 세션)에 제품/사이즈를 저장한다. 저장하는 값은 next — 제품만 바꿀 때는 마지막 저장값 + 제품. */
+  const persist = async (next: typeof draft) => {
+    {
+      const servings = next.servings.trim() ? Number(next.servings) : null;
       if (servings !== null && (!Number.isInteger(servings) || servings < 0))
         throw new Error("인분은 0 이상의 정수로 입력하세요");
       const uid = await currentUserId();
       const { data, error } = await supabase
         .from("orders")
         .update({
-          product_id: draft.product || null,
-          product_size_id: draft.size || null,
-          cake_size_id: draft.standard || null,
+          product_id: next.product || null,
+          product_size_id: next.size || null,
+          cake_size_id: next.standard || null,
           servings,
         })
         .eq("id", order.id)
@@ -90,13 +101,13 @@ export function ProductionOrderSizeEditor({
         .single();
       if (error) throw new Error(`주문 사이즈 저장 실패 — 최신 값을 확인하세요: ${error.message}`);
       // Persist the saved order before mirroring optional session metadata. Never change recipe quantities.
-      baseline.current = { state: draft, updatedAt: data.updated_at };
+      baseline.current = { state: next, updatedAt: data.updated_at };
       const { error: sessionError } = await supabase
         .from("work_sessions")
         .update({
-          product_id: draft.product || null,
-          product_size_id: draft.size || null,
-          cake_size_id: draft.standard || null,
+          product_id: next.product || null,
+          product_size_id: next.size || null,
+          cake_size_id: next.standard || null,
         })
         .eq("order_id", order.id)
         .eq("user_id", uid)
@@ -105,20 +116,66 @@ export function ProductionOrderSizeEditor({
         throw new Error(
           `주문 사이즈는 저장됐지만 세션 반영이 실패했습니다. 다시 불러온 뒤 저장하세요: ${sessionError.message}`,
         );
+    }
+  };
+  const save = useMutation({
+    mutationFn: async () => {
+      if (issue) throw new Error(issue);
+      if (invalidStandard)
+        throw new Error("이 공용 규격의 치수가 비어 있습니다. 유효한 규격을 선택하세요.");
+      await persist(draft);
+    },
+    onSettled: () => {
+      void invalidateProductionSync(client);
+    },
+  });
+  // 제품만 바로 바꾸기(2026-11-05) — 오더 상세가 읽기 전용이 돼서 PRODUCTION ORDERS에서 바꾼다.
+  // 제품 전용 사이즈는 제품마다 달라 비우고, 다른 미저장 편집은 건드리지 않는다.
+  const changeProduct = useMutation({
+    mutationFn: async (productId: string) => {
+      const next = { ...baseline.current.state, product: productId, size: "" };
+      await persist(next);
+      setDraft((d) => ({ ...d, product: productId, size: "" }));
     },
     onSettled: () => {
       void invalidateProductionSync(client);
     },
   });
   const stored = (standards.data ?? []).find((c) => c.id === order.cake_size_id);
+  const linkedParts = (selections.data ?? []).flatMap((r) =>
+    r.formula_versions.formulas.component_id
+      ? [
+          {
+            label: r.slot ?? r.kind,
+            name: r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name,
+            componentId: r.formula_versions.formulas.component_id,
+            formulaVersionId: r.formula_version_id,
+          },
+        ]
+      : [],
+  );
   return (
     <div className="border-t border-dashed border-border pt-2 text-xs">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="label-caps text-[10px] text-muted-foreground">제품</span>
+        <div className="min-w-0 flex-1 basis-56">
+          <ProductSelect
+            value={baseline.current.state.product}
+            disabled={readOnly || changeProduct.isPending}
+            onChange={(id) => changeProduct.mutate(id)}
+            linkedParts={linkedParts}
+          />
+        </div>
+        {changeProduct.isPending && <span className="text-muted-foreground">저장 중…</span>}
+      </div>
+      {changeProduct.isError && (
+        <p role="alert" className="mb-2 text-destructive">
+          {changeProduct.error.message}
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <span className="flex-1">
-          완성 사이즈 ·{" "}
-          {stored
-            ? `${stored.name} · ${formatProductSizeLabel({ ...stored, shape: stored.shape ?? "" })}`
-            : "미지정"}
+          완성 사이즈 · {stored ? sizeText(stored) : "미지정"}
           {order.servings == null ? "" : ` · ${order.servings}인분`}
         </span>
         {!readOnly && (
@@ -139,20 +196,7 @@ export function ProductionOrderSizeEditor({
             <ProductSelect
               value={draft.product}
               onChange={(id) => setDraft((d) => ({ ...d, product: id, size: "" }))}
-              linkedParts={(selections.data ?? []).flatMap((r) =>
-                r.formula_versions.formulas.component_id
-                  ? [
-                      {
-                        label: r.slot ?? r.kind,
-                        name:
-                          r.formula_versions.formulas.components?.name ??
-                          r.formula_versions.formulas.name,
-                        componentId: r.formula_versions.formulas.component_id,
-                        formulaVersionId: r.formula_version_id,
-                      },
-                    ]
-                  : [],
-              )}
+              linkedParts={linkedParts}
             />
           </label>
           <label className="block">
@@ -196,8 +240,7 @@ export function ProductionOrderSizeEditor({
               <option value="">미지정</option>
               {(standards.data ?? []).map((s) => (
                 <option key={s.id} value={s.id} disabled={!completeGeometry(s)}>
-                  {s.name} · {formatProductSizeLabel({ ...s, shape: s.shape ?? "" })} · #
-                  {s.id.slice(0, 8)}
+                  {sizeText(s)} · #{s.id.slice(0, 8)}
                   {completeGeometry(s) ? "" : " · 치수 확인 필요"}
                 </option>
               ))}
