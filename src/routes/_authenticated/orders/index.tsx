@@ -26,6 +26,7 @@ import {
 import { toLocalDateString, koreanWeekdayShort } from "@/lib/datetime";
 import { ensureWorkSessionForOrder } from "@/lib/work-session";
 import { EmptyState } from "@/components/EmptyState";
+import { dietaryBoxClass, leastLikedBoxClass, splitFlavours } from "@/components/pilot/OrderTitle";
 import { PageHeader, primaryButtonClass, buttonClass, selectClass } from "@/components/pilot/ui";
 import { cn } from "@/lib/utils";
 
@@ -132,7 +133,16 @@ function OrdersPage() {
 }
 
 type ColumnKey =
-  "order" | "customer" | "recipient" | "occasion" | "dietary" | "date" | "product" | "cake_size" | "status";
+  | "order"
+  | "customer"
+  | "recipient"
+  | "occasion"
+  | "dietary"
+  | "least_liked"
+  | "date"
+  | "product"
+  | "cake_size"
+  | "status";
 
 // 2026-10-06 사용자 요청: 열 간격을 내용 길이에 맞춰 재배분 — ORDER는 짧으니 줄이고,
 // DATE/PRODUCT처럼 긴 텍스트가 많은 열에 더 넓게 배정. STATUS도 "FINAL TOUCH"처럼
@@ -148,6 +158,7 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   recipient: "RECIPIENT",
   occasion: "OCCASION",
   dietary: "DIETARY REQUIREMENT",
+  least_liked: "LEAST LIKED",
   date: "DATE",
   product: "PRODUCT",
   cake_size: "CAKE SIZE",
@@ -159,6 +170,7 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnKey, number> = {
   recipient: 110,
   occasion: 100,
   dietary: 170,
+  least_liked: 170,
   date: 190,
   product: 150,
   cake_size: 100,
@@ -171,6 +183,7 @@ const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
   "recipient",
   "occasion",
   "dietary",
+  "least_liked",
   "date",
   "product",
   "cake_size",
@@ -519,14 +532,31 @@ function OrderRow({
           {orderTagNames.map((n) => (
             <span
               key={n}
-              className="label-caps border border-foreground px-1.5 py-0.5 text-[10px] text-foreground"
+              className={`label-caps border px-1.5 py-0.5 text-[10px] ${dietaryBoxClass}`}
             >
               {n}
             </span>
           ))}
         </span>
       ),
-    cake_size: <span className="text-sm text-muted-foreground">{cakeSizeName || o.cake_size || "—"}</span>,
+    least_liked:
+      splitFlavours(o.least_liked_flavours).length === 0 ? (
+        <span className="text-sm text-muted-foreground">—</span>
+      ) : (
+        <span className="flex flex-wrap gap-1">
+          {splitFlavours(o.least_liked_flavours).map((n) => (
+            <span
+              key={n}
+              className={`label-caps border px-1.5 py-0.5 text-[10px] ${leastLikedBoxClass}`}
+            >
+              {n}
+            </span>
+          ))}
+        </span>
+      ),
+    cake_size: (
+      <span className="text-sm text-muted-foreground">{cakeSizeName || o.cake_size || "—"}</span>
+    ),
     status: (
       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
         <span

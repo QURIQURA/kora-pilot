@@ -1110,6 +1110,7 @@ export interface DashboardComponentRow {
     eventDate: string | null;
     productName: string | null;
     customerName: string | null;
+    leastLiked: string | null;
   };
 }
 
@@ -1121,7 +1122,7 @@ export const dashboardComponentsQuery = () =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "id, multiplier, formula_version_id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, products(name), customers(name)))",
+            "id, multiplier, formula_version_id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, least_liked_flavours, products(name), customers(name)))",
           )
           .eq("kind", "CORE")
           .order("sort_order", { ascending: true }),
@@ -1155,6 +1156,7 @@ export const dashboardComponentsQuery = () =>
             status: string;
             pickup_at: string | null;
             event_date: string | null;
+            least_liked_flavours: string | null;
             products: { name: string } | null;
             customers: { name: string | null } | null;
           } | null;
@@ -1192,6 +1194,7 @@ export const dashboardComponentsQuery = () =>
             eventDate: order.event_date,
             productName: order.products?.name ?? null,
             customerName: order.customers?.name ?? null,
+            leastLiked: order.least_liked_flavours ?? null,
           },
         });
       }

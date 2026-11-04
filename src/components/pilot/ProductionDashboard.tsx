@@ -13,7 +13,7 @@ import {
 } from "@/components/pilot/WorkSessionWorkspace";
 import {
   CopyWarning,
-  DietaryChips,
+  OrderFlagBoxes,
   orderTitle,
   useOrderDietaryNames,
 } from "@/components/pilot/OrderTitle";
@@ -903,7 +903,10 @@ export function ProductionDashboard() {
                     <span className="text-muted-foreground">
                       {orderTitle(g.order.customerName, g.order.productName)}
                     </span>
-                    <DietaryChips names={dietaryOf(g.order.id)} />
+                    <OrderFlagBoxes
+                      dietary={dietaryOf(g.order.id)}
+                      leastLiked={g.order.leastLiked}
+                    />
                     {delivery && (
                       <span className="ml-auto font-mono text-[11px]">🚚 {delivery}</span>
                     )}

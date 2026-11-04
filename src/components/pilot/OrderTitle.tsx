@@ -28,6 +28,49 @@ export function useOrderDietaryNames(): (orderId: string) => string[] {
   return (orderId) => byOrder.get(orderId) ?? [];
 }
 
+/** "Floral, Spice; Mint" 같은 자유 텍스트를 항목으로 나눈다 */
+export function splitFlavours(text: string | null | undefined): string[] {
+  return (text ?? "")
+    .split(/[,;\n、]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+/** 정보별 영역 구분 — DIETARY(초록 상자) / LEAST LIKED(빨강 상자). 오더 카드·대시보드 공용. */
+export const dietaryBoxClass =
+  "border-emerald-600/60 bg-emerald-50 text-emerald-900 dark:border-emerald-400/50 dark:bg-emerald-950/40 dark:text-emerald-100";
+export const leastLikedBoxClass =
+  "border-rose-600/60 bg-rose-50 text-rose-900 dark:border-rose-400/50 dark:bg-rose-950/40 dark:text-rose-100";
+
+export function OrderFlagBoxes({
+  dietary,
+  leastLiked,
+}: {
+  dietary: string[];
+  leastLiked: string | null | undefined;
+}) {
+  const disliked = splitFlavours(leastLiked);
+  if (dietary.length === 0 && disliked.length === 0) return null;
+  const box = (label: string, items: string[], cls: string) => (
+    <span
+      className={`inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border px-1.5 py-0.5 ${cls}`}
+    >
+      <span className="label-caps text-[9px] font-semibold opacity-70">{label}</span>
+      {items.map((n) => (
+        <span key={n} className="text-[11px]">
+          {n}
+        </span>
+      ))}
+    </span>
+  );
+  return (
+    <>
+      {dietary.length > 0 && box("DIETARY", dietary, dietaryBoxClass)}
+      {disliked.length > 0 && box("LEAST LIKED", disliked, leastLikedBoxClass)}
+    </>
+  );
+}
+
 export function DietaryChips({ names }: { names: string[] }) {
   if (names.length === 0) return null;
   return (

@@ -28,7 +28,7 @@ import {
   DashboardComponentCopyForm,
   DashboardComponentNewForm,
 } from "@/components/pilot/DashboardComponentCopyForm";
-import { CopyWarning, DietaryChips, orderTitle, useOrderDietaryNames } from "./OrderTitle";
+import { CopyWarning, OrderFlagBoxes, orderTitle, useOrderDietaryNames } from "./OrderTitle";
 import { buttonClass } from "./ui";
 
 /**
@@ -185,7 +185,10 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
               >
                 {orderTitle(order.customers?.name, order.products?.name, order.recipient ?? "")}
               </Link>
-              <DietaryChips names={dietaryOf(order.id)} />
+              <OrderFlagBoxes
+                dietary={dietaryOf(order.id)}
+                leastLiked={order.least_liked_flavours}
+              />
               <span className="font-mono text-[10px] uppercase text-muted-foreground">
                 {orderStatusLabel(order.status)}
               </span>
