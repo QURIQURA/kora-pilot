@@ -8,6 +8,13 @@ const efficiency = await loadTs("src/lib/production-efficiency.ts");
 const round = { shape: "ROUND", diameter_mm: 200, width_mm: null, length_mm: null, height_mm: 100 };
 const standard = { ...round, id: "standard-a", name: "8 inch" };
 const productSize = { ...round, id: "size-a", product_id: "product-a", cake_size_id: standard.id };
+test("incomplete linked standards stay invalid while valid standalone choices need no product-size mapping", () => {
+  const missing = { ...standard, diameter_mm: null, height_mm: 150 };
+  const product = { ...productSize, diameter_mm: 220, height_mm: 150 };
+  assert.match(sizes.sizeLinkIssue(product, missing), /실제 치수/);
+  assert.equal(sizes.selectionIssue("product-a", null, standard.id, undefined, standard), null);
+  assert.equal(sizes.completeGeometry({ ...standard, diameter_mm: 250 }).diameter_mm, 250);
+});
 const row = (extra = {}) => ({
   component_id: "cream",
   formula_version_id: "v1",
