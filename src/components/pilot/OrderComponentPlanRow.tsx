@@ -14,6 +14,7 @@ import { resolveSlotGroup } from "@/lib/technique";
 import { sumBaseGrams } from "@/lib/work-session";
 import { fmtNumber } from "@/lib/formula";
 import { invalidateProductionSync } from "@/lib/production-sync";
+import { syncWorkSessionToPlanner } from "@/lib/work-session";
 import { buttonClass, inputClass, selectClass } from "./ui";
 
 const fromRow = (row: WorkSessionFormulaVersionRow) => ({
@@ -122,6 +123,8 @@ export function OrderComponentPlanRow({
             old?.map((r) => (r.id === saved.id ? { ...r, ...saved } : r)),
         );
       void invalidateProductionSync(client);
+      // 플래너 TASK 제목(사이즈 × 배수)이 계획과 어긋나지 않게 바로 다시 동기화한다.
+      void syncWorkSessionToPlanner(row.work_session_id);
     },
   });
   return (

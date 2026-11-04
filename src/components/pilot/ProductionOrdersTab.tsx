@@ -48,18 +48,21 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
   const [mode, setMode] = useState<"pick" | "copy" | "new">("pick");
 
   const firstBlockByRow = useMemo(() => {
-    const map = new Map<string, { date: string; time: string; count: number }>();
+    const map = new Map<string, { date: string; time: string; count: number; lastDate: string }>();
     for (const b of [...(blocks.data ?? [])].sort(
       (a, b) =>
         a.block_date.localeCompare(b.block_date) || a.start_time.localeCompare(b.start_time),
     )) {
       const cur = map.get(b.work_session_formula_version_id);
-      if (cur) cur.count += 1;
-      else
+      if (cur) {
+        cur.count += 1;
+        cur.lastDate = b.block_date;
+      } else
         map.set(b.work_session_formula_version_id, {
           date: b.block_date,
           time: b.start_time.slice(0, 5),
           count: 1,
+          lastDate: b.block_date,
         });
     }
     return map;
@@ -356,7 +359,7 @@ function ProductionOrderComponentList({
 }: {
   sessionId: string;
   dashboardRows: DashboardComponentRow[];
-  firstBlockByRow: Map<string, { date: string; time: string; count: number }>;
+  firstBlockByRow: Map<string, { date: string; time: string; count: number; lastDate: string }>;
   readOnly: boolean;
 }) {
   const selections = useQuery(workSessionFormulaVersionsQuery(sessionId));
@@ -398,11 +401,16 @@ function ProductionOrderComponentItem({
 }: {
   row: import("@/lib/queries").WorkSessionFormulaVersionRow;
   dashboardRow: DashboardComponentRow | undefined;
-  block: { date: string; time: string; count: number } | undefined;
+  block: { date: string; time: string; count: number; lastDate: string } | undefined;
   readOnly: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const client = useQueryClient();
+  // 마지막 생산 블록 날짜가 오늘(캔버라) 이전이면 생산이 끝난 것으로 표시한다(2026-11-05 요청).
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(
+    new Date(),
+  );
+  const produced = Boolean(block && block.lastDate < today);
   const [removeWarning, setRemoveWarning] = useState<string | null>(null);
   const remove = useMutation({
     mutationFn: () => removePlannedComponent(row),
@@ -423,6 +431,14 @@ function ProductionOrderComponentItem({
           {row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name}
         </span>
         {dashboardRow?.unmodifiedCopy && <CopyWarning formulaId={dashboardRow.formulaId} />}
+        {produced && (
+          <span
+            title="생산 날짜가 지났어요"
+            className="label-caps border border-emerald-600/60 bg-emerald-50 px-1 text-[10px] text-emerald-900 dark:border-emerald-400/50 dark:bg-emerald-950/40 dark:text-emerald-100"
+          >
+            ✓ 생산 완료
+          </span>
+        )}
         <span className="font-mono text-[10px] text-muted-foreground">
           {block
             ? `${block.date.slice(5)} ${block.time}${block.count > 1 ? ` +${block.count - 1}` : ""}`
