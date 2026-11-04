@@ -13,7 +13,7 @@ import {
   orderTitle,
   useOrderDietaryNames,
 } from "@/components/pilot/OrderTitle";
-import { BlockTaskDetails } from "@/components/pilot/BlockTaskDetails";
+import { BlockTaskDetails, BlockTimerInline } from "@/components/pilot/BlockTaskDetails";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1470,8 +1470,8 @@ export function ProductionDashboard() {
             items={dayWorkItems}
             focusedRowId={selected?.work_session_formula_version_id ?? null}
             focusKey={selected?.id ?? null}
-            renderRecords={(selectionIds) =>
-              selectionIds.map((id) => {
+            renderRecords={(selectionIds) => {
+              const renderOne = (id: string) => {
                 const row = rowById.get(id);
                 if (!row) return null;
                 const recordBlocks = dayBlocks
@@ -1500,8 +1500,47 @@ export function ProductionDashboard() {
                     )}
                   </div>
                 );
-              })
-            }
+              };
+              if (selectionIds.length < 2) return selectionIds.map(renderOne);
+              // 병합된 컴포넌트는 같은 반죽을 함께 굽는 것이라 생산 기록도 한 벌로 보여준다.
+              // 같은 단계(step_name/차수)의 블록끼리 묶고, 가장 이른 블록의 기록을 대표로 쓴다.
+              const memberBlocks = selectionIds
+                .flatMap((id) => {
+                  const row = rowById.get(id);
+                  if (!row) return [];
+                  return dayBlocks
+                    .filter((b) => b.work_session_formula_version_id === id)
+                    .map((block) => ({ block, row }));
+                })
+                .sort((a, b) => a.block.start_time.localeCompare(b.block.start_time));
+              const stepGroups = new Map<string, typeof memberBlocks>();
+              for (const item of memberBlocks) {
+                const key = item.block.step_name ?? `part-${item.block.part_no}`;
+                stepGroups.set(key, [...(stepGroups.get(key) ?? []), item]);
+              }
+              if (stepGroups.size === 0) {
+                return (
+                  <p className="text-xs text-muted-foreground">
+                    타임라인에 배정하면 생산 기록을 입력할 수 있어요.
+                  </p>
+                );
+              }
+              return [...stepGroups.entries()].map(([key, items]) => {
+                const primary = items[0]!;
+                const orders = [...new Set(items.map((i) => i.row.order.order_number))];
+                return (
+                  <ProductionBlockRecord
+                    key={key}
+                    block={primary.block}
+                    row={primary.row}
+                    title={blockTitle(primary.block, primary.row)}
+                    active={items.some((i) => selected?.id === i.block.id)}
+                    onStarted={ensureSessionStarted}
+                    mergedLabel={orders.join(" + ")}
+                  />
+                );
+              });
+            }}
             labels={Object.fromEntries(
               rows.map((r) => [r.id, `${r.order.order_number} · ${r.slot ?? ""}`]),
             )}
@@ -1510,9 +1549,7 @@ export function ProductionDashboard() {
             className="border border-border bg-card"
             onToggle={(e) => setShowSessionNotes(e.currentTarget.open)}
           >
-            <summary className="label-caps cursor-pointer px-3 py-2 text-xs">
-              세션 메모
-            </summary>
+            <summary className="label-caps cursor-pointer px-3 py-2 text-xs">세션 메모</summary>
             <p className="px-3 pb-2 text-xs text-muted-foreground">
               세션 전체 메모입니다. 생산 수량과 기록은 위 컴포넌트 행에서 관리하세요.
             </p>
@@ -1550,14 +1587,18 @@ function ProductionBlockRecord({
   title,
   active,
   onStarted,
+  mergedLabel,
 }: {
   block: WorkBlock;
   row: DashboardComponentRow;
   title: string;
   active: boolean;
   onStarted: (sessionId: string, iso: string) => void | Promise<void>;
+  /** 병합 컴포넌트의 한 벌 기록 — 이 기록이 함께 다루는 오더들 */
+  mergedLabel?: string;
 }) {
-  const [expanded, setExpanded] = useState(active);
+  // 기본으로 열어 둔다(사용자가 닫지 않는 한) — 타이머·관찰값을 바로 입력할 수 있게.
+  const [expanded, setExpanded] = useState(true);
   useEffect(() => {
     if (active) setExpanded(true);
   }, [active]);
@@ -1573,9 +1614,15 @@ function ProductionBlockRecord({
         <span>
           {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
         </span>
-        <span className="flex-1">{block.step_name ?? `${block.part_no}차 생산`}</span>
+        <span className="flex-1">
+          {block.step_name ?? `${block.part_no}차 생산`}
+          {mergedLabel && (
+            <span className="ml-2 font-mono text-[11px] text-muted-foreground">{mergedLabel}</span>
+          )}
+        </span>
         <span className="text-muted-foreground">기록</span>
       </button>
+      {!expanded && <BlockTimerInline block={block} row={row} onStarted={onStarted} />}
       {expanded && (
         <BlockTaskDetails block={block} row={row} title={title} onStarted={onStarted} embedded />
       )}

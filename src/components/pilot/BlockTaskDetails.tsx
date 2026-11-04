@@ -478,3 +478,90 @@ export function BlockTaskDetails({
     </div>
   );
 }
+
+/**
+ * 드롭다운을 열지 않아도 보이는 한 줄 타이머 — 상태/남은 시간/START·COMPLETE.
+ * 값은 BlockTaskDetails와 같은 work_session_tasks 행을 읽고 쓴다.
+ */
+export function BlockTimerInline({
+  block,
+  row,
+  onStarted,
+}: {
+  block: WorkBlock;
+  row: DashboardComponentRow;
+  onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
+}) {
+  const queryClient = useQueryClient();
+  const sessionId = row.work_session_id;
+  const tasks = useQuery(workSessionTasksQuery(sessionId));
+  const task = (tasks.data ?? []).find((t) => t.id === block.work_session_task_id);
+  const [now, setNow] = useState(() => new Date());
+  const [error, setError] = useState<string | null>(null);
+  const running = task?.status === "IN_PROGRESS" && Boolean(task.actual_started_at);
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  if (!task) return null;
+
+  const update = async (patch: Record<string, unknown>) => {
+    const userId = await currentUserId();
+    const { error: e } = await supabase
+      .from("work_session_tasks")
+      .update(patch as never)
+      .eq("id", task.id)
+      .eq("user_id", userId);
+    setError(e ? e.message : null);
+    await queryClient.invalidateQueries({ queryKey: ["work_session_tasks", sessionId] });
+    await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
+  };
+  const elapsedSec = task.actual_started_at
+    ? (now.getTime() - new Date(task.actual_started_at).getTime()) / 1000
+    : 0;
+  const remainSec = task.timer_minutes != null ? task.timer_minutes * 60 - elapsedSec : null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 pb-1 pl-5 text-xs">
+      <span className="label-caps border border-border px-1.5 py-0.5 text-[10px]">
+        {task.status === "IN_PROGRESS" ? "ACTIVE" : task.status === "DONE" ? "DONE" : "READY"}
+      </span>
+      {task.timer_minutes != null && task.status !== "IN_PROGRESS" && (
+        <span className="font-mono text-muted-foreground">TIMER {task.timer_minutes}분</span>
+      )}
+      {task.status === "NOT_STARTED" && (
+        <button
+          type="button"
+          className={primaryButtonClass}
+          onClick={async () => {
+            const iso = new Date().toISOString();
+            await update({ status: "IN_PROGRESS", actual_started_at: iso, completed_at: null });
+            await onStarted?.(sessionId, iso);
+          }}
+        >
+          {task.timer_minutes != null ? "▶ START TIMER" : "▶ START"}
+        </button>
+      )}
+      {running && (
+        <>
+          <span className="font-mono text-sm tabular-nums">
+            {task.timer_minutes != null
+              ? remainSec !== null && remainSec > 0
+                ? `남은 ${formatDuration(remainSec)}`
+                : `+${formatDuration(Math.abs(remainSec ?? 0))}`
+              : formatDuration(elapsedSec)}
+          </span>
+          <button
+            type="button"
+            className={primaryButtonClass}
+            onClick={() => void update({ status: "DONE", completed_at: new Date().toISOString() })}
+          >
+            ■ COMPLETE
+          </button>
+        </>
+      )}
+      {error && <span className="text-destructive">{error}</span>}
+    </div>
+  );
+}

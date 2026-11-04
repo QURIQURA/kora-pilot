@@ -2523,7 +2523,8 @@ function ComponentProductionRow({
   focusKey: string | null;
   renderRecords: ((ids: string[]) => React.ReactNode) | undefined;
 }) {
-  const [expanded, setExpanded] = useState(focused);
+  // 기본으로 열어 둔다 — 사용자가 닫지 않는 한 유지.
+  const [expanded, setExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   useEffect(() => {
     if (focused) setExpanded(true);
