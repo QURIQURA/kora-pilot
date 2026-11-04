@@ -49,6 +49,8 @@ const corsHeaders = {
 
 type CoreRow = {
   id: string;
+  formula_version_id: string;
+  base_grams?: number | null;
   slot: string | null;
   planner_task_id: string | null;
   multiplier: number | string | null;
@@ -82,17 +84,31 @@ const json = (body: unknown, status = 200) =>
 /** 숫자를 소수 둘째 자리까지, 끝의 0은 떼고 표기. */
 const fmt = (n: number) => String(Math.round(n * 100) / 100);
 
-/** 품목 이름 + 배치용량 × 배수. 용량(틀/목표중량)이 없으면 배수만 붙인다. */
+/** 몰드 이름 → 사람이 읽는 사이즈. 예: `ROUND 6"` / `ROUND8"` → "6inch round". 패턴이 아니면 이름 그대로. */
+const mouldLabel = (name: string): string => {
+  const m = name.trim().match(/^(.*?)\s*(\d+(?:\.\d+)?)\s*(?:"|''|”|inch|in|인치)?$/i);
+  if (!m || !m[1]?.trim()) return name.trim();
+  return `${m[2]}inch ${m[1].trim().toLowerCase()}`;
+};
+
+/**
+ * 품목 이름 + 사이즈 × 수량.
+ * - SHEET: 몰드 기준 — "EARLGREY CHIFFON 8inch round ×2" (몰드가 없으면 배수만)
+ * - 그 외(CREAM/FILLING…): 기준중량(base weight) 기준 — "Yogurt Cream 1200g ×1"
+ *   기준중량은 프리셋이 있으면 그 값, 없으면 레시피 BASE(×1) 재료 합계(g).
+ */
 const taskTitle = (row: CoreRow): string => {
   const formula = row.formula_versions?.formulas ?? null;
   const name = formula?.components?.name ?? formula?.name ?? "—";
-  const capGrams = row.capacities?.weight_g ?? null;
-  const bwGrams = row.base_weight_presets?.weight_g ?? null;
-  if (capGrams != null) {
-    const qty = Number(row.capacity_qty ?? row.multiplier ?? 1);
-    return `${name} ${fmt(capGrams)}g ×${fmt(qty)}`;
+  if (row.slot === "SHEET") {
+    if (row.capacities?.name) {
+      const qty = Number(row.capacity_qty ?? row.multiplier ?? 1);
+      return `${name} ${mouldLabel(row.capacities.name)} ×${fmt(qty)}`;
+    }
+    return `${name} ×${fmt(Number(row.multiplier ?? 1))}`;
   }
-  if (bwGrams != null) {
+  const bwGrams = row.base_weight_presets?.weight_g ?? row.base_grams ?? null;
+  if (bwGrams != null && bwGrams > 0) {
     const qty = Number(row.base_weight_qty ?? row.multiplier ?? 1);
     return `${name} ${fmt(bwGrams)}g ×${fmt(qty)}`;
   }
@@ -345,7 +361,7 @@ Deno.serve(async (req: Request) => {
     const { data: coreRowsRaw, error: coreRowsError } = await kora
       .from("work_session_formula_versions")
       .select(
-        "id, slot, planner_task_id, multiplier, capacity_qty, base_weight_qty, " +
+        "id, slot, formula_version_id, planner_task_id, multiplier, capacity_qty, base_weight_qty, " +
           "capacities(name, weight_g), base_weight_presets(name, weight_g), " +
           "formula_versions(formulas(name, components(name)))",
       )
@@ -353,6 +369,28 @@ Deno.serve(async (req: Request) => {
       .eq("kind", "CORE");
     if (coreRowsError) throw coreRowsError;
     const coreRows = (coreRowsRaw ?? []) as unknown as CoreRow[];
+
+    // 기준중량 프리셋이 없는 비-SHEET 품목의 제목용 — 레시피 BASE(×1) 재료 합계(g).
+    const versionIds = [...new Set(coreRows.map((r) => r.formula_version_id))];
+    if (versionIds.length > 0) {
+      const { data: ingRaw, error: ingError } = await kora
+        .from("formula_version_ingredients")
+        .select("formula_version_id, amount, unit")
+        .in("formula_version_id", versionIds);
+      if (ingError) throw ingError;
+      const totals = new Map<string, number | null>();
+      for (const ing of (ingRaw ?? []) as { formula_version_id: string; amount: number; unit: string }[]) {
+        const factor = ing.unit === "g" || ing.unit === "ml" ? 1 : ing.unit === "kg" || ing.unit === "l" ? 1000 : null;
+        const prev = totals.get(ing.formula_version_id);
+        if (prev === null) continue;
+        if (factor == null) {
+          if (Number(ing.amount) > 0) totals.set(ing.formula_version_id, null);
+          continue;
+        }
+        totals.set(ing.formula_version_id, (prev ?? 0) + Number(ing.amount) * factor);
+      }
+      for (const r of coreRows) r.base_grams = totals.get(r.formula_version_id) ?? null;
+    }
 
     let blocks: Block[] = [];
     if (coreRows.length > 0) {
