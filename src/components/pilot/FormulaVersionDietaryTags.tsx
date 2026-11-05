@@ -64,7 +64,7 @@ export function FormulaVersionDietaryTags({ versionId }: { versionId: string | n
         })}
         {(tags.data ?? []).length === 0 && (
           <span className="font-mono text-[11px] text-muted-foreground">
-            Add tags in SETTINGS &gt; DIETARY TAGS
+            Add tags in SHCS admin &gt; Questions
           </span>
         )}
       </div>

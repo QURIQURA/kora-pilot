@@ -300,7 +300,7 @@ function OrderDetailPage() {
   const [dietaryRequirements, setDietaryRequirements] = useState("");
   // 2026-10-22: 웹 주문서 "제일 안 좋아하는 플레이버"(중복 선택) 답. "Fruit" = 과일 없는 백업 케익.
   const [leastLikedFlavours, setLeastLikedFlavours] = useState("");
-  // 2026-10-21: DIETARY REQUIREMENTS 태그(복수 선택, SETTINGS > DIETARY TAGS). null = 아직 손대지 않음(서버 값 사용).
+  // 2026-10-21: DIETARY REQUIREMENTS 태그(복수 선택, 태그 목록은 SHCS admin > Questions에서 관리). null = 아직 손대지 않음(서버 값 사용).
   const dietaryTags = useQuery(dietaryTagsQuery());
   const dietaryLinks = useQuery(orderDietaryTagLinksQuery());
   const [dietaryTagIds, setDietaryTagIds] = useState<string[] | null>(null);
@@ -933,7 +933,7 @@ function OrderDetailPage() {
                     })}
                     {(dietaryTags.data ?? []).length === 0 && (
                       <span className="font-mono text-[11px] text-muted-foreground">
-                        Add tags in SETTINGS &gt; DIETARY TAGS
+                        Add tags in SHCS admin &gt; Questions
                       </span>
                     )}
                   </div>

@@ -200,7 +200,7 @@ function DietaryPageInner() {
 
       {(tags.data ?? []).length === 0 && !loading && (
         <p className="font-mono text-xs text-muted-foreground">
-          No dietary tags yet — add them in SETTINGS &gt; DIETARY TAGS, then tag formula versions on
+          No dietary tags yet — add them in SHCS admin &gt; Questions, then tag formula versions on
           the FORMULA page.
         </p>
       )}

@@ -4,7 +4,6 @@ import { CategoryManager } from "@/components/pilot/CategoryManager";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { PastryMeasurementGuide } from "@/components/pilot/PastryMeasurementGuide";
 import { CakeSizeManager } from "@/components/pilot/CakeSizeManager";
-import { DietaryTagManager } from "@/components/pilot/DietaryTagManager";
 import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
@@ -106,9 +105,7 @@ function SettingsPage() {
         <SettingsSection title="GOOGLE 캘린더 구독 (.ics)">
           <OrdersCalendarFeedSection />
         </SettingsSection>
-        <SettingsSection title="DIETARY TAGS" defaultOpen>
-          <DietaryTagManager />
-        </SettingsSection>
+        {/* 2026-11-05: DIETARY TAGS 편집은 SHCS admin > Questions로 이동 (주문서 질문과 함께 관리). */}
         <SettingsSection title="ORDER STATUS COLORS" defaultOpen>
           <OrderStatusColorsSettings />
         </SettingsSection>
