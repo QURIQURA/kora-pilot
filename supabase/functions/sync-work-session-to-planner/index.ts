@@ -39,6 +39,8 @@ const WANN_OS_URL = "https://txrxzsrjqwhvjosutotp.supabase.co";
 const WANN_USER_ID = "1f1dd73b-cfa9-47d3-855b-f1d58283885f";
 const WANN_SHCO_CATEGORY_ID = "c8068046-5bb0-4043-acbb-60f862fcad52";
 const WANN_PRODUCTION_SUBTAG_ID = "ce89b071-61c5-4378-8403-99b93990598f";
+// 이 앱은 1인 사용자 — 로그인한 소유자만 이 함수를 쓸 수 있다(서비스 키로 WANN을 수정하므로 반드시 필요).
+const KORA_OWNER_ID = "53e168e4-72aa-418e-812a-6caaf315a205";
 const DAILY_PROJECT_PREFIX = "Daily Project";
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -240,6 +242,20 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    // 2026-11-06: 인증 — 로그인한 소유자의 토큰이 아니면 거절한다(anon 키만으로는 호출 불가).
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: authData, error: authError } = token
+      ? await authClient.auth.getUser(token)
+      : { data: { user: null }, error: new Error("no token") };
+    if (authError || authData.user?.id !== KORA_OWNER_ID)
+      return json({ error: "unauthorized" }, 401);
+
     const body = await req.json();
     let sessionId: string | null = body.work_session_id ?? null;
     const removeBlockId: string | null = body.remove_block_id ?? null;
@@ -532,6 +548,18 @@ Deno.serve(async (req: Request) => {
         .single();
       if (orderError) throw orderError;
       orderProjectId = order.wann_project_id;
+    } else {
+      // 2026-11-06: 팝업 품목에 연결된 세션이면 그 팝업의 WANN 프로젝트 아래로 넣는다(CONFIRMED 때 생성된 프로젝트).
+      const { data: popup, error: popupError } = await kora
+        .from("orders")
+        .select("wann_project_id")
+        .eq("order_kind", "POPUP")
+        .contains("popup_plan", { items: [{ work_session_id: sessionId }] })
+        .not("wann_project_id", "is", null)
+        .limit(1)
+        .maybeSingle();
+      if (popupError) throw popupError;
+      orderProjectId = popup?.wann_project_id ?? null;
     }
 
     // 오더는 연결됐는데 WANN 프로젝트가 아직 없음 → 만들어둔 TASK 전부 정리하고 끝낸다.
