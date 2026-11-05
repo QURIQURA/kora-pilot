@@ -2,6 +2,7 @@ import { PopupWorkflowSettings } from "@/components/pilot/PopupWorkflowSettings"
 import { useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
+import { CakeSizeMouldPairs } from "@/components/pilot/CakeSizeMouldPairs";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { PastryMeasurementGuide } from "@/components/pilot/PastryMeasurementGuide";
 import { CakeSizeManager } from "@/components/pilot/CakeSizeManager";
@@ -120,6 +121,9 @@ function SettingsPage() {
           주문·제품·작업 세션·생산·원가·재고에서 같은 규격을 사용합니다. 제품별 판매가와 사용량은
           제품 화면에서 설정하세요.
         </p>
+        <div className="mb-4">
+          <CakeSizeMouldPairs />
+        </div>
         {/* 2026-11-05: 공용 완성 규격 ↔ 시트 몰드를 나란히 놓고 비교하며 정리한다(좁은 화면에서는 위아래). */}
         <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
           <div className="min-w-0">
