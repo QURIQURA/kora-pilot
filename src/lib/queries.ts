@@ -1,3 +1,4 @@
+import { compareMoulds } from "@/lib/mould-match";
 import { readPopupPlan } from "@/lib/popup";
 import { queryOptions } from "@tanstack/react-query";
 import { summarizeUsage } from "@/lib/product-usage";
@@ -533,7 +534,7 @@ export const mouldsQuery = () =>
   queryOptions({
     queryKey: ["moulds"],
     queryFn: async (): Promise<Mould[]> =>
-      unwrap(await supabase.from("moulds").select("*").order("name")),
+      unwrap(await supabase.from("moulds").select("*").order("name")).sort(compareMoulds),
   });
 
 /** 몰드별 사용 횟수 (formula_versions.default_mould_id) */
