@@ -17,10 +17,24 @@ const TOP_ITEMS = [
   { label: "REFERENCES", to: "/references" },
 ] as const;
 
-export function SideNav({ onNavigate }: { onNavigate?: () => void }) {
+export function SideNav({
+  onNavigate,
+  onCollapse,
+  collapseLabel = "◂ 숨기기",
+  onPin,
+  pinLabel,
+}: {
+  onNavigate?: () => void;
+  /** 데스크톱: 메뉴 숨기기(또는 서랍 닫기) 버튼 */
+  onCollapse?: () => void;
+  collapseLabel?: string;
+  /** 서랍 상태에서 "항상 펼치기"로 되돌리는 버튼 */
+  onPin?: () => void;
+  pinLabel?: string;
+}) {
   return (
     <nav className="flex h-full flex-col">
-      <div className="border-b border-border p-4">
+      <div className="flex items-center justify-between gap-2 border-b border-border p-4">
         <Link
           to="/"
           className="label-caps block text-foreground hover:text-muted-foreground"
@@ -28,6 +42,27 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void }) {
         >
           PILOT
         </Link>
+        <div className="flex items-center gap-2">
+          {onPin && pinLabel && (
+            <button
+              type="button"
+              onClick={onPin}
+              className="label-caps text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              {pinLabel}
+            </button>
+          )}
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              aria-label="메뉴 숨기기"
+              className="label-caps text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              {collapseLabel}
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-auto py-2">
         <ul className="space-y-0.5 px-2">
