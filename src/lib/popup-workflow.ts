@@ -47,3 +47,11 @@ export function popupStageLabel(
   const id = popupStageId(plan, status, stages);
   return stages.find((s) => s.id === id)?.label ?? id;
 }
+
+/** 팝업 단계 점 색 — 주문 상태와 같은 팔레트를 단계 순서대로 쓰고, 마지막 COMPLETED는 주문 COMPLETED와 같은 짙은 색. */
+const STAGE_PALETTE = ["#9ca3af", "#60a5fa", "#a78bfa", "#fb923c", "#fbbf24", "#34d399"];
+export function popupStageColor(stages: PopupStage[], id: string): string {
+  if (id === "COMPLETED") return "#374151";
+  const index = stages.findIndex((s) => s.id === id);
+  return index < 0 ? "#9ca3af" : (STAGE_PALETTE[index % STAGE_PALETTE.length] ?? "#9ca3af");
+}
