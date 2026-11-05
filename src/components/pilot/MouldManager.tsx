@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { mouldUsageQuery, mouldsQuery } from "@/lib/queries";
+import { mouldUsageDetailQuery, mouldUsageQuery, mouldsQuery } from "@/lib/queries";
 import { mmToCm } from "@/lib/product-size";
 import { mouldFootprintCm2, MOULD_REFERENCE_PRESETS } from "@/lib/mould-dimensions";
 import { MouldCreateForm } from "./MouldCreateForm";
@@ -12,6 +12,7 @@ export function MouldManager() {
   const queryClient = useQueryClient();
   const moulds = useQuery(mouldsQuery());
   const usage = useQuery(mouldUsageQuery());
+  const usageDetail = useQuery(mouldUsageDetailQuery());
   const [adding, setAdding] = useState(false);
 
   const invalidate = async () => {
@@ -55,6 +56,8 @@ export function MouldManager() {
       if (error) throw error;
     },
     onSuccess: invalidate,
+    // 삭제가 DB에서 거절돼도 조용히 넘어가지 않도록 이유를 보여준다.
+    onError: (e: Error) => alert(`삭제하지 못했어요: ${e.message}`),
   });
 
   const rows = moulds.data ?? [];
@@ -222,13 +225,18 @@ export function MouldManager() {
                 <span className="label-caps text-xs text-muted-foreground">
                   {used > 0 ? `${used} IN USE` : "UNUSED"}
                 </span>
+                {used > 0 && (
+                  <span className="basis-full font-mono text-[10px] text-muted-foreground">
+                    사용 중: {(usageDetail.data?.[mould.id] ?? []).join(" · ") || "…"}
+                  </span>
+                )}
                 <button
                   type="button"
                   className={`${buttonClass} px-3 text-xs`}
                   onClick={() => {
                     if (used > 0) {
                       alert(
-                        `${used}개 버전이 이 몰드를 사용 중입니다 — 해당 버전의 몰드를 먼저 변경하세요.`,
+                        `${used}개 버전이 이 몰드를 사용 중입니다 — 해당 버전의 몰드를 먼저 변경하세요.\n\n${(usageDetail.data?.[mould.id] ?? []).join("\n")}`,
                       );
                       return;
                     }

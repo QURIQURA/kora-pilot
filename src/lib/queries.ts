@@ -550,6 +550,28 @@ export const mouldUsageQuery = () =>
     },
   });
 
+/** 몰드별로 어떤 레시피 버전이 쓰는지 — "Lemon Gelatin Pond V1" 목록 (몰드 정리용) */
+export const mouldUsageDetailQuery = () =>
+  queryOptions({
+    queryKey: ["mould_usage", "detail"],
+    queryFn: async (): Promise<Record<string, string[]>> => {
+      const rows = unwrap(
+        await supabase
+          .from("formula_versions")
+          .select("default_mould_id, version_number, formulas(name)")
+          .not("default_mould_id", "is", null),
+      ) as unknown as {
+        default_mould_id: string;
+        version_number: number;
+        formulas: { name: string } | null;
+      }[];
+      const map: Record<string, string[]> = {};
+      for (const r of rows)
+        (map[r.default_mould_id] ??= []).push(`${r.formulas?.name ?? "—"} V${r.version_number}`);
+      return map;
+    },
+  });
+
 /** 몰드가 아닌 제품군(가나슈/필링/크림 등)의 기준 배치 중량(g) 프리셋 — moulds와 대응 */
 export type BaseWeightPreset =
   import("@/integrations/supabase/types").Tables<"base_weight_presets">;
