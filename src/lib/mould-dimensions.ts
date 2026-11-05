@@ -26,6 +26,17 @@ export function mouldFootprintCm2(mould: MouldDimensions | null | undefined): nu
   return width_mm != null && length_mm != null ? (width_mm * length_mm) / 100 : null;
 }
 
+/** 부피(cm³) = 외곽 바닥 면적 × 높이. 높이가 없으면 null. 중앙 기둥·테이퍼는 반영하지 않는다. */
+export function mouldVolumeCm3(mould: MouldDimensions | null | undefined): number | null {
+  const area = mouldFootprintCm2(mould);
+  const height = positive(mould?.height_mm);
+  return area != null && height != null ? area * (height / 10) : null;
+}
+
+/** 1,234 cm³ 처럼 천 단위 쉼표를 붙여 표기. */
+export const fmtVolume = (v: number | null): string =>
+  v == null ? "—" : `${Math.round(v).toLocaleString("en-US")} cm³`;
+
 export function mmToCmInput(value: number | null | undefined): string {
   return value == null ? "" : String(value / 10);
 }
@@ -62,6 +73,6 @@ export const MOULD_REFERENCE_PRESETS = ([6, 8, 10] as const).flatMap((inch, inde
     width_mm: sideMm,
     length_mm: sideMm,
     height_mm: 100,
-    notes: `명목 사이즈 참고값·실측 전. ${inch}인치≈${sideMm / 10}cm. 높이 10cm·바닥분리형은 사용자 지정. 외곽 면적이며 중앙 기둥·테이퍼 미반영. 반죽량·완성 케이크 치수로 자동 적용하지 않음. 출처: ${MOULD_REFERENCE_SOURCE}`,
+    notes: `명목 사이즈 참고값·실측 전. ${inch}인치≈${sideMm / 10}cm. 높이 10cm·바닥분리형은 사용자 지정. 부피는 외곽 기준이며 중앙 기둥·테이퍼 미반영. 반죽량·완성 케이크 치수로 자동 적용하지 않음. 출처: ${MOULD_REFERENCE_SOURCE}`,
   }));
 });

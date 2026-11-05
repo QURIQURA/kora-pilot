@@ -5,7 +5,8 @@ import { currentUserId } from "@/lib/queries";
 import {
   cmInputToMm,
   mmToCmInput,
-  mouldFootprintCm2,
+  fmtVolume,
+  mouldVolumeCm3,
   MOULD_REFERENCE_PRESETS,
 } from "@/lib/mould-dimensions";
 import { Field, buttonClass, inputClass, primaryButtonClass, selectClass } from "./ui";
@@ -40,7 +41,7 @@ export function MouldCreateForm({
   };
   let area: number | null = null;
   try {
-    area = mouldFootprintCm2(dimensions());
+    area = mouldVolumeCm3(dimensions());
   } catch {
     /* Validation is shown on submit. */
   }
@@ -122,7 +123,7 @@ export function MouldCreateForm({
       </Field>
       <p className="text-xs text-muted-foreground">
         6/8/10인치≈15/20/25cm의 명목 참고값입니다. 높이 10cm·바닥분리형은 지정 조건이며 보유 몰드의
-        실측값이 아닙니다. 중앙 기둥이 있으면 아래 면적은 외곽 면적입니다. 반죽량은 레시피별로
+        실측값이 아닙니다. 중앙 기둥이 있으면 아래 부피는 외곽 기준입니다. 반죽량은 레시피별로
         확인한 뒤 입력하세요.
       </p>
       <Field label="NAME">
@@ -193,8 +194,7 @@ export function MouldCreateForm({
         </Field>
       </div>
       <p className="font-mono text-xs text-muted-foreground">
-        외곽 바닥 면적: {area == null ? "미입력" : `${area.toFixed(1)} cm²`} · 중앙 기둥·테이퍼
-        미반영
+        부피: {area == null ? "높이·치수 미입력" : fmtVolume(area)} · 중앙 기둥·테이퍼 미반영
       </p>
       <Field label="SHAPE / SIZE 메모 (선택)">
         <input

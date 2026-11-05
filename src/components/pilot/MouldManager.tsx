@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { mouldUsageDetailQuery, mouldUsageQuery, mouldsQuery } from "@/lib/queries";
 import { mmToCm } from "@/lib/product-size";
-import { mouldFootprintCm2, MOULD_REFERENCE_PRESETS } from "@/lib/mould-dimensions";
+import { fmtVolume, mouldVolumeCm3, MOULD_REFERENCE_PRESETS } from "@/lib/mould-dimensions";
 import { MouldCreateForm } from "./MouldCreateForm";
 import { SectionCard, buttonClass, inputClass } from "./ui";
 
@@ -90,14 +90,14 @@ export function MouldManager() {
       <details className="mb-3 border border-border p-3 text-xs">
         <summary className="cursor-pointer">높이 10cm · 바닥분리형 기본 참고 규격 6종</summary>
         <p className="my-2 text-muted-foreground">
-          명목 사이즈 참고값·실측 전. + ADD MOULD에서 불러올 수 있어요. 면적은 중앙 기둥·테이퍼를
-          제외하지 않은 외곽 바닥 면적입니다.
+          명목 사이즈 참고값·실측 전. + ADD MOULD에서 불러올 수 있어요. 부피는 중앙 기둥·테이퍼를
+          제외하지 않은 외곽 기준입니다.
         </p>
         <ul className="space-y-1 font-mono">
           {MOULD_REFERENCE_PRESETS.map((p) => (
             <li key={p.key}>
               {p.inch}″ {p.shape} · {p.width_mm / 10} × {p.length_mm / 10} × 10cm ·{" "}
-              {mouldFootprintCm2(p)?.toFixed(1)} cm²
+              {fmtVolume(mouldVolumeCm3(p))}
             </li>
           ))}
         </ul>
@@ -220,7 +220,7 @@ export function MouldManager() {
                   <span className="label-caps text-[10px] text-muted-foreground">CM H</span>
                 </div>
                 <span className="font-mono text-[10px] text-muted-foreground">
-                  외곽 면적 {mouldFootprintCm2(mould)?.toFixed(1) ?? "—"} cm²
+                  부피 {fmtVolume(mouldVolumeCm3(mould))}
                 </span>
                 <span className="label-caps text-xs text-muted-foreground">
                   {used > 0 ? `${used} IN USE` : "UNUSED"}

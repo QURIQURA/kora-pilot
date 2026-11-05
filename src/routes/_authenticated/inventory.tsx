@@ -16,7 +16,7 @@ import {
   mmToCmInput,
   mouldDimensionInputs,
   mouldDimensionsMm,
-  mouldFootprintCm2,
+  mouldVolumeCm3,
   type MouldDimensions,
 } from "@/lib/mould-dimensions";
 import { PackagingInventory } from "@/components/pilot/PackagingInventory";
@@ -58,16 +58,18 @@ function dimText(l: Pick<StockLine, "width_mm" | "length_mm" | "height_mm">): st
 }
 
 function mouldText(
-  l: Pick<StockLine, "width_mm" | "length_mm" | "mould_id" | "mould_qty">,
+  l: Pick<StockLine, "width_mm" | "length_mm" | "height_mm" | "mould_id" | "mould_qty">,
   moulds: MouldLite[],
 ): string {
   const mould = moulds.find((m) => m.id === l.mould_id);
   if (!mould) return "";
   const parts: string[] = [];
   if (l.mould_qty != null) parts.push(`${mould.name} ${l.mould_qty}개분`);
-  const a = mouldFootprintCm2(mould);
-  if (a && l.width_mm && l.length_mm) {
-    parts.push(`직사각 조각 면적 기준 ≈ ${((l.width_mm * l.length_mm) / 100 / a).toFixed(1)}개분`);
+  const a = mouldVolumeCm3(mould);
+  if (a && l.width_mm && l.length_mm && l.height_mm) {
+    parts.push(
+      `직사각 조각 부피 기준 ≈ ${((l.width_mm * l.length_mm * l.height_mm) / 1000 / a).toFixed(1)}개분`,
+    );
   }
   return parts.length ? parts.join(" · ") : mould.name;
 }
@@ -112,10 +114,11 @@ function LineFields({
 }) {
   const moulds = useQuery(mouldsQuery());
   const mould = (moulds.data ?? []).find((m) => m.id === form.mouldId);
-  const a = mouldFootprintCm2(mould);
+  const a = mouldVolumeCm3(mould);
   const w = Number(form.width);
   const l = Number(form.length);
-  const auto = a && w > 0 && l > 0 ? ((w * l) / a).toFixed(1) : null;
+  const h = Number(form.height);
+  const auto = a && w > 0 && l > 0 && h > 0 ? ((w * l * h) / a).toFixed(1) : null;
   return (
     <div className="space-y-3">
       <p className="font-mono text-[11px] text-muted-foreground">
@@ -129,8 +132,9 @@ function LineFields({
       )}
       {a != null && (
         <p className="font-mono text-[11px] text-muted-foreground">
-          몰드 외곽 바닥 면적: {a.toFixed(1)} cm² · 중앙 기둥·테이퍼 미반영. 면적 환산은 직사각 조각
-          기준이며, 원형 전체 시트는 몰드 개수를 직접 입력하세요.
+          몰드 부피: {Math.round(a).toLocaleString("en-US")} cm³ · 중앙 기둥·테이퍼 미반영. 부피
+          환산은 직사각 조각(가로·세로·높이 입력) 기준이며, 원형 전체 시트는 몰드 개수를 직접
+          입력하세요.
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-5">
@@ -199,7 +203,7 @@ function LineFields({
             className={inputClass}
             inputMode="decimal"
             disabled={!form.mouldId}
-            placeholder={auto ? `직사각 조각 면적 기준 ≈ ${auto}` : ""}
+            placeholder={auto ? `직사각 조각 부피 기준 ≈ ${auto}` : ""}
             value={form.mouldQty}
             onChange={(e) => onChange({ mouldQty: e.target.value })}
           />
