@@ -19,6 +19,7 @@ const inputTime = (iso: string | null) =>
 const isoTime = (text: string) =>
   text ? localDateTimeToISO(text.slice(0, 10), text.slice(11)) : null;
 const initial = (order: OrderListRow) => ({
+  orderNumber: order.order_number ?? "",
   plan: readPopupPlan(order.popup_plan),
   start: inputTime(order.pickup_at),
   status: order.status as OrderStatus,
@@ -54,13 +55,15 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
   const save = useMutation({
     mutationFn: async () => {
       if (validation) throw new Error(validation);
+      if (!draft.orderNumber.trim()) throw new Error("오더 번호를 입력하세요");
       if (conflict) throw new Error("다른 화면에서 변경됐습니다. 최신 값을 불러오세요");
       const start = isoTime(draft.start);
       const ends = isoTime(end);
       if (ends && (!start || ends <= start))
         throw new Error("종료 시각은 시작 시각 이후로 입력하세요");
       const saved = { ...draft, plan: { ...plan, ends_at: ends ?? "" } };
-      const { data, error } = await supabase.rpc("save_popup_order", {
+      const { data, error } = await supabase.rpc("save_popup_order_details", {
+        p_order_number: draft.orderNumber.trim(),
         p_order_id: order.id,
         p_expected_updated_at: baseline.current.updatedAt,
         p_plan: saved.plan as unknown as Json,
@@ -68,10 +71,11 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
         p_status: draft.status,
       });
       if (error) throw error;
-      const result = data as { updated_at: string; status: string; popup_plan: Json };
+      const result = data as { updated_at: string; status: string; popup_plan: Json; order_number: string };
       return {
         state: {
           ...saved,
+          orderNumber: result.order_number,
           plan: readPopupPlan(result.popup_plan),
           status: result.status as OrderStatus,
         },
@@ -113,11 +117,29 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <Link to="/orders" className="text-xs underline">
             ← ORDERS
           </Link>
-          <h1 className="label-caps mt-2 text-lg">{order.order_number} · Saturday Night Live</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input
+              className="label-caps w-[10rem] max-w-full border-0 bg-transparent p-0 text-lg text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={draft.orderNumber}
+              aria-label="ORDER NUMBER"
+              maxLength={200}
+              disabled={pending}
+              onChange={(e) => setDraft((d) => ({ ...d, orderNumber: e.target.value }))}
+            />
+            <span aria-hidden="true">·</span>
+            <input
+              className="label-caps min-w-[12rem] flex-1 border-0 bg-transparent p-0 text-lg text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={plan.title}
+              aria-label="POP UP TITLE"
+              maxLength={200}
+              disabled={pending}
+              onChange={(e) => setPlan({ title: e.target.value })}
+            />
+          </div>
         </div>
         <PopupStagePicker
           value={plan.stage_id || (draft.status === "COMPLETED" ? "COMPLETED" : "")}
@@ -377,13 +399,13 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
           <button
             type="button"
             className={primaryButtonClass}
-            disabled={pending || !changed || !!validation || conflict}
+            disabled={pending || !changed || !!validation || !draft.orderNumber.trim() || conflict}
             onClick={() => save.mutate()}
           >
             {save.isPending ? "저장 중…" : "SAVE POP UP"}
           </button>
           <span className="text-xs text-muted-foreground">
-            {changed ? "품목·수량·체크 상태를 저장하세요" : "✓ SAVED"}
+            {changed ? "타이틀·품목·수량·체크 상태를 저장하세요" : "✓ SAVED"}
           </span>
         </div>
       </div>

@@ -3804,6 +3804,17 @@ export type Database = {
         Args: { p_order_id: string; p_stage_id: string; p_expected_updated_at: string };
         Returns: Json;
       };
+      save_popup_order_details: {
+        Args: {
+          p_order_id: string;
+          p_expected_updated_at: string;
+          p_plan: Json;
+          p_start: string | null;
+          p_status: string;
+          p_order_number: string;
+        };
+        Returns: Json;
+      };
       save_popup_order: {
         Args: {
           p_order_id: string;
