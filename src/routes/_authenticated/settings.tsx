@@ -115,20 +115,25 @@ function SettingsPage() {
         </SettingsSection>
       </SettingsGroup>
 
-      <SettingsSection title="공용 완성 규격" defaultOpen>
+      <SettingsSection title="공용 완성 규격 ↔ 시트 몰드 (나란히 비교)" defaultOpen>
         <p className="mb-3 text-sm text-muted-foreground">
           주문·제품·작업 세션·생산·원가·재고에서 같은 규격을 사용합니다. 제품별 판매가와 사용량은
           제품 화면에서 설정하세요.
         </p>
-        <CakeSizeManager />
+        {/* 2026-11-05: 공용 완성 규격 ↔ 시트 몰드를 나란히 놓고 비교하며 정리한다(좁은 화면에서는 위아래). */}
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+          <div className="min-w-0">
+            <CakeSizeManager />
+          </div>
+          <div className="min-w-0">
+            <MouldManager />
+          </div>
+        </div>
       </SettingsSection>
 
       <SettingsGroup label="PRODUCTS">
         <SettingsSection title="CATEGORIES" defaultOpen>
           <CategoryManager />
-        </SettingsSection>
-        <SettingsSection title="MOULDS (시트 사이즈)">
-          <MouldManager />
         </SettingsSection>
         <SettingsSection title="TECHNIQUE CATEGORIES">
           <TechniqueCategoryManager />
