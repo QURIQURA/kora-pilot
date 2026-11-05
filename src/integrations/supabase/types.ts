@@ -1959,6 +1959,7 @@ export type Database = {
       };
       pilot_settings: {
         Row: {
+          customer_care_steps: Json | null;
           popup_workflow: Json;
           popup_next_number: number;
           ics_feed_token: string | null;
@@ -1970,6 +1971,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          customer_care_steps?: Json | null;
           popup_workflow?: Json;
           popup_next_number?: number;
           ics_feed_token?: string | null;
@@ -1981,6 +1983,7 @@ export type Database = {
           user_id?: string;
         };
         Update: {
+          customer_care_steps?: Json | null;
           popup_workflow?: Json;
           popup_next_number?: number;
           ics_feed_token?: string | null;

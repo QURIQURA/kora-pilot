@@ -14,6 +14,7 @@ import {
   formulaVersionDietaryTagLinksQuery,
   orderDietaryTagLinksQuery,
   pilotSettingsQuery,
+  customersQuery,
   workSessionByOrderQuery,
   workSessionFormulaVersionsQuery,
   formulasQuery,
@@ -152,6 +153,7 @@ function OrderDetailPage() {
   const queryClient = useQueryClient();
   const order = useQuery(orderQuery(orderId));
   const pilotSettings = useQuery(pilotSettingsQuery());
+  const customers = useQuery(customersQuery());
   const workSession = useQuery(workSessionByOrderQuery(orderId));
   const productionSelections = useQuery(
     workSessionFormulaVersionsQuery(workSession.data?.id ?? ""),
@@ -989,7 +991,15 @@ function OrderDetailPage() {
           <OrderCustomerCareSection
             orderId={order.data.id}
             requestId={linkedRequest.data?.id}
-            pickupAt={order.data.pickup_at}
+            info={{
+              customerName: customers.data?.find((c) => c.id === customerId)?.name,
+              recipient,
+              pickupAt: datetimeLocalToIso(pickupAt),
+              address: deliveryAddress,
+              price,
+              orderNumber,
+              requestNumber: linkedRequest.data?.request_number,
+            }}
           />
 
           {/* 2026-10-06 사용자 요청: Satisfaction — Status(진행 단계)와는 별개 개념이라 별도 섹션으로

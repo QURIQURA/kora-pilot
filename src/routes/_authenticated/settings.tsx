@@ -23,6 +23,7 @@ import { CostItemManager } from "@/components/pilot/CostItemManager";
 import { MonthlyOverheadSettings } from "@/components/pilot/MonthlyOverheadSettings";
 import { OrdersCalendarFeedSection } from "@/components/pilot/OrdersCalendarFeedSection";
 import { OrderStatusColorsSettings } from "@/components/pilot/OrderStatusColorsSettings";
+import { CustomerCareSettings } from "@/components/pilot/CustomerCareSettings";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -115,6 +116,11 @@ function SettingsPage() {
           <OrderStatusColorsSettings />
         </SettingsSection>
       </SettingsGroup>
+
+      {/* 2026-11-06 사용자 요청: CUSTOMER CARE 단계와 문자/이메일 문구를 한 곳에서 관리 */}
+      <SettingsSection title="CUSTOMER CARE · 단계와 문자/이메일 문구">
+        <CustomerCareSettings />
+      </SettingsSection>
 
       <SettingsSection title="공용 완성 규격 ↔ 시트 몰드 (나란히 비교)" defaultOpen>
         <p className="mb-3 text-sm text-muted-foreground">

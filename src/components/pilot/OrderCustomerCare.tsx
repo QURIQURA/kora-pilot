@@ -2,35 +2,23 @@
 // 구분해서 표기해줘" — ORDER DETAIL 탭에 고객 연락처(폰/이메일)와 CS 단계 체크표(TEXT / EMAIL 열)를 둔다.
 // 체크는 SAVE 바와 별개로 누르는 즉시 저장된다(order_cs_checks). 웹 주문의 자동 메일(접수/수락)은
 // shco_email_log에서 읽어 AUTO로 표시한다.
-import { useState } from "react";
+// 2026-11-06: 단계와 문구는 SETTINGS > CUSTOMER CARE에서 관리. 단계를 누르면 그 주문 정보로 채운
+// 문자/이메일 문구가 펼쳐지고 COPY로 복사한다.
+import { Fragment, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SectionCard, inputClass } from "@/components/pilot/ui";
+import { pilotSettingsQuery } from "@/lib/queries";
+import {
+  careStepsFromSettings,
+  careValues,
+  fillCareTemplate,
+  type CareOrderInfo,
+} from "@/lib/customer-care";
 
 type Channel = "TEXT" | "EMAIL";
 
-const CS_STEPS: { key: string; label: string; hint: string; autoEmail?: string }[] = [
-  {
-    key: "received",
-    label: "Request received",
-    hint: "Thanks for the request",
-    autoEmail: "customer_submitted",
-  },
-  {
-    key: "confirmed",
-    label: "Order confirmed",
-    hint: "Accepted, delivery time + address",
-    autoEmail: "customer_accepted",
-  },
-  { key: "invoice", label: "Payment & invoice", hint: "After payment, send the invoice" },
-  { key: "day_before", label: "Day-before check", hint: "Confirm time, address, someone home" },
-  {
-    key: "thank_you",
-    label: "Thank you & feedback",
-    hint: "After delivery, ask for a photo or a few words",
-  },
-];
 const CHANNELS: Channel[] = ["TEXT", "EMAIL"];
 
 function shortDate(iso: string) {
@@ -44,7 +32,7 @@ function phoneKey(v: string | null | undefined) {
   return d.startsWith("61") ? "0" + d.slice(2) : d;
 }
 
-function CopyButton({ value }: { value: string }) {
+function CopyButton({ value, label = "COPY" }: { value: string; label?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
@@ -58,7 +46,7 @@ function CopyButton({ value }: { value: string }) {
         });
       }}
     >
-      {done ? "COPIED" : "COPY"}
+      {done ? "COPIED" : label}
     </button>
   );
 }
@@ -132,17 +120,22 @@ export function OrderCustomerContact({
   );
 }
 
-/** CS step checklist: rows = steps, columns = TEXT / EMAIL. */
+/** CS step checklist: rows = steps (from SETTINGS > CUSTOMER CARE), columns = TEXT / EMAIL. */
 export function OrderCustomerCareSection({
   orderId,
   requestId,
-  pickupAt,
+  info,
 }: {
   orderId: string;
   requestId?: string | null | undefined;
-  pickupAt?: string | null;
+  info: CareOrderInfo;
 }) {
   const qc = useQueryClient();
+  const settings = useQuery(pilotSettingsQuery());
+  const steps = careStepsFromSettings(settings.data?.customer_care_steps);
+  const values = careValues(info);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+
   const checksKey = ["order-cs-checks", orderId];
   const checks = useQuery({
     queryKey: checksKey,
@@ -199,12 +192,12 @@ export function OrderCustomerCareSection({
   const findAuto = (kind?: string) =>
     kind ? (autoMail.data ?? []).find((l) => l.kind === kind) : undefined;
 
-  const stepDone = (s: (typeof CS_STEPS)[number]) =>
-    CHANNELS.some((ch) => findCheck(s.key, ch)) || !!findAuto(s.autoEmail);
-  const doneCount = CS_STEPS.filter(stepDone).length;
+  const stepDone = (s: (typeof steps)[number]) =>
+    CHANNELS.some((ch) => findCheck(s.key, ch)) || !!findAuto(s.auto_email);
+  const doneCount = steps.filter(stepDone).length;
 
-  const dayBefore = pickupAt
-    ? shortDate(new Date(new Date(pickupAt).getTime() - 86400000).toISOString())
+  const dayBefore = info.pickupAt
+    ? shortDate(new Date(new Date(info.pickupAt).getTime() - 86400000).toISOString())
     : null;
 
   const missingTable = checks.isError;
@@ -214,7 +207,7 @@ export function OrderCustomerCareSection({
       title="CUSTOMER CARE"
       action={
         <span className="font-mono text-xs tabular-nums text-muted-foreground">
-          {doneCount} / {CS_STEPS.length}
+          {doneCount} / {steps.length}
         </span>
       }
     >
@@ -223,6 +216,10 @@ export function OrderCustomerCareSection({
           Checklist storage is not set up yet (run order_cs_checks.sql in the Supabase SQL Editor).
         </p>
       )}
+      <p className="mb-2 font-mono text-[11px] text-muted-foreground">
+        Tap a step to see its message for this customer. Edit steps and wording in SETTINGS &gt;
+        CUSTOMER CARE.
+      </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[420px] border-collapse text-sm">
           <thead>
@@ -241,64 +238,92 @@ export function OrderCustomerCareSection({
             </tr>
           </thead>
           <tbody>
-            {CS_STEPS.map((s) => {
+            {steps.map((s) => {
               const done = stepDone(s);
+              const open = openKey === s.key;
+              const text = fillCareTemplate(s.text, values);
+              const subject = fillCareTemplate(s.email_subject, values);
+              const emailBody = fillCareTemplate(s.email_body, values);
               return (
-                <tr key={s.key} className="border-b border-border last:border-b-0">
-                  <td className="py-2 pr-2 align-top">
-                    <div className="flex items-start gap-2">
-                      <span
-                        className={
-                          "mt-1 h-2.5 w-2.5 shrink-0 rounded-full border " +
-                          (done ? "border-foreground bg-foreground" : "border-muted-foreground")
-                        }
-                        aria-hidden
-                      />
-                      <div>
-                        <div>{s.label}</div>
-                        <div className="font-mono text-[11px] text-muted-foreground">
-                          {s.key === "day_before" && dayBefore ? `Due ${dayBefore} · ` : ""}
-                          {s.hint}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  {CHANNELS.map((ch) => {
-                    const auto = ch === "EMAIL" ? findAuto(s.autoEmail) : undefined;
-                    const check = findCheck(s.key, ch);
-                    if (auto && !check) {
+                <Fragment key={s.key}>
+                  <tr className={"border-b border-border " + (open ? "bg-secondary/40" : "")}>
+                    <td className="py-2 pr-2 align-top">
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => setOpenKey(open ? null : s.key)}
+                        className="flex w-full items-start gap-2 text-left"
+                      >
+                        <span
+                          className={
+                            "mt-1 h-2.5 w-2.5 shrink-0 rounded-full border " +
+                            (done ? "border-foreground bg-foreground" : "border-muted-foreground")
+                          }
+                          aria-hidden
+                        />
+                        <span className="min-w-0">
+                          <span className="block">
+                            {s.label}{" "}
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              {open ? "▲ HIDE" : "▼ MESSAGE"}
+                            </span>
+                          </span>
+                          <span className="block font-mono text-[11px] text-muted-foreground">
+                            {s.key === "day_before" && dayBefore ? `Due ${dayBefore} · ` : ""}
+                            {s.hint}
+                          </span>
+                        </span>
+                      </button>
+                    </td>
+                    {CHANNELS.map((ch) => {
+                      const auto = ch === "EMAIL" ? findAuto(s.auto_email) : undefined;
+                      const check = findCheck(s.key, ch);
+                      if (auto && !check) {
+                        return (
+                          <td key={ch} className="px-1 py-2 text-center align-top">
+                            <span
+                              className="label-caps inline-flex min-h-[28px] w-full items-center justify-center border border-foreground/40 bg-secondary px-1 text-[10px]"
+                              title="Sent automatically by the web order system"
+                            >
+                              AUTO ✓ {shortDate(auto.created_at)}
+                            </span>
+                          </td>
+                        );
+                      }
                       return (
                         <td key={ch} className="px-1 py-2 text-center align-top">
-                          <span
-                            className="label-caps inline-flex min-h-[28px] w-full items-center justify-center border border-foreground/40 bg-secondary px-1 text-[10px]"
-                            title="Sent automatically by the web order system"
+                          <button
+                            type="button"
+                            disabled={missingTable || toggle.isPending}
+                            aria-pressed={!!check}
+                            aria-label={`${s.label} ${ch}`}
+                            onClick={() =>
+                              toggle.mutate({ step: s.key, channel: ch, id: check?.id })
+                            }
+                            className={
+                              "label-caps inline-flex min-h-[28px] w-full items-center justify-center border px-1 text-[10px] disabled:opacity-40 " +
+                              (check
+                                ? "border-foreground bg-foreground text-background"
+                                : "border-input bg-background text-muted-foreground hover:border-foreground hover:text-foreground")
+                            }
                           >
-                            AUTO ✓ {shortDate(auto.created_at)}
-                          </span>
+                            {check ? `✓ ${shortDate(check.done_at)}` : "MARK SENT"}
+                          </button>
                         </td>
                       );
-                    }
-                    return (
-                      <td key={ch} className="px-1 py-2 text-center align-top">
-                        <button
-                          type="button"
-                          disabled={missingTable || toggle.isPending}
-                          aria-pressed={!!check}
-                          aria-label={`${s.label} ${ch}`}
-                          onClick={() => toggle.mutate({ step: s.key, channel: ch, id: check?.id })}
-                          className={
-                            "label-caps inline-flex min-h-[28px] w-full items-center justify-center border px-1 text-[10px] disabled:opacity-40 " +
-                            (check
-                              ? "border-foreground bg-foreground text-background"
-                              : "border-input bg-background text-muted-foreground hover:border-foreground hover:text-foreground")
-                          }
-                        >
-                          {check ? `✓ ${shortDate(check.done_at)}` : "MARK SENT"}
-                        </button>
+                    })}
+                  </tr>
+                  {open && (
+                    <tr className="border-b border-border bg-secondary/40">
+                      <td colSpan={3} className="px-2 pb-3 pt-1">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <MessageBox label="TEXT" body={text} />
+                          <MessageBox label="EMAIL" subject={subject} body={emailBody} />
+                        </div>
                       </td>
-                    );
-                  })}
-                </tr>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -310,5 +335,32 @@ export function OrderCustomerCareSection({
         </p>
       )}
     </SectionCard>
+  );
+}
+
+function MessageBox({ label, subject, body }: { label: string; subject?: string; body: string }) {
+  const missing = /\[\w+\]/.test((subject ?? "") + body);
+  return (
+    <div className="min-w-0 space-y-1.5 border border-border bg-background p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="label-caps text-[11px] text-muted-foreground">{label}</span>
+        <div className="flex gap-1.5">
+          {subject !== undefined && <CopyButton value={subject} label="COPY SUBJECT" />}
+          <CopyButton value={body} />
+        </div>
+      </div>
+      {subject !== undefined && (
+        <p className="font-mono text-[12px]">
+          <span className="text-muted-foreground">Subject: </span>
+          {subject || "—"}
+        </p>
+      )}
+      <p className="whitespace-pre-line text-sm leading-relaxed">{body || "—"}</p>
+      {missing && (
+        <p className="font-mono text-[11px] text-destructive">
+          [ ] = missing on this order. Fill it in above or edit before sending.
+        </p>
+      )}
+    </div>
   );
 }
