@@ -72,7 +72,7 @@ export function PopupWorkflowSettings() {
     <fieldset disabled={save.isPending} className="space-y-3">
       <p className="text-sm text-muted-foreground">
         Saturday Night Live 전용 진행 단계입니다. 케이크 주문 단계와 별도로 추가·이름·순서를
-        관리합니다. 새 팝업은 첫 단계로 시작하며, 번호는 SNL-001부터 순서대로 부여됩니다.
+        관리합니다. 새 팝업은 첫 단계로 시작하며, 번호는 SND-001부터 순서대로 부여됩니다.
       </p>
       {stages.map((stage, i) => (
         <div key={stage.id} className="flex items-center gap-1">
