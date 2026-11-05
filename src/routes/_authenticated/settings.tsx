@@ -1,3 +1,4 @@
+import { PopupWorkflowSettings } from "@/components/pilot/PopupWorkflowSettings";
 import { useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { CategoryManager } from "@/components/pilot/CategoryManager";
@@ -105,7 +106,10 @@ function SettingsPage() {
         <SettingsSection title="GOOGLE 캘린더 구독 (.ics)">
           <OrdersCalendarFeedSection />
         </SettingsSection>
-        {/* 2026-11-05: DIETARY TAGS 편집은 SHCS admin > Questions로 이동 (주문서 질문과 함께 관리). */}
+        {/* DIETARY TAGS 편집은 SHCS admin > Questions에서 관리합니다. */}
+        <SettingsSection title="SNL · 팝업 진행 단계" defaultOpen>
+          <PopupWorkflowSettings />
+        </SettingsSection>
         <SettingsSection title="ORDER STATUS COLORS" defaultOpen>
           <OrderStatusColorsSettings />
         </SettingsSection>

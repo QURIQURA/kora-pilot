@@ -1,0 +1,54 @@
+select set_config('request.jwt.claim.sub',public.shco_owner_id()::text,true);
+set local role authenticated;
+do $$
+declare uid uuid:=auth.uid();o public.orders%rowtype;second public.orders%rowtype;cake public.orders%rowtype; plan jsonb; stages jsonb; failed boolean; seq integer; check_id uuid:=gen_random_uuid(); original_id text;
+begin
+ plan:=jsonb_build_object('title','SNL TEST','location','','ends_at','','notes','','items','[]'::jsonb,'checklist',jsonb_build_array(jsonb_build_object('id',check_id,'group','PACKAGING','label','Boxes','done',true)));
+ insert into public.orders(user_id,order_kind,popup_plan) values(uid,'POPUP',plan) returning * into o;
+ if o.order_number !~ '^SNL-[0-9]{3,}$' or o.popup_plan->>'stage_id' is null then raise exception 'SNL identity/default stage missing';end if;
+ seq:=substring(o.order_number from '^SNL-([0-9]+)$')::integer;
+ plan:=o.popup_plan||jsonb_build_object('check_categories','[{"id":"PACKAGING","label":"포장"},{"id":"TRANSPORT","label":"운반"}]'::jsonb);
+ plan:=jsonb_set(plan,'{checklist,0,group}','"TRANSPORT"');
+ perform public.save_popup_order(o.id,o.updated_at,plan,null,'DESIGN');
+ select * into o from public.orders where id=o.id;
+ if o.status='DESIGN' then raise exception 'cake status leaked into popup workflow';end if;
+ plan:=jsonb_set(o.popup_plan,'{check_categories,1,label}','"운반 준비"');
+ perform public.save_popup_order(o.id,o.updated_at,plan,null,o.status);
+ select * into o from public.orders where id=o.id;
+ failed:=false;
+ begin perform public.save_popup_order(o.id,o.updated_at,jsonb_set(o.popup_plan,'{check_categories}','[{"id":"PACKAGING","label":"포장"}]'),null,o.status);exception when raise_exception then failed:=true;end;
+ if not failed then raise exception 'deletion orphaned a checked item';end if;
+ -- Move the item, remove its category and retain the item ID and done state.
+ plan:=jsonb_set(jsonb_set(o.popup_plan,'{checklist,0,group}','"PACKAGING"'),'{check_categories}','[{"id":"PACKAGING","label":"포장"}]');
+ perform public.save_popup_order(o.id,o.updated_at,plan,null,o.status);
+ select * into o from public.orders where id=o.id;
+ if o.popup_plan->'checklist'->0->>'id'<>check_id::text or (o.popup_plan->'checklist'->0->>'done')::boolean is not true then raise exception 'item history lost';end if;
+ -- Old clients omitting metadata must not erase renamed categories.
+ perform public.save_popup_order(o.id,o.updated_at,o.popup_plan-'check_categories',null,o.status);
+ select * into o from public.orders where id=o.id;
+ if o.popup_plan->'check_categories'->0->>'label'<>'포장' then raise exception 'old client erased categories';end if;
+ select popup_workflow into stages from public.pilot_settings where user_id=uid;
+ stages:=jsonb_insert(stages,array[(jsonb_array_length(stages)-1)::text],'{"id":"TEST_COOLING","label":"테스트 냉장"}');
+ update public.pilot_settings set popup_workflow=stages where user_id=uid;
+ perform public.save_popup_stage(o.id,'TEST_COOLING',o.updated_at);
+ select * into o from public.orders where id=o.id;
+ if o.popup_plan->>'stage_id'<>'TEST_COOLING' or o.status<>'PRODUCTION' then raise exception 'custom stage not saved';end if;
+ failed:=false;
+ begin update public.pilot_settings set popup_workflow=(select jsonb_agg(v order by ord) from jsonb_array_elements(stages) with ordinality r(v,ord) where v->>'id'<>'TEST_COOLING') where user_id=uid;exception when raise_exception then failed:=true;end;
+ if not failed then raise exception 'used stage deleted';end if;
+ perform public.save_popup_stage(o.id,'COMPLETED',o.updated_at);
+ select * into o from public.orders where id=o.id;
+ if o.status<>'COMPLETED' then raise exception 'popup history status not synchronized';end if;
+ failed:=false;
+ begin perform public.save_popup_stage(o.id,'UNKNOWN_STAGE',o.updated_at);exception when raise_exception then failed:=true;end;
+ if not failed then raise exception 'unknown stage accepted';end if;
+ failed:=false;
+ begin perform public.save_popup_stage(o.id,'PLANNING',o.updated_at-interval '1 second');exception when raise_exception then failed:=true;end;
+ if not failed then raise exception 'stale stage save accepted';end if;
+ insert into public.orders(user_id,order_kind,popup_plan) values(uid,'POPUP',plan) returning * into second;
+ if substring(second.order_number from '^SNL-([0-9]+)$')::integer<>seq+1 then raise exception 'popup sequence not independent';end if;
+ insert into public.orders(user_id) values(uid) returning * into cake;
+ if cake.order_number not like 'SH-%' then raise exception 'cake numbering changed';end if;
+ if not exists(select 1 from public.order_production_sync_log where order_id=o.id and source='popup_stage') then raise exception 'stage audit missing';end if;
+end $$;
+select 'PASS: categories, transfer/check state, legacy clients, configurable stages, completion, numbering, conflicts, audit and cake isolation' as result;

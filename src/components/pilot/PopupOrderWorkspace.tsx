@@ -1,24 +1,13 @@
+import { PopupStagePicker } from "./PopupStageSelect";
+import { PopupChecklistSection } from "./PopupChecklistSection";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import {
-  cakeSizesQuery,
-  productsQuery,
-  ORDER_STATUSES,
-  orderStatusLabel,
-  type OrderListRow,
-  type OrderStatus,
-} from "@/lib/queries";
+import { cakeSizesQuery, productsQuery, type OrderListRow, type OrderStatus } from "@/lib/queries";
 import { formatDateTime, formatTime, localDateTimeToISO, toLocalDateString } from "@/lib/datetime";
-import {
-  POPUP_CHECK_GROUPS,
-  POPUP_CHECK_LABELS,
-  readPopupPlan,
-  validatePopupPlan,
-  type PopupItem,
-} from "@/lib/popup";
+import { readPopupPlan, validatePopupPlan, type PopupItem } from "@/lib/popup";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { ProductSelect } from "./ProductSelect";
 import { OrderMoodboardSection } from "./OrderMoodboardSection";
@@ -79,7 +68,15 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
         p_status: draft.status,
       });
       if (error) throw error;
-      return { state: saved, updatedAt: (data as { updated_at: string }).updated_at };
+      const result = data as { updated_at: string; status: string; popup_plan: Json };
+      return {
+        state: {
+          ...saved,
+          plan: readPopupPlan(result.popup_plan),
+          status: result.status as OrderStatus,
+        },
+        updatedAt: result.updated_at,
+      };
     },
     onSuccess: async (result) => {
       baseline.current = result;
@@ -120,21 +117,13 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
           <Link to="/orders" className="text-xs underline">
             ← ORDERS
           </Link>
-          <h1 className="label-caps mt-2 text-lg">{order.order_number} · POP UP</h1>
+          <h1 className="label-caps mt-2 text-lg">{order.order_number} · Saturday Night Live</h1>
         </div>
-        <select
-          aria-label="팝업 상태"
-          className={`${selectClass} !w-auto`}
-          value={draft.status}
+        <PopupStagePicker
+          value={plan.stage_id || (draft.status === "COMPLETED" ? "COMPLETED" : "")}
           disabled={pending}
-          onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value as OrderStatus }))}
-        >
-          {ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {orderStatusLabel(s)}
-            </option>
-          ))}
-        </select>
+          onChange={(stage_id) => setPlan({ stage_id })}
+        />
       </div>
       <div className="flex gap-2 border-b border-border">
         {(["POP UP DETAIL", "VISUALS"] as const).map((t) => (
@@ -348,75 +337,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
               </p>
             )}
           </SectionCard>
-          <SectionCard
-            title={`준비 체크리스트 · ${plan.checklist.filter((c) => c.done).length}/${plan.checklist.length}`}
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              {POPUP_CHECK_GROUPS.map((group) => (
-                <div key={group} className="space-y-2">
-                  <div className="flex justify-between gap-2">
-                    <h3 className="label-caps text-xs">{POPUP_CHECK_LABELS[group]}</h3>
-                    <button
-                      type="button"
-                      className="text-xs underline"
-                      onClick={() =>
-                        setPlan({
-                          checklist: [
-                            ...plan.checklist,
-                            { id: crypto.randomUUID(), group, label: "", done: false },
-                          ],
-                        })
-                      }
-                    >
-                      + 항목
-                    </button>
-                  </div>
-                  {plan.checklist
-                    .filter((c) => c.group === group)
-                    .map((check) => (
-                      <div key={check.id} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          aria-label={`${check.label || POPUP_CHECK_LABELS[group]} 구비 완료`}
-                          checked={check.done}
-                          onChange={(e) =>
-                            setPlan({
-                              checklist: plan.checklist.map((c) =>
-                                c.id === check.id ? { ...c, done: e.target.checked } : c,
-                              ),
-                            })
-                          }
-                        />
-                        <input
-                          aria-label={`${POPUP_CHECK_LABELS[group]} 내용`}
-                          className={`${inputClass} ${check.done ? "text-muted-foreground line-through" : ""}`}
-                          value={check.label}
-                          maxLength={1000}
-                          placeholder="준비할 내용과 수량"
-                          onChange={(e) =>
-                            setPlan({
-                              checklist: plan.checklist.map((c) =>
-                                c.id === check.id ? { ...c, label: e.target.value } : c,
-                              ),
-                            })
-                          }
-                        />
-                        <button
-                          type="button"
-                          aria-label={`${check.label || "준비 항목"} 제거`}
-                          className="px-1 text-xs"
-                          onClick={() =>
-                            setPlan({ checklist: plan.checklist.filter((c) => c.id !== check.id) })
-                          }
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              ))}
-            </div>
-          </SectionCard>
+          <PopupChecklistSection plan={plan} onChange={setPlan} />
           <SectionCard title="운영 메모">
             <textarea
               className={inputClass}

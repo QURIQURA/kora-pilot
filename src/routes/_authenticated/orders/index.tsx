@@ -1,3 +1,4 @@
+import { PopupOrderStageSelect } from "@/components/pilot/PopupStageSelect";
 import { newPopupPlan, readPopupPlan } from "@/lib/popup";
 import {
   useEffect,
@@ -607,27 +608,30 @@ function OrderRow({
     cake_size: (
       <span className="text-sm text-muted-foreground">{cakeSizeName || o.cake_size || "—"}</span>
     ),
-    status: (
-      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: orderStatusColor(statusColors, o.status) }}
-          aria-hidden
-        />
-        <select
-          className={`${selectClass} !w-auto !min-h-0 border-none bg-transparent px-1 py-0.5 text-[11px]`}
-          value={o.status}
-          disabled={updateStatus.isPending}
-          onChange={(e) => updateStatus.mutate(e.target.value as OrderStatus)}
-        >
-          {ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {orderStatusLabel(s)}
-            </option>
-          ))}
-        </select>
-      </div>
-    ),
+    status:
+      o.order_kind === "POPUP" ? (
+        <PopupOrderStageSelect order={o} />
+      ) : (
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{ backgroundColor: orderStatusColor(statusColors, o.status) }}
+            aria-hidden
+          />
+          <select
+            className={`${selectClass} !w-auto !min-h-0 border-none bg-transparent px-1 py-0.5 text-[11px]`}
+            value={o.status}
+            disabled={updateStatus.isPending}
+            onChange={(e) => updateStatus.mutate(e.target.value as OrderStatus)}
+          >
+            {ORDER_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {orderStatusLabel(s)}
+              </option>
+            ))}
+          </select>
+        </div>
+      ),
   };
 
   return (

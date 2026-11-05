@@ -1959,6 +1959,8 @@ export type Database = {
       };
       pilot_settings: {
         Row: {
+          popup_workflow: Json;
+          popup_next_number: number;
           ics_feed_token: string | null;
           monthly_overhead: number;
           monthly_unit_count: number;
@@ -1968,6 +1970,8 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          popup_workflow?: Json;
+          popup_next_number?: number;
           ics_feed_token?: string | null;
           monthly_overhead?: number;
           monthly_unit_count?: number;
@@ -1977,6 +1981,8 @@ export type Database = {
           user_id?: string;
         };
         Update: {
+          popup_workflow?: Json;
+          popup_next_number?: number;
           ics_feed_token?: string | null;
           monthly_overhead?: number;
           monthly_unit_count?: number;
@@ -3792,6 +3798,10 @@ export type Database = {
           p_target_quantity_g: number | null;
           p_version_pinned?: boolean;
         };
+        Returns: Json;
+      };
+      save_popup_stage: {
+        Args: { p_order_id: string; p_stage_id: string; p_expected_updated_at: string };
         Returns: Json;
       };
       save_popup_order: {

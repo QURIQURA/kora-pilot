@@ -1,10 +1,11 @@
+import { popupStageLabel, readPopupStages } from "@/lib/popup-workflow";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { readPopupPlan } from "@/lib/popup";
 import { formatDateTime } from "@/lib/datetime";
 import {
-  orderStatusLabel,
+  pilotSettingsQuery,
   workSessionFormulaVersionsQuery,
   workSessionQuery,
   type OrderListRow,
@@ -16,6 +17,7 @@ import { buttonClass } from "./ui";
 
 export function PopupProductionCard({ order }: { order: OrderListRow }) {
   const plan = readPopupPlan(order.popup_plan);
+  const settings = useQuery(pilotSettingsQuery());
   return (
     <section className="space-y-3 border border-border bg-card p-3">
       <Link className="text-sm underline" to="/orders/$orderId" params={{ orderId: order.id }}>
@@ -50,7 +52,7 @@ export function PopupProductionCard({ order }: { order: OrderListRow }) {
       ))}
       <p className="text-xs text-muted-foreground">
         준비 체크 {plan.checklist.filter((c) => c.done).length}/{plan.checklist.length} ·{" "}
-        {orderStatusLabel(order.status)}
+        {popupStageLabel(plan, order.status, readPopupStages(settings.data?.popup_workflow))}
       </p>
       <Link className={buttonClass} to="/orders/$orderId" params={{ orderId: order.id }}>
         POP UP DETAIL · 품목별 세션 준비

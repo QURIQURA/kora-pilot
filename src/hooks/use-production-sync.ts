@@ -28,6 +28,7 @@ export function useProductionSync(userId: string) {
     const channel = supabase.channel(`pilot-production-${userId}`);
     for (const table of [
       "orders",
+      "pilot_settings",
       "cake_sizes",
       "product_sizes",
       "work_sessions",
