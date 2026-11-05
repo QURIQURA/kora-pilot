@@ -3,12 +3,12 @@ export interface PopupStage {
   label: string;
 }
 export const DEFAULT_POPUP_STAGES: PopupStage[] = [
-  { id: "PLANNING", label: "기획" },
-  { id: "PREPARING", label: "준비" },
-  { id: "PRODUCTION", label: "생산" },
-  { id: "READY", label: "준비 완료" },
-  { id: "LIVE", label: "판매 중" },
-  { id: "COMPLETED", label: "완료" },
+  { id: "PLANNING", label: "CONFIRMED" },
+  { id: "PREPARING", label: "MENU PLANNING" },
+  { id: "PRODUCTION", label: "ORDER REVIEW" },
+  { id: "READY", label: "PREP" },
+  { id: "LIVE", label: "POP-UP" },
+  { id: "COMPLETED", label: "COMPLETED" },
 ];
 export function readPopupStages(value: unknown): PopupStage[] {
   return Array.isArray(value) && value.length
