@@ -236,7 +236,7 @@ export function MouldManager() {
                   onClick={() => {
                     if (used > 0) {
                       alert(
-                        `${used}개 버전이 이 몰드를 사용 중입니다 — 해당 버전의 몰드를 먼저 변경하세요.\n\n${(usageDetail.data?.[mould.id] ?? []).join("\n")}`,
+                        `${used}곳에서 이 몰드를 사용 중입니다 — 해당 항목의 몰드를 먼저 변경하세요.\n\n${(usageDetail.data?.[mould.id] ?? []).join("\n")}`,
                       );
                       return;
                     }

@@ -537,16 +537,23 @@ export const mouldsQuery = () =>
       unwrap(await supabase.from("moulds").select("*").order("name")).sort(compareMoulds),
   });
 
-/** 몰드별 사용 횟수 (formula_versions.default_mould_id) */
+/** 몰드별 사용 횟수 — 레시피 버전(기본 몰드) + 작업 세션 + 공용 완성 규격(시트 몰드) */
 export const mouldUsageQuery = () =>
   queryOptions({
     queryKey: ["mould_usage"],
     queryFn: async (): Promise<Record<string, number>> => {
-      const rows = unwrap(await supabase.from("formula_versions").select("default_mould_id"));
+      const [versions, sessions, sizes] = await Promise.all([
+        supabase.from("formula_versions").select("default_mould_id"),
+        supabase.from("work_session_formula_versions").select("mould_id"),
+        supabase.from("cake_sizes").select("sheet_mould_id"),
+      ]);
       const map: Record<string, number> = {};
-      for (const row of rows) {
-        if (row.default_mould_id) map[row.default_mould_id] = (map[row.default_mould_id] ?? 0) + 1;
-      }
+      const add = (id: string | null | undefined) => {
+        if (id) map[id] = (map[id] ?? 0) + 1;
+      };
+      for (const r of unwrap(versions)) add(r.default_mould_id);
+      for (const r of unwrap(sessions)) add(r.mould_id);
+      for (const r of unwrap(sizes)) add(r.sheet_mould_id);
       return map;
     },
   });
@@ -556,19 +563,37 @@ export const mouldUsageDetailQuery = () =>
   queryOptions({
     queryKey: ["mould_usage", "detail"],
     queryFn: async (): Promise<Record<string, string[]>> => {
-      const rows = unwrap(
-        await supabase
+      const [versions, sessions, sizes] = await Promise.all([
+        supabase
           .from("formula_versions")
           .select("default_mould_id, version_number, formulas(name)")
           .not("default_mould_id", "is", null),
-      ) as unknown as {
+        supabase
+          .from("work_session_formula_versions")
+          .select("mould_id, work_sessions(name)")
+          .not("mould_id", "is", null),
+        supabase
+          .from("cake_sizes")
+          .select("sheet_mould_id, name")
+          .not("sheet_mould_id", "is", null),
+      ]);
+      const map: Record<string, string[]> = {};
+      const add = (id: string, label: string) => {
+        (map[id] ??= []).push(label);
+      };
+      for (const r of unwrap(versions) as unknown as {
         default_mould_id: string;
         version_number: number;
         formulas: { name: string } | null;
-      }[];
-      const map: Record<string, string[]> = {};
-      for (const r of rows)
-        (map[r.default_mould_id] ??= []).push(`${r.formulas?.name ?? "—"} V${r.version_number}`);
+      }[])
+        add(r.default_mould_id, `${r.formulas?.name ?? "—"} V${r.version_number}`);
+      for (const r of unwrap(sessions) as unknown as {
+        mould_id: string;
+        work_sessions: { name: string | null } | null;
+      }[])
+        add(r.mould_id, `세션: ${r.work_sessions?.name ?? "—"}`);
+      for (const r of unwrap(sizes) as unknown as { sheet_mould_id: string; name: string }[])
+        add(r.sheet_mould_id, `규격: ${r.name}`);
       return map;
     },
   });
