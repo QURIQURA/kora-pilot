@@ -395,6 +395,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      order_cs_checks: {
+        Row: {
+          channel: string;
+          created_at: string;
+          done_at: string;
+          id: string;
+          order_id: string;
+          step: string;
+          user_id: string;
+        };
+        Insert: {
+          channel: string;
+          created_at?: string;
+          done_at?: string;
+          id?: string;
+          order_id: string;
+          step: string;
+          user_id?: string;
+        };
+        Update: {
+          channel?: string;
+          created_at?: string;
+          done_at?: string;
+          id?: string;
+          order_id?: string;
+          step?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       customers: {
         Row: {
           created_at: string;

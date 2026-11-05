@@ -53,6 +53,10 @@ import { ProductSelect } from "@/components/pilot/ProductSelect";
 import { OrderMoodboardSection } from "@/components/pilot/OrderMoodboardSection";
 import { OrderResultPhotosSection } from "@/components/pilot/OrderResultPhotosSection";
 import {
+  OrderCustomerCareSection,
+  OrderCustomerContact,
+} from "@/components/pilot/OrderCustomerCare";
+import {
   Field,
   SectionCard,
   buttonClass,
@@ -172,7 +176,7 @@ function OrderDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("shco_order_requests")
-        .select("request_number")
+        .select("id, request_number, customer_phone, customer_email")
         .eq("order_id", orderId)
         .maybeSingle();
       if (error) throw error;
@@ -198,7 +202,10 @@ function OrderDetailPage() {
   // (ORDER DETAIL)을 탭으로 분리. SAVE/DELETE 바는 둘 다에 적용되므로 탭 밖(페이지 하단)에 둔다.
   // 2026-10-15 사용자 재요청: "visuals가 먼저 뜨게해줘" — 탭 순서도 VISUALS를 앞으로, 페이지
   // 진입 시 기본 선택 탭도 VISUALS로.
-  const [activeTab, setActiveTab] = useState<"ORDER DETAIL" | "VISUALS">("ORDER DETAIL");
+  // 2026-11-05 사용자 요청: "Visual/Production detail/Order detail 이렇게 따로 탭 만들자"
+  const [activeTab, setActiveTab] = useState<"VISUALS" | "PRODUCTION DETAIL" | "ORDER DETAIL">(
+    "ORDER DETAIL",
+  );
 
   const [orderNumber, setOrderNumber] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -695,7 +702,7 @@ function OrderDetailPage() {
       </div>
 
       <div className="flex items-center gap-2 border-b border-border">
-        {(["ORDER DETAIL", "VISUALS"] as const).map((tab) => (
+        {(["VISUALS", "PRODUCTION DETAIL", "ORDER DETAIL"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -732,7 +739,7 @@ function OrderDetailPage() {
             </Field>
           </SectionCard>
         </div>
-      ) : (
+      ) : activeTab === "ORDER DETAIL" ? (
         <>
           <SectionCard title="CUSTOMER DETAILS">
             {/* 2026-10-20 사용자 요청: 2열 기준 필드 순서 재배치 */}
@@ -748,6 +755,12 @@ function OrderDetailPage() {
                   placeholder="—"
                 />
               </Field>
+              {/* 2026-11-05 사용자 요청: 고객 폰/이메일이 주문 화면에 안 보임 → 고객 카드에서 읽어 표시 */}
+              <OrderCustomerContact
+                customerId={customerId}
+                requestPhone={linkedRequest.data?.customer_phone}
+                requestEmail={linkedRequest.data?.customer_email}
+              />
               <Field label="RECIPIENT">
                 <input
                   className={inputClass}
@@ -973,6 +986,59 @@ function OrderDetailPage() {
             </div>
           </SectionCard>
 
+          <OrderCustomerCareSection
+            orderId={order.data.id}
+            requestId={linkedRequest.data?.id}
+            pickupAt={order.data.pickup_at}
+          />
+
+          {/* 2026-10-06 사용자 요청: Satisfaction — Status(진행 단계)와는 별개 개념이라 별도 섹션으로
+          분리. Maker/Customer Satisfaction을 각각 독립 필드로 관리(향후 둘을 비교 분석하기 위함).
+          SAVE/DELETE 버튼은 기존과 동일하게 이 페이지 전체(주문 정보 + Satisfaction)에 공통 적용. */}
+          <SectionCard title="SATISFACTION">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field label="MAKER SATISFACTION">
+                <StarRating value={makerSatisfaction} onChange={setMakerSatisfaction} />
+              </Field>
+              <Field label="CUSTOMER SATISFACTION">
+                <div className="space-y-1">
+                  <StarRating value={customerSatisfaction} onChange={setCustomerSatisfaction} />
+                  <button
+                    type="button"
+                    className="label-caps text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={() => setCustomerSatisfaction("")}
+                  >
+                    {customerSatisfaction === ""
+                      ? "— NOT YET COLLECTED"
+                      : "✕ RESET TO NOT YET COLLECTED"}
+                  </button>
+                </div>
+              </Field>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label="CUSTOMER FEEDBACK">
+                <AutoGrowTextarea
+                  rows={3}
+                  className={inputClass}
+                  placeholder='e.g. "She absolutely loved the surprise!"'
+                  value={customerFeedback}
+                  onChange={(e) => setCustomerFeedback(e.target.value)}
+                />
+              </Field>
+              <Field label="MAKER NOTES">
+                <AutoGrowTextarea
+                  rows={3}
+                  className={inputClass}
+                  placeholder='e.g. "Result was beautiful but production took too long."'
+                  value={makerNotes}
+                  onChange={(e) => setMakerNotes(e.target.value)}
+                />
+              </Field>
+            </div>
+          </SectionCard>
+        </>
+      ) : (
+        <>
           {/* 2026-10-20 사용자 요청: "손님디테일은 디테일대로, 생산관련 디테일은... 분류해줘 박스자체를
           분류해서 보기쉽게" — 기존 단일 "주문 정보" 박스를 CUSTOMER DETAILS / PRODUCTION DETAILS
           두 박스로 분리. */}
@@ -1237,51 +1303,6 @@ function OrderDetailPage() {
                     </ul>
                   </div>
                 )}
-              </Field>
-            </div>
-          </SectionCard>
-
-          {/* 2026-10-06 사용자 요청: Satisfaction — Status(진행 단계)와는 별개 개념이라 별도 섹션으로
-          분리. Maker/Customer Satisfaction을 각각 독립 필드로 관리(향후 둘을 비교 분석하기 위함).
-          SAVE/DELETE 버튼은 기존과 동일하게 이 페이지 전체(주문 정보 + Satisfaction)에 공통 적용. */}
-          <SectionCard title="SATISFACTION">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="MAKER SATISFACTION">
-                <StarRating value={makerSatisfaction} onChange={setMakerSatisfaction} />
-              </Field>
-              <Field label="CUSTOMER SATISFACTION">
-                <div className="space-y-1">
-                  <StarRating value={customerSatisfaction} onChange={setCustomerSatisfaction} />
-                  <button
-                    type="button"
-                    className="label-caps text-[10px] text-muted-foreground hover:text-foreground"
-                    onClick={() => setCustomerSatisfaction("")}
-                  >
-                    {customerSatisfaction === ""
-                      ? "— NOT YET COLLECTED"
-                      : "✕ RESET TO NOT YET COLLECTED"}
-                  </button>
-                </div>
-              </Field>
-            </div>
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="CUSTOMER FEEDBACK">
-                <AutoGrowTextarea
-                  rows={3}
-                  className={inputClass}
-                  placeholder='e.g. "She absolutely loved the surprise!"'
-                  value={customerFeedback}
-                  onChange={(e) => setCustomerFeedback(e.target.value)}
-                />
-              </Field>
-              <Field label="MAKER NOTES">
-                <AutoGrowTextarea
-                  rows={3}
-                  className={inputClass}
-                  placeholder='e.g. "Result was beautiful but production took too long."'
-                  value={makerNotes}
-                  onChange={(e) => setMakerNotes(e.target.value)}
-                />
               </Field>
             </div>
           </SectionCard>
