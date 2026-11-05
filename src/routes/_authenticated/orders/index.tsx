@@ -48,6 +48,23 @@ function OrdersPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"LIST" | "CALENDAR">("LIST");
+  // 2026-11-06: ORDERS 와 POP UP 을 탭으로 분리 — 목록·추가 버튼이 탭마다 따로다. 선택한 탭은 기억한다.
+  const [tab, setTabState] = useState<"ORDERS" | "POPUP">("ORDERS");
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("kora-pilot:orders-tab") === "POPUP") setTabState("POPUP");
+    } catch {
+      /* 저장소를 못 쓰면 기본 탭 */
+    }
+  }, []);
+  const setTab = (next: "ORDERS" | "POPUP") => {
+    setTabState(next);
+    try {
+      localStorage.setItem("kora-pilot:orders-tab", next);
+    } catch {
+      /* 무시 */
+    }
+  };
 
   // New Order는 아무 정보 없이도 즉시 생성된다 — 주문번호만 자동 발급되고 나머지는
   // 상세 페이지에서 천천히 채운다(DM 놓치지 않는 게 목적이라, 입력을 막으면 안 됨).
@@ -113,6 +130,9 @@ function OrdersPage() {
     });
     return list;
   }, [orders.data]);
+  const orderRows = useMemo(() => rows.filter((o) => o.order_kind !== "POPUP"), [rows]);
+  const popupRows = useMemo(() => rows.filter((o) => o.order_kind === "POPUP"), [rows]);
+  const tabRows = tab === "POPUP" ? popupRows : orderRows;
 
   return (
     <div className="space-y-4">
@@ -127,25 +147,53 @@ function OrdersPage() {
             >
               {view === "LIST" ? "CALENDAR VIEW" : "LIST VIEW"}
             </button>
-            <button
-              type="button"
-              className={buttonClass}
-              disabled={createPopup.isPending}
-              onClick={() => createPopup.mutate()}
-            >
-              {createPopup.isPending ? "CREATING…" : "+ NEW POP UP"}
-            </button>
-            <button
-              type="button"
-              className={primaryButtonClass}
-              disabled={createOrder.isPending}
-              onClick={() => createOrder.mutate()}
-            >
-              + NEW ORDER
-            </button>
+            {tab === "POPUP" ? (
+              <button
+                type="button"
+                className={primaryButtonClass}
+                disabled={createPopup.isPending}
+                onClick={() => createPopup.mutate()}
+              >
+                {createPopup.isPending ? "CREATING…" : "+ NEW POP UP"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={primaryButtonClass}
+                disabled={createOrder.isPending}
+                onClick={() => createOrder.mutate()}
+              >
+                {createOrder.isPending ? "CREATING…" : "+ NEW ORDER"}
+              </button>
+            )}
           </div>
         }
       />
+
+      <div role="tablist" className="flex border-b border-border">
+        {(
+          [
+            ["ORDERS", "ORDERS", orderRows.length],
+            ["POPUP", "POP UP", popupRows.length],
+          ] as const
+        ).map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={cn(
+              "label-caps -mb-px min-h-[44px] border-b-2 px-4 text-xs transition-colors",
+              tab === key
+                ? "border-foreground text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label} <span className="font-mono text-[10px]">{count}</span>
+          </button>
+        ))}
+      </div>
 
       {(createPopup.isError || createOrder.isError) && (
         <p role="alert" className="text-sm text-destructive">
@@ -155,16 +203,28 @@ function OrdersPage() {
 
       {orders.isLoading ? (
         <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          message="NO ORDERS YET"
-          actionLabel="+ NEW ORDER"
-          onAction={() => createOrder.mutate()}
-        />
+      ) : tabRows.length === 0 ? (
+        tab === "POPUP" ? (
+          <EmptyState
+            message="NO POP UPS YET"
+            actionLabel="+ NEW POP UP"
+            onAction={() => createPopup.mutate()}
+          />
+        ) : (
+          <EmptyState
+            message="NO ORDERS YET"
+            actionLabel="+ NEW ORDER"
+            onAction={() => createOrder.mutate()}
+          />
+        )
       ) : view === "LIST" ? (
-        <OrdersTable rows={rows} statusColors={statusColors} />
+        <OrdersTable
+          rows={tabRows}
+          statusColors={statusColors}
+          onlyColumns={tab === "POPUP" ? POPUP_COLUMNS : undefined}
+        />
       ) : (
-        <OrdersCalendar rows={rows} />
+        <OrdersCalendar rows={tabRows} />
       )}
     </div>
   );
@@ -364,14 +424,22 @@ function ColumnResizeHandle({
   );
 }
 
+// 팝업 탭에서는 고객·식이·수령인 같은 주문 전용 열을 숨긴다(열 순서/폭 설정은 두 탭이 공유).
+const POPUP_COLUMNS: ColumnKey[] = ["order", "date", "product", "status"];
+
 function OrdersTable({
   rows,
   statusColors,
+  onlyColumns,
 }: {
   rows: OrderListRow[];
   statusColors: Record<string, string> | null;
+  onlyColumns?: ColumnKey[] | undefined;
 }) {
-  const { order: columnOrder, reorder } = useColumnOrder();
+  const { order: fullColumnOrder, reorder } = useColumnOrder();
+  const columnOrder = onlyColumns
+    ? fullColumnOrder.filter((k) => onlyColumns.includes(k))
+    : fullColumnOrder;
   const { widths: columnWidths, setWidth } = useColumnWidths();
   const [draggingKey, setDraggingKey] = useState<ColumnKey | null>(null);
   // 리사이즈 드래그 중엔 로컬 state만 바꿔 매끄럽게 미리보이고(저장은 떼는 순간 한 번만),
