@@ -5,8 +5,8 @@ declare uid uuid:=auth.uid();o public.orders%rowtype;second public.orders%rowtyp
 begin
  plan:=jsonb_build_object('title','SNL TEST','location','','ends_at','','notes','','items','[]'::jsonb,'checklist',jsonb_build_array(jsonb_build_object('id',check_id,'group','PACKAGING','label','Boxes','done',true)));
  insert into public.orders(user_id,order_kind,popup_plan) values(uid,'POPUP',plan) returning * into o;
- if o.order_number !~ '^SNL-[0-9]{3,}$' or o.popup_plan->>'stage_id' is null then raise exception 'SNL identity/default stage missing';end if;
- seq:=substring(o.order_number from '^SNL-([0-9]+)$')::integer;
+ if o.order_number !~ '^SND-[0-9]{3,}$' or o.popup_plan->>'stage_id' is null then raise exception 'SNL identity/default stage missing';end if;
+ seq:=substring(o.order_number from '^SND-([0-9]+)$')::integer;
  plan:=o.popup_plan||jsonb_build_object('check_categories','[{"id":"PACKAGING","label":"포장"},{"id":"TRANSPORT","label":"운반"}]'::jsonb);
  plan:=jsonb_set(plan,'{checklist,0,group}','"TRANSPORT"');
  perform public.save_popup_order(o.id,o.updated_at,plan,null,'DESIGN');
@@ -46,7 +46,7 @@ begin
  begin perform public.save_popup_stage(o.id,'PLANNING',o.updated_at-interval '1 second');exception when raise_exception then failed:=true;end;
  if not failed then raise exception 'stale stage save accepted';end if;
  insert into public.orders(user_id,order_kind,popup_plan) values(uid,'POPUP',plan) returning * into second;
- if substring(second.order_number from '^SNL-([0-9]+)$')::integer<>seq+1 then raise exception 'popup sequence not independent';end if;
+ if substring(second.order_number from '^SND-([0-9]+)$')::integer<>seq+1 then raise exception 'popup sequence not independent';end if;
  insert into public.orders(user_id) values(uid) returning * into cake;
  if cake.order_number not like 'SH-%' then raise exception 'cake numbering changed';end if;
  if not exists(select 1 from public.order_production_sync_log where order_id=o.id and source='popup_stage') then raise exception 'stage audit missing';end if;
