@@ -8,6 +8,7 @@ const TOP_ITEMS = [
   { label: "CUSTOMERS", to: "/customers" },
   { label: "PRODUCTS", to: "/products" },
   { label: "COMPONENTS", to: "/components" },
+  { label: "FORMULAS", to: "/formulas" },
   ...(DIETARY_ASSEMBLY_ENABLED ? [{ label: "DIETARY", to: "/dietary" }] : []),
   { label: "COST", to: "/cost" },
   { label: "PRODUCTION", to: "/production" },

@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-11-06 — 사이드 메뉴에 FORMULAS 추가
+
+- FORMULAS 화면(생산용 / R&D 실험 / 보관 탭)이 사이드 메뉴에 없어 들어갈 수 없던 문제 수정 — COMPONENTS 아래에 FORMULAS 메뉴 추가.
+
 ## 2026-11-06 — 생산 세션을 바로 R&D 실험으로 전환
 
 - PRODUCTION 대시보드 오른쪽 디테일 창에 "🧪 R&D 실험으로 전환" 버튼 추가. 누르면 그 컴포넌트가 쓰던 버전을 복사한 DRAFT 실험 버전을 만들고, 이 세션 행과 TASK를 새 버전으로 옮긴다(`convert_session_row_to_experiment`). 이미 실험 중이면 "R&D 실험 중"과 FORMULAS 링크가 보인다.
