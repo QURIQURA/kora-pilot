@@ -1,11 +1,8 @@
 /**
- * 대시보드에서 선택한 작업 블록(= TASK)의 상세 — 예전 WORKFLOW 화면의 TASK 한 줄이 하던 일
- * (실제 시작/종료 시간, 타이머, 작업시간·생산량·단위(효율), 관찰값, 체크리스트)을 블록에 붙였다.
- *
- * 값은 work_session_tasks 행에 그대로 저장한다 — EFFICIENCY 화면이 이 테이블을 읽기 때문. 블록이
- * 처음 선택될 때 행이 없으면 만들어 work_blocks.work_session_task_id로 잇고, 컴포넌트에 SETTINGS의
- * COMPONENT WORKFLOW TEMPLATE(기본 템플릿 + 자동 적용)가 있으면 그 내용으로 채운다. 드롭다운으로
- * 다른 템플릿을 다시 적용할 수도 있다.
+ * 대시보드에서 선택한 작업 블록(= TASK)의 상세 — Start/End 시간, 타이머(여러 개 + 타이머별 메모),
+ * 관찰값, 메모, 체크리스트. 값은 work_session_tasks 행에 저장한다(EFFICIENCY 화면이 이 테이블을 읽음).
+ * 블록이 처음 선택될 때 행이 없으면 만들어 work_blocks.work_session_task_id로 잇는다.
+ * 효율(작업시간·생산량)은 여기서 입력하지 않고 EFFICIENCY 화면에서 상세로 본다(2026-11-06).
  */
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +10,6 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
   taskTypeDefinitionsQuery,
-  workflowTemplatesQuery,
   workSessionTasksQuery,
   type DashboardComponentRow,
   type WorkBlock,
@@ -22,12 +18,11 @@ import { formatDuration, formatTime, localDateTimeToISO } from "@/lib/datetime";
 import {
   hasObservationFields,
   minutesBetween,
-  TASK_TYPE_SUGGESTIONS,
   type ChecklistItem,
   type WorkSessionTask,
 } from "@/lib/workflow";
 import { syncWorkSessionToPlanner } from "@/lib/work-session";
-import { loadStepTaskDefaults, loadTemplateTaskDefaults } from "@/lib/workflow-template";
+import { newTimer, readTimers, timerElapsedSec, type TaskTimer } from "@/lib/task-timers";
 import { buttonClass, primaryButtonClass } from "@/components/pilot/ui";
 
 const smallInput = "h-7 border border-border bg-background px-1.5 text-xs tabular-nums";
@@ -40,6 +35,23 @@ function timeValue(iso: string | null): string {
 }
 
 const numOrNull = (v: string) => (v.trim() ? Number(v) : null);
+
+/** 타이머 목록 저장 — 레거시 timer_minutes는 첫 타이머로 옮겨졌으므로 비운다. */
+async function saveTimers(task: Pick<WorkSessionTask, "id">, timers: TaskTimer[]) {
+  const userId = await currentUserId();
+  const { error } = await supabase
+    .from("work_session_tasks")
+    .update({
+      timers: timers.map((t) => ({
+        ...t,
+        id: t.id === "default" ? crypto.randomUUID() : t.id,
+      })) as never,
+      timer_minutes: null,
+    })
+    .eq("id", task.id)
+    .eq("user_id", userId);
+  return error;
+}
 
 export function BlockTaskDetails({
   block,
@@ -61,7 +73,6 @@ export function BlockTaskDetails({
   const queryClient = useQueryClient();
   const sessionId = row.work_session_id;
   const tasks = useQuery(workSessionTasksQuery(sessionId));
-  const templates = useQuery(workflowTemplatesQuery());
   const typeDefs = useQuery(taskTypeDefinitionsQuery());
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -85,31 +96,10 @@ export function BlockTaskDetails({
         const user_id = await currentUserId();
         const { data: sel, error: selError } = await supabase
           .from("work_session_formula_versions")
-          .select(
-            "formula_version_id, formula_versions(formulas(components(default_workflow_template_id, auto_apply_default_workflow)))",
-          )
+          .select("formula_version_id")
           .eq("id", block.work_session_formula_version_id)
           .single();
         if (selError) throw selError;
-        const comp = (
-          sel as unknown as {
-            formula_versions: {
-              formulas: {
-                components: {
-                  default_workflow_template_id: string | null;
-                  auto_apply_default_workflow: boolean;
-                } | null;
-              } | null;
-            } | null;
-          }
-        ).formula_versions?.formulas?.components;
-        let defaults: Awaited<ReturnType<typeof loadTemplateTaskDefaults>> | null = null;
-        if (block.step_template_task_id) {
-          // 템플릿 단계에서 만든 블록 — 그 단계의 값만 쓴다.
-          defaults = await loadStepTaskDefaults(block.step_template_task_id);
-        } else if (comp?.auto_apply_default_workflow && comp.default_workflow_template_id) {
-          defaults = await loadTemplateTaskDefaults(comp.default_workflow_template_id);
-        }
         const maxSort = (tasks.data ?? []).reduce((m, t) => Math.max(m, t.sort_order), -1);
         const { data: created, error: insError } = await supabase
           .from("work_session_tasks")
@@ -118,9 +108,9 @@ export function BlockTaskDetails({
             work_session_id: sessionId,
             formula_version_id: sel.formula_version_id,
             task_name: title,
-            task_type: defaults?.task_type ?? null,
-            timer_minutes: defaults?.timer_minutes ?? null,
-            checklist_items: (defaults?.checklist_items as never) ?? null,
+            // 구움 시트 컴포넌트는 관찰값(높이·온도)·플래너 굽기 줄이 동작하도록 Bake로 둔다(화면엔 안 보임).
+            task_type: row.slot === "SHEET" ? "Bake" : null,
+            timers: [newTimer()] as never,
             sort_order: maxSort + 1,
           })
           .select("id")
@@ -141,11 +131,14 @@ export function BlockTaskDetails({
   }, [block.id, block.work_session_task_id, tasks.isLoading]);
 
   const running = task?.status === "IN_PROGRESS";
+  const timersRunning = (task?.timers as unknown[] | undefined)?.some(
+    (t) => (t as TaskTimer).started_at && !(t as TaskTimer).done_at,
+  );
   useEffect(() => {
-    if (!running) return;
+    if (!running && !timersRunning) return;
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
-  }, [running]);
+  }, [running, timersRunning]);
 
   if (!task) {
     return (
@@ -195,31 +188,22 @@ export function BlockTaskDetails({
     }
   };
 
-  const applyTemplate = async (templateId: string) => {
-    if (!templateId) return;
-    const d = await loadTemplateTaskDefaults(templateId);
-    if (d.error) {
-      setError(`템플릿 조회 실패 — ${d.error}`);
-      return;
-    }
-    if (!d.checklist_items && d.task_type == null && d.timer_minutes == null) {
-      setError("이 템플릿에 TASK가 없어요 — SETTINGS에서 먼저 등록하세요.");
-      return;
-    }
-    await update(
-      {
-        task_type: d.task_type,
-        timer_minutes: d.timer_minutes,
-        checklist_items: d.checklist_items,
-      },
-      "템플릿",
-    );
-  };
-
-  const elapsedSec = task.actual_started_at
+  const timers = readTimers(task);
+  const taskElapsedSec = task.actual_started_at
     ? (now.getTime() - new Date(task.actual_started_at).getTime()) / 1000
     : 0;
-  const remainSec = task.timer_minutes != null ? task.timer_minutes * 60 - elapsedSec : null;
+  const saveTimerList = async (next: TaskTimer[]) => {
+    const e = await saveTimers(task, next);
+    setError(e ? `타이머 저장 실패 — ${e.message}` : null);
+    await refresh();
+  };
+  const patchTimer = (id: string, patch: Partial<TaskTimer>) =>
+    saveTimerList(timers.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  const startTimer = async (id: string) => {
+    const iso = new Date().toISOString();
+    await patchTimer(id, { started_at: iso, done_at: null });
+    if (task.status === "NOT_STARTED") await start();
+  };
   const doneMinutes =
     task.actual_started_at && task.completed_at
       ? minutesBetween(task.actual_started_at, task.completed_at)
@@ -231,27 +215,7 @@ export function BlockTaskDetails({
     <div
       className={embedded ? "space-y-3 pb-3 pl-4" : "space-y-3 border border-border bg-card p-3"}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {!embedded && <p className="label-caps text-xs">TASK DETAILS · {title}</p>}
-        <p className="font-mono text-xs text-muted-foreground">
-          이 주문 배정 ×{Number(row.multiplier.toFixed(3))} · 생산 배수 연동
-        </p>
-        <div className="flex items-center gap-2">
-          <span className="label-caps text-[11px] text-muted-foreground">TEMPLATE</span>
-          <select
-            className={`${smallInput} max-w-48`}
-            value=""
-            onChange={(e) => void applyTemplate(e.target.value)}
-          >
-            <option value="">불러오기…</option>
-            {(templates.data ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      {!embedded && <p className="label-caps text-xs">TASK DETAILS · {title}</p>}
       {error && (
         <p className="border border-destructive px-2 py-1 text-xs text-destructive">{error}</p>
       )}
@@ -263,18 +227,12 @@ export function BlockTaskDetails({
         </span>
         {task.status === "NOT_STARTED" && (
           <button type="button" className={primaryButtonClass} onClick={() => void start()}>
-            {task.timer_minutes != null ? "▶ START TIMER" : "▶ START"}
+            ▶ START
           </button>
         )}
         {running && (
           <>
-            <span className="font-mono text-sm tabular-nums">
-              {task.timer_minutes != null
-                ? remainSec !== null && remainSec > 0
-                  ? `남은 ${formatDuration(remainSec)}`
-                  : `+${formatDuration(Math.abs(remainSec ?? 0))}`
-                : formatDuration(elapsedSec)}
-            </span>
+            <span className="font-mono text-sm tabular-nums">{formatDuration(taskElapsedSec)}</span>
             <span className="font-mono text-[11px] text-muted-foreground">
               시작 {formatTime(task.actual_started_at!)}
             </span>
@@ -293,9 +251,7 @@ export function BlockTaskDetails({
       <div className="grid gap-3 md:grid-cols-2">
         {/* 시간 */}
         <label className="space-y-1">
-          <span className="label-caps block text-[11px] text-muted-foreground">
-            실제 시작 → 종료
-          </span>
+          <span className="label-caps block text-[11px] text-muted-foreground">Start → End</span>
           <span className="flex flex-wrap items-center gap-1">
             <input
               key={`s-${k}`}
@@ -323,86 +279,6 @@ export function BlockTaskDetails({
             )}
           </span>
         </label>
-
-        {/* 타입 / 타이머 */}
-        <div className="space-y-1">
-          <span className="label-caps block text-[11px] text-muted-foreground">
-            TASK TYPE · TIMER
-          </span>
-          <span className="flex flex-wrap items-center gap-1">
-            <input
-              key={`t-${k}`}
-              className={`${smallInput} w-28`}
-              list={`block-task-type-${block.id}`}
-              placeholder="TYPE"
-              defaultValue={task.task_type ?? ""}
-              onBlur={(e) => {
-                if ((e.target.value.trim() || null) !== task.task_type)
-                  void update({ task_type: e.target.value.trim() || null }, "TYPE");
-              }}
-            />
-            <datalist id={`block-task-type-${block.id}`}>
-              {TASK_TYPE_SUGGESTIONS.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
-            <input
-              key={`tm-${k}`}
-              type="number"
-              className={`${smallInput} w-20`}
-              placeholder="타이머"
-              defaultValue={task.timer_minutes ?? ""}
-              onBlur={(e) => {
-                const v = numOrNull(e.target.value);
-                if (v !== task.timer_minutes) void update({ timer_minutes: v }, "타이머");
-              }}
-            />
-            <span className="text-xs text-muted-foreground">분</span>
-          </span>
-        </div>
-
-        {/* 효율 */}
-        <div className="space-y-1 md:col-span-2">
-          <span className="label-caps block text-[11px] text-muted-foreground">
-            효율 — 작업시간 · 생산량 · 단위
-          </span>
-          <span className="flex flex-wrap items-center gap-1">
-            <input
-              key={`l-${k}`}
-              type="number"
-              className={`${smallInput} w-20`}
-              placeholder="작업시간"
-              defaultValue={task.active_labour_minutes ?? ""}
-              onBlur={(e) => {
-                const v = numOrNull(e.target.value);
-                if (v !== task.active_labour_minutes)
-                  void update({ active_labour_minutes: v }, "작업시간");
-              }}
-            />
-            <span className="text-xs text-muted-foreground">분 ·</span>
-            <input
-              key={`q-${k}`}
-              type="number"
-              className={`${smallInput} w-20`}
-              placeholder="수량"
-              defaultValue={task.output_quantity ?? ""}
-              onBlur={(e) => {
-                const v = numOrNull(e.target.value);
-                if (v !== task.output_quantity) void update({ output_quantity: v }, "생산량");
-              }}
-            />
-            <input
-              key={`u-${k}`}
-              className={`${smallInput} w-24`}
-              placeholder="단위(g/개/장)"
-              defaultValue={task.output_unit ?? ""}
-              onBlur={(e) => {
-                if ((e.target.value.trim() || null) !== task.output_unit)
-                  void update({ output_unit: e.target.value.trim() || null }, "단위");
-              }}
-            />
-          </span>
-        </div>
 
         {/* 관찰값 */}
         {hasObservationFields(task.task_type, observationOverrides) && (
@@ -441,6 +317,102 @@ export function BlockTaskDetails({
             </span>
           </div>
         )}
+      </div>
+
+      {/* 타이머 — 기본 1개, 추가 가능, 타이머마다 메모 */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="label-caps text-[11px] text-muted-foreground">타이머</span>
+          <button
+            type="button"
+            className={`${buttonClass} !min-h-[24px] px-1.5 text-[11px]`}
+            onClick={() => void saveTimerList([...timers, newTimer()])}
+          >
+            + 타이머 추가
+          </button>
+        </div>
+        {timers.map((t) => {
+          const isRunning = Boolean(t.started_at && !t.done_at);
+          const isDone = Boolean(t.started_at && t.done_at);
+          const remain = t.minutes != null ? t.minutes * 60 - timerElapsedSec(t, now) : null;
+          return (
+            <div key={`${t.id}-${k}`} className="flex flex-wrap items-center gap-1.5">
+              <input
+                className={`${smallInput} min-w-0 flex-1 basis-32`}
+                placeholder="무슨 타이머? (메모)"
+                defaultValue={t.label}
+                onBlur={(e) => {
+                  if (e.target.value.trim() !== t.label)
+                    void patchTimer(t.id, { label: e.target.value.trim() });
+                }}
+              />
+              <input
+                type="number"
+                className={`${smallInput} w-16`}
+                placeholder="분"
+                disabled={isRunning}
+                defaultValue={t.minutes ?? ""}
+                onBlur={(e) => {
+                  const v = numOrNull(e.target.value);
+                  if (v !== t.minutes) void patchTimer(t.id, { minutes: v });
+                }}
+              />
+              <span className="text-xs text-muted-foreground">분</span>
+              {!t.started_at && (
+                <button
+                  type="button"
+                  className={`${buttonClass} !min-h-[28px] px-2 text-xs`}
+                  onClick={() => void startTimer(t.id)}
+                >
+                  ▶
+                </button>
+              )}
+              {isRunning && (
+                <>
+                  <span className="w-20 font-mono text-sm tabular-nums">
+                    {remain !== null
+                      ? remain > 0
+                        ? formatDuration(remain)
+                        : `+${formatDuration(Math.abs(remain))}`
+                      : formatDuration(timerElapsedSec(t, now))}
+                  </span>
+                  <button
+                    type="button"
+                    className={`${primaryButtonClass} !min-h-[28px] px-2 text-xs`}
+                    onClick={() => void patchTimer(t.id, { done_at: new Date().toISOString() })}
+                  >
+                    ■
+                  </button>
+                </>
+              )}
+              {isDone && (
+                <>
+                  <span className="w-20 font-mono text-xs">
+                    ✓ {Math.max(1, Math.round(minutesBetween(t.started_at!, t.done_at!)))}분
+                  </span>
+                  <button
+                    type="button"
+                    className={`${buttonClass} !min-h-[28px] px-2 text-xs`}
+                    title="다시 하기"
+                    onClick={() => void patchTimer(t.id, { started_at: null, done_at: null })}
+                  >
+                    ↺
+                  </button>
+                </>
+              )}
+              {timers.length > 1 && (
+                <button
+                  type="button"
+                  className="px-1 text-xs text-muted-foreground hover:text-destructive"
+                  title="타이머 삭제"
+                  onClick={() => void saveTimerList(timers.filter((x) => x.id !== t.id))}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* 체크리스트 */}
@@ -487,103 +459,22 @@ export function BlockTaskDetails({
 }
 
 /**
- * 드롭다운을 열지 않아도 보이는 한 줄 타이머 — 상태/남은 시간/START·COMPLETE.
- * 값은 BlockTaskDetails와 같은 work_session_tasks 행을 읽고 쓴다.
+ * 타이머가 도는 동안 task 행을 1초마다 다시 그리기 위한 공용 훅.
  */
-export function BlockTimerInline({
-  block,
-  row,
-  onStarted,
-  onRetime,
-  label,
-}: {
-  block: WorkBlock;
-  row: DashboardComponentRow;
-  onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
-  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
-  /** 단계/차수 표시(여러 타이머가 한 줄에 있을 때) */
-  label?: string | undefined;
-}) {
-  const queryClient = useQueryClient();
-  const sessionId = row.work_session_id;
-  const tasks = useQuery(workSessionTasksQuery(sessionId));
-  const task = (tasks.data ?? []).find((t) => t.id === block.work_session_task_id);
+function useTick(active: boolean): Date {
   const [now, setNow] = useState(() => new Date());
-  const [error, setError] = useState<string | null>(null);
-  const running = task?.status === "IN_PROGRESS" && Boolean(task.actual_started_at);
   useEffect(() => {
-    if (!running) return;
+    if (!active) return;
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
-  }, [running]);
-  if (!task) return null;
-
-  const update = async (patch: Record<string, unknown>) => {
-    const userId = await currentUserId();
-    const { error: e } = await supabase
-      .from("work_session_tasks")
-      .update(patch as never)
-      .eq("id", task.id)
-      .eq("user_id", userId);
-    setError(e ? e.message : null);
-    await queryClient.invalidateQueries({ queryKey: ["work_session_tasks", sessionId] });
-    await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
-  };
-  const elapsedSec = task.actual_started_at
-    ? (now.getTime() - new Date(task.actual_started_at).getTime()) / 1000
-    : 0;
-  const remainSec = task.timer_minutes != null ? task.timer_minutes * 60 - elapsedSec : null;
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      {label && <span className="font-mono text-[11px] text-muted-foreground">{label}</span>}
-      <span className="label-caps border border-border px-1.5 py-0.5 text-[10px]">
-        {task.status === "IN_PROGRESS" ? "ACTIVE" : task.status === "DONE" ? "DONE" : "READY"}
-      </span>
-      {task.timer_minutes != null && task.status !== "IN_PROGRESS" && (
-        <span className="font-mono text-muted-foreground">TIMER {task.timer_minutes}분</span>
-      )}
-      {task.status === "NOT_STARTED" && (
-        <button
-          type="button"
-          className={primaryButtonClass}
-          onClick={async () => {
-            const iso = new Date().toISOString();
-            await update({ status: "IN_PROGRESS", actual_started_at: iso, completed_at: null });
-            await onStarted?.(sessionId, iso);
-            await onRetime?.(block, iso);
-          }}
-        >
-          {task.timer_minutes != null ? "▶ START TIMER" : "▶ START"}
-        </button>
-      )}
-      {running && (
-        <>
-          <span className="font-mono text-sm tabular-nums">
-            {task.timer_minutes != null
-              ? remainSec !== null && remainSec > 0
-                ? `남은 ${formatDuration(remainSec)}`
-                : `+${formatDuration(Math.abs(remainSec ?? 0))}`
-              : formatDuration(elapsedSec)}
-          </span>
-          <button
-            type="button"
-            className={primaryButtonClass}
-            onClick={() => void update({ status: "DONE", completed_at: new Date().toISOString() })}
-          >
-            ■ COMPLETE
-          </button>
-        </>
-      )}
-      {error && <span className="text-destructive">{error}</span>}
-    </div>
-  );
+  }, [active]);
+  return now;
 }
 
 /**
  * 타임라인 블록 안에 들어가는 아주 작은 타이머 + 메모 표기.
- * ▶ 시작 / 진행 중 남은(또는 경과) 시간 + ■ 완료 / ✓ 소요 시간, 그리고 TASK 메모 한 줄.
- * 자세한 입력(시간 수정·관찰값·체크리스트)은 오른쪽 디테일 창에서 한다.
+ * 타이머마다 ▶ 시작 / 남은(또는 경과) 시간 + ■ 종료 / ✓ 소요를 보여주고(이름이 있으면 함께),
+ * 아무 타이머도 안 돌고 TASK가 진행 중이면 TASK 완료 버튼을 보인다. 자세한 입력은 오른쪽 디테일 창.
  */
 export function BlockTimerChip({
   block,
@@ -603,103 +494,166 @@ export function BlockTimerChip({
   const sessionId = row.work_session_id;
   const tasks = useQuery(workSessionTasksQuery(sessionId));
   const task = (tasks.data ?? []).find((t) => t.id === block.work_session_task_id);
-  const [now, setNow] = useState(() => new Date());
-  const running = task?.status === "IN_PROGRESS" && Boolean(task.actual_started_at);
-  useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, [running]);
+  const timers = task ? readTimers(task) : [];
+  const running = task?.status === "IN_PROGRESS";
+  const now = useTick(timers.some((t) => t.started_at && !t.done_at));
   if (!task) return null;
 
-  const update = async (patch: Record<string, unknown>) => {
-    const userId = await currentUserId();
-    await supabase
-      .from("work_session_tasks")
-      .update(patch as never)
-      .eq("id", task.id)
-      .eq("user_id", userId);
+  const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["work_session_tasks", sessionId] });
     await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
   };
-  const elapsedSec = task.actual_started_at
-    ? (now.getTime() - new Date(task.actual_started_at).getTime()) / 1000
-    : 0;
-  const remainSec = task.timer_minutes != null ? task.timer_minutes * 60 - elapsedSec : null;
+  const patchTimer = async (id: string, patch: Partial<TaskTimer>) => {
+    await saveTimers(
+      task,
+      timers.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    );
+    await refresh();
+  };
   const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
   const chipButton =
     "shrink-0 border border-current px-1 font-mono text-[11px] leading-4 hover:opacity-70";
 
-  let timer: React.ReactNode = null;
-  if (task.status === "NOT_STARTED") {
-    timer = (
-      <button
-        type="button"
-        draggable={false}
-        className={chipButton}
-        title={task.timer_minutes != null ? `타이머 ${task.timer_minutes}분 시작` : "시작"}
-        onMouseDown={stop}
-        onClick={async (e) => {
-          e.stopPropagation();
-          const iso = new Date().toISOString();
-          await update({ status: "IN_PROGRESS", actual_started_at: iso, completed_at: null });
-          await onStarted?.(sessionId, iso);
-          await onRetime?.(block, iso);
-        }}
-      >
-        ▶{task.timer_minutes != null ? ` ${task.timer_minutes}분` : ""}
-      </button>
-    );
-  } else if (running) {
-    const over = remainSec !== null && remainSec <= 0;
-    timer = (
-      <span className="flex shrink-0 items-center gap-1">
-        <span
-          className={`font-mono text-[11px] font-medium tabular-nums ${over ? "underline" : ""}`}
-        >
-          {task.timer_minutes != null
-            ? over
-              ? `+${formatDuration(Math.abs(remainSec ?? 0))}`
-              : formatDuration(remainSec ?? 0)
-            : formatDuration(elapsedSec)}
-        </span>
+  if (part === "note") {
+    const labels = timers.filter((t) => t.label);
+    const text = [
+      task.note,
+      ...labels.map((t) => `${t.label}${t.minutes ? ` ${t.minutes}분` : ""}`),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return text ? (
+      <p className="truncate text-[11px] opacity-80" title={text}>
+        ✎ {text}
+      </p>
+    ) : null;
+  }
+
+  const nextIdle = timers.find((t) => !t.started_at);
+  return (
+    <>
+      {timers.map((t) => {
+        if (t.started_at && !t.done_at) {
+          const remain = t.minutes != null ? t.minutes * 60 - timerElapsedSec(t, now) : null;
+          const over = remain !== null && remain <= 0;
+          return (
+            <span key={t.id} className="flex shrink-0 items-center gap-1" title={t.label}>
+              <span
+                className={`font-mono text-[11px] font-medium tabular-nums ${over ? "underline" : ""}`}
+              >
+                {remain !== null
+                  ? over
+                    ? `+${formatDuration(Math.abs(remain))}`
+                    : formatDuration(remain)
+                  : formatDuration(timerElapsedSec(t, now))}
+              </span>
+              <button
+                type="button"
+                draggable={false}
+                className={chipButton}
+                title="타이머 종료"
+                onMouseDown={stop}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void patchTimer(t.id, { done_at: new Date().toISOString() });
+                }}
+              >
+                ■
+              </button>
+            </span>
+          );
+        }
+        if (t.started_at && t.done_at) {
+          return (
+            <span key={t.id} className="shrink-0 font-mono text-[11px]" title={t.label}>
+              ✓ {Math.max(1, Math.round(minutesBetween(t.started_at, t.done_at)))}분
+            </span>
+          );
+        }
+        if (t.id !== nextIdle?.id) return null;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            draggable={false}
+            className={chipButton}
+            title={t.label ? `${t.label} 타이머 시작` : "타이머 시작"}
+            onMouseDown={stop}
+            onClick={async (e) => {
+              e.stopPropagation();
+              const iso = new Date().toISOString();
+              await patchTimer(t.id, { started_at: iso, done_at: null });
+              if (task.status === "NOT_STARTED") {
+                const userId = await currentUserId();
+                await supabase
+                  .from("work_session_tasks")
+                  .update({ status: "IN_PROGRESS", actual_started_at: iso, completed_at: null })
+                  .eq("id", task.id)
+                  .eq("user_id", userId);
+                await refresh();
+                await onStarted?.(sessionId, iso);
+                await onRetime?.(block, iso);
+              }
+            }}
+          >
+            ▶{t.minutes != null ? ` ${t.minutes}분` : ""}
+          </button>
+        );
+      })}
+      {running && !timers.some((t) => t.started_at && !t.done_at) && (
         <button
           type="button"
           draggable={false}
           className={chipButton}
-          title="완료"
+          title="작업 완료"
           onMouseDown={stop}
-          onClick={(e) => {
+          onClick={async (e) => {
             e.stopPropagation();
-            void update({ status: "DONE", completed_at: new Date().toISOString() });
+            const userId = await currentUserId();
+            await supabase
+              .from("work_session_tasks")
+              .update({ status: "DONE", completed_at: new Date().toISOString() })
+              .eq("id", task.id)
+              .eq("user_id", userId);
+            await refresh();
           }}
         >
-          ■
+          ✔
         </button>
-      </span>
-    );
-  } else if (task.status === "DONE") {
-    const spent =
-      task.actual_started_at && task.completed_at
-        ? Math.max(
-            1,
-            Math.round(
-              (new Date(task.completed_at).getTime() - new Date(task.actual_started_at).getTime()) /
-                60000,
-            ),
-          )
-        : null;
-    timer = (
-      <span className="shrink-0 font-mono text-[11px]">✓{spent != null ? ` ${spent}분` : ""}</span>
-    );
-  }
+      )}
+      {task.status === "DONE" && task.actual_started_at && task.completed_at && (
+        <span className="shrink-0 font-mono text-[11px]">
+          ✓ {Math.max(1, Math.round(minutesBetween(task.actual_started_at, task.completed_at)))}분
+        </span>
+      )}
+    </>
+  );
+}
 
-  if (part === "note") {
-    return task.note ? (
-      <p className="truncate text-[11px] opacity-80" title={task.note}>
-        ✎ {task.note}
-      </p>
-    ) : null;
-  }
-  return <>{timer}</>;
+/** 일일 카드 등에서 쓰는 한 줄 타이머 — 블록 칩과 같은 내용에 단계/차수 라벨만 붙인다. */
+export function BlockTimerInline({
+  block,
+  row,
+  onStarted,
+  onRetime,
+  label,
+}: {
+  block: WorkBlock;
+  row: DashboardComponentRow;
+  onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
+  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
+  label?: string | undefined;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      {label && <span className="font-mono text-[11px] text-muted-foreground">{label}</span>}
+      <BlockTimerChip
+        part="timer"
+        block={block}
+        row={row}
+        {...(onStarted ? { onStarted } : {})}
+        onRetime={onRetime}
+      />
+    </div>
+  );
 }

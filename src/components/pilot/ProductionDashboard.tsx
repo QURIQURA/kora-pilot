@@ -30,9 +30,9 @@ import {
   dailyTasksQuery,
   dailyTaskTemplatesQuery,
   dashboardComponentsQuery,
+  mouldsQuery,
   ordersQuery,
   workBlocksQuery,
-  workflowTemplateStepsQuery,
   type DailyTask,
   type DailyTaskTemplate,
   type DashboardComponentRow,
@@ -44,6 +44,7 @@ import {
   syncDailyTaskToPlanner,
   syncWorkSessionToPlanner,
 } from "@/lib/work-session";
+import { mouldAbbr } from "@/lib/component-size";
 import { cn } from "@/lib/utils";
 import { buttonClass, inputClass } from "./ui";
 
@@ -129,7 +130,6 @@ export function ProductionDashboard() {
   const queryClient = useQueryClient();
   const components = useQuery(dashboardComponentsQuery());
   const blocksQuery = useQuery(workBlocksQuery());
-  const stepsQuery = useQuery(workflowTemplateStepsQuery());
   const [date, setDate] = useState(() => toLocalDateString());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSessionNotes, setShowSessionNotes] = useState(false);
@@ -142,6 +142,7 @@ export function ProductionDashboard() {
   const dailyTemplatesQuery = useQuery(dailyTaskTemplatesQuery());
   const ordersData = useQuery(ordersQuery());
   const dietaryOf = useOrderDietaryNames();
+  const mouldsData = useQuery(mouldsQuery());
   const [pickedRowIds, setPickedRowIds] = useState<string[]>([]);
   const [selectedDailyId, setSelectedDailyId] = useState<string | null>(null);
   const [dailyName, setDailyName] = useState("");
@@ -150,10 +151,6 @@ export function ProductionDashboard() {
 
   const rows = useMemo(() => components.data ?? [], [components.data]);
   const blocks = useMemo(() => blocksQuery.data ?? [], [blocksQuery.data]);
-
-  // 컴포넌트의 기본 템플릿 단계들 — 대기공간에서 놓으면 단계마다 블록이 만들어진다.
-  const stepsOf = (row: DashboardComponentRow) =>
-    row.templateId ? (stepsQuery.data ?? []).filter((s) => s.template_id === row.templateId) : [];
 
   const rowById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
   const blocksByRow = useMemo(() => {
@@ -188,7 +185,9 @@ export function ProductionDashboard() {
     >();
     for (const r of rows) {
       if (!isActive(r)) continue;
-      if ((blocksByRow.get(r.id) ?? []).length > 0) continue;
+      // 타임라인에 올라간 컴포넌트는 사라지지 않고 비활성으로 남긴다 — 단, 보고 있는 날짜에 배정된 것만.
+      const rb = blocksByRow.get(r.id) ?? [];
+      if (rb.length > 0 && !rb.some((b) => b.block_date === date)) continue;
       const g = groups.get(r.order.id) ?? { order: r.order, rows: [] };
       g.rows.push(r);
       groups.set(r.order.id, g);
@@ -196,8 +195,24 @@ export function ProductionDashboard() {
     return [...groups.values()].sort((a, b) =>
       a.order.order_number.localeCompare(b.order.order_number),
     );
-  }, [rows, blocksByRow]);
-  const poolCount = poolGroups.reduce((n, g) => n + g.rows.length, 0);
+  }, [rows, blocksByRow, date]);
+  const poolCount = poolGroups.reduce(
+    (n, g) => n + g.rows.filter((r) => (blocksByRow.get(r.id) ?? []).length === 0).length,
+    0,
+  );
+  const mouldById = useMemo(
+    () => new Map((mouldsData.data ?? []).map((m) => [m.id, m])),
+    [mouldsData.data],
+  );
+  const sizeText = (r: DashboardComponentRow) => {
+    const parts: string[] = [];
+    const m = r.mouldId ? mouldById.get(r.mouldId) : null;
+    if (m) parts.push(`${mouldAbbr(m)}${r.mouldQty ? ` ×${r.mouldQty}` : ""}`);
+    if (r.targetQuantityG) parts.push(`${Math.round(r.targetQuantityG)}g`);
+    if (r.multiplier && r.multiplier !== 1)
+      parts.push(`배수 ×${Math.round(r.multiplier * 100) / 100}`);
+    return parts.join(" · ");
+  };
 
   const dayBlocks = useMemo(
     () =>
@@ -342,54 +357,18 @@ export function ProductionDashboard() {
       day: string;
     }) => {
       const user_id = await currentUserId();
-      const steps = stepsOf(v.row);
-      type Insert = {
-        user_id: string;
-        work_session_formula_version_id: string;
-        block_date: string;
-        start_time: string;
-        end_time: string;
-        part_no: number;
-        step_name?: string | null;
-        step_template_task_id?: string | null;
-      };
-      const inserts: Insert[] = [];
-      if (steps.length === 0) {
-        const partNo =
-          (blocksByRow.get(v.row.id) ?? []).reduce((m, b) => Math.max(m, b.part_no), 0) + 1;
-        inserts.push({
+      const partNo =
+        (blocksByRow.get(v.row.id) ?? []).reduce((m, b) => Math.max(m, b.part_no), 0) + 1;
+      const inserts = [
+        {
           user_id,
           work_session_formula_version_id: v.row.id,
           block_date: v.day,
           start_time: toTime(v.startMin),
           end_time: toTime(v.endMin),
           part_no: partNo,
-        });
-      } else {
-        // 템플릿 단계 = 블록: 놓은 시각부터 단계 순서대로 이어 붙이고, 하루를 넘치면 다음 날 09:00로 넘긴다.
-        let day = v.day;
-        let cursor = v.startMin;
-        steps.forEach((step, idx) => {
-          const dur = step.timer_minutes
-            ? Math.max(SNAP_MIN, Math.ceil(step.timer_minutes / SNAP_MIN) * SNAP_MIN)
-            : DEFAULT_DURATION_MIN;
-          if (cursor + dur > DAY_END_MIN) {
-            day = addDays(day, 1);
-            cursor = 9 * 60;
-          }
-          inserts.push({
-            user_id,
-            work_session_formula_version_id: v.row.id,
-            block_date: day,
-            start_time: toTime(cursor),
-            end_time: toTime(cursor + dur),
-            part_no: idx + 1,
-            step_name: steps.length > 1 ? step.task_name : null,
-            step_template_task_id: step.id,
-          });
-          cursor += dur;
-        });
-      }
+        },
+      ];
       const { data, error } = await supabase.from("work_blocks").insert(inserts).select("id");
       if (error) throw error;
       await syncAfter(v.row.work_session_id);
@@ -817,25 +796,14 @@ export function ProductionDashboard() {
     createBlock.mutate({ row, startMin, endMin: startMin + DEFAULT_DURATION_MIN, day: date });
   };
 
-  // 시간 배정 전 컴포넌트 여러 개를 지금 현재 시각부터 차례로 이어서 넣는다(템플릿 단계가 있으면 단계 합계만큼 차지).
+  // 시간 배정 전 컴포넌트 여러 개를 지금 현재 시각부터 차례로 이어서 넣는다.
   const addRowsToDay = async (rowIds: string[]) => {
     const now = new Date();
     let cursor = Math.floor((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
     for (const id of rowIds) {
       const row = rowById.get(id);
       if (!row) continue;
-      const steps = stepsOf(row);
-      const dur =
-        steps.length === 0
-          ? DEFAULT_DURATION_MIN
-          : steps.reduce(
-              (sum, st) =>
-                sum +
-                (st.timer_minutes
-                  ? Math.max(SNAP_MIN, Math.ceil(st.timer_minutes / SNAP_MIN) * SNAP_MIN)
-                  : DEFAULT_DURATION_MIN),
-              0,
-            );
+      const dur = DEFAULT_DURATION_MIN;
       const startMin = clamp(cursor, DAY_START_MIN, DAY_END_MIN - DEFAULT_DURATION_MIN);
       await createBlock.mutateAsync({
         row,
@@ -932,50 +900,69 @@ export function ProductionDashboard() {
                         <span className="ml-auto font-mono text-[11px]">🚚 {delivery}</span>
                       )}
                     </p>
-                    {g.rows.map((r) => (
-                      <div
-                        key={r.id}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(
-                            "text/plain",
-                            JSON.stringify({ kind: "row", rowId: r.id } satisfies DragPayload),
-                          );
-                          e.dataTransfer.effectAllowed = "move";
-                        }}
-                        onClick={() => {
-                          setSelectedId(null);
-                          setFocusRowId(r.id);
-                        }}
-                        className="flex cursor-grab items-center gap-2 border border-border bg-background px-2 py-1.5"
-                        style={{ borderLeft: `3px solid ${color.accent}` }}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="label-caps text-[11px] text-muted-foreground">
-                            {r.slot ?? "CORE"}
-                          </p>
-                          <p className="flex items-center gap-1 truncate text-sm">
-                            <span className="truncate">{r.componentName}</span>
-                            {r.unmodifiedCopy && <CopyWarning formulaId={r.formulaId} />}
-                          </p>
-                          {stepsOf(r).length > 1 && (
-                            <p className="truncate font-mono text-[10px] text-muted-foreground">
-                              {stepsOf(r)
-                                .map((s) => s.task_name)
-                                .join(" → ")}
+                    {g.rows.map((r) => {
+                      const placed = (blocksByRow.get(r.id) ?? []).filter(
+                        (b) => b.block_date === date,
+                      );
+                      const isPlaced = placed.length > 0;
+                      const size = sizeText(r);
+                      return (
+                        <div
+                          key={r.id}
+                          draggable={!isPlaced}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              "text/plain",
+                              JSON.stringify({ kind: "row", rowId: r.id } satisfies DragPayload),
+                            );
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onClick={() => {
+                            setSelectedId(null);
+                            setFocusRowId(r.id);
+                          }}
+                          className={cn(
+                            "flex items-center gap-2 border border-border bg-background px-2 py-1",
+                            isPlaced ? "cursor-pointer opacity-50" : "cursor-grab",
+                          )}
+                          style={{ borderLeft: `3px solid ${color.accent}` }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="flex items-center gap-1 truncate text-xs">
+                              <span className="label-caps text-[10px] text-muted-foreground">
+                                {r.slot ?? "CORE"}
+                              </span>
+                              <span className={cn("truncate", isPlaced && "line-through")}>
+                                {r.componentName}
+                              </span>
+                              {r.unmodifiedCopy && <CopyWarning formulaId={r.formulaId} />}
                             </p>
+                            {(size || isPlaced) && (
+                              <p className="truncate font-mono text-[10px] text-muted-foreground">
+                                {size}
+                                {isPlaced &&
+                                  `${size ? " · " : ""}✓ ${placed
+                                    .map((b) => b.start_time.slice(0, 5))
+                                    .join(", ")} 배정됨`}
+                              </p>
+                            )}
+                          </div>
+                          {!isPlaced && (
+                            <button
+                              type="button"
+                              className={cn(buttonClass, "!min-h-[24px] px-1.5 text-[10px]")}
+                              disabled={busy}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                quickAdd(r);
+                              }}
+                            >
+                              ADD
+                            </button>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          className={cn(buttonClass, "!min-h-[26px] px-1.5 text-[11px]")}
-                          disabled={busy}
-                          onClick={() => quickAdd(r)}
-                        >
-                          ADD
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })}

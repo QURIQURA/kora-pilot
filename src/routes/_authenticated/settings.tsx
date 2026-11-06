@@ -9,7 +9,6 @@ import { CakeSizeManager } from "@/components/pilot/CakeSizeManager";
 import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
-import { WorkflowTemplateManager } from "@/components/pilot/WorkflowTemplateManager";
 import { TaskTypeManager } from "@/components/pilot/TaskTypeManager";
 import { DailyTaskTemplateManager } from "@/components/pilot/DailyTaskTemplateManager";
 import { IngredientFunctionManager } from "@/components/pilot/IngredientFunctionManager";
@@ -151,9 +150,6 @@ function SettingsPage() {
       </SettingsGroup>
 
       <SettingsGroup label="COMPONENTS">
-        <SettingsSection title="WORKFLOW TEMPLATES">
-          <WorkflowTemplateManager />
-        </SettingsSection>
         <SettingsSection title="TASK TYPES">
           <TaskTypeManager />
         </SettingsSection>

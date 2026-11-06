@@ -9,7 +9,6 @@ import {
   componentUsageQuery,
   currentUserId,
   techniqueCategoriesQuery,
-  workflowTemplatesByTechniqueQuery,
 } from "@/lib/queries";
 import { techniquePath } from "@/lib/technique";
 import { formatDateTime } from "@/lib/datetime";
@@ -17,14 +16,8 @@ import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { CurrentFormulaPanel } from "@/components/pilot/CurrentFormulaPanel";
 import { DuplicateComponentModal } from "@/components/pilot/DuplicateComponentModal";
 import { ComponentTagsSection } from "@/components/pilot/ComponentTagsSection";
-import { TemplateTaskEditor } from "@/components/pilot/WorkflowTemplateManager";
 import { ComponentObservationsSection } from "@/components/pilot/ComponentObservationsSection";
-import {
-  SectionCard,
-  buttonClass,
-  inputClass,
-  selectClass,
-} from "@/components/pilot/ui";
+import { SectionCard, buttonClass, inputClass, selectClass } from "@/components/pilot/ui";
 
 export const Route = createFileRoute("/_authenticated/components/$componentId")({
   head: () => ({
@@ -53,9 +46,6 @@ function ComponentDetailPage() {
 
   const techniqueCategoryList = techniqueCategories.data ?? [];
   const path = techniquePath(techniqueCategoryList, component.data?.technique_category_id ?? null);
-  const templatesForTechnique = useQuery(
-    workflowTemplatesByTechniqueQuery(component.data?.technique_category_id ?? null),
-  );
 
   useSetBreadcrumb([
     { label: "PILOT", path: "/" },
@@ -136,49 +126,6 @@ function ComponentDetailPage() {
       </div>
 
       <CurrentFormulaPanel componentId={componentId} componentName={data.name} />
-
-      <SectionCard title="DEFAULT WORKFLOW">
-        <p className="mb-2 font-mono text-[11px] text-muted-foreground">
-          이 Component를 PRODUCTION 세션에 추가할 때 자동으로 깔아줄 기본 WORKFLOW TEMPLATE입니다.
-          제작방법(위 TECHNIQUE)에 등록된 템플릿 중에서 고르세요. 기본 템플릿을 지정하면 세션에
-          추가하는 즉시 TASK가 무조건 자동 생성됩니다(2026-09-30부터 끄는 옵션 없음).
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <select
-            className={selectClass + " w-auto"}
-            value={data.default_workflow_template_id ?? ""}
-            disabled={!data.technique_category_id}
-            onChange={(e) => {
-              const id = e.target.value || null;
-              update.mutate({
-                default_workflow_template_id: id,
-                auto_apply_default_workflow: id !== null,
-              });
-            }}
-          >
-            <option value="">
-              {data.technique_category_id ? "기본 템플릿 없음" : "먼저 TECHNIQUE를 지정하세요"}
-            </option>
-            {(templatesForTechnique.data ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          {data.default_workflow_template_id && (
-            <span className="label-caps text-[11px] text-muted-foreground">✓ 세션에 추가 시 자동 적용됨</span>
-          )}
-        </div>
-        {data.default_workflow_template_id && (
-          <div className="mt-3 border-t border-dashed border-border pt-3">
-            <p className="mb-2 font-mono text-[11px] text-muted-foreground">
-              이 템플릿의 TASK 구성 — 여기서 수정하면 PRODUCTION에서 이 Component를 쓰는 모든 세션에
-              공통으로 반영됩니다(제작방법이 같은 다른 Component와도 공유됨).
-            </p>
-            <TemplateTaskEditor templateId={data.default_workflow_template_id} />
-          </div>
-        )}
-      </SectionCard>
 
       <SectionCard title="DESCRIPTION">
         <TextArea

@@ -1143,6 +1143,10 @@ export const dailyTasksQuery = () =>
 export interface DashboardComponentRow {
   id: string; // work_session_formula_versions.id
   multiplier: number;
+  /** 대기공간 표기용 — 생산 사이즈(몰드)·개수와 목표 중량 */
+  mouldId: string | null;
+  mouldQty: number | null;
+  targetQuantityG: number | null;
   formulaVersionId: string;
   slot: string | null;
   work_session_id: string;
@@ -1152,8 +1156,6 @@ export interface DashboardComponentRow {
   unmodifiedCopy: boolean;
   formulaId: string | null;
   componentId: string | null;
-  /** 컴포넌트의 기본 WORKFLOW TEMPLATE(자동 적용이 켜진 경우만) — 단계가 곧 작업 블록 단위가 된다 */
-  templateId: string | null;
   sessionStatus: string;
   order: {
     id: string;
@@ -1175,13 +1177,16 @@ export const dashboardComponentsQuery = () =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "id, multiplier, formula_version_id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name, default_workflow_template_id, auto_apply_default_workflow))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, least_liked_flavours, products(name), customers(name)))",
+            "id, multiplier, mould_id, mould_qty, target_quantity_g, formula_version_id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, least_liked_flavours, products(name), customers(name)))",
           )
           .eq("kind", "CORE")
           .order("sort_order", { ascending: true }),
       ) as unknown as {
         id: string;
         multiplier: number;
+        mould_id: string | null;
+        mould_qty: number | null;
+        target_quantity_g: number | null;
         formula_version_id: string;
         slot: string | null;
         work_session_id: string;
@@ -1195,8 +1200,6 @@ export const dashboardComponentsQuery = () =>
             components: {
               id: string;
               name: string;
-              default_workflow_template_id: string | null;
-              auto_apply_default_workflow: boolean;
             } | null;
           } | null;
         } | null;
@@ -1248,6 +1251,9 @@ export const dashboardComponentsQuery = () =>
         rows.push({
           id: r.id,
           multiplier: Number(r.multiplier),
+          mouldId: r.mould_id,
+          mouldQty: r.mould_qty != null ? Number(r.mould_qty) : null,
+          targetQuantityG: r.target_quantity_g != null ? Number(r.target_quantity_g) : null,
           formulaVersionId: r.formula_version_id,
           slot: r.slot,
           work_session_id: r.work_session_id,
@@ -1260,9 +1266,6 @@ export const dashboardComponentsQuery = () =>
             (r.formula_versions?.formula_version_ingredients ?? []).every(
               (i) => i.amount_source === "copied",
             ),
-          templateId: formula?.components?.auto_apply_default_workflow
-            ? (formula.components.default_workflow_template_id ?? null)
-            : null,
           sessionStatus: r.work_sessions?.status ?? "PLANNED",
           order: {
             id: order.id,
@@ -2449,72 +2452,6 @@ export const workSessionMultiplierHistoryQuery = (sessionId: string, selectionId
 
 /* ── WORKFLOW TEMPLATES (2026-09-23) — 제작방법(technique_category)별 표준 TASK 순서 ─── */
 
-export type WorkflowTemplate = import("@/integrations/supabase/types").Tables<"workflow_templates">;
-export type WorkflowTemplateTask =
-  import("@/integrations/supabase/types").Tables<"workflow_template_tasks">;
-
-/** 전체 템플릿 목록 (SETTINGS 관리 화면용) */
-export const workflowTemplatesQuery = () =>
-  queryOptions({
-    queryKey: ["workflow_templates"],
-    queryFn: async (): Promise<WorkflowTemplate[]> =>
-      unwrap(await supabase.from("workflow_templates").select("*").order("name")),
-  });
-
-/** 특정 제작방법(TECHNIQUE CATEGORY)에 속한 템플릿만 — PRODUCTION에서 "템플릿 불러오기"용 */
-export const workflowTemplatesByTechniqueQuery = (techniqueCategoryId: string | null) =>
-  queryOptions({
-    queryKey: ["workflow_templates_by_technique", techniqueCategoryId],
-    enabled: Boolean(techniqueCategoryId),
-    queryFn: async (): Promise<WorkflowTemplate[]> => {
-      if (!techniqueCategoryId) return [];
-      return unwrap(
-        await supabase
-          .from("workflow_templates")
-          .select("*")
-          .eq("technique_category_id", techniqueCategoryId)
-          .order("name"),
-      );
-    },
-  });
-
-export const workflowTemplateTasksQuery = (templateId: string | null) =>
-  queryOptions({
-    queryKey: ["workflow_template_tasks", templateId],
-    enabled: Boolean(templateId),
-    queryFn: async (): Promise<WorkflowTemplateTask[]> => {
-      if (!templateId) return [];
-      return unwrap(
-        await supabase
-          .from("workflow_template_tasks")
-          .select("*")
-          .eq("template_id", templateId)
-          .order("sort_order"),
-      );
-    },
-  });
-
-/** templateId → { taskId → [predecessor taskId, ...] } */
-export const workflowTemplateTaskPredecessorsQuery = (templateId: string | null) =>
-  queryOptions({
-    queryKey: ["workflow_template_task_predecessors", templateId],
-    enabled: Boolean(templateId),
-    queryFn: async (): Promise<Record<string, string[]>> => {
-      if (!templateId) return {};
-      const rows = unwrap(
-        await supabase
-          .from("workflow_template_task_predecessors")
-          .select("task_id, predecessor_task_id")
-          .eq("template_id", templateId),
-      );
-      const map: Record<string, string[]> = {};
-      for (const row of rows) {
-        (map[row.task_id] ??= []).push(row.predecessor_task_id);
-      }
-      return map;
-    },
-  });
-
 /* ── COMPONENT OBSERVATION (2026-09-30) — RND 삭제 후, PRODUCTION TASK LIST에서 기록한
  * 관찰값(work_session_tasks.observation_*)을 COMPONENT 단위로 모아 보여준다. 이 COMPONENT의
  * FORMULA로 진행된 모든 PRODUCTION 세션의 TASK 중 관찰값이 하나라도 있는 것만 대상. */
@@ -2659,19 +2596,6 @@ export const dietaryBuildsQuery = () =>
           .select("*, dietary_build_items(*), dietary_build_tags(*)")
           .order("created_at", { ascending: false }),
       ) as unknown as DietaryBuildFull[],
-  });
-
-/** 모든 WORKFLOW TEMPLATE의 단계(작업 블록 단위) — 대시보드가 템플릿 id로 묶어 쓴다. */
-export const workflowTemplateStepsQuery = () =>
-  queryOptions({
-    queryKey: ["workflow_template_steps_all"],
-    queryFn: async () =>
-      unwrap(
-        await supabase
-          .from("workflow_template_tasks")
-          .select("id, template_id, task_name, task_type, timer_minutes, sort_order")
-          .order("sort_order", { ascending: true }),
-      ),
   });
 
 /* ── 포뮬라 R&D 실험 (2026-11-06) ── */

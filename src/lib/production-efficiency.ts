@@ -61,10 +61,16 @@ export function stepUnitsProduced(
 export function stepMinutesPerUnit(
   task: Pick<Tables<"work_session_tasks">, "active_labour_minutes">,
   unitsProduced: number | null,
+  /** 작업시간을 직접 안 적었을 때 쓰는 Start→End 경과 분(2026-11-06) */
+  fallbackMinutes?: number | null,
 ): number | null {
-  if (task.active_labour_minutes == null) return null;
+  const minutes =
+    task.active_labour_minutes != null
+      ? Number(task.active_labour_minutes)
+      : (fallbackMinutes ?? null);
+  if (minutes == null) return null;
   if (unitsProduced == null || !(unitsProduced > 0)) return null;
-  return Number(task.active_labour_minutes) / unitsProduced;
+  return minutes / unitsProduced;
 }
 
 export interface StepSummary {
@@ -105,15 +111,17 @@ export function summarizeSessionEfficiency(
 ): SessionEfficiencySummary {
   const steps: StepSummary[] = tasks.map((task) => {
     const unitsProduced = stepUnitsProduced(task, gramsPerUnitByFormulaVersionId);
+    const elapsed = elapsedMinutesOf(task);
     return {
       taskId: task.id,
       taskName: task.task_name,
       taskType: task.task_type,
+      // 작업시간을 따로 입력하지 않으면 Start→End 경과 시간으로 대신한다.
       activeLabourMinutes:
-        task.active_labour_minutes != null ? Number(task.active_labour_minutes) : null,
-      elapsedMinutes: elapsedMinutesOf(task),
+        task.active_labour_minutes != null ? Number(task.active_labour_minutes) : elapsed,
+      elapsedMinutes: elapsed,
       unitsProduced,
-      minutesPerUnit: stepMinutesPerUnit(task, unitsProduced),
+      minutesPerUnit: stepMinutesPerUnit(task, unitsProduced, elapsed),
     };
   });
 
