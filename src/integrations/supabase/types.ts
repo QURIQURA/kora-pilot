@@ -3253,6 +3253,8 @@ export type Database = {
           multiplier: number;
           target_quantity_g: number | null;
           version_pinned: boolean;
+          parent_selection_id: string | null;
+          source_index: number | null;
           planner_task_id: string | null;
           slot: string | null;
           sort_order: number;
@@ -3274,6 +3276,8 @@ export type Database = {
           multiplier?: number;
           target_quantity_g?: number | null;
           version_pinned?: boolean;
+          parent_selection_id?: string | null;
+          source_index?: number | null;
           planner_task_id?: string | null;
           slot?: string | null;
           sort_order?: number;
@@ -3295,6 +3299,8 @@ export type Database = {
           multiplier?: number;
           target_quantity_g?: number | null;
           version_pinned?: boolean;
+          parent_selection_id?: string | null;
+          source_index?: number | null;
           planner_task_id?: string | null;
           slot?: string | null;
           sort_order?: number;

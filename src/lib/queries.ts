@@ -1194,6 +1194,7 @@ export const dashboardComponentsQuery = () =>
             "id, multiplier, mould_id, mould_qty, base_weight_id, base_weight_qty, target_quantity_g, formula_version_id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, least_liked_flavours, products(name), customers(name)))",
           )
           .eq("kind", "CORE")
+          .is("parent_selection_id", null)
           .order("sort_order", { ascending: true }),
       ) as unknown as {
         id: string;
@@ -1412,7 +1413,26 @@ export const workSessionFormulaVersionsQuery = (sessionId: string) =>
             "*, formula_versions(id, version_number, status, default_mould_id, default_base_weight_id, default_capacity_id, formulas(id, name, component_id, components(id, name, scaling_mode, default_workflow_template_id, auto_apply_default_workflow)))",
           )
           .eq("work_session_id", sessionId)
+          .is("parent_selection_id", null)
           .order("sort_order"),
+      ) as unknown as WorkSessionFormulaVersionRow[],
+  });
+
+/** 블렌드 포뮬라의 원본별 하위 선택 행(parent_selection_id가 있는 행) — WORK VIEW 매트릭스 전용 */
+export const workSessionChildSelectionsQuery = (sessionId: string) =>
+  queryOptions({
+    queryKey: ["work_session_child_selections", sessionId],
+    enabled: Boolean(sessionId),
+    queryFn: async (): Promise<WorkSessionFormulaVersionRow[]> =>
+      unwrap(
+        await supabase
+          .from("work_session_formula_versions")
+          .select(
+            "*, formula_versions(id, version_number, status, default_mould_id, default_base_weight_id, default_capacity_id, formulas(id, name, component_id, components(id, name, scaling_mode, default_workflow_template_id, auto_apply_default_workflow)))",
+          )
+          .eq("work_session_id", sessionId)
+          .not("parent_selection_id", "is", null)
+          .order("source_index"),
       ) as unknown as WorkSessionFormulaVersionRow[],
   });
 

@@ -55,6 +55,7 @@ export function SessionExperimentButton({ row }: { row: DashboardComponentRow })
       "formula_experiments",
       "work_session_tasks",
       "work_session_formula_versions",
+      "work_session_child_selections",
       "formulas",
     ])
       await queryClient.invalidateQueries({ queryKey: [key] });

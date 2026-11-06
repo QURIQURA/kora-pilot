@@ -10,6 +10,7 @@ export const PRODUCTION_SYNC_QUERY_KEYS = [
   "stock_candidates",
   "work_sessions",
   "work_session_formula_versions",
+  "work_session_child_selections",
   "dashboard_components",
   "work_blocks",
   "work_session_tasks",

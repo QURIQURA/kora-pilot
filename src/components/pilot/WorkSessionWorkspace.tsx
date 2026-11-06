@@ -33,6 +33,7 @@ import {
   techniqueCategoriesQuery,
   versionIngredientsBulkQuery,
   versionIngredientsQuery,
+  workSessionChildSelectionsQuery,
   workSessionFormulaVersionsQuery,
   workSessionMultiplierHistoryQuery,
   workSessionProgressQuery,
@@ -923,6 +924,9 @@ type WeighingColumn = {
   mouldQty?: number | null;
   /** 레시피 기본 몰드 — 몰드 개수가 비어 있을 때 배수에서 거꾸로 계산하는 데 사용 */
   baseMouldId?: string | null;
+  /** 블렌드(합성) 포뮬라의 원본별 하위 열 — 같은 groupKey(부모 선택 id)끼리 맨 위 제목 열로 묶는다 */
+  groupKey?: string;
+  groupLabel?: string;
 };
 
 const DEFAULT_MATRIX_COL_WIDTH = 150;
@@ -989,6 +993,16 @@ function WeighingView({
     const byId = new Map(columns.map((c) => [c.selectionId, c]));
     return columnOrder.map((id) => byId.get(id)).filter((c): c is WeighingColumn => Boolean(c));
   }, [columns, columnOrder]);
+
+  const headerGroups = useMemo(() => {
+    const out: { key: string | undefined; label: string; span: number }[] = [];
+    for (const c of displayColumns) {
+      const last = out[out.length - 1];
+      if (last && c.groupKey && last.key === c.groupKey) last.span += 1;
+      else out.push({ key: c.groupKey, label: c.groupLabel ?? "", span: 1 });
+    }
+    return out;
+  }, [displayColumns]);
 
   const displayGroups = useMemo(() => {
     const byId = new Map(groups.map((g) => [g.ingredientId, g]));
@@ -1121,20 +1135,45 @@ function WeighingView({
           onDragEnd={handleColumnDragEnd}
         >
           <thead>
+            {headerGroups.some((g) => g.key) && (
+              <tr>
+                <th
+                  rowSpan={2}
+                  className="label-caps sticky left-0 top-0 z-30 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground"
+                >
+                  INGREDIENT
+                </th>
+                {headerGroups.map((g, gi) => (
+                  <th
+                    key={`${g.key ?? "single"}-${gi}`}
+                    colSpan={g.span}
+                    className={cn(
+                      "sticky top-0 z-20 h-7 border-b border-l border-border bg-secondary px-3 text-left text-[11px]",
+                      g.key && "label-caps text-foreground",
+                    )}
+                  >
+                    {g.key ? `🔗 ${g.label} · BLEND ${g.span}` : ""}
+                  </th>
+                ))}
+                <th className="sticky top-0 z-20 h-7 border-b border-l border-border bg-secondary" />
+              </tr>
+            )}
             <tr>
-              <th className="label-caps sticky left-0 top-0 z-30 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
-                INGREDIENT
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    startIngredientColResize(e.clientX);
-                  }}
-                />
-              </th>
+              {!headerGroups.some((g) => g.key) && (
+                <th className="label-caps sticky left-0 top-0 z-30 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
+                  INGREDIENT
+                  <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      startIngredientColResize(e.clientX);
+                    }}
+                  />
+                </th>
+              )}
               <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
                 {displayColumns.map((col) => (
                   <MatrixColumnHeader
@@ -1145,9 +1184,10 @@ function WeighingView({
                     versionId={col.formulaVersionId}
                     multiplier={col.multiplier}
                     rnd={rndVersionIds.has(col.formulaVersionId)}
+                    stickyTop={headerGroups.some((g) => g.key) ? 28 : 0}
                     onResizeStart={(clientX) => startColumnResize(col.selectionId, clientX)}
                     onEdit={
-                      !onEditColumn || (col.members && col.members.length > 1)
+                      !onEditColumn || col.groupKey || (col.members && col.members.length > 1)
                         ? undefined
                         : () => onEditColumn(col)
                     }
@@ -1254,10 +1294,13 @@ function MatrixColumnHeader({
   versionId,
   multiplier,
   rnd,
+  stickyTop = 0,
   onResizeStart,
   onEdit,
 }: {
   id: string;
+  /** 위에 묶음 제목 행이 있으면 그 높이만큼 아래에 고정 */
+  stickyTop?: number;
   formulaName: string;
   formulaId: string;
   versionId: string;
@@ -1273,9 +1316,9 @@ function MatrixColumnHeader({
   return (
     <th
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Transform.toString(transform), transition, top: stickyTop }}
       className={cn(
-        "sticky top-0 z-20 relative border-b border-l border-border bg-secondary px-3 py-2 text-left align-bottom",
+        "sticky z-20 relative border-b border-l border-border bg-secondary px-3 py-2 text-left align-bottom",
         rnd && "!bg-[#DCF0C8]",
         isDragging && "z-40 bg-secondary",
       )}
@@ -3022,6 +3065,21 @@ export function DayWorkView({
   const progressQs = useQueries({
     queries: sessionIds.map((sid) => workSessionProgressQuery(sid)),
   });
+  const childQs = useQueries({
+    queries: sessionIds.map((sid) => workSessionChildSelectionsQuery(sid)),
+  });
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, WorkSessionFormulaVersionRow[]>();
+    for (const q of childQs)
+      for (const c of q.data ?? []) {
+        if (!c.parent_selection_id) continue;
+        const list = map.get(c.parent_selection_id) ?? [];
+        list.push(c);
+        map.set(c.parent_selection_id, list);
+      }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childQs.map((q) => q.dataUpdatedAt).join(",")]);
 
   const rowsById = useMemo(() => {
     const map = new Map<string, { row: WorkSessionFormulaVersionRow; sessionId: string }>();
@@ -3041,8 +3099,13 @@ export function DayWorkView({
     [items, rowsById],
   );
   const versionIds = useMemo(
-    () => [...new Set(ordered.map((o) => o.row.formula_version_id))],
-    [ordered],
+    () => [
+      ...new Set([
+        ...ordered.map((o) => o.row.formula_version_id),
+        ...[...childrenByParent.values()].flat().map((c) => c.formula_version_id),
+      ]),
+    ],
+    [ordered, childrenByParent],
   );
   const ingredients = useQuery(versionIngredientsBulkQuery(versionIds));
   const ingredientsByVersion = useMemo(() => ingredients.data ?? {}, [ingredients.data]);
@@ -3070,31 +3133,59 @@ export function DayWorkView({
   );
   const columns: WeighingColumn[] = useMemo(
     () =>
-      quantityGroups.map((group, idx) => {
+      quantityGroups.flatMap((group, idx): WeighingColumn[] => {
         const r = group.members[0]!;
-        return {
-          selectionId: r.id,
-          formulaVersionId: r.formula_version_id,
-          formulaId: r.formula_versions.formulas.id,
-          formulaName: `${r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name}${group.members.length > 1 ? ` · MERGED ${group.members.length}` : ""}`,
-          versionNumber: r.formula_versions.version_number,
-          multiplier: group.multiplier,
-          sortOrder: idx,
-          sessionId: r.sessionId,
-          slot: r.slot ?? null,
-          mouldId: r.mould_id ?? null,
-          baseMouldId: r.formula_versions.default_mould_id ?? null,
-          mouldQty: group.members.every((m) => m.mould_id === r.mould_id && m.mould_qty != null)
-            ? group.members.reduce((sum, m) => sum + Number(m.mould_qty), 0)
-            : null,
-          members: group.members.map((m) => ({
-            selectionId: m.id,
-            sessionId: m.sessionId,
-            label: labels[m.id] ?? m.sessionId.slice(0, 8),
-          })),
-        };
+        const kids = group.members.length === 1 ? (childrenByParent.get(r.id) ?? []) : [];
+        if (kids.length > 0) {
+          const parentName =
+            r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name;
+          return kids.map((k, ki) => ({
+            selectionId: k.id,
+            formulaVersionId: k.formula_version_id,
+            formulaId: k.formula_versions.formulas.id,
+            formulaName:
+              k.formula_versions.formulas.components?.name ?? k.formula_versions.formulas.name,
+            versionNumber: k.formula_versions.version_number,
+            multiplier: Number(k.multiplier),
+            sortOrder: idx + ki / 100,
+            sessionId: r.sessionId,
+            slot: r.slot ?? null,
+            groupKey: r.id,
+            groupLabel: parentName,
+            members: [
+              {
+                selectionId: k.id,
+                sessionId: r.sessionId,
+                label: labels[r.id] ?? r.sessionId.slice(0, 8),
+              },
+            ],
+          }));
+        }
+        return [
+          {
+            selectionId: r.id,
+            formulaVersionId: r.formula_version_id,
+            formulaId: r.formula_versions.formulas.id,
+            formulaName: `${r.formula_versions.formulas.components?.name ?? r.formula_versions.formulas.name}${group.members.length > 1 ? ` · MERGED ${group.members.length}` : ""}`,
+            versionNumber: r.formula_versions.version_number,
+            multiplier: group.multiplier,
+            sortOrder: idx,
+            sessionId: r.sessionId,
+            slot: r.slot ?? null,
+            mouldId: r.mould_id ?? null,
+            baseMouldId: r.formula_versions.default_mould_id ?? null,
+            mouldQty: group.members.every((m) => m.mould_id === r.mould_id && m.mould_qty != null)
+              ? group.members.reduce((sum, m) => sum + Number(m.mould_qty), 0)
+              : null,
+            members: group.members.map((m) => ({
+              selectionId: m.id,
+              sessionId: m.sessionId,
+              label: labels[m.id] ?? m.sessionId.slice(0, 8),
+            })),
+          },
+        ];
       }),
-    [quantityGroups],
+    [quantityGroups, childrenByParent, labels],
   );
   const groups = useMemo(
     () =>

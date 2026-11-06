@@ -610,7 +610,8 @@ function OrderDetailPage() {
         const { data: rows, error: rowsError } = await supabase
           .from("work_session_formula_versions")
           .select("formula_version_id, formula_versions(formulas(component_id))")
-          .eq("work_session_id", workSession.data.id);
+          .eq("work_session_id", workSession.data.id)
+          .is("parent_selection_id", null);
         if (rowsError) throw rowsError;
         const elements = (rows ?? [])
           .map((r) => ({
