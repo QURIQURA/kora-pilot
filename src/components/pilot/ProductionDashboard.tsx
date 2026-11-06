@@ -1055,11 +1055,13 @@ export function ProductionDashboard() {
                             e.dataTransfer.effectAllowed = "move";
                           }}
                           onClick={() => {
+                            // 배정된 컴포넌트는 그 블록을 바로 선택해서 날짜·시간 수정 패널이 뜨게 한다.
                             if (isElsewhere) {
+                              setSelectedId(elsewhere[0]!.id);
                               setDate(elsewhere[0]!.block_date);
                               return;
                             }
-                            setSelectedId(null);
+                            setSelectedId(isPlaced ? placed[0]!.id : null);
                             setFocusRowId(r.id);
                           }}
                           className={cn(
