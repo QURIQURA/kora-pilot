@@ -51,7 +51,7 @@ import {
   rescaleProductionSelections,
 } from "@/lib/production-quantity";
 import { resolveSlotGroup } from "@/lib/technique";
-import { mouldAbbr } from "@/lib/component-size";
+import { mouldAbbr, mouldQty } from "@/lib/component-size";
 import { AdjustInput, ScaleAllPanel } from "@/components/pilot/RecipeScaleControls";
 import { round2, type ScaleMode } from "@/lib/recipe-scale";
 import { ExperimentCard } from "@/components/pilot/FormulaExperimentsTab";
@@ -917,6 +917,12 @@ type WeighingColumn = {
   /** 여러 세션을 한 표에 합칠 때(대시보드 DayWorkView) 이 열이 속한 세션 */
   sessionId?: string;
   members?: { selectionId: string; sessionId: string; label?: string }[];
+  /** Pastry Base(SHEET) — 적용 몰드와 개수(합쳐진 열이면 같은 몰드끼리 합산) */
+  slot?: string | null;
+  mouldId?: string | null;
+  mouldQty?: number | null;
+  /** 레시피 기본 몰드 — 몰드 개수가 비어 있을 때 배수에서 거꾸로 계산하는 데 사용 */
+  baseMouldId?: string | null;
 };
 
 const DEFAULT_MATRIX_COL_WIDTH = 150;
@@ -947,6 +953,8 @@ function WeighingView({
   onProgressChanged: () => void;
   onEditColumn?: (column: WeighingColumn) => void;
 }) {
+  const mouldsForTotal = useQuery(mouldsQuery());
+  const mouldById = new Map((mouldsForTotal.data ?? []).map((m) => [m.id, m]));
   const rndExperiments = useQuery(formulaExperimentsQuery());
   const rndVersionIds = new Set(
     (rndExperiments.data ?? []).filter((x) => x.status === "OPEN").map((x) => x.version_id),
@@ -1173,6 +1181,40 @@ function WeighingView({
           </SortableContext>
         </DndContext>
         <tfoot>
+          {displayColumns.some((c) => c.slot === "SHEET" && c.mouldId) && (
+            <tr>
+              <th className="label-caps sticky left-0 z-10 border-t border-r border-border bg-secondary px-3 py-1 text-right text-[11px] text-muted-foreground">
+                MOULD
+              </th>
+              {displayColumns.map((col) => {
+                const m = col.slot === "SHEET" && col.mouldId ? mouldById.get(col.mouldId) : null;
+                const refG = m?.reference_weight_g != null ? Number(m.reference_weight_g) : null;
+                const baseM = col.baseMouldId ? mouldById.get(col.baseMouldId) : null;
+                const qty =
+                  col.mouldQty ?? (m && baseM ? mouldQty(col.multiplier, baseM, m) : null);
+                return (
+                  <td
+                    key={col.selectionId}
+                    className="border-t border-l border-border bg-secondary px-2 py-1 text-left font-mono text-[11px] tabular-nums text-muted-foreground"
+                  >
+                    {m ? (
+                      <>
+                        {mouldAbbr(m)}
+                        {refG != null && ` (${fmtNumber(refG, 0)}g)`}
+                        {qty != null && ` ×${fmtNumber(qty, 2)}`}
+                        {refG != null && qty != null && (
+                          <span className="block text-[10px]">≈ {fmtNumber(refG * qty, 0)}g</span>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                );
+              })}
+              <td className="border-t border-l border-border bg-secondary" />
+            </tr>
+          )}
           <tr>
             <th className="label-caps sticky left-0 bottom-0 z-10 border-t border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
               TOTAL
@@ -2262,6 +2304,34 @@ function EditFormulaVersionModal({
                 />
               )}
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="label-caps text-[11px] text-muted-foreground">연동/고정</span>
+              <button
+                type="button"
+                className={`${buttonClass} !h-7 !min-h-0 px-2 text-[11px]`}
+                onClick={() =>
+                  setLockedKeys(
+                    new Set(visibleRows.filter((r) => r.key !== anchorKey).map((r) => r.key)),
+                  )
+                }
+              >
+                🔒 전체 고정
+              </button>
+              <button
+                type="button"
+                className={`${buttonClass} !h-7 !min-h-0 px-2 text-[11px]`}
+                onClick={() => setLockedKeys(new Set())}
+              >
+                🔗 전체 해제(연동)
+              </button>
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {lockedKeys.size > 0 ? `${lockedKeys.size}개 고정 중` : "모두 연동 중"}
+              </span>
+            </div>
+            <p className="font-mono text-[10px] leading-snug text-muted-foreground">
+              ⚓ 앵커(기준 재료) — +1/−1의 기준이 되는 재료 · 🔗 연동 — 기준 개수 비율대로 같이 바뀜
+              · 🔒 고정 — 기준을 바꿔도 이 양은 그대로
+            </p>
             <p className="font-mono text-[11px] text-muted-foreground">
               {anchorRow
                 ? anchorCount != null
@@ -2718,6 +2788,12 @@ export function DayWorkView({
           multiplier: group.multiplier,
           sortOrder: idx,
           sessionId: r.sessionId,
+          slot: r.slot ?? null,
+          mouldId: r.mould_id ?? null,
+          baseMouldId: r.formula_versions.default_mould_id ?? null,
+          mouldQty: group.members.every((m) => m.mould_id === r.mould_id && m.mould_qty != null)
+            ? group.members.reduce((sum, m) => sum + Number(m.mould_qty), 0)
+            : null,
           members: group.members.map((m) => ({
             selectionId: m.id,
             sessionId: m.sessionId,
