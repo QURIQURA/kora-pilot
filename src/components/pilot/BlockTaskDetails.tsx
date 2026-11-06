@@ -498,13 +498,18 @@ export function BlockTimerChip({
   return (
     <>
       {timers.map((t, idx) => {
-        const tag = timers.length > 1 ? `${idx + 1}` : "";
+        // 타이머마다 "1. 머랭휘핑: 13분" / "2. Oven: 진행중 0:23" 형식으로 이름과 시간을 함께 표기한다.
+        const tag = timers.length > 1 ? `${idx + 1}.` : "";
+        const name = t.label ? (
+          <span className="max-w-[7rem] truncate opacity-80">{t.label}:</span>
+        ) : null;
         if (t.started_at && !t.done_at) {
           return (
             <span key={t.id} className="flex shrink-0 items-center gap-1" title={t.label}>
               {tag && <span className="font-mono text-[10px] opacity-70">{tag}</span>}
+              {name && <span className="font-mono text-[11px]">{name}</span>}
               <span className="font-mono text-[11px] font-medium tabular-nums">
-                {formatDuration(timerElapsedSec(t, now))}
+                진행중 {formatDuration(timerElapsedSec(t, now))}
               </span>
               <button
                 type="button"
@@ -524,9 +529,14 @@ export function BlockTimerChip({
         }
         if (t.started_at && t.done_at) {
           return (
-            <span key={t.id} className="shrink-0 font-mono text-[11px]" title={t.label}>
-              {tag && <span className="opacity-70">{tag} </span>}✓{" "}
-              {Math.max(1, Math.round(minutesBetween(t.started_at, t.done_at)))}분
+            <span
+              key={t.id}
+              className="flex shrink-0 items-center gap-1 font-mono text-[11px]"
+              title={t.label}
+            >
+              {tag && <span className="opacity-70">{tag}</span>}
+              {name}
+              <span>✓ {Math.max(1, Math.round(minutesBetween(t.started_at, t.done_at)))}분</span>
             </span>
           );
         }
@@ -557,7 +567,8 @@ export function BlockTimerChip({
               }
             }}
           >
-            {tag}▶
+            {tag}
+            {t.label ? `${t.label} ` : ""}▶
           </button>
         );
       })}
