@@ -50,6 +50,7 @@ import {
   rescaleProductionSelections,
 } from "@/lib/production-quantity";
 import { resolveSlotGroup } from "@/lib/technique";
+import { mouldAbbr } from "@/lib/component-size";
 import { fmtNumber, toGrams, versionLabel, UNITS, type Mould } from "@/lib/formula";
 import { formatProductSizeLabel } from "@/lib/product-size";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
@@ -680,6 +681,21 @@ export function AddFormulaVersionForm({
   );
   const selectedVersion = versionOptions.find((v) => v.id === versionId) ?? null;
   const scalingMode = formula?.components?.scaling_mode ?? null;
+  // 2026-11-06: 배수를 정할 때 기준이 되도록 이 버전의 ×1 총 중량과(SHEET면) 기본 몰드·기준중량을 보여준다.
+  const baseIngredients = useQuery(versionIngredientsQuery(versionId || null));
+  const allMoulds = useQuery(mouldsQuery());
+  const baseTotal = (baseIngredients.data ?? []).reduce(
+    (sum, row) => sum + (toGrams(Number(row.amount), row.unit) ?? 0),
+    0,
+  );
+  const hasNonWeight = (baseIngredients.data ?? []).some(
+    (row) => toGrams(Number(row.amount), row.unit) == null,
+  );
+  const baseMould =
+    (slot === "SHEET" || scalingMode === "MOULD") && selectedVersion?.default_mould_id
+      ? ((allMoulds.data ?? []).find((m) => m.id === selectedVersion.default_mould_id) ?? null)
+      : null;
+  const multiplierNum = Number(planMultiplier);
 
   const add = useMutation({
     mutationFn: async () => {
@@ -775,6 +791,40 @@ export function AddFormulaVersionForm({
           </select>
         </Field>
       </div>
+      {versionId && (
+        <div className="space-y-0.5 border border-border bg-muted/30 px-3 py-2 font-mono text-xs">
+          {baseIngredients.isLoading ? (
+            <p className="text-muted-foreground">기본 레시피 불러오는 중…</p>
+          ) : (
+            <>
+              <p>
+                기본 레시피 ×1 = <b className="text-sm">{fmtNumber(baseTotal, 0)}g</b>
+                {hasNonWeight && (
+                  <span className="text-muted-foreground"> (g로 환산 안 되는 재료 제외)</span>
+                )}
+                {Number.isFinite(multiplierNum) && multiplierNum > 0 && multiplierNum !== 1 && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    → ×{fmtNumber(multiplierNum, 2)} = {fmtNumber(baseTotal * multiplierNum, 0)}g
+                  </span>
+                )}
+              </p>
+              {baseMould ? (
+                <p>
+                  기본 몰드 {mouldAbbr(baseMould)}
+                  {baseMould.reference_weight_g != null
+                    ? ` · 몰드 1개 기준중량 ${fmtNumber(Number(baseMould.reference_weight_g), 0)}g (이 레시피 ×1 = 몰드 1개분)`
+                    : " · 기준중량 미설정"}
+                </p>
+              ) : (
+                slot === "SHEET" && (
+                  <p className="text-muted-foreground">이 버전에 기본 몰드가 지정돼 있지 않아요</p>
+                )
+              )}
+            </>
+          )}
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
         이 주문의 계획으로 저장합니다. 다른 화면에는 같은 계획이 표시됩니다.
       </p>
