@@ -34,6 +34,12 @@ function timeValue(iso: string | null): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const nowHm = () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const numOrNull = (v: string) => (v.trim() ? Number(v) : null);
 
 /** 타이머 목록 저장 — 레거시 timer_minutes는 첫 타이머로 옮겨졌으므로 비운다. */
@@ -216,6 +222,17 @@ export function BlockTaskDetails({
                   void setTime("actual_started_at", e.target.value);
               }}
             />
+            <button
+              type="button"
+              title="현재 시각 적용"
+              className={`${buttonClass} !min-h-[28px] px-1.5 text-[11px]`}
+              onClick={(e) => {
+                e.preventDefault();
+                void setTime("actual_started_at", nowHm());
+              }}
+            >
+              지금
+            </button>
             <span className="text-muted-foreground">→</span>
             <input
               key={`e-${k}`}
@@ -227,9 +244,39 @@ export function BlockTaskDetails({
                   void setTime("completed_at", e.target.value);
               }}
             />
+            <button
+              type="button"
+              title="현재 시각 적용"
+              className={`${buttonClass} !min-h-[28px] px-1.5 text-[11px]`}
+              onClick={(e) => {
+                e.preventDefault();
+                void setTime("completed_at", nowHm());
+              }}
+            >
+              지금
+            </button>
             {doneMinutes !== null && doneMinutes > 0 && (
               <span className="text-xs text-muted-foreground">· {Math.round(doneMinutes)} MIN</span>
             )}
+          </span>
+        </label>
+
+        {/* 반죽 높이 */}
+        <label className="space-y-1">
+          <span className="label-caps block text-[11px] text-muted-foreground">반죽 높이</span>
+          <span className="flex items-center gap-1">
+            <input
+              key={`bh-${k}`}
+              type="number"
+              step="0.5"
+              className={`${smallInput} w-20`}
+              defaultValue={task.batter_height_mm ?? ""}
+              onBlur={(e) => {
+                const v = numOrNull(e.target.value);
+                if (v !== task.batter_height_mm) void update({ batter_height_mm: v }, "반죽 높이");
+              }}
+            />
+            <span className="text-xs text-muted-foreground">mm</span>
           </span>
         </label>
 
@@ -319,7 +366,7 @@ export function BlockTaskDetails({
 
       {/* 체크리스트 */}
       <label className="block space-y-1">
-        <span className="label-caps text-[11px] text-muted-foreground">메모 · 반죽 높이 등</span>
+        <span className="label-caps text-[11px] text-muted-foreground">메모</span>
         <textarea
           key={`note-${k}`}
           className="min-h-16 w-full border border-border bg-background p-2 text-xs"

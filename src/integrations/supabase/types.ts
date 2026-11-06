@@ -3528,6 +3528,7 @@ export type Database = {
           task_type: string | null;
           timer_minutes: number | null;
           timers: Json;
+          batter_height_mm: number | null;
           updated_at: string;
           user_id: string;
           work_session_id: string;
@@ -3559,6 +3560,7 @@ export type Database = {
           task_type?: string | null;
           timer_minutes?: number | null;
           timers?: Json;
+          batter_height_mm?: number | null;
           updated_at?: string;
           user_id: string;
           work_session_id: string;
@@ -3590,6 +3592,7 @@ export type Database = {
           task_type?: string | null;
           timer_minutes?: number | null;
           timers?: Json;
+          batter_height_mm?: number | null;
           updated_at?: string;
           user_id?: string;
           work_session_id?: string;
