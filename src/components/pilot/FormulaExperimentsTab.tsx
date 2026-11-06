@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   formulaExperimentsQuery,
@@ -145,6 +145,28 @@ export function FormulaExperimentsTab({ formulas }: { formulas: FormulaListRow[]
   );
 }
 
+/** 그 버전으로 진행한 생산 TASK에 기록된 가장 최근 반죽 높이·구움 높이(mm) */
+const sessionHeightsQuery = (versionId: string | null) =>
+  queryOptions({
+    queryKey: ["session_heights", versionId],
+    enabled: Boolean(versionId),
+    queryFn: async (): Promise<{ batter: number | null; baked: number | null }> => {
+      if (!versionId) return { batter: null, baked: null };
+      const { data, error } = await supabase
+        .from("work_session_tasks")
+        .select("batter_height_mm, observation_height_end_mm, updated_at")
+        .eq("formula_version_id", versionId)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      const rows = data ?? [];
+      const pick = (f: "batter_height_mm" | "observation_height_end_mm") => {
+        const r = rows.find((x) => x[f] != null);
+        return r ? Number(r[f]) : null;
+      };
+      return { batter: pick("batter_height_mm"), baked: pick("observation_height_end_mm") };
+    },
+  });
+
 function ExperimentCard({ experiment: e }: { experiment: FormulaExperimentRow }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +175,8 @@ function ExperimentCard({ experiment: e }: { experiment: FormulaExperimentRow })
     e.result_height_mm != null ? String(Number(e.result_height_mm) / 10) : "",
   );
   const [notes, setNotes] = useState(e.result_notes ?? "");
+  const trialHeights = useQuery(sessionHeightsQuery(e.version_id));
+  const baseHeights = useQuery(sessionHeightsQuery(e.base_version_id));
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["formula_experiments"] });
@@ -254,6 +278,45 @@ function ExperimentCard({ experiment: e }: { experiment: FormulaExperimentRow })
           <p className="mt-1 font-mono text-[11px] text-muted-foreground">
             그 외 재료 {unchanged}개 변경 없음
           </p>
+        )}
+      </div>
+
+      <div className="border-t border-border px-3 py-2">
+        <p className="label-caps mb-1 text-[11px] text-muted-foreground">
+          생산 기록 높이 (반죽 → 구움, 세션 디테일에서 입력한 값)
+        </p>
+        <table className="w-full font-mono text-[11px]">
+          <tbody>
+            {(
+              [
+                ["기준 버전", baseHeights.data],
+                ["이 실험", trialHeights.data],
+              ] as const
+            ).map(([label, h]) => (
+              <tr key={label}>
+                <td className="w-24 py-0.5 text-muted-foreground">{label}</td>
+                <td>{h?.batter != null ? `반죽 ${h.batter}mm` : "반죽 —"}</td>
+                <td>{h?.baked != null ? `구움 ${h.baked}mm` : "구움 —"}</td>
+                <td>
+                  {h?.batter != null && h.baked != null && h.batter > 0
+                    ? `×${Math.round((h.baked / h.batter) * 100) / 100}`
+                    : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {trialHeights.data?.baked != null && e.result_height_mm == null && (
+          <button
+            type="button"
+            className={`${buttonClass} mt-1 text-[11px]`}
+            onClick={() => {
+              setHeight(String((trialHeights.data?.baked ?? 0) / 10));
+              setTimeout(() => saveResult.mutate(), 0);
+            }}
+          >
+            구움 {trialHeights.data.baked}mm를 결과로 가져오기
+          </button>
         )}
       </div>
 
