@@ -75,7 +75,6 @@ export function BlockTaskDetails({
   const tasks = useQuery(workSessionTasksQuery(sessionId));
   const typeDefs = useQuery(taskTypeDefinitionsQuery());
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => new Date());
   const creating = useRef<string | null>(null);
 
   const task: WorkSessionTask | undefined = (tasks.data ?? []).find(
@@ -130,16 +129,6 @@ export function BlockTaskDetails({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block.id, block.work_session_task_id, tasks.isLoading]);
 
-  const running = task?.status === "IN_PROGRESS";
-  const timersRunning = (task?.timers as unknown[] | undefined)?.some(
-    (t) => (t as TaskTimer).started_at && !(t as TaskTimer).done_at,
-  );
-  useEffect(() => {
-    if (!running && !timersRunning) return;
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, [running, timersRunning]);
-
   if (!task) {
     return (
       <p className="border border-border p-3 font-mono text-xs text-muted-foreground">
@@ -168,17 +157,6 @@ export function BlockTaskDetails({
   const observationOverrides: Record<string, boolean> = {};
   for (const d of typeDefs.data ?? []) observationOverrides[d.key] = d.has_observation_fields;
 
-  const start = async () => {
-    const iso = new Date().toISOString();
-    await update({ status: "IN_PROGRESS", actual_started_at: iso, completed_at: null }, "START");
-    await onStarted?.(sessionId, iso);
-    await onRetime?.(block, iso);
-  };
-  const complete = () =>
-    update({ status: "DONE", completed_at: new Date().toISOString() }, "COMPLETE");
-  const reset = () =>
-    update({ status: "NOT_STARTED", actual_started_at: null, completed_at: null }, "UNDO");
-
   const setTime = async (field: "actual_started_at" | "completed_at", value: string) => {
     const iso = value ? localDateTimeToISO(block.block_date, value) : null;
     await update({ [field]: iso }, "시간");
@@ -189,9 +167,6 @@ export function BlockTaskDetails({
   };
 
   const timers = readTimers(task);
-  const taskElapsedSec = task.actual_started_at
-    ? (now.getTime() - new Date(task.actual_started_at).getTime()) / 1000
-    : 0;
   const saveTimerList = async (next: TaskTimer[]) => {
     const e = await saveTimers(task, next);
     setError(e ? `타이머 저장 실패 — ${e.message}` : null);
@@ -199,11 +174,6 @@ export function BlockTaskDetails({
   };
   const patchTimer = (id: string, patch: Partial<TaskTimer>) =>
     saveTimerList(timers.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  const startTimer = async (id: string) => {
-    const iso = new Date().toISOString();
-    await patchTimer(id, { started_at: iso, done_at: null });
-    if (task.status === "NOT_STARTED") await start();
-  };
   const doneMinutes =
     task.actual_started_at && task.completed_at
       ? minutesBetween(task.actual_started_at, task.completed_at)
@@ -220,39 +190,22 @@ export function BlockTaskDetails({
         <p className="border border-destructive px-2 py-1 text-xs text-destructive">{error}</p>
       )}
 
-      {/* 진행 — START(타이머) / COMPLETE */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="label-caps border border-border px-2 py-1 text-[11px]">
-          {task.status === "IN_PROGRESS" ? "ACTIVE" : task.status === "DONE" ? "DONE" : "READY"}
-        </span>
-        {task.status === "NOT_STARTED" && (
-          <button type="button" className={primaryButtonClass} onClick={() => void start()}>
-            ▶ START
-          </button>
-        )}
-        {running && (
-          <>
-            <span className="font-mono text-sm tabular-nums">{formatDuration(taskElapsedSec)}</span>
-            <span className="font-mono text-[11px] text-muted-foreground">
-              시작 {formatTime(task.actual_started_at!)}
-            </span>
-            <button type="button" className={primaryButtonClass} onClick={() => void complete()}>
-              ■ COMPLETE
-            </button>
-          </>
-        )}
-        {task.status === "DONE" && (
-          <button type="button" className={buttonClass} onClick={() => void reset()}>
-            되돌리기
-          </button>
-        )}
-      </div>
-
       <div className="grid gap-3 md:grid-cols-2">
         {/* 시간 */}
         <label className="space-y-1">
           <span className="label-caps block text-[11px] text-muted-foreground">Start → End</span>
           <span className="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              title="타이머 추가"
+              className={`${buttonClass} !min-h-[28px] !w-7 px-0 text-sm leading-none`}
+              onClick={(e) => {
+                e.preventDefault();
+                void saveTimerList([...timers, newTimer()]);
+              }}
+            >
+              +
+            </button>
             <input
               key={`s-${k}`}
               type="time"
@@ -319,27 +272,30 @@ export function BlockTaskDetails({
         )}
       </div>
 
-      {/* 타이머 — 기본 1개, 추가 가능, 타이머마다 메모 */}
+      {/* 타이머 기록 — 시작/종료는 왼쪽 타임라인에서, 여기는 표기·메모용 */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="label-caps text-[11px] text-muted-foreground">타이머</span>
-          <button
-            type="button"
-            className={`${buttonClass} !min-h-[24px] px-1.5 text-[11px]`}
-            onClick={() => void saveTimerList([...timers, newTimer()])}
-          >
-            + 타이머 추가
-          </button>
-        </div>
-        {timers.map((t) => {
-          const isRunning = Boolean(t.started_at && !t.done_at);
-          const isDone = Boolean(t.started_at && t.done_at);
-          const remain = t.minutes != null ? t.minutes * 60 - timerElapsedSec(t, now) : null;
+        {timers.map((t, idx) => {
+          const spent =
+            t.started_at && t.done_at
+              ? Math.max(1, Math.round(minutesBetween(t.started_at, t.done_at)))
+              : null;
           return (
-            <div key={`${t.id}-${k}`} className="flex flex-wrap items-center gap-1.5">
+            <div
+              key={`${t.id}-${k}`}
+              className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+            >
+              <span className="w-4 font-mono text-[11px] text-muted-foreground">{idx + 1}</span>
+              <span className="w-28 font-mono tabular-nums">
+                {t.started_at ? formatTime(t.started_at) : "--:--"}
+                {" – "}
+                {t.done_at ? formatTime(t.done_at) : t.started_at ? "진행 중" : "--:--"}
+              </span>
+              <span className="w-12 font-mono tabular-nums">
+                {spent != null ? `${spent}분` : "—"}
+              </span>
               <input
                 className={`${smallInput} min-w-0 flex-1 basis-32`}
-                placeholder="무슨 타이머? (메모)"
+                placeholder="메모 (무슨 타이머?)"
                 defaultValue={t.label}
                 onBlur={(e) => {
                   if (e.target.value.trim() !== t.label)
@@ -348,58 +304,16 @@ export function BlockTaskDetails({
               />
               <input
                 type="number"
-                className={`${smallInput} w-16`}
-                placeholder="분"
-                disabled={isRunning}
+                className={`${smallInput} w-14`}
+                placeholder="목표분"
+                title="타임라인 카운트다운 길이(분)"
+                disabled={Boolean(t.started_at && !t.done_at)}
                 defaultValue={t.minutes ?? ""}
                 onBlur={(e) => {
                   const v = numOrNull(e.target.value);
                   if (v !== t.minutes) void patchTimer(t.id, { minutes: v });
                 }}
               />
-              <span className="text-xs text-muted-foreground">분</span>
-              {!t.started_at && (
-                <button
-                  type="button"
-                  className={`${buttonClass} !min-h-[28px] px-2 text-xs`}
-                  onClick={() => void startTimer(t.id)}
-                >
-                  ▶
-                </button>
-              )}
-              {isRunning && (
-                <>
-                  <span className="w-20 font-mono text-sm tabular-nums">
-                    {remain !== null
-                      ? remain > 0
-                        ? formatDuration(remain)
-                        : `+${formatDuration(Math.abs(remain))}`
-                      : formatDuration(timerElapsedSec(t, now))}
-                  </span>
-                  <button
-                    type="button"
-                    className={`${primaryButtonClass} !min-h-[28px] px-2 text-xs`}
-                    onClick={() => void patchTimer(t.id, { done_at: new Date().toISOString() })}
-                  >
-                    ■
-                  </button>
-                </>
-              )}
-              {isDone && (
-                <>
-                  <span className="w-20 font-mono text-xs">
-                    ✓ {Math.max(1, Math.round(minutesBetween(t.started_at!, t.done_at!)))}분
-                  </span>
-                  <button
-                    type="button"
-                    className={`${buttonClass} !min-h-[28px] px-2 text-xs`}
-                    title="다시 하기"
-                    onClick={() => void patchTimer(t.id, { started_at: null, done_at: null })}
-                  >
-                    ↺
-                  </button>
-                </>
-              )}
               {timers.length > 1 && (
                 <button
                   type="button"
@@ -529,15 +443,16 @@ export function BlockTimerChip({
     ) : null;
   }
 
-  const nextIdle = timers.find((t) => !t.started_at);
   return (
     <>
-      {timers.map((t) => {
+      {timers.map((t, idx) => {
+        const tag = timers.length > 1 ? `${idx + 1}` : "";
         if (t.started_at && !t.done_at) {
           const remain = t.minutes != null ? t.minutes * 60 - timerElapsedSec(t, now) : null;
           const over = remain !== null && remain <= 0;
           return (
             <span key={t.id} className="flex shrink-0 items-center gap-1" title={t.label}>
+              {tag && <span className="font-mono text-[10px] opacity-70">{tag}</span>}
               <span
                 className={`font-mono text-[11px] font-medium tabular-nums ${over ? "underline" : ""}`}
               >
@@ -566,11 +481,11 @@ export function BlockTimerChip({
         if (t.started_at && t.done_at) {
           return (
             <span key={t.id} className="shrink-0 font-mono text-[11px]" title={t.label}>
-              ✓ {Math.max(1, Math.round(minutesBetween(t.started_at, t.done_at)))}분
+              {tag && <span className="opacity-70">{tag} </span>}✓{" "}
+              {Math.max(1, Math.round(minutesBetween(t.started_at, t.done_at)))}분
             </span>
           );
         }
-        if (t.id !== nextIdle?.id) return null;
         return (
           <button
             key={t.id}
@@ -596,7 +511,7 @@ export function BlockTimerChip({
               }
             }}
           >
-            ▶{t.minutes != null ? ` ${t.minutes}분` : ""}
+            {tag}▶{t.minutes != null ? ` ${t.minutes}분` : ""}
           </button>
         );
       })}
@@ -627,33 +542,5 @@ export function BlockTimerChip({
         </span>
       )}
     </>
-  );
-}
-
-/** 일일 카드 등에서 쓰는 한 줄 타이머 — 블록 칩과 같은 내용에 단계/차수 라벨만 붙인다. */
-export function BlockTimerInline({
-  block,
-  row,
-  onStarted,
-  onRetime,
-  label,
-}: {
-  block: WorkBlock;
-  row: DashboardComponentRow;
-  onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
-  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
-  label?: string | undefined;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      {label && <span className="font-mono text-[11px] text-muted-foreground">{label}</span>}
-      <BlockTimerChip
-        part="timer"
-        block={block}
-        row={row}
-        {...(onStarted ? { onStarted } : {})}
-        onRetime={onRetime}
-      />
-    </div>
   );
 }

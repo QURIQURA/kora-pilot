@@ -17,11 +17,7 @@ import {
   orderTitle,
   useOrderDietaryNames,
 } from "@/components/pilot/OrderTitle";
-import {
-  BlockTaskDetails,
-  BlockTimerChip,
-  BlockTimerInline,
-} from "@/components/pilot/BlockTaskDetails";
+import { BlockTaskDetails, BlockTimerChip } from "@/components/pilot/BlockTaskDetails";
 import { SessionExperimentButton } from "@/components/pilot/SessionExperimentButton";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1609,47 +1605,6 @@ export function ProductionDashboard() {
                 focusKey={selected?.id ?? null}
                 mergedVersions={mergedVersions}
                 onToggleMerge={(versionId) => void toggleMergeAndAlign(versionId)}
-                renderHeaderExtra={(selectionIds) => {
-                  const memberBlocks = selectionIds
-                    .flatMap((id) => {
-                      const row = rowById.get(id);
-                      if (!row) return [];
-                      return dayBlocks
-                        .filter((b) => b.work_session_formula_version_id === id)
-                        .map((block) => ({ block, row }));
-                    })
-                    .sort((a, b) => a.block.start_time.localeCompare(b.block.start_time));
-                  // 병합이면 같은 단계끼리 한 타이머, 아니면 블록마다
-                  const seen = new Set<string>();
-                  const primaries = memberBlocks.filter(({ block }) => {
-                    const key =
-                      selectionIds.length > 1
-                        ? (block.step_name ?? `part-${block.part_no}`)
-                        : block.id;
-                    if (seen.has(key)) return false;
-                    seen.add(key);
-                    return true;
-                  });
-                  if (!primaries.length) return null;
-                  return (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      {primaries.map(({ block, row }) => (
-                        <BlockTimerInline
-                          key={block.id}
-                          block={block}
-                          row={row}
-                          onStarted={ensureSessionStarted}
-                          onRetime={retimeBlock}
-                          label={
-                            primaries.length > 1
-                              ? (block.step_name ?? `${block.part_no}차`)
-                              : undefined
-                          }
-                        />
-                      ))}
-                    </div>
-                  );
-                }}
                 renderRecords={(selectionIds) => {
                   const renderOne = (id: string) => {
                     const row = rowById.get(id);
