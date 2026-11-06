@@ -188,6 +188,18 @@ export function BlockTaskDetails({
     }
   };
 
+  // 진행 시간(분)을 직접 입력 — Start(없으면 블록 시작 시각)에 분을 더해 End를 정한다.
+  const setDuration = async (minutes: number) => {
+    let startIso = task.actual_started_at;
+    if (!startIso) {
+      startIso = localDateTimeToISO(block.block_date, block.start_time.slice(0, 5));
+      await setTime("actual_started_at", block.start_time.slice(0, 5));
+    }
+    const end = new Date(new Date(startIso).getTime() + minutes * 60_000);
+    const hm = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+    await setTime("completed_at", hm);
+  };
+
   const timers = readTimers(task);
   const saveTimerList = async (next: TaskTimer[]) => {
     const e = await saveTimers(task, next);
@@ -249,6 +261,23 @@ export function BlockTaskDetails({
             >
               지금
             </button>
+            <input
+              key={`d-${k}`}
+              type="number"
+              min={1}
+              step={1}
+              className={`${smallInput} w-16 text-right`}
+              placeholder="분"
+              title="진행 시간(분) — 입력하면 End가 Start + 분으로 바뀝니다"
+              defaultValue={doneMinutes !== null && doneMinutes > 0 ? Math.round(doneMinutes) : ""}
+              onBlur={(e) => {
+                const m = Number(e.target.value);
+                if (!e.target.value || !Number.isFinite(m) || m <= 0) return;
+                if (doneMinutes !== null && Math.round(doneMinutes) === Math.round(m)) return;
+                void setDuration(m);
+              }}
+            />
+            <span className="text-xs text-muted-foreground">분</span>
             <span className="text-muted-foreground">→</span>
             <input
               key={`e-${k}`}
