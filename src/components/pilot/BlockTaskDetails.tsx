@@ -166,19 +166,42 @@ export function BlockTaskDetails({
   const setTime = async (field: "actual_started_at" | "completed_at", value: string) => {
     const iso = value ? localDateTimeToISO(block.block_date, value) : null;
     await update({ [field]: iso }, "시간");
-    // 타이머가 하나뿐이면 수기로 고친 Start/End가 그 타이머 기록에도 그대로 반영되게 한다(따로 놀지 않도록).
-    const only = readTimers(task);
-    if (only.length === 1) {
-      const t = only[0]!;
+    // 수기로 고친 Start/End가 해당 타이머 기록에도 그대로 반영되게 한다(따로 놀지 않도록).
+    // 타이머가 여러 개면 Start가 일치하는 타이머(없으면 진행 중 → 마지막으로 시작한 타이머)를 대상으로 삼는다.
+    const all = readTimers(task);
+    const oldStart = task.actual_started_at ? new Date(task.actual_started_at).getTime() : null;
+    const target =
+      all.length === 1
+        ? all[0]
+        : ((oldStart !== null
+            ? all.find(
+                (t) =>
+                  t.started_at && Math.abs(new Date(t.started_at).getTime() - oldStart) < 60_000,
+              )
+            : undefined) ??
+          all.find((t) => t.started_at && !t.done_at) ??
+          [...all].reverse().find((t) => t.started_at));
+    if (target) {
       const next: TaskTimer =
         field === "actual_started_at"
-          ? { ...t, started_at: iso, done_at: iso ? (t.done_at ?? task.completed_at) : null }
+          ? {
+              ...target,
+              started_at: iso,
+              done_at: iso
+                ? (target.done_at ?? (all.length === 1 ? task.completed_at : null))
+                : null,
+            }
           : {
-              ...t,
+              ...target,
               done_at: iso,
-              started_at: iso ? (t.started_at ?? task.actual_started_at) : t.started_at,
+              started_at: iso
+                ? (target.started_at ?? (all.length === 1 ? task.actual_started_at : null))
+                : target.started_at,
             };
-      const e = await saveTimers(task, [next]);
+      const e = await saveTimers(
+        task,
+        all.map((t) => (t.id === target.id ? next : t)),
+      );
       if (e) setError(`타이머 저장 실패 — ${e.message}`);
       await refresh();
     }
