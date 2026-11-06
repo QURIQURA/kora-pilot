@@ -166,6 +166,22 @@ export function BlockTaskDetails({
   const setTime = async (field: "actual_started_at" | "completed_at", value: string) => {
     const iso = value ? localDateTimeToISO(block.block_date, value) : null;
     await update({ [field]: iso }, "시간");
+    // 타이머가 하나뿐이면 수기로 고친 Start/End가 그 타이머 기록에도 그대로 반영되게 한다(따로 놀지 않도록).
+    const only = readTimers(task);
+    if (only.length === 1) {
+      const t = only[0]!;
+      const next: TaskTimer =
+        field === "actual_started_at"
+          ? { ...t, started_at: iso, done_at: iso ? (t.done_at ?? task.completed_at) : null }
+          : {
+              ...t,
+              done_at: iso,
+              started_at: iso ? (t.started_at ?? task.actual_started_at) : t.started_at,
+            };
+      const e = await saveTimers(task, [next]);
+      if (e) setError(`타이머 저장 실패 — ${e.message}`);
+      await refresh();
+    }
     if (field === "actual_started_at" && iso) {
       await onStarted?.(sessionId, iso);
       await onRetime?.(block, iso);
@@ -257,6 +273,9 @@ export function BlockTaskDetails({
             </button>
             {doneMinutes !== null && doneMinutes > 0 && (
               <span className="text-xs text-muted-foreground">· {Math.round(doneMinutes)} MIN</span>
+            )}
+            {doneMinutes !== null && doneMinutes < 0 && (
+              <span className="text-xs text-destructive">⚠ End가 Start보다 빨라요</span>
             )}
           </span>
         </label>
@@ -563,11 +582,14 @@ export function BlockTimerChip({
           ✔
         </button>
       )}
-      {task.status === "DONE" && task.actual_started_at && task.completed_at && (
-        <span className="shrink-0 font-mono text-[11px]">
-          ✓ {Math.max(1, Math.round(minutesBetween(task.actual_started_at, task.completed_at)))}분
-        </span>
-      )}
+      {task.status === "DONE" &&
+        task.actual_started_at &&
+        task.completed_at &&
+        !timers.some((t) => t.started_at && t.done_at) && (
+          <span className="shrink-0 font-mono text-[11px]">
+            ✓ {Math.max(1, Math.round(minutesBetween(task.actual_started_at, task.completed_at)))}분
+          </span>
+        )}
     </>
   );
 }
