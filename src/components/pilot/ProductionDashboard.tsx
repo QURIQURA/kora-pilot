@@ -197,9 +197,7 @@ export function ProductionDashboard() {
     >();
     for (const r of rows) {
       if (!isActive(r)) continue;
-      // 타임라인에 올라간 컴포넌트는 사라지지 않고 비활성으로 남긴다 — 단, 보고 있는 날짜에 배정된 것만.
-      const rb = blocksByRow.get(r.id) ?? [];
-      if (rb.length > 0 && !rb.some((b) => b.block_date === date)) continue;
+      // 타임라인에 올라간 컴포넌트는 사라지지 않고 비활성으로 남긴다(다른 날짜에 배정된 것도 — 날짜 표기와 함께).
       const g = groups.get(r.order.id) ?? { order: r.order, rows: [] };
       g.rows.push(r);
       groups.set(r.order.id, g);
@@ -207,7 +205,7 @@ export function ProductionDashboard() {
     return [...groups.values()].sort((a, b) =>
       a.order.order_number.localeCompare(b.order.order_number),
     );
-  }, [rows, blocksByRow, date]);
+  }, [rows]);
   const poolCount = poolGroups.reduce(
     (n, g) => n + g.rows.filter((r) => (blocksByRow.get(r.id) ?? []).length === 0).length,
     0,
@@ -943,11 +941,16 @@ export function ProductionDashboard() {
                         (b) => b.block_date === date,
                       );
                       const isPlaced = placed.length > 0;
+                      // 보고 있는 날짜가 아닌 다른 날짜에 배정된 경우 — 목록에서 사라지지 않게 날짜를 표기한다.
+                      const elsewhere = isPlaced
+                        ? []
+                        : (blocksByRow.get(r.id) ?? []).filter((b) => b.block_date !== date);
+                      const isElsewhere = elsewhere.length > 0;
                       const size = sizeText(r);
                       return (
                         <div
                           key={r.id}
-                          draggable={!isPlaced}
+                          draggable={!isPlaced && !isElsewhere}
                           onDragStart={(e) => {
                             e.dataTransfer.setData(
                               "text/plain",
@@ -956,12 +959,16 @@ export function ProductionDashboard() {
                             e.dataTransfer.effectAllowed = "move";
                           }}
                           onClick={() => {
+                            if (isElsewhere) {
+                              setDate(elsewhere[0]!.block_date);
+                              return;
+                            }
                             setSelectedId(null);
                             setFocusRowId(r.id);
                           }}
                           className={cn(
                             "flex items-center gap-2 border border-border bg-background px-2 py-1",
-                            isPlaced ? "cursor-pointer opacity-50" : "cursor-grab",
+                            isPlaced || isElsewhere ? "cursor-pointer opacity-50" : "cursor-grab",
                           )}
                           style={{ borderLeft: `3px solid ${color.accent}` }}
                         >
@@ -970,22 +977,34 @@ export function ProductionDashboard() {
                               <span className="label-caps text-[10px] text-muted-foreground">
                                 {r.slot ?? "CORE"}
                               </span>
-                              <span className={cn("truncate", isPlaced && "line-through")}>
+                              <span
+                                className={cn(
+                                  "truncate",
+                                  (isPlaced || isElsewhere) && "line-through",
+                                )}
+                              >
                                 {r.componentName}
                               </span>
                               {r.unmodifiedCopy && <CopyWarning formulaId={r.formulaId} />}
                             </p>
-                            {(size || isPlaced) && (
+                            {(size || isPlaced || isElsewhere) && (
                               <p className="truncate font-mono text-[10px] text-muted-foreground">
                                 {size}
                                 {isPlaced &&
                                   `${size ? " · " : ""}✓ ${placed
                                     .map((b) => b.start_time.slice(0, 5))
                                     .join(", ")} 배정됨`}
+                                {isElsewhere &&
+                                  `${size ? " · " : ""}📅 ${elsewhere
+                                    .map(
+                                      (b) =>
+                                        `${b.block_date.slice(5).replace("-", "/")} ${b.start_time.slice(0, 5)}`,
+                                    )
+                                    .join(", ")} 배정됨 · 눌러서 이동`}
                               </p>
                             )}
                           </div>
-                          {!isPlaced && (
+                          {!isPlaced && !isElsewhere && (
                             <button
                               type="button"
                               className={cn(buttonClass, "!min-h-[24px] px-1.5 text-[10px]")}
