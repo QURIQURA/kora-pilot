@@ -227,7 +227,7 @@ export function BlockTaskDetails({
                   void setTime("completed_at", e.target.value);
               }}
             />
-            {doneMinutes !== null && (
+            {doneMinutes !== null && doneMinutes > 0 && (
               <span className="text-xs text-muted-foreground">· {Math.round(doneMinutes)} MIN</span>
             )}
           </span>
@@ -295,23 +295,11 @@ export function BlockTaskDetails({
               </span>
               <input
                 className={`${smallInput} min-w-0 flex-1 basis-32`}
-                placeholder="메모 (무슨 타이머?)"
+                placeholder=""
                 defaultValue={t.label}
                 onBlur={(e) => {
                   if (e.target.value.trim() !== t.label)
                     void patchTimer(t.id, { label: e.target.value.trim() });
-                }}
-              />
-              <input
-                type="number"
-                className={`${smallInput} w-14`}
-                placeholder="목표분"
-                title="타임라인 카운트다운 길이(분)"
-                disabled={Boolean(t.started_at && !t.done_at)}
-                defaultValue={t.minutes ?? ""}
-                onBlur={(e) => {
-                  const v = numOrNull(e.target.value);
-                  if (v !== t.minutes) void patchTimer(t.id, { minutes: v });
                 }}
               />
               {timers.length > 1 && (
@@ -448,19 +436,11 @@ export function BlockTimerChip({
       {timers.map((t, idx) => {
         const tag = timers.length > 1 ? `${idx + 1}` : "";
         if (t.started_at && !t.done_at) {
-          const remain = t.minutes != null ? t.minutes * 60 - timerElapsedSec(t, now) : null;
-          const over = remain !== null && remain <= 0;
           return (
             <span key={t.id} className="flex shrink-0 items-center gap-1" title={t.label}>
               {tag && <span className="font-mono text-[10px] opacity-70">{tag}</span>}
-              <span
-                className={`font-mono text-[11px] font-medium tabular-nums ${over ? "underline" : ""}`}
-              >
-                {remain !== null
-                  ? over
-                    ? `+${formatDuration(Math.abs(remain))}`
-                    : formatDuration(remain)
-                  : formatDuration(timerElapsedSec(t, now))}
+              <span className="font-mono text-[11px] font-medium tabular-nums">
+                {formatDuration(timerElapsedSec(t, now))}
               </span>
               <button
                 type="button"
@@ -497,8 +477,10 @@ export function BlockTimerChip({
             onClick={async (e) => {
               e.stopPropagation();
               const iso = new Date().toISOString();
+              const othersRunning = timers.some((x) => x.id !== t.id && x.started_at && !x.done_at);
               await patchTimer(t.id, { started_at: iso, done_at: null });
-              if (task.status === "NOT_STARTED") {
+              // 다른 타이머가 안 돌고 있으면 시작 버튼이 곧 새 시작 — 수기로 고친 Start/End를 리셋한다.
+              if (!othersRunning) {
                 const userId = await currentUserId();
                 await supabase
                   .from("work_session_tasks")
@@ -511,7 +493,7 @@ export function BlockTimerChip({
               }
             }}
           >
-            {tag}▶{t.minutes != null ? ` ${t.minutes}분` : ""}
+            {tag}▶
           </button>
         );
       })}
