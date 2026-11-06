@@ -15,17 +15,20 @@ import {
   type WorkBlock,
 } from "@/lib/queries";
 import { formatDuration, formatTime, localDateTimeToISO } from "@/lib/datetime";
-import {
-  hasObservationFields,
-  minutesBetween,
-  type ChecklistItem,
-  type WorkSessionTask,
-} from "@/lib/workflow";
+import { hasObservationFields, type ChecklistItem, type WorkSessionTask } from "@/lib/workflow";
 import { syncWorkSessionToPlanner } from "@/lib/work-session";
 import { newTimer, readTimers, timerElapsedSec, type TaskTimer } from "@/lib/task-timers";
 import { buttonClass, primaryButtonClass } from "@/components/pilot/ui";
 
 const smallInput = "h-7 border border-border bg-background px-1.5 text-xs tabular-nums";
+
+/** 분 단위로 맞춘(초 버림) 시간차 — 시작에 초가 남아 있어도 60분이 59분으로 보이지 않는다. */
+function wholeMinutes(startIso: string, endIso: string): number {
+  return (
+    Math.floor(new Date(endIso).getTime() / 60_000) -
+    Math.floor(new Date(startIso).getTime() / 60_000)
+  );
+}
 
 function timeValue(iso: string | null): string {
   if (!iso) return "";
@@ -440,9 +443,7 @@ export function BlockTaskDetails({
       <div className="space-y-1.5">
         {timers.map((t, idx) => {
           const spent =
-            t.started_at && t.done_at
-              ? Math.max(1, Math.round(minutesBetween(t.started_at, t.done_at)))
-              : null;
+            t.started_at && t.done_at ? Math.max(1, wholeMinutes(t.started_at, t.done_at)) : null;
           return (
             <div
               key={`${t.id}-${k}`}
@@ -657,7 +658,7 @@ export function BlockTimerChip({
             >
               {tag && <span className="opacity-70">{tag}</span>}
               {name}
-              <span>✓ {Math.max(1, Math.round(minutesBetween(t.started_at, t.done_at)))}분</span>
+              <span>✓ {Math.max(1, wholeMinutes(t.started_at, t.done_at))}분</span>
             </span>
           );
         }
@@ -719,7 +720,7 @@ export function BlockTimerChip({
         task.completed_at &&
         !timers.some((t) => t.started_at && t.done_at) && (
           <span className="shrink-0 font-mono text-[11px]">
-            ✓ {Math.max(1, Math.round(minutesBetween(task.actual_started_at, task.completed_at)))}분
+            ✓ {Math.max(1, wholeMinutes(task.actual_started_at, task.completed_at))}분
           </span>
         )}
     </>
