@@ -231,7 +231,7 @@ export function BlockTaskDetails({
             <input
               key={`s-${k}`}
               type="time"
-              className={`${smallInput} w-24`}
+              className={`${smallInput} w-32 min-w-[8rem]`}
               defaultValue={timeValue(task.actual_started_at)}
               onBlur={(e) => {
                 if (e.target.value !== timeValue(task.actual_started_at))
@@ -253,7 +253,7 @@ export function BlockTaskDetails({
             <input
               key={`e-${k}`}
               type="time"
-              className={`${smallInput} w-24`}
+              className={`${smallInput} w-32 min-w-[8rem]`}
               defaultValue={timeValue(task.completed_at)}
               onBlur={(e) => {
                 if (e.target.value !== timeValue(task.completed_at))

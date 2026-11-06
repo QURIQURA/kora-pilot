@@ -1630,7 +1630,7 @@ export function ProductionDashboard() {
                     <input
                       type="time"
                       step={300}
-                      className={cn(inputClass, "!w-28")}
+                      className={cn(inputClass, "!w-36 min-w-[9rem]")}
                       defaultValue={selectedDaily.start_time.slice(0, 5)}
                       onBlur={(e) => {
                         if (!e.target.value) return;
@@ -1664,7 +1664,7 @@ export function ProductionDashboard() {
                     <input
                       type="time"
                       step={300}
-                      className={cn(inputClass, "!w-28")}
+                      className={cn(inputClass, "!w-36 min-w-[9rem]")}
                       defaultValue={selectedDaily.end_time.slice(0, 5)}
                       onBlur={(e) => {
                         if (!e.target.value) return;
@@ -1773,7 +1773,7 @@ export function ProductionDashboard() {
                     <input
                       type="time"
                       step={300}
-                      className={cn(inputClass, "!w-28")}
+                      className={cn(inputClass, "!w-36 min-w-[9rem]")}
                       defaultValue={selected.start_time.slice(0, 5)}
                       onBlur={(e) => {
                         const v = e.target.value;
@@ -1806,7 +1806,7 @@ export function ProductionDashboard() {
                     <input
                       type="time"
                       step={300}
-                      className={cn(inputClass, "!w-28")}
+                      className={cn(inputClass, "!w-36 min-w-[9rem]")}
                       defaultValue={selected.end_time.slice(0, 5)}
                       onBlur={(e) => {
                         const v = e.target.value;
