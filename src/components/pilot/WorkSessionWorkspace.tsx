@@ -1188,10 +1188,18 @@ function WeighingView({
               </th>
               {displayColumns.map((col) => {
                 const m = col.slot === "SHEET" && col.mouldId ? mouldById.get(col.mouldId) : null;
-                const refG = m?.reference_weight_g != null ? Number(m.reference_weight_g) : null;
                 const baseM = col.baseMouldId ? mouldById.get(col.baseMouldId) : null;
                 const qty =
                   col.mouldQty ?? (m && baseM ? mouldQty(col.multiplier, baseM, m) : null);
+                // R&D 실험은 레시피 양을 직접 바꾸므로 몰드 기준중량이 아니라 아래 TOTAL을 몰드 개수로 나눈 실제 중량을 쓴다.
+                const isRnd = rndVersionIds.has(col.formulaVersionId);
+                const rndTotal = totalsByColumn[col.selectionId] ?? 0;
+                const refG =
+                  isRnd && qty != null && qty > 0 && rndTotal > 0
+                    ? rndTotal / qty
+                    : m?.reference_weight_g != null
+                      ? Number(m.reference_weight_g)
+                      : null;
                 return (
                   <td
                     key={col.selectionId}
@@ -1203,7 +1211,9 @@ function WeighingView({
                         {refG != null && ` (${fmtNumber(refG, 0)}g)`}
                         {qty != null && ` ×${fmtNumber(qty, 2)}`}
                         {refG != null && qty != null && (
-                          <span className="block text-[10px]">≈ {fmtNumber(refG * qty, 0)}g</span>
+                          <span className="block text-[10px]">
+                            ≈ {fmtNumber(refG * qty, 0)}g{isRnd ? " (R&D 실제)" : ""}
+                          </span>
                         )}
                       </>
                     ) : (
@@ -1749,6 +1759,62 @@ function EditFormulaVersionModal({
   };
 
   const visibleRows = draftRows.filter((r) => !r.removed);
+  // 재료 대치 — 고른 여러 재료(예: 쌀가루+옥수수전분)를 하나(예: 콜스 글루텐프리 가루)로 합쳐 같은 총량으로 바꾼다.
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [replaceSel, setReplaceSel] = useState<Set<string>>(() => new Set());
+  const [replaceError, setReplaceError] = useState<string | null>(null);
+  const replaceIngredients = async (ingredientId: string) => {
+    const sel = visibleRows.filter((r) => replaceSel.has(r.key));
+    if (sel.length === 0) return;
+    const grams = sel.map((r) => toGrams(Number(r.amount) || 0, r.unit));
+    if (grams.some((g) => g == null)) {
+      setReplaceError("g으로 환산할 수 없는 단위의 재료가 있어요.");
+      return;
+    }
+    const total = round2(grams.reduce<number>((sum, g) => sum + (g ?? 0), 0));
+    const { data } = await supabase
+      .from("ingredients")
+      .select("name, name_en")
+      .eq("id", ingredientId)
+      .single();
+    const name = data ? (data.name_en ? `${data.name} (${data.name_en})` : data.name) : "…";
+    setDraftRows((prev) => {
+      const existing = prev.find(
+        (r) => !r.removed && r.ingredientId === ingredientId && !replaceSel.has(r.key),
+      );
+      const kept = prev
+        .filter((r) => !(replaceSel.has(r.key) && r.sourceId === null))
+        .map((r) => (replaceSel.has(r.key) ? { ...r, removed: true } : r));
+      if (existing) {
+        const base = toGrams(Number(existing.amount) || 0, existing.unit) ?? 0;
+        return kept.map((r) =>
+          r.key === existing.key
+            ? { ...r, amount: String(round2(base + total)), unit: "g", secondaryAmount: null }
+            : r,
+        );
+      }
+      return [
+        ...kept,
+        {
+          key: `new-${ingredientId}-${Date.now()}`,
+          sourceId: null,
+          ingredientId,
+          ingredientName: name,
+          unit: "g",
+          amount: String(total),
+          originalAmount: null,
+          originalUnit: null,
+          note: null,
+          secondaryAmount: null,
+          secondaryUnit: null,
+          removed: false,
+        },
+      ];
+    });
+    setReplaceSel(new Set());
+    setReplaceOpen(false);
+    setReplaceError(null);
+  };
   const [moreKeys, setMoreKeys] = useState<Set<string>>(() => new Set());
   // 기준 재료(예: 계란) 개수를 ±1 하면 🔗 연동된 재료가 같은 비율로 같이 바뀐다. 🔒 고정한 재료는 그대로.
   const [lockedKeys, setLockedKeys] = useState<Set<string>>(() => new Set());
@@ -2545,6 +2611,72 @@ function EditFormulaVersionModal({
             )}
           </ul>
 
+          {replaceOpen ? (
+            <div className="space-y-2 border border-dashed border-border p-3">
+              <p className="font-mono text-[11px] text-muted-foreground">
+                1) 합칠 재료를 고르세요 — 고른 재료의 양을 모두 더한 만큼 하나의 재료로 바뀌어요.
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {visibleRows.map((r) => {
+                  const on = replaceSel.has(r.key);
+                  return (
+                    <button
+                      key={r.key}
+                      type="button"
+                      className={`${on ? primaryButtonClass : buttonClass} !h-7 !min-h-0 px-2 text-xs`}
+                      onClick={() =>
+                        setReplaceSel((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(r.key)) next.delete(r.key);
+                          else next.add(r.key);
+                          return next;
+                        })
+                      }
+                    >
+                      {r.ingredientName} {fmtNumber(Number(r.amount) || 0, 1)}
+                      {r.unit}
+                    </button>
+                  );
+                })}
+              </div>
+              {replaceSel.size > 0 && (
+                <>
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    2) 대신 쓸 재료를 고르세요 (합계{" "}
+                    {fmtNumber(
+                      visibleRows
+                        .filter((r) => replaceSel.has(r.key))
+                        .reduce((sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0), 0),
+                      1,
+                    )}
+                    g)
+                  </p>
+                  <IngredientPicker
+                    onPick={(ingredientId) => {
+                      void replaceIngredients(ingredientId);
+                    }}
+                    onCancel={() => setReplaceOpen(false)}
+                  />
+                </>
+              )}
+              {replaceError && <p className="text-xs text-destructive">{replaceError}</p>}
+              <button type="button" className={buttonClass} onClick={() => setReplaceOpen(false)}>
+                취소
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={buttonClass}
+              onClick={() => {
+                setReplaceSel(new Set());
+                setReplaceError(null);
+                setReplaceOpen(true);
+              }}
+            >
+              🔁 재료 합쳐서 대치
+            </button>
+          )}
           {pickingIngredient ? (
             <div className="border border-dashed border-border p-3">
               <IngredientPicker
