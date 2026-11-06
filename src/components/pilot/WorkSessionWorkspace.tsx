@@ -1871,6 +1871,7 @@ function EditFormulaVersionModal({
       return;
     }
     const total = round2(grams.reduce<number>((sum, g) => sum + (g ?? 0), 0));
+    pushUndo();
     const { data } = await supabase
       .from("ingredients")
       .select("name, name_en")
@@ -1943,6 +1944,9 @@ function EditFormulaVersionModal({
     setShortPicking(false);
     setShortError(null);
   };
+  // 재료 대치 도구를 적용하기 직전 상태를 쌓아 두고 "되돌리기"로 한 단계씩 복구한다.
+  const [undoStack, setUndoStack] = useState<(typeof draftRows)[]>([]);
+  const pushUndo = () => setUndoStack((st) => [...st.slice(-9), draftRows]);
   const applyShortage = () => {
     if (!shortRow || shortSubs.length === 0) return;
     const restCount = shortSubs.filter((x) => x.rest).length;
@@ -1954,6 +1958,7 @@ function EditFormulaVersionModal({
       setShortError("대치 재료 합계가 원래 양보다 많아요.");
       return;
     }
+    pushUndo();
     const grams = shortSubs.map((x) =>
       x.rest ? shortRestBase : round2((Number(x.amount) || 0) * shortFactor),
     );
@@ -2598,6 +2603,21 @@ function EditFormulaVersionModal({
           <div className="border border-border bg-background/40">
             <div className="flex flex-wrap items-center gap-1 px-2 py-1">
               <span className="label-caps mr-1 text-[11px] text-muted-foreground">재료 조정</span>
+              {undoStack.length > 0 && (
+                <button
+                  type="button"
+                  className={`${buttonClass} !h-7 !min-h-0 px-2 text-xs`}
+                  title="방금 한 재료 대치를 되돌립니다"
+                  onClick={() => {
+                    const prev = undoStack[undoStack.length - 1];
+                    if (!prev) return;
+                    setDraftRows(prev);
+                    setUndoStack((st) => st.slice(0, -1));
+                  }}
+                >
+                  ↩ 되돌리기 ({undoStack.length})
+                </button>
+              )}
               {(
                 [
                   ["anchor", "⚓ 개수로 증량"],
