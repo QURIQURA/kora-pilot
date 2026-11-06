@@ -218,7 +218,9 @@ export function BlockTaskDetails({
       startIso = localDateTimeToISO(block.block_date, block.start_time.slice(0, 5));
       await setTime("actual_started_at", block.start_time.slice(0, 5));
     }
-    const end = new Date(new Date(startIso).getTime() + minutes * 60_000);
+    // 시작 시각의 초는 버리고(분 단위로 맞춤) 분을 더한다 — 초가 남으면 60분이 59분으로 줄어든다.
+    const startMin = Math.floor(new Date(startIso).getTime() / 60_000);
+    const end = new Date((startMin + minutes) * 60_000);
     const hm = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
     await setTime("completed_at", hm);
   };
@@ -229,11 +231,55 @@ export function BlockTaskDetails({
     setError(e ? `타이머 저장 실패 — ${e.message}` : null);
     await refresh();
   };
+  // 타이머 하나의 시작/종료/분을 고친다 — 분은 시작(초 버림)에 더해 종료로 환산하고, TASK의 Start/End도 타이머들에 맞춘다.
+  const editTimer = async (
+    t: TaskTimer,
+    edit: { start?: string; end?: string; minutes?: number },
+  ) => {
+    const toIso = (hm: string) => (hm ? localDateTimeToISO(block.block_date, hm) : null);
+    let started = t.started_at;
+    let done = t.done_at;
+    if (edit.start !== undefined) started = toIso(edit.start);
+    if (edit.end !== undefined) done = toIso(edit.end);
+    if (edit.minutes !== undefined) {
+      started = started ?? localDateTimeToISO(block.block_date, block.start_time.slice(0, 5));
+      done = new Date(
+        (Math.floor(new Date(started).getTime() / 60_000) + edit.minutes) * 60_000,
+      ).toISOString();
+    }
+    if (started && done && new Date(done) < new Date(started)) {
+      setError("종료 시각이 시작보다 빨라요.");
+      return;
+    }
+    const next = timers.map((x) =>
+      x.id === t.id ? { ...x, started_at: started, done_at: done } : x,
+    );
+    const e = await saveTimers(task, next);
+    if (e) {
+      setError(`타이머 저장 실패 — ${e.message}`);
+      return;
+    }
+    setError(null);
+    const starts = next.map((x) => x.started_at).filter((x): x is string => Boolean(x));
+    const anyRunning = next.some((x) => x.started_at && !x.done_at);
+    const dones = next.map((x) => x.done_at).filter((x): x is string => Boolean(x));
+    const taskPatch: { actual_started_at?: string | null; completed_at?: string | null } = {};
+    if (starts.length) taskPatch.actual_started_at = [...starts].sort()[0] ?? null;
+    if (!anyRunning && dones.length)
+      taskPatch.completed_at = [...dones].sort().slice(-1)[0] ?? null;
+    if (Object.keys(taskPatch).length) await update(taskPatch, "시간");
+    else await refresh();
+    if (taskPatch.actual_started_at) {
+      await onStarted?.(sessionId, taskPatch.actual_started_at);
+      await onRetime?.(block, taskPatch.actual_started_at);
+    }
+  };
   const patchTimer = (id: string, patch: Partial<TaskTimer>) =>
     saveTimerList(timers.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   const doneMinutes =
     task.actual_started_at && task.completed_at
-      ? minutesBetween(task.actual_started_at, task.completed_at)
+      ? Math.floor(new Date(task.completed_at).getTime() / 60_000) -
+        Math.floor(new Date(task.actual_started_at).getTime() / 60_000)
       : null;
   const checklist = (task.checklist_items as unknown as ChecklistItem[] | null) ?? [];
   const k = task.updated_at; // 저장 뒤 입력칸 defaultValue를 새로 반영
@@ -403,14 +449,42 @@ export function BlockTaskDetails({
               className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
             >
               <span className="w-4 font-mono text-[11px] text-muted-foreground">{idx + 1}</span>
-              <span className="w-28 font-mono tabular-nums">
-                {t.started_at ? formatTime(t.started_at) : "--:--"}
-                {" – "}
-                {t.done_at ? formatTime(t.done_at) : t.started_at ? "진행 중" : "--:--"}
-              </span>
-              <span className="w-12 font-mono tabular-nums">
-                {spent != null ? `${spent}분` : "—"}
-              </span>
+              <input
+                type="time"
+                className={`${smallInput} w-32 min-w-[8rem]`}
+                title="타이머 시작 시각"
+                defaultValue={timeValue(t.started_at)}
+                onBlur={(e) => {
+                  if (e.target.value === timeValue(t.started_at)) return;
+                  void editTimer(t, { start: e.target.value });
+                }}
+              />
+              <span className="text-muted-foreground">–</span>
+              <input
+                type="time"
+                className={`${smallInput} w-32 min-w-[8rem]`}
+                title={t.done_at ? "타이머 종료 시각" : "진행 중 — 시각을 입력하면 종료돼요"}
+                defaultValue={timeValue(t.done_at)}
+                onBlur={(e) => {
+                  if (e.target.value === timeValue(t.done_at)) return;
+                  void editTimer(t, { end: e.target.value });
+                }}
+              />
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className={`${smallInput} w-16 text-right`}
+                placeholder="분"
+                title="이 타이머의 진행 시간(분) — 입력하면 종료가 시작 + 분으로 바뀝니다"
+                defaultValue={spent ?? ""}
+                onBlur={(e) => {
+                  const m = Number(e.target.value);
+                  if (!e.target.value || !Number.isFinite(m) || m <= 0 || m === spent) return;
+                  void editTimer(t, { minutes: m });
+                }}
+              />
+              <span className="text-muted-foreground">분</span>
               <input
                 className={`${smallInput} min-w-0 flex-1 basis-32`}
                 placeholder=""
