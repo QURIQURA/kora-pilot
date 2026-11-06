@@ -44,6 +44,7 @@ import {
   syncWorkSessionToPlanner,
 } from "@/lib/work-session";
 import { mouldAbbr } from "@/lib/component-size";
+import { completeComponentBlocks, isBlockPast } from "@/lib/complete-blocks";
 import { cn } from "@/lib/utils";
 import { buttonClass, inputClass } from "./ui";
 
@@ -222,6 +223,37 @@ export function ProductionDashboard() {
       a.order.order_number.localeCompare(b.order.order_number),
     );
   }, [rows, blocksByRow, doneTaskIds.data]);
+  // 일정(블록 종료 시각)이 이미 지났는데 TASK가 완료되지 않은 컴포넌트 — 알림 표시 대상.
+  const overdueIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!doneTaskIds.data) return ids;
+    for (const g of poolGroups)
+      for (const r of g.rows)
+        if (
+          (blocksByRow.get(r.id) ?? []).some(
+            (b) =>
+              isBlockPast(b) &&
+              !(b.work_session_task_id && doneTaskIds.data.has(b.work_session_task_id)),
+          )
+        )
+          ids.add(r.id);
+    return ids;
+  }, [poolGroups, blocksByRow, doneTaskIds.data]);
+  const completeRows = useMutation({
+    mutationFn: async (targets: DashboardComponentRow[]) => {
+      for (const r of targets)
+        await completeComponentBlocks(
+          r,
+          blocksByRow.get(r.id) ?? [],
+          doneTaskIds.data ?? new Set(),
+        );
+    },
+    onSuccess: async () => {
+      for (const key of ["work_blocks", "work_session_tasks", "dashboard_components"])
+        await queryClient.invalidateQueries({ queryKey: [key] });
+    },
+    onError: (e) => setWarning((e as Error).message),
+  });
   const poolCount = poolGroups.reduce(
     (n, g) => n + g.rows.filter((r) => (blocksByRow.get(r.id) ?? []).length === 0).length,
     0,
@@ -927,6 +959,26 @@ export function ProductionDashboard() {
               {" · 블록을 여기로 끌면 시간 배정 해제(데일리 태스크는 삭제)"}
             </p>
           </div>
+          {overdueIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border border-[#C0392B] bg-[#FBEAE8] px-3 py-2 text-xs text-[#8E2A20]">
+              <span>
+                ⚠ 일정이 지났는데 완료 처리 안 된 컴포넌트 {overdueIds.size}개 — 이미 끝낸 작업이면
+                완료 처리하세요.
+              </span>
+              <button
+                type="button"
+                className={cn(buttonClass, "!min-h-[24px] px-2 text-[11px]")}
+                disabled={completeRows.isPending}
+                onClick={() => {
+                  const targets = rows.filter((r) => overdueIds.has(r.id));
+                  if (window.confirm(`지난 일정 ${targets.length}개를 모두 완료 처리할까요?`))
+                    completeRows.mutate(targets);
+                }}
+              >
+                지난 일정 모두 완료
+              </button>
+            </div>
+          )}
           {components.isLoading ? (
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
           ) : poolGroups.length === 0 ? (
@@ -957,6 +1009,27 @@ export function ProductionDashboard() {
                       />
                       {delivery && (
                         <span className="ml-auto font-mono text-[11px]">🚚 {delivery}</span>
+                      )}
+                      {g.rows.some((r) => (blocksByRow.get(r.id) ?? []).length > 0) && (
+                        <button
+                          type="button"
+                          className={cn(buttonClass, "!min-h-[20px] px-1.5 text-[10px]")}
+                          disabled={completeRows.isPending}
+                          title="이 오더에서 시간 배정된 컴포넌트를 모두 완료 처리"
+                          onClick={() => {
+                            const targets = g.rows.filter(
+                              (r) => (blocksByRow.get(r.id) ?? []).length > 0,
+                            );
+                            if (
+                              window.confirm(
+                                `${g.order.order_number}의 배정된 컴포넌트 ${targets.length}개를 완료 처리할까요?`,
+                              )
+                            )
+                              completeRows.mutate(targets);
+                          }}
+                        >
+                          ✓ 전체 완료
+                        </button>
                       )}
                     </p>
                     {g.rows.map((r) => {
@@ -1027,6 +1100,28 @@ export function ProductionDashboard() {
                               </p>
                             )}
                           </div>
+                          {overdueIds.has(r.id) && (
+                            <span
+                              className="shrink-0 border border-[#C0392B] px-1 font-mono text-[10px] text-[#C0392B]"
+                              title="일정이 지났는데 완료 처리되지 않았어요"
+                            >
+                              ⚠ 지연
+                            </span>
+                          )}
+                          {(isPlaced || isElsewhere) && (
+                            <button
+                              type="button"
+                              className={cn(buttonClass, "!min-h-[24px] px-1.5 text-[10px]")}
+                              disabled={completeRows.isPending}
+                              title="타이머 없이 끝낸 작업 — 완료 처리"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                completeRows.mutate([r]);
+                              }}
+                            >
+                              ✓ 완료
+                            </button>
+                          )}
                           {!isPlaced && !isElsewhere && (
                             <button
                               type="button"
