@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import {
   currentUserId,
   formulasQuery,
+  formulaExperimentsQuery,
   mouldsQuery,
   productsQuery,
   cakeSizesQuery,
@@ -1586,7 +1587,13 @@ function EditFormulaVersionModal({
   // 2026-10-18 사용자 요청: "기존 formula말고 새로운 formula 생성이랑 이름도 바로 정할수
   // 있게해줘" — NEW_FORMULA는 기존 포뮬라와 완전히 분리된 새 포뮬라(+버전 1개)를 만들고,
   // 이 WORK SESSION의 이 열만 거기로 옮긴다. 이름을 바로 이 자리에서 정한다.
-  const [saveMode, setSaveMode] = useState<"new" | "overwrite" | "new_formula">("new");
+  // R&D 실험 중인 DRAFT 버전이면 기본이 "덮어쓰기" — 실험 버전 자체를 바로 고치는 게 자연스럽다.
+  const experiments = useQuery(formulaExperimentsQuery());
+  const runningExperiment = (experiments.data ?? []).find(
+    (x) => x.status === "OPEN" && x.version_id === column.formulaVersionId,
+  );
+  const [saveModeChoice, setSaveMode] = useState<"new" | "overwrite" | "new_formula" | null>(null);
+  const saveMode = saveModeChoice ?? (runningExperiment ? "overwrite" : "new");
   const [newFormulaName, setNewFormulaName] = useState("");
   const [reason, setReason] = useState("");
   const [targetSelectionId, setTargetSelectionId] = useState(column.selectionId);
@@ -1990,6 +1997,12 @@ function EditFormulaVersionModal({
               2026-10-18 사용자 요청: "기존 formula말고 새로운 formula 생성이랑 이름도 바로
               정할수 있게해줘" — 세 번째 선택지로 완전히 새로운 포뮬라를 만드는 옵션을 추가. */}
           <div className="space-y-1">
+            {runningExperiment && (
+              <p className="border border-border bg-muted px-2 py-1 font-mono text-[11px]">
+                🧪 R&amp;D 실험 중 · {runningExperiment.title} — 재료를 고치고 "현재 버전에
+                덮어쓰기"로 저장하면 실험 버전이 바로 수정돼요.
+              </p>
+            )}
             <p className="label-caps text-xs text-muted-foreground">저장 방식</p>
             <div className="flex flex-wrap gap-2">
               <button
