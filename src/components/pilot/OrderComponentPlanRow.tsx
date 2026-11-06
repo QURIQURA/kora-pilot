@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
+  baseWeightsQuery,
   formulasQuery,
   mouldsQuery,
   techniqueCategoriesQuery,
@@ -28,6 +29,9 @@ const fromRow = (row: WorkSessionFormulaVersionRow) => ({
   // 몰드 기준 생산: 목표 몰드 id / 개수(""이면 저장된 배수에서 계산)
   mould: row.mould_id ?? "",
   qty: "",
+  // 기준중량 기준 생산: SETTINGS > BASE WEIGHTS 프리셋 id / 개수
+  bw: "",
+  bwQty: "1",
 });
 
 /** Order and Production edit one selection record; this is not a second recipe copy. */
@@ -94,11 +98,38 @@ export function OrderComponentPlanRow({
   const effectiveMultiplier = useMould
     ? (mouldMultiplier(Number(qtyText), baseMould, targetMould) ?? Number.NaN)
     : Number(draft.multiplier);
-  const parsedTarget = draft.target.trim() ? Number(draft.target) : null;
+  // 기준중량 기준(가나슈/크림/필링 등 몰드 없는 컴포넌트): 설정의 기준중량 × 개수 = 목표 중량 → 배수 자동 계산.
+  const baseWeights = useQuery(baseWeightsQuery());
+  const bwPreset = (baseWeights.data ?? []).find((b) => b.id === draft.bw);
+  const useBase = !mouldMode && Boolean(bwPreset?.weight_g) && base > 0;
+  const bwQtyNum = Number(draft.bwQty);
+  const bwTargetG = useBase && bwQtyNum > 0 ? Number(bwPreset!.weight_g) * bwQtyNum : null;
+  const bwMultiplier =
+    bwTargetG != null ? Math.round((bwTargetG / base) * 10000) / 10000 : Number.NaN;
+  // 저장된 목표 중량이 어떤 기준중량의 정수배면 그 프리셋을 처음부터 선택해 보여준다.
+  useEffect(() => {
+    if (mouldMode || draft.bw || !baseWeights.data || row.target_quantity_g == null) return;
+    if (JSON.stringify(draft) !== JSON.stringify(baseline.current.draft)) return;
+    const target = Number(row.target_quantity_g);
+    const hit = [...baseWeights.data]
+      .filter((b) => b.weight_g && target / Number(b.weight_g) >= 1)
+      .filter(
+        (b) =>
+          Math.abs(target / Number(b.weight_g) - Math.round(target / Number(b.weight_g))) < 1e-6,
+      )
+      .sort((a, b) => Number(b.weight_g) - Number(a.weight_g))[0];
+    if (!hit) return;
+    const next = { ...draft, bw: hit.id, bwQty: String(Math.round(target / Number(hit.weight_g))) };
+    baseline.current = { ...baseline.current, draft: next };
+    setDraft(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mouldMode, baseWeights.data, row.target_quantity_g]);
+  const effectiveMultiplierAll = useBase ? bwMultiplier : effectiveMultiplier;
+  const parsedTarget = useBase ? bwTargetG : draft.target.trim() ? Number(draft.target) : null;
   const preview =
-    Number.isFinite(effectiveMultiplier) && effectiveMultiplier > 0
+    Number.isFinite(effectiveMultiplierAll) && effectiveMultiplierAll > 0
       ? productionDemandSummary(
-          [{ multiplier: effectiveMultiplier, target_quantity_g: parsedTarget }],
+          [{ multiplier: effectiveMultiplierAll, target_quantity_g: parsedTarget }],
           base,
         )
       : null;
@@ -108,9 +139,12 @@ export function OrderComponentPlanRow({
       if (useMould && !(Number(qtyText) > 0))
         throw new Error("몰드 개수는 0보다 큰 숫자여야 합니다");
       // 몰드 없이 직접 입력하는 경우만 정수 배수 규칙을 적용한다.
+      if (useBase && !(bwQtyNum > 0)) throw new Error("기준중량 개수는 0보다 큰 숫자여야 합니다");
       const plan = useMould
         ? { multiplier: effectiveMultiplier, target_quantity_g: parsedTarget }
-        : parseComponentPlan(draft.multiplier, draft.target, row.multiplier);
+        : useBase
+          ? { multiplier: bwMultiplier, target_quantity_g: bwTargetG }
+          : parseComponentPlan(draft.multiplier, draft.target, row.multiplier);
       if (!Number.isFinite(plan.multiplier) || plan.multiplier <= 0)
         throw new Error("생산 배수를 계산할 수 없어요 — 몰드의 기준중량을 확인하세요");
       const { data, error } = await supabase.rpc("save_order_component_plan_v2", {
@@ -144,6 +178,8 @@ export function OrderComponentPlanRow({
         pinned: saved.version_pinned,
         mould: saved.mould_id ?? "",
         qty: "",
+        bw: draft.bw,
+        bwQty: draft.bwQty,
       };
       baseline.current = { draft: next, updatedAt: saved.updated_at };
       setDraft(next);
@@ -282,19 +318,64 @@ export function OrderComponentPlanRow({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-2">
-            <label className="text-[11px]">
-              생산 배수 ×
-              <input
-                aria-label="주문 생산 배수"
-                type="number"
-                min="1"
-                step="1"
-                className={inputClass}
-                value={draft.multiplier}
-                onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
-              />
-            </label>
+          <div className="space-y-1 border border-border p-2">
+            <div className="grid grid-cols-[1fr_5rem] gap-2">
+              <label className="text-[11px]">
+                기준중량 (SETTINGS)
+                <select
+                  aria-label="기준중량"
+                  className={selectClass}
+                  value={draft.bw}
+                  onChange={(e) => setDraft((d) => ({ ...d, bw: e.target.value, bwQty: "1" }))}
+                >
+                  <option value="">기준중량 없이 배수로 직접 입력</option>
+                  {(baseWeights.data ?? []).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} · {fmtNumber(Number(b.weight_g))}g
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {useBase && (
+                <label className="text-[11px]">
+                  개수
+                  <input
+                    aria-label="기준중량 개수"
+                    type="number"
+                    min="0"
+                    step="any"
+                    className={inputClass}
+                    value={draft.bwQty}
+                    onChange={(e) => setDraft((d) => ({ ...d, bwQty: e.target.value }))}
+                  />
+                </label>
+              )}
+            </div>
+            {useBase ? (
+              <p className="font-mono text-[11px]">
+                {bwPreset!.name} ×{fmtNumber(bwQtyNum, 2)} = 목표{" "}
+                {bwTargetG != null ? fmtNumber(bwTargetG) : "?"}g → 레시피 ×
+                {Number.isFinite(bwMultiplier) ? fmtNumber(bwMultiplier, 4) : "?"}
+              </p>
+            ) : (
+              <label className="block text-[11px]">
+                생산 배수 ×
+                <input
+                  aria-label="주문 생산 배수"
+                  type="number"
+                  min="1"
+                  step="1"
+                  className={inputClass}
+                  value={draft.multiplier}
+                  onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
+                />
+              </label>
+            )}
+            {draft.bw && base <= 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                이 버전의 재료 합계(g)를 알 수 없어 기준중량으로 배수를 계산할 수 없어요.
+              </p>
+            )}
           </div>
         )}
         {!Number.isInteger(row.multiplier) && (
@@ -312,7 +393,7 @@ export function OrderComponentPlanRow({
         </label>
         {ingredients.isSuccess && preview && (
           <p className="font-mono text-[11px]">
-            기본 {fmtNumber(base)}g × {fmtNumber(effectiveMultiplier, 4)} = 생산{" "}
+            기본 {fmtNumber(base)}g × {fmtNumber(effectiveMultiplierAll, 4)} = 생산{" "}
             {fmtNumber(preview.production)}g
           </p>
         )}
