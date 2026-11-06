@@ -319,9 +319,7 @@ export function BlockTaskDetails({
 
       {/* 체크리스트 */}
       <label className="block space-y-1">
-        <span className="label-caps text-[11px] text-muted-foreground">
-          이 생산 단계 메모 · {title}
-        </span>
+        <span className="label-caps text-[11px] text-muted-foreground">메모 · 반죽 높이 등</span>
         <textarea
           key={`note-${k}`}
           className="min-h-16 w-full border border-border bg-background p-2 text-xs"

@@ -1860,7 +1860,7 @@ function ProductionBlockRecord({
           {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)}
         </span>
         <span className="flex-1">
-          {block.step_name ?? `${block.part_no}차 생산`}
+          Detail
           {mergedLabel && (
             <span className="ml-2 font-mono text-[11px] text-muted-foreground">{mergedLabel}</span>
           )}
