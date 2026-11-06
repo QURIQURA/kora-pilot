@@ -1244,15 +1244,17 @@ function MatrixColumnHeader({
         {/* 2026-10-14 사용자 요청: "work session에서 재료 추가하고 추가된 재료로 새로운 버전
             포뮬라 추가 하는버튼" — 포뮬라 페이지로 이동하지 않고 이 열의 레시피를 바로
             수정/새 버전 저장할 수 있게 하는 진입점. */}
-        <button
-          type="button"
-          className="label-caps shrink-0 px-1 py-0.5 text-[10px] text-muted-foreground hover:border hover:border-border hover:text-foreground"
-          onClick={onEdit}
-          disabled={!onEdit}
-          title={!onEdit ? "UNMERGE 후 개별 레시피를 수정하세요" : undefined}
-        >
-          EDIT
-        </button>
+        {!rnd && (
+          <button
+            type="button"
+            className="label-caps shrink-0 px-1 py-0.5 text-[10px] text-muted-foreground hover:border hover:border-border hover:text-foreground"
+            onClick={onEdit}
+            disabled={!onEdit}
+            title={!onEdit ? "UNMERGE 후 개별 레시피를 수정하세요" : undefined}
+          >
+            EDIT
+          </button>
+        )}
       </div>
       {/* 열 너비 조절 손잡이 — 오른쪽 경계를 드래그 */}
       <div
@@ -1544,6 +1546,9 @@ type EditDraftRow = {
   note: string | null;
   secondaryAmount: number | null;
   secondaryUnit: string | null;
+  /** 저장된 값 — 개수 표기만 바뀌어도 저장 대상이 되게 비교용 */
+  originalSecondaryAmount?: number | null;
+  originalSecondaryUnit?: string | null;
   removed: boolean;
 };
 
@@ -1585,10 +1590,13 @@ function EditFormulaVersionModal({
   column,
   onClose,
   onSaved,
+  inline = false,
 }: {
   column: WeighingColumn;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
+  /** WORK VIEW 아래에 항상 떠 있는 R&D 편집기 — 팝업이 아니라 페이지 안에 그대로 그리고, 저장은 실험 버전 덮어쓰기로 고정 */
+  inline?: boolean;
 }) {
   const queryClient = useQueryClient();
   const baseIngredients = useQuery(versionIngredientsQuery(column.formulaVersionId));
@@ -1608,7 +1616,9 @@ function EditFormulaVersionModal({
     (x) => x.status === "OPEN" && x.version_id === column.formulaVersionId,
   );
   const [saveModeChoice, setSaveMode] = useState<"new" | "overwrite" | "new_formula" | null>(null);
-  const saveMode = saveModeChoice ?? (runningExperiment ? "overwrite" : "new");
+  const saveMode = inline
+    ? "overwrite"
+    : (saveModeChoice ?? (runningExperiment ? "overwrite" : "new"));
   const [newFormulaName, setNewFormulaName] = useState("");
   const [reason, setReason] = useState("");
   const [targetSelectionId, setTargetSelectionId] = useState(column.selectionId);
@@ -1633,9 +1643,17 @@ function EditFormulaVersionModal({
         note: row.note,
         secondaryAmount: row.secondary_amount,
         secondaryUnit: row.secondary_unit,
+        originalSecondaryAmount: row.secondary_amount,
+        originalSecondaryUnit: row.secondary_unit,
         removed: false,
       })),
     );
+    // 기준 재료 기본값 — 계란 계열(전란/흰자/노른자)이면 그걸로. 개수가 적혀 있는 걸 우선.
+    const eggs = baseIngredients.data.filter((r) =>
+      /계란|전란|흰자|노른자|egg/i.test(`${r.ingredients.name} ${r.ingredients.name_en ?? ""}`),
+    );
+    const pick = eggs.find((r) => r.secondary_amount != null) ?? eggs[0];
+    setAnchorKey(pick ? pick.id : null);
     setSeeded(true);
   }, [seeded, baseIngredients.data]);
 
@@ -1688,6 +1706,37 @@ function EditFormulaVersionModal({
 
   const visibleRows = draftRows.filter((r) => !r.removed);
   const [moreKeys, setMoreKeys] = useState<Set<string>>(() => new Set());
+  // 기준 재료(예: 계란) 개수를 ±1 하면 🔗 연동된 재료가 같은 비율로 같이 바뀐다. 🔒 고정한 재료는 그대로.
+  const [lockedKeys, setLockedKeys] = useState<Set<string>>(() => new Set());
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
+  const anchorRow = draftRows.find((r) => r.key === anchorKey && !r.removed) ?? null;
+  const anchorCount =
+    anchorRow?.secondaryAmount != null && anchorRow.secondaryAmount > 0
+      ? anchorRow.secondaryAmount
+      : null;
+  const stepAnchor = (delta: number) => {
+    if (!anchorRow || anchorCount == null) return;
+    const next = anchorCount + delta;
+    if (next <= 0) return;
+    const factor = next / anchorCount;
+    setDraftRows((prev) =>
+      prev.map((r) => {
+        const amount = Number(r.amount);
+        const isAnchor = r.key === anchorRow.key;
+        if (r.removed || r.unit === "%" || !(amount > 0)) return r;
+        if (!isAnchor && lockedKeys.has(r.key)) return r;
+        return {
+          ...r,
+          amount: String(round2(amount * factor)),
+          secondaryAmount: isAnchor
+            ? next
+            : r.secondaryAmount != null
+              ? round2(r.secondaryAmount * factor)
+              : null,
+        };
+      }),
+    );
+  };
   const [scaleMode, setScaleMode] = useState<ScaleMode>("FACTOR");
   const [scaleValue, setScaleValue] = useState("");
   const currentTotal = visibleRows.reduce(
@@ -1699,7 +1748,7 @@ function EditFormulaVersionModal({
     setDraftRows((prev) =>
       prev.map((r) => {
         const amount = Number(r.amount);
-        if (r.removed || r.unit === "%" || !(amount > 0)) return r;
+        if (r.removed || r.unit === "%" || !(amount > 0) || lockedKeys.has(r.key)) return r;
         return {
           ...r,
           amount: String(round2(amount * factor)),
@@ -1958,12 +2007,21 @@ function EditFormulaVersionModal({
       const changedRows = visibleRows.filter(
         (row) =>
           row.sourceId !== null &&
-          (Number(row.amount) !== row.originalAmount || row.unit !== row.originalUnit),
+          (Number(row.amount) !== row.originalAmount ||
+            row.unit !== row.originalUnit ||
+            (row.secondaryAmount ?? null) !== (row.originalSecondaryAmount ?? null) ||
+            (row.secondaryUnit ?? null) !== (row.originalSecondaryUnit ?? null)),
       );
       for (const row of changedRows) {
         const { error: updateError } = await supabase
           .from("formula_version_ingredients")
-          .update({ amount: Number(row.amount) || 0, unit: row.unit, amount_source: "manual" })
+          .update({
+            amount: Number(row.amount) || 0,
+            unit: row.unit,
+            secondary_amount: row.secondaryAmount,
+            secondary_unit: row.secondaryUnit,
+            amount_source: "manual",
+          })
           .eq("id", row.sourceId as string);
         if (updateError) throw updateError;
       }
@@ -2010,6 +2068,12 @@ function EditFormulaVersionModal({
         await queryClient.invalidateQueries({ queryKey: ["components"] });
       }
       void invalidateProductionSync(queryClient);
+      if (inline) {
+        // 상시 편집기 — 저장한 값을 새 기준으로 다시 불러온다.
+        await queryClient.invalidateQueries({ queryKey: ["formula_version_ingredients"] });
+        await queryClient.invalidateQueries({ queryKey: ["version_ingredients"] });
+        setSeeded(false);
+      }
       await onSaved();
     },
     onError: (e: unknown) => {
@@ -2018,10 +2082,17 @@ function EditFormulaVersionModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+    <div
+      className={
+        inline
+          ? ""
+          : "fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4"
+      }
+    >
       <div
         className={cn(
-          "max-h-[90vh] w-full max-w-lg overflow-auto border bg-background",
+          "w-full border bg-background",
+          !inline && "max-h-[90vh] max-w-lg overflow-auto",
           runningExperiment ? "border-[#7DB35A] bg-[#EEF8E4]" : "border-border",
         )}
       >
@@ -2032,11 +2103,15 @@ function EditFormulaVersionModal({
           )}
         >
           <span className="label-caps">
-            {runningExperiment && "🧪 R&D · "}EDIT {column.formulaName} (v{column.versionNumber})
+            {runningExperiment && "🧪 R&D · "}
+            {inline ? "" : "EDIT "}
+            {column.formulaName} (v{column.versionNumber})
           </span>
-          <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
-            CLOSE
-          </button>
+          {!inline && (
+            <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
+              CLOSE
+            </button>
+          )}
         </div>
 
         <div className="space-y-4 p-4">
@@ -2054,56 +2129,58 @@ function EditFormulaVersionModal({
           {/* 2026-10-14 사용자 요청: "new 버전으로 저장할지 아니면 덮어쓸지도 선택할수 있게"
               2026-10-18 사용자 요청: "기존 formula말고 새로운 formula 생성이랑 이름도 바로
               정할수 있게해줘" — 세 번째 선택지로 완전히 새로운 포뮬라를 만드는 옵션을 추가. */}
-          <div className="space-y-1">
-            <p className="label-caps text-xs text-muted-foreground">저장 방식</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={saveMode === "new" ? primaryButtonClass : buttonClass}
-                onClick={() => setSaveMode("new")}
-              >
-                새 버전으로 저장
-              </button>
-              <button
-                type="button"
-                className={saveMode === "overwrite" ? primaryButtonClass : buttonClass}
-                onClick={() => setSaveMode("overwrite")}
-              >
-                현재 버전에 덮어쓰기
-              </button>
-              <button
-                type="button"
-                className={saveMode === "new_formula" ? primaryButtonClass : buttonClass}
-                onClick={() => {
-                  setSaveMode("new_formula");
-                  if (!newFormulaName.trim()) setNewFormulaName(`${column.formulaName} 사본`);
-                }}
-              >
-                새 포뮬라로 저장
-              </button>
+          {!inline && (
+            <div className="space-y-1">
+              <p className="label-caps text-xs text-muted-foreground">저장 방식</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={saveMode === "new" ? primaryButtonClass : buttonClass}
+                  onClick={() => setSaveMode("new")}
+                >
+                  새 버전으로 저장
+                </button>
+                <button
+                  type="button"
+                  className={saveMode === "overwrite" ? primaryButtonClass : buttonClass}
+                  onClick={() => setSaveMode("overwrite")}
+                >
+                  현재 버전에 덮어쓰기
+                </button>
+                <button
+                  type="button"
+                  className={saveMode === "new_formula" ? primaryButtonClass : buttonClass}
+                  onClick={() => {
+                    setSaveMode("new_formula");
+                    if (!newFormulaName.trim()) setNewFormulaName(`${column.formulaName} 사본`);
+                  }}
+                >
+                  새 포뮬라로 저장
+                </button>
+              </div>
+              <p className="font-mono text-xs uppercase text-muted-foreground">
+                {saveMode === "new" &&
+                  `현재 v${column.versionNumber}을 복사해서 새 DRAFT 버전을 만듭니다. 저장하면 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 바로 새 버전을 쓰게 되고, 계량 체크는 초기화됩니다.`}
+                {saveMode === "overwrite" &&
+                  `v${column.versionNumber} 자체를 고칩니다. 이 버전을 쓰는 다른 WORK SESSION/포뮬라에도 바로 반영되고, 양이 안 바뀐 재료의 계량 체크는 그대로 남습니다.`}
+                {saveMode === "new_formula" &&
+                  `"${column.formulaName}"과 완전히 분리된 새 포뮬라 + 새 COMPONENT를 만듭니다. 기존 포뮬라/COMPONENT는 그대로 남고, 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 새 포뮬라로 전환됩니다.`}
+              </p>
+              {saveMode === "new_formula" && (
+                <Field label="새 포뮬라 이름">
+                  <input
+                    className={inputClass}
+                    autoFocus
+                    value={newFormulaName}
+                    onChange={(e) => setNewFormulaName(e.target.value)}
+                    placeholder="예: 당근케익 (저당 버전)"
+                  />
+                </Field>
+              )}
             </div>
-            <p className="font-mono text-xs uppercase text-muted-foreground">
-              {saveMode === "new" &&
-                `현재 v${column.versionNumber}을 복사해서 새 DRAFT 버전을 만듭니다. 저장하면 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 바로 새 버전을 쓰게 되고, 계량 체크는 초기화됩니다.`}
-              {saveMode === "overwrite" &&
-                `v${column.versionNumber} 자체를 고칩니다. 이 버전을 쓰는 다른 WORK SESSION/포뮬라에도 바로 반영되고, 양이 안 바뀐 재료의 계량 체크는 그대로 남습니다.`}
-              {saveMode === "new_formula" &&
-                `"${column.formulaName}"과 완전히 분리된 새 포뮬라 + 새 COMPONENT를 만듭니다. 기존 포뮬라/COMPONENT는 그대로 남고, 이 WORK SESSION의 이 열(×${fmtNumber(column.multiplier, 0)})만 새 포뮬라로 전환됩니다.`}
-            </p>
-            {saveMode === "new_formula" && (
-              <Field label="새 포뮬라 이름">
-                <input
-                  className={inputClass}
-                  autoFocus
-                  value={newFormulaName}
-                  onChange={(e) => setNewFormulaName(e.target.value)}
-                  placeholder="예: 당근케익 (저당 버전)"
-                />
-              </Field>
-            )}
-          </div>
+          )}
 
-          {(column.members?.length ?? 0) > 1 && (
+          {!inline && (column.members?.length ?? 0) > 1 && (
             <div className="space-y-2 border border-border p-2">
               <p className="text-xs">
                 MERGE는 계량 보기입니다. 새 버전·새 포뮬라는 아래에서 선택한 주문 항목 하나에
@@ -2131,6 +2208,68 @@ function EditFormulaVersionModal({
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
           )}
 
+          <div className="space-y-1 border border-dashed border-border bg-background/60 p-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="label-caps text-[11px] text-muted-foreground">⚓ 기준 재료</span>
+              <select
+                className={`${selectClass} !h-7 !min-h-0 !w-auto !px-1 text-xs`}
+                value={anchorKey ?? ""}
+                onChange={(e) => setAnchorKey(e.target.value || null)}
+              >
+                <option value="">선택 안 함</option>
+                {visibleRows.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {r.ingredientName}
+                  </option>
+                ))}
+              </select>
+              {anchorRow && anchorCount != null && (
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className={`${buttonClass} !h-7 !min-h-0 px-2 text-sm`}
+                    onClick={() => stepAnchor(-1)}
+                  >
+                    −1
+                  </button>
+                  <span className="min-w-12 text-center font-mono text-sm tabular-nums">
+                    {fmtNumber(anchorCount, 2)}
+                    {anchorRow.secondaryUnit ?? ""}
+                  </span>
+                  <button
+                    type="button"
+                    className={`${primaryButtonClass} !h-7 !min-h-0 px-2 text-sm`}
+                    onClick={() => stepAnchor(1)}
+                  >
+                    +1
+                  </button>
+                </span>
+              )}
+              {anchorRow && anchorCount == null && (
+                <input
+                  type="number"
+                  step="any"
+                  className={`${inputClass} !h-7 !min-h-0 !w-28 text-xs`}
+                  placeholder="현재 개수 입력"
+                  onBlur={(e) => {
+                    const n = Number(e.target.value);
+                    if (n > 0)
+                      patchRow(anchorRow.key, {
+                        secondaryAmount: n,
+                        secondaryUnit: anchorRow.secondaryUnit ?? "개",
+                      });
+                  }}
+                />
+              )}
+            </div>
+            <p className="font-mono text-[11px] text-muted-foreground">
+              {anchorRow
+                ? anchorCount != null
+                  ? "+1/−1을 누르면 🔗 연동된 재료가 같은 비율로 같이 바뀌어요. 🔒 고정한 재료와 직접 입력한 양은 그대로예요."
+                  : "이 재료가 현재 몇 개인지 먼저 입력하세요(예: 흰자 3). 그다음부터 +1/−1로 조절돼요."
+                : "기준 재료를 고르면 개수 +1/−1로 다른 재료를 비율대로 같이 늘릴 수 있어요."}
+            </p>
+          </div>
           <ScaleAllPanel
             mode={scaleMode}
             value={scaleValue}
@@ -2146,7 +2285,40 @@ function EditFormulaVersionModal({
             {visibleRows.map((row) => (
               <li key={row.key} className="px-3 py-1">
                 <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 break-words text-sm">{row.ingredientName}</span>
+                  {row.key === anchorKey ? (
+                    <span className="w-7 text-center text-sm" title="기준 재료">
+                      ⚓
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="h-7 w-7 text-sm hover:bg-secondary"
+                      title={
+                        lockedKeys.has(row.key)
+                          ? "🔒 고정 — 기준 재료를 바꿔도 이 양은 그대로"
+                          : "🔗 연동 — 기준 재료 개수에 맞춰 같이 바뀜"
+                      }
+                      onClick={() =>
+                        setLockedKeys((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(row.key)) next.delete(row.key);
+                          else next.add(row.key);
+                          return next;
+                        })
+                      }
+                    >
+                      {lockedKeys.has(row.key) ? "🔒" : "🔗"}
+                    </button>
+                  )}
+                  <span className="min-w-0 flex-1 break-words text-sm">
+                    {row.ingredientName}
+                    {row.secondaryAmount != null && row.secondaryUnit && (
+                      <span className="ml-1 font-mono text-[11px] text-muted-foreground">
+                        · {fmtNumber(row.secondaryAmount, 2)}
+                        {row.secondaryUnit}
+                      </span>
+                    )}
+                  </span>
                   <input
                     className={`${inputClass} !h-7 !min-h-0 !w-20 text-right`}
                     type="number"
@@ -2268,12 +2440,25 @@ function EditFormulaVersionModal({
               onClick={() => saveChanges.mutate()}
             >
               {saveMode === "new" && "새 버전으로 저장"}
-              {saveMode === "overwrite" && "덮어쓰기"}
+              {saveMode === "overwrite" && (inline ? "저장 (실험 버전에 반영)" : "덮어쓰기")}
               {saveMode === "new_formula" && "새 포뮬라로 저장"}
             </button>
-            <button type="button" className={buttonClass} onClick={onClose}>
-              CANCEL
-            </button>
+            {inline ? (
+              <button
+                type="button"
+                className={buttonClass}
+                onClick={() => {
+                  setSeeded(false);
+                  setLockedKeys(new Set());
+                }}
+              >
+                되돌리기
+              </button>
+            ) : (
+              <button type="button" className={buttonClass} onClick={onClose}>
+                CANCEL
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -2574,6 +2759,13 @@ export function DayWorkView({
     [columns, ingredientsByVersion, progressBySelectionAndLine],
   );
 
+  const rndExperimentsAll = useQuery(formulaExperimentsQuery());
+  const rndOpenVersionIds = new Set(
+    (rndExperimentsAll.data ?? []).filter((x) => x.status === "OPEN").map((x) => x.version_id),
+  );
+  const rndColumns = columns.filter(
+    (c) => rndOpenVersionIds.has(c.formulaVersionId) && !((c.members?.length ?? 0) > 1),
+  );
   const invalidateProgress = async () => {
     for (const sid of sessionIds)
       await queryClient.invalidateQueries({ queryKey: ["work_session_progress", sid] });
@@ -2657,6 +2849,24 @@ export function DayWorkView({
           )}
         </SectionCard>
       )}
+      {part !== "COMPONENTS" &&
+        rndColumns.map((col) => (
+          <div key={col.selectionId} className="mt-4">
+            <EditFormulaVersionModal
+              inline
+              column={col}
+              onClose={() => undefined}
+              onSaved={async () => {
+                if (col.sessionId)
+                  await queryClient.invalidateQueries({
+                    queryKey: ["work_session_formula_versions", col.sessionId],
+                  });
+                await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
+                await invalidateProgress();
+              }}
+            />
+          </div>
+        ))}
       {part !== "COMPONENTS" && editingColumn && (
         <EditFormulaVersionModal
           column={editingColumn}
