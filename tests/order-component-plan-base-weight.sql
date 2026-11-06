@@ -5,7 +5,11 @@ do $$
 declare r record; res jsonb; bw uuid; rejected boolean := false;
 begin
   select w.id, w.updated_at, w.user_id, w.formula_version_id into r
-    from public.work_session_formula_versions w limit 1;
+    from public.work_session_formula_versions w
+    join public.work_sessions s on s.id = w.work_session_id
+    join public.orders o on o.id = s.order_id
+    where s.status not in ('COMPLETED', 'CANCELLED') and o.status not in ('COMPLETED', 'CANCELLED')
+    limit 1;
   perform set_config('request.jwt.claims', json_build_object('sub', r.user_id, 'role', 'authenticated')::text, true);
   select id into bw from public.base_weight_presets limit 1;
   res := public.save_order_component_plan_v3(r.id, r.updated_at, r.formula_version_id, 1.5714, 1100, true, null, null, bw, 1);
