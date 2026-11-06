@@ -994,16 +994,6 @@ function WeighingView({
     return columnOrder.map((id) => byId.get(id)).filter((c): c is WeighingColumn => Boolean(c));
   }, [columns, columnOrder]);
 
-  const headerGroups = useMemo(() => {
-    const out: { key: string | undefined; label: string; span: number }[] = [];
-    for (const c of displayColumns) {
-      const last = out[out.length - 1];
-      if (last && c.groupKey && last.key === c.groupKey) last.span += 1;
-      else out.push({ key: c.groupKey, label: c.groupLabel ?? "", span: 1 });
-    }
-    return out;
-  }, [displayColumns]);
-
   const displayGroups = useMemo(() => {
     const byId = new Map(groups.map((g) => [g.ingredientId, g]));
     return rowOrder
@@ -1135,45 +1125,20 @@ function WeighingView({
           onDragEnd={handleColumnDragEnd}
         >
           <thead>
-            {headerGroups.some((g) => g.key) && (
-              <tr>
-                <th
-                  rowSpan={2}
-                  className="label-caps sticky left-0 top-0 z-30 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground"
-                >
-                  INGREDIENT
-                </th>
-                {headerGroups.map((g, gi) => (
-                  <th
-                    key={`${g.key ?? "single"}-${gi}`}
-                    colSpan={g.span}
-                    className={cn(
-                      "sticky top-0 z-20 h-7 border-b border-l border-border bg-secondary px-3 text-left text-[11px]",
-                      g.key && "label-caps text-foreground",
-                    )}
-                  >
-                    {g.key ? `🔗 ${g.label} · BLEND ${g.span}` : ""}
-                  </th>
-                ))}
-                <th className="sticky top-0 z-20 h-7 border-b border-l border-border bg-secondary" />
-              </tr>
-            )}
             <tr>
-              {!headerGroups.some((g) => g.key) && (
-                <th className="label-caps sticky left-0 top-0 z-30 relative border-b border-r border-border bg-secondary px-3 py-2 text-right text-xs text-muted-foreground">
-                  INGREDIENT
-                  <div
-                    role="separator"
-                    aria-orientation="vertical"
-                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      startIngredientColResize(e.clientX);
-                    }}
-                  />
-                </th>
-              )}
+              <th className="label-caps sticky left-0 top-0 z-30 relative bg-secondary px-3 py-2 text-right text-xs text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border),inset_-1px_0_0_0_var(--color-border)]">
+                INGREDIENT
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    startIngredientColResize(e.clientX);
+                  }}
+                />
+              </th>
               <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
                 {displayColumns.map((col) => (
                   <MatrixColumnHeader
@@ -1184,7 +1149,11 @@ function WeighingView({
                     versionId={col.formulaVersionId}
                     multiplier={col.multiplier}
                     rnd={rndVersionIds.has(col.formulaVersionId)}
-                    stickyTop={headerGroups.some((g) => g.key) ? 28 : 0}
+                    groupLabel={col.groupKey ? (col.groupLabel ?? "") : undefined}
+                    groupFirst={
+                      Boolean(col.groupKey) &&
+                      displayColumns[displayColumns.indexOf(col) - 1]?.groupKey !== col.groupKey
+                    }
                     onResizeStart={(clientX) => startColumnResize(col.selectionId, clientX)}
                     onEdit={
                       !onEditColumn || col.groupKey || (col.members && col.members.length > 1)
@@ -1196,7 +1165,7 @@ function WeighingView({
               </SortableContext>
               <th
                 key={MATRIX_FILLER_COL_ID}
-                className="sticky top-0 z-20 border-b border-l border-border bg-secondary"
+                className="sticky top-0 z-20 bg-secondary shadow-[inset_0_-1px_0_0_var(--color-border),inset_1px_0_0_0_var(--color-border)]"
               />
             </tr>
           </thead>
@@ -1333,13 +1302,15 @@ function MatrixColumnHeader({
   versionId,
   multiplier,
   rnd,
-  stickyTop = 0,
+  groupLabel,
+  groupFirst = false,
   onResizeStart,
   onEdit,
 }: {
   id: string;
-  /** 위에 묶음 제목 행이 있으면 그 높이만큼 아래에 고정 */
-  stickyTop?: number;
+  /** 블렌드(합성) 포뮬라의 원본 열이면 묶음 제목 — 첫 열에만 글자를 그리고 모든 원본 열 위에 같은 색 띠를 둔다 */
+  groupLabel?: string | undefined;
+  groupFirst?: boolean;
   formulaName: string;
   formulaId: string;
   versionId: string;
@@ -1355,13 +1326,22 @@ function MatrixColumnHeader({
   return (
     <th
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, top: stickyTop }}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "sticky z-20 relative border-b border-l border-border bg-secondary px-3 py-2 text-left align-bottom",
+        "sticky top-0 z-20 relative bg-secondary px-3 py-2 text-left align-bottom",
+        groupLabel !== undefined
+          ? "shadow-[inset_0_3px_0_0_var(--color-foreground),inset_0_-1px_0_0_var(--color-border),inset_1px_0_0_0_var(--color-border)] pt-8"
+          : "shadow-[inset_0_-1px_0_0_var(--color-border),inset_1px_0_0_0_var(--color-border)]",
+        groupFirst && "z-[25]",
         rnd && "!bg-[#DCF0C8]",
         isDragging && "z-40 bg-secondary",
       )}
     >
+      {groupFirst && (
+        <span className="label-caps pointer-events-none absolute left-3 top-1.5 whitespace-nowrap text-[11px] font-semibold text-foreground">
+          🔗 {groupLabel} · BLEND
+        </span>
+      )}
       <div className="flex items-start gap-1">
         {/* 열(포뮬라 버전) 드래그 손잡이 */}
         <button
