@@ -1411,45 +1411,48 @@ export function ProductionDashboard() {
                             }
                           }}
                           className={cn(
-                            "absolute cursor-grab px-2 py-1 text-left",
-                            isSelected
-                              ? "outline outline-2 outline-foreground"
-                              : "border border-border",
+                            "absolute cursor-grab text-left",
+                            isSelected && "outline outline-2 outline-foreground",
                           )}
                           style={{
                             top: t.cardTop,
                             left: gutter + 4,
                             right: 2,
-                            background: color.bg,
                             color: color.text,
                           }}
                         >
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            <span className="font-mono text-[11px] opacity-80">
-                              {hm(start)}–{hm(end)}
-                            </span>
+                          {/* 시작 줄만 색으로 채운다 — 시각 · 오더 · 슬롯 · 컴포넌트 */}
+                          <div
+                            className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border border-border px-2 py-1"
+                            style={{ background: color.bg }}
+                          >
+                            <span className="font-mono text-[11px] opacity-80">{hm(start)}</span>
                             <span className="min-w-0 flex-1 break-words text-xs font-medium">
+                              <span className="font-mono text-[10px] opacity-70">[start]</span>{" "}
+                              <span className="font-mono text-[11px] opacity-80">
+                                {merged
+                                  ? `MERGED ${merged.orders.length} · ${merged.orders.join(" + ")}`
+                                  : row.order.order_number}
+                              </span>{" "}
                               <span className="label-caps mr-1 text-[10px] opacity-70">
                                 {row.slot ?? "CORE"}
                               </span>
                               {blockTitle(b, row)}
                             </span>
-                            <span className="flex w-full flex-wrap items-center gap-x-3 gap-y-0.5">
-                              <BlockTimerChip
-                                part="timer"
-                                block={b}
-                                row={row}
-                                onStarted={ensureSessionStarted}
-                                onRetime={retimeBlock}
-                              />
-                            </span>
                           </div>
-                          <p className="break-words font-mono text-[11px] opacity-80">
-                            {merged
-                              ? `MERGED ${merged.orders.length} · ${merged.orders.join(" + ")}`
-                              : row.order.order_number}
-                          </p>
-                          <BlockTimerChip part="note" block={b} row={row} />
+                          {/* 타이머 — 박스 없이 텍스트로 */}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-2 pt-0.5">
+                            <BlockTimerChip
+                              part="timer"
+                              block={b}
+                              row={row}
+                              onStarted={ensureSessionStarted}
+                              onRetime={retimeBlock}
+                            />
+                          </div>
+                          <div className="px-2">
+                            <BlockTimerChip part="note" block={b} row={row} />
+                          </div>
                         </div>
                         {/* 종료 줄 — 위아래로 끌면 길이 조절 */}
                         <div
@@ -1471,7 +1474,7 @@ export function ProductionDashboard() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <span>{hm(end)}</span>
-                          <span className="truncate">■ {blockTitle(b, row)} [end]</span>
+                          <span>■ [end]</span>
                         </div>
                       </div>
                     );
