@@ -1107,6 +1107,18 @@ export const workBlocksQuery = () =>
       ),
   });
 
+/** 작업이 완료(DONE)된 TASK id — 작업 대기공간에서 완료된 컴포넌트를 빼는 데 쓴다. work_blocks 키 아래에 둬서 블록/TASK 갱신 때 같이 새로고침된다. */
+export const doneTaskIdsQuery = () =>
+  queryOptions({
+    queryKey: ["work_blocks", "done_task_ids"],
+    queryFn: async (): Promise<Set<string>> =>
+      new Set(
+        unwrap(await supabase.from("work_session_tasks").select("id").eq("status", "DONE")).map(
+          (t) => t.id,
+        ),
+      ),
+  });
+
 // ── DAILY TASKS(2026-10-22) ──────────────────────────────────────────────────
 // 케이크 제품/컴포넌트와 무관한 작업. 라이브러리(daily_task_templates)는 SETTINGS에서 관리하고,
 // 대시보드에 올린 건 daily_tasks 한 줄 = WANN 플래너 TASK 1개(그 날짜의 Daily Project 하위).

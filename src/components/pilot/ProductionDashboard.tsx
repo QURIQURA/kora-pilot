@@ -30,6 +30,7 @@ import {
   mouldsQuery,
   ordersQuery,
   workBlocksQuery,
+  doneTaskIdsQuery,
   type DailyTask,
   type DailyTaskTemplate,
   type DashboardComponentRow,
@@ -147,6 +148,7 @@ export function ProductionDashboard() {
   const queryClient = useQueryClient();
   const components = useQuery(dashboardComponentsQuery());
   const blocksQuery = useQuery(workBlocksQuery());
+  const doneTaskIds = useQuery(doneTaskIdsQuery());
   const [date, setDate] = useState(() => toLocalDateString());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSessionNotes, setShowSessionNotes] = useState(false);
@@ -203,6 +205,14 @@ export function ProductionDashboard() {
     for (const r of rows) {
       if (!isActive(r)) continue;
       // 타임라인에 올라간 컴포넌트는 사라지지 않고 비활성으로 남긴다(다른 날짜에 배정된 것도 — 날짜 표기와 함께).
+      // 작업이 끝난(배정된 블록의 TASK가 전부 DONE) 컴포넌트는 대기공간에서 뺀다 — ORDERS 쪽에서 확인.
+      const rbAll = blocksByRow.get(r.id) ?? [];
+      if (
+        rbAll.length > 0 &&
+        doneTaskIds.data &&
+        rbAll.every((b) => b.work_session_task_id && doneTaskIds.data.has(b.work_session_task_id))
+      )
+        continue;
       const g = groups.get(r.order.id) ?? { order: r.order, rows: [] };
       g.rows.push(r);
       groups.set(r.order.id, g);
@@ -210,7 +220,7 @@ export function ProductionDashboard() {
     return [...groups.values()].sort((a, b) =>
       a.order.order_number.localeCompare(b.order.order_number),
     );
-  }, [rows]);
+  }, [rows, blocksByRow, doneTaskIds.data]);
   const poolCount = poolGroups.reduce(
     (n, g) => n + g.rows.filter((r) => (blocksByRow.get(r.id) ?? []).length === 0).length,
     0,
