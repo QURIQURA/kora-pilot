@@ -1687,6 +1687,7 @@ function EditFormulaVersionModal({
   };
 
   const visibleRows = draftRows.filter((r) => !r.removed);
+  const [moreKeys, setMoreKeys] = useState<Set<string>>(() => new Set());
   const [scaleMode, setScaleMode] = useState<ScaleMode>("FACTOR");
   const [scaleValue, setScaleValue] = useState("");
   const currentTotal = visibleRows.reduce(
@@ -2143,47 +2144,72 @@ function EditFormulaVersionModal({
           />
           <ul className="divide-y divide-border border border-border">
             {visibleRows.map((row) => (
-              <li key={row.key} className="flex items-center gap-2 px-3 py-2">
-                <span className="flex-1 text-sm">{row.ingredientName}</span>
-                <div className="flex flex-col items-end">
+              <li key={row.key} className="px-3 py-1">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 break-words text-sm">{row.ingredientName}</span>
                   <input
-                    className={`${inputClass} !w-24 text-right`}
+                    className={`${inputClass} !h-7 !min-h-0 !w-20 text-right`}
                     type="number"
                     step="any"
                     value={row.amount}
                     onChange={(e) => patchRow(row.key, { amount: e.target.value })}
                   />
-                  <AdjustInput
-                    current={Number(row.amount) || 0}
-                    onApply={(next) => {
-                      const cur = Number(row.amount) || 0;
-                      patchRow(row.key, {
-                        amount: String(next),
-                        ...(row.secondaryAmount != null && cur > 0
-                          ? { secondaryAmount: round2((Number(row.secondaryAmount) * next) / cur) }
-                          : {}),
-                      });
-                    }}
-                  />
+                  <select
+                    className={`${selectClass} !h-7 !min-h-0 !w-16 !px-1 text-xs`}
+                    value={row.unit}
+                    onChange={(e) => patchRow(row.key, { unit: e.target.value })}
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className={cn(
+                      "h-7 px-1.5 text-xs text-muted-foreground hover:bg-secondary",
+                      moreKeys.has(row.key) && "bg-secondary text-foreground",
+                    )}
+                    title="증량(+20 ×1.2) 입력 펼치기"
+                    onClick={() =>
+                      setMoreKeys((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(row.key)) next.delete(row.key);
+                        else next.add(row.key);
+                        return next;
+                      })
+                    }
+                  >
+                    ⋯
+                  </button>
+                  <button
+                    type="button"
+                    className="h-7 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+                    title="재료 삭제"
+                    onClick={() => removeRow(row.key)}
+                  >
+                    ✕
+                  </button>
                 </div>
-                <select
-                  className={`${selectClass} !w-20`}
-                  value={row.unit}
-                  onChange={(e) => patchRow(row.key, { unit: e.target.value })}
-                >
-                  {UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="label-caps px-1 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={() => removeRow(row.key)}
-                >
-                  ✕
-                </button>
+                {moreKeys.has(row.key) && (
+                  <div className="flex justify-end pb-1">
+                    <AdjustInput
+                      current={Number(row.amount) || 0}
+                      onApply={(next) => {
+                        const cur = Number(row.amount) || 0;
+                        patchRow(row.key, {
+                          amount: String(next),
+                          ...(row.secondaryAmount != null && cur > 0
+                            ? {
+                                secondaryAmount: round2((Number(row.secondaryAmount) * next) / cur),
+                              }
+                            : {}),
+                        });
+                      }}
+                    />
+                  </div>
+                )}
               </li>
             ))}
             {visibleRows.length === 0 && !baseIngredients.isLoading && (

@@ -154,11 +154,11 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
  * 버튼도 표준 크기(min-h-44px)보다 작게 줄인다. 앱 전역 selectClass/buttonClass는 그대로
  * 두고(다른 화면 터치 타겟에 영향 없게) 이 페이지 안에서만 쓰는 축소 버전. */
 const compactSelectClass =
-  "min-h-[32px] border border-input bg-background px-2 py-1 font-body text-xs text-foreground outline-none focus:border-foreground disabled:opacity-60";
+  "min-h-[28px] border border-input bg-background px-2 py-0.5 font-body text-xs text-foreground outline-none focus:border-foreground disabled:opacity-60";
 const compactButtonClass =
-  "label-caps inline-flex min-h-[30px] items-center justify-center border border-input bg-background px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-secondary disabled:opacity-40";
+  "label-caps inline-flex min-h-[28px] items-center justify-center border border-input bg-background px-2 py-0.5 text-[11px] text-foreground transition-colors hover:bg-secondary disabled:opacity-40";
 const compactPrimaryButtonClass =
-  "label-caps inline-flex min-h-[30px] items-center justify-center border border-foreground bg-foreground px-2 py-1 text-[11px] text-background transition-colors hover:opacity-90 disabled:opacity-40";
+  "label-caps inline-flex min-h-[28px] items-center justify-center border border-foreground bg-foreground px-2 py-0.5 text-[11px] text-background transition-colors hover:opacity-90 disabled:opacity-40";
 
 function FormulaDetailPage() {
   const { formulaId } = Route.useParams();
@@ -909,126 +909,134 @@ function FormulaDetailPage() {
       {/* 부가 정보(기법/방법/기준배합/컴포넌트)와 SAVE를 한 박스에 — 중요도가 낮은 편집
           컨트롤들이라 하나로 모으고 버튼도 작게 줄여서, 페이지 상단이 INGREDIENTS 앞을
           너무 많이 차지하지 않도록 한다. */}
-      <div className="flex flex-wrap items-center gap-2 border border-border bg-card px-3 py-2">
-        <TechniqueSelect
-          className={`${compactSelectClass} w-auto`}
-          value={editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")}
-          disabled={fieldsDisabled}
-          onChange={(id) => setDraft((d) => (d ? { ...d, techniqueId: id ?? "" } : d))}
-        />
-        <MethodSelect
-          className={`${compactSelectClass} w-auto`}
-          techniqueCategoryId={
-            editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")
-          }
-          value={editing ? (draft?.methodId ?? "") : (formula.data.method_id ?? "")}
-          disabled={fieldsDisabled}
-          onChange={(id) => setDraft((d) => (d ? { ...d, methodId: id ?? "" } : d))}
-        />
-        <label className="flex items-center gap-1.5 text-xs">
-          <input
-            type="checkbox"
-            className="h-4 w-4 border border-input"
-            checked={editing ? (draft?.isBase ?? false) : formula.data.is_base_formula}
-            disabled={
-              fieldsDisabled || !(editing ? draft?.techniqueId : formula.data.technique_category_id)
+      <div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border border-border bg-card px-3 py-1.5">
+          <TechniqueSelect
+            className={`${compactSelectClass} w-auto`}
+            value={
+              editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")
             }
-            onChange={(e) => setDraft((d) => (d ? { ...d, isBase: e.target.checked } : d))}
+            disabled={fieldsDisabled}
+            onChange={(id) => setDraft((d) => (d ? { ...d, techniqueId: id ?? "" } : d))}
           />
-          <span className="label-caps">기준 배합</span>
-        </label>
-        <select
-          className={`${compactSelectClass} w-auto`}
-          value={editing ? (draft?.componentId ?? "") : (formula.data.component_id ?? "")}
-          disabled={fieldsDisabled}
-          onChange={(e) => setDraft((d) => (d ? { ...d, componentId: e.target.value } : d))}
-        >
-          <option value="">NO COMPONENT</option>
-          {(components.data ?? []).map((component) => (
-            <option key={component.id} value={component.id}>
-              {component.name}
-            </option>
-          ))}
-        </select>
+          <MethodSelect
+            className={`${compactSelectClass} w-auto`}
+            techniqueCategoryId={
+              editing ? (draft?.techniqueId ?? "") : (formula.data.technique_category_id ?? "")
+            }
+            value={editing ? (draft?.methodId ?? "") : (formula.data.method_id ?? "")}
+            disabled={fieldsDisabled}
+            onChange={(id) => setDraft((d) => (d ? { ...d, methodId: id ?? "" } : d))}
+          />
+          <label className="flex items-center gap-1.5 text-xs">
+            <input
+              type="checkbox"
+              className="h-4 w-4 border border-input"
+              checked={editing ? (draft?.isBase ?? false) : formula.data.is_base_formula}
+              disabled={
+                fieldsDisabled ||
+                !(editing ? draft?.techniqueId : formula.data.technique_category_id)
+              }
+              onChange={(e) => setDraft((d) => (d ? { ...d, isBase: e.target.checked } : d))}
+            />
+            <span className="label-caps">기준 배합</span>
+          </label>
+          <select
+            className={`${compactSelectClass} w-auto`}
+            value={editing ? (draft?.componentId ?? "") : (formula.data.component_id ?? "")}
+            disabled={fieldsDisabled}
+            onChange={(e) => setDraft((d) => (d ? { ...d, componentId: e.target.value } : d))}
+          >
+            <option value="">NO COMPONENT</option>
+            {(components.data ?? []).map((component) => (
+              <option key={component.id} value={component.id}>
+                {component.name}
+              </option>
+            ))}
+          </select>
 
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
 
-        {/* VERSION — 버전 전환/CURRENT·ARCHIVE 지정. DRAFT/TESTING/SUPERSEDED/LOGGED 같은 세부
+          {/* VERSION — 버전 전환/CURRENT·ARCHIVE 지정. DRAFT/TESTING/SUPERSEDED/LOGGED 같은 세부
             상태는 수동으로 고를 필요가 없다는 판단으로 CURRENT/ARCHIVE 두 가지만 남겼다(2026-09-22) —
             SUPERSEDED는 다른 버전을 CURRENT로 바꿀 때 DB 트리거가 자동 처리하고, LOGGED는
             Development Entry 저장 시 자동으로 붙는 값이라 여기서 고를 필요가 없다. */}
-        <select
-          className={`${compactSelectClass} w-auto`}
-          value={versionId ?? ""}
-          onChange={(e) => setVersionId(e.target.value)}
-        >
-          {versionList.map((v) => (
-            <option key={v.id} value={v.id}>
-              {`${versionLabel(v.version_number)} · ${v.status}`}
+          <select
+            className={`${compactSelectClass} w-auto`}
+            value={versionId ?? ""}
+            onChange={(e) => setVersionId(e.target.value)}
+          >
+            {versionList.map((v) => (
+              <option key={v.id} value={v.id}>
+                {`${versionLabel(v.version_number)} · ${v.status}`}
+              </option>
+            ))}
+          </select>
+          {version && <StatusBadge status={version.status} />}
+          <select
+            className={`${compactSelectClass} w-auto`}
+            value=""
+            onChange={(e) => {
+              const next = e.target.value as FormulaStatus;
+              if (!next || !versionId) return;
+              supabase
+                .from("formula_versions")
+                .update({ status: next })
+                .eq("id", versionId)
+                .then(({ error }) => {
+                  if (error) throw error;
+                  return invalidate();
+                });
+            }}
+          >
+            <option value="">SET…</option>
+            <option value="CURRENT" disabled={version?.status === "CURRENT"}>
+              SET CURRENT
             </option>
-          ))}
-        </select>
-        {version && <StatusBadge status={version.status} />}
-        <select
-          className={`${compactSelectClass} w-auto`}
-          value=""
-          onChange={(e) => {
-            const next = e.target.value as FormulaStatus;
-            if (!next || !versionId) return;
-            supabase
-              .from("formula_versions")
-              .update({ status: next })
-              .eq("id", versionId)
-              .then(({ error }) => {
-                if (error) throw error;
-                return invalidate();
-              });
-          }}
-        >
-          <option value="">SET…</option>
-          <option value="CURRENT" disabled={version?.status === "CURRENT"}>
-            SET CURRENT
-          </option>
-          <option value="ARCHIVED" disabled={version?.status === "ARCHIVED"}>
-            ARCHIVE
-          </option>
-        </select>
-        <button
-          type="button"
-          className={compactButtonClass}
-          onClick={() => setCreatingVersion(true)}
-        >
-          + NEW VERSION
-        </button>
+            <option value="ARCHIVED" disabled={version?.status === "ARCHIVED"}>
+              ARCHIVE
+            </option>
+          </select>
+          <button
+            type="button"
+            className={compactButtonClass}
+            onClick={() => setCreatingVersion(true)}
+          >
+            + NEW VERSION
+          </button>
 
-        {canEditPage && (
-          <>
-            <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-            <button
-              type="button"
-              className={compactPrimaryButtonClass}
-              disabled={!draft || !isDirty || saveAll.isPending}
-              onClick={() => saveAll.mutate()}
-            >
-              {saveAll.isPending ? "SAVING…" : "SAVE"}
-            </button>
-            {isDirty && (
+          {canEditPage && (
+            <>
+              <span className="mx-1 h-4 w-px bg-border" aria-hidden />
               <button
                 type="button"
-                className={compactButtonClass}
-                onClick={() => setDraft(buildDraft())}
+                className={compactPrimaryButtonClass}
+                disabled={!draft || !isDirty || saveAll.isPending}
+                onClick={() => saveAll.mutate()}
               >
-                되돌리기
+                {saveAll.isPending ? "SAVING…" : "SAVE"}
               </button>
-            )}
-            <span className="label-caps text-[10px] text-muted-foreground">
-              {!draft ? "LOADING…" : isDirty ? "변경 사항이 있습니다 — 저장하려면 SAVE" : "✓ SAVED"}
-            </span>
-          </>
-        )}
-      </div>
+              {isDirty && (
+                <button
+                  type="button"
+                  className={compactButtonClass}
+                  onClick={() => setDraft(buildDraft())}
+                >
+                  되돌리기
+                </button>
+              )}
+              <span className="label-caps text-[10px] text-muted-foreground">
+                {!draft
+                  ? "LOADING…"
+                  : isDirty
+                    ? "변경 사항이 있습니다 — 저장하려면 SAVE"
+                    : "✓ SAVED"}
+              </span>
+            </>
+          )}
+        </div>
 
-      {/* 2026-09-30에 MOULD/YIELD/BATCH ×N 미리보기 박스를 지우면서, 이 배합 버전 자체의 기본
+        {/* 2026-09-30에 MOULD/YIELD/BATCH ×N 미리보기 박스를 지우면서, 이 배합 버전 자체의 기본
           MOULD/BASE WEIGHT/YIELD를 "바꾸는" UI만 없앤 것이었는데, 그 값을 "보여주는" 곳도 결국
           없어져서 — 2026-10-06 사용자가 "몰드 기준이라 되어있는데 어떤 용량의 몰드 기준인지는
           안적혀있어"로 재발견. draft.mouldId/baseWeightId/yieldQuantity는 그동안도 계속
@@ -1036,38 +1044,41 @@ function FormulaDetailPage() {
           여기 가볍게 한 줄로 되살린다. SETTINGS > MOULDS의 reference_weight_g(기준중량)가
           드롭다운 라벨에 그대로 보이므로(MouldSelect의 mouldOptionLabel 공용 포맷) 어떤 용량
           기준인지 더 이상 헷갈리지 않는다. */}
-      <div className="flex flex-wrap items-center gap-2 border border-border bg-card px-3 py-2">
-        <span className="label-caps text-xs text-muted-foreground">
-          {scalingMode === "MOULD" ? "MOULD BASIS" : "BASE WEIGHT BASIS"}
-        </span>
-        {scalingMode === "MOULD" ? (
-          <MouldSelect
-            className={`${compactSelectClass} w-auto`}
-            value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
-            disabled={fieldsDisabled}
-            onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id } : d))}
-          />
-        ) : (
-          <BaseWeightSelect
-            className={`${compactSelectClass} w-auto`}
-            value={editing ? (draft?.baseWeightId ?? "") : (version?.default_base_weight_id ?? "")}
-            disabled={fieldsDisabled}
-            onChange={(id) => setDraft((d) => (d ? { ...d, baseWeightId: id } : d))}
-          />
-        )}
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-        <label className="flex items-center gap-1.5 text-xs">
-          <span className="label-caps text-muted-foreground">YIELD</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            className={`${compactSelectClass} !w-24`}
-            placeholder="g"
-            value={editing ? (draft?.yieldQuantity ?? "") : yieldQty || ""}
-            disabled={fieldsDisabled}
-            onChange={(e) => setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))}
-          />
-        </label>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border border-t-0 border-border bg-card px-3 py-1.5">
+          <span className="label-caps text-[11px] text-muted-foreground">
+            {scalingMode === "MOULD" ? "MOULD BASIS" : "BASE WEIGHT BASIS"}
+          </span>
+          {scalingMode === "MOULD" ? (
+            <MouldSelect
+              className={`${compactSelectClass} w-auto`}
+              value={editing ? (draft?.mouldId ?? "") : (version?.default_mould_id ?? "")}
+              disabled={fieldsDisabled}
+              onChange={(id) => setDraft((d) => (d ? { ...d, mouldId: id } : d))}
+            />
+          ) : (
+            <BaseWeightSelect
+              className={`${compactSelectClass} w-auto`}
+              value={
+                editing ? (draft?.baseWeightId ?? "") : (version?.default_base_weight_id ?? "")
+              }
+              disabled={fieldsDisabled}
+              onChange={(id) => setDraft((d) => (d ? { ...d, baseWeightId: id } : d))}
+            />
+          )}
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+          <label className="flex items-center gap-1.5 text-xs">
+            <span className="label-caps text-muted-foreground">YIELD</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              className={`${compactSelectClass} !w-24`}
+              placeholder="g"
+              value={editing ? (draft?.yieldQuantity ?? "") : yieldQty || ""}
+              disabled={fieldsDisabled}
+              onChange={(e) => setDraft((d) => (d ? { ...d, yieldQuantity: e.target.value } : d))}
+            />
+          </label>
+        </div>
       </div>
 
       {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
@@ -1114,7 +1125,7 @@ function FormulaDetailPage() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <select
-              className="label-caps border border-input bg-background px-2 py-2 text-xs"
+              className="label-caps border border-input bg-background px-1.5 py-1 text-[11px]"
               value={basisId}
               onChange={(e) => setBasisId(e.target.value)}
             >
@@ -1128,7 +1139,7 @@ function FormulaDetailPage() {
             {editing && (
               <button
                 type="button"
-                className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+                className="label-caps px-1.5 py-1 text-[11px] hover:bg-secondary"
                 onClick={() => {
                   setNewBatchMouldId(
                     scalingMode === "MOULD" ? (version?.default_mould_id ?? "") : "",
@@ -1145,7 +1156,7 @@ function FormulaDetailPage() {
             {editing && (
               <button
                 type="button"
-                className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+                className="label-caps px-1.5 py-1 text-[11px] hover:bg-secondary"
                 title="모든 재료의 중량을 한 번에 늘리거나 줄입니다"
                 onClick={() => setScaleOpen((open) => !open)}
               >
@@ -1154,7 +1165,7 @@ function FormulaDetailPage() {
             )}
             <button
               type="button"
-              className="label-caps px-2 py-2 text-xs hover:bg-secondary disabled:opacity-40"
+              className="label-caps px-1.5 py-1 text-[11px] hover:bg-secondary disabled:opacity-40"
               title="재료 그룹(가루류/액체류 등) 순서로 다시 정렬합니다"
               disabled={resortIngredientsByGroup.isPending || rows.length === 0}
               onClick={() => resortIngredientsByGroup.mutate()}
@@ -1163,7 +1174,7 @@ function FormulaDetailPage() {
             </button>
             <button
               type="button"
-              className="label-caps px-2 py-2 text-xs hover:bg-secondary"
+              className="label-caps px-1.5 py-1 text-[11px] hover:bg-secondary"
               onClick={() => setAdding(true)}
             >
               + ADD INGREDIENT
@@ -1203,22 +1214,24 @@ function FormulaDetailPage() {
                 긴 INGREDIENT/FUNCTION은 넉넉한 너비로 고정해 비율을 맞춘다. */}
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-8" />
-                <col className="w-48" />
-                <col className="w-36" />
+                <col className="w-6" />
+                <col className="w-56" />
+                <col className="w-28" />
                 {batchPresets.map((preset) => (
                   <col key={preset.id} className="w-32" />
                 ))}
-                <col className="w-24" />
-                <col className="w-40" />
-                <col className="w-56" />
-                <col className="w-24" />
+                <col className="w-16" />
+                <col className="w-28" />
+                <col className="w-48" />
+                <col className="w-14" />
               </colgroup>
               <thead>
                 <tr className="border-b border-border text-left">
-                  <th className="w-8 px-1 py-2" aria-label="공정 순서 드래그" />
-                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">INGREDIENT</th>
-                  <th className="label-caps border-r border-border bg-secondary/40 px-2 py-2 text-xs text-muted-foreground">
+                  <th className="w-6 px-1 py-1" aria-label="공정 순서 드래그" />
+                  <th className="label-caps px-2 py-1 text-[11px] text-muted-foreground">
+                    INGREDIENT
+                  </th>
+                  <th className="label-caps border-r border-border bg-secondary/40 px-2 py-1 text-[11px] text-muted-foreground">
                     BASE ×1
                   </th>
                   {batchPresets.map((preset) => {
@@ -1229,7 +1242,7 @@ function FormulaDetailPage() {
                     return (
                       <th
                         key={preset.id}
-                        className="label-caps border-r border-dashed border-border px-2 py-2 text-xs text-muted-foreground"
+                        className="label-caps border-r border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground"
                       >
                         {/* 2026-09-30: 헤더에 몰드 드롭다운/직접입력 전환 버튼을 늘어놓던 걸 없애고
                             간단한 표시 + EDIT 팝업으로 뺐다 — 몰드 기준 계산은 열을 만들 때(ADD
@@ -1269,10 +1282,14 @@ function FormulaDetailPage() {
                       </th>
                     );
                   })}
-                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">UNIT</th>
-                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">% / RATE</th>
-                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground">FUNCTION</th>
-                  <th className="label-caps px-2 py-2 text-xs text-muted-foreground" />
+                  <th className="label-caps px-2 py-1 text-[11px] text-muted-foreground">UNIT</th>
+                  <th className="label-caps px-2 py-1 text-[11px] text-muted-foreground">
+                    % / RATE
+                  </th>
+                  <th className="label-caps px-2 py-1 text-[11px] text-muted-foreground">
+                    FUNCTION
+                  </th>
+                  <th className="label-caps px-2 py-1 text-[11px] text-muted-foreground" />
                 </tr>
               </thead>
               <DndContext
@@ -1682,6 +1699,8 @@ function UnifiedIngredientRow({
   const [targetPct, setTargetPct] = useState("");
   const [bloomOpen, setBloomOpen] = useState(false);
   const [myBloom, setMyBloom] = useState("");
+  // 증량(+20 ×1.2)·개수/단위 보조 입력은 평소 접어 두고 ⋯로 펼친다 — 재료 한 줄을 한 줄로 유지.
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const ing = row.ingredients;
   const isFunctional = Boolean(ing?.is_functional);
@@ -1740,28 +1759,28 @@ function UnifiedIngredientRow({
       ref={setNodeRef}
       style={dragStyle}
       className={cn(
-        "border-b border-border align-top",
+        "border-b border-border align-middle",
         isFunctional && "bg-secondary/20",
         isDragging && "relative z-10 bg-background shadow-md",
       )}
     >
       {/* 드래그 손잡이 — 공정 순서대로 재정렬할 때 사용 */}
-      <td className="px-1 py-2 align-middle">
+      <td className="px-1 py-1 align-middle">
         {!locked && (
           <button
             type="button"
-            className="flex h-8 w-6 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            className="flex h-6 w-5 cursor-grab items-center justify-center text-muted-foreground hover:text-foreground active:cursor-grabbing"
             aria-label="드래그해서 순서 변경"
             {...attributes}
             {...listeners}
           >
-            <GripVertical className="h-4 w-4" />
+            <GripVertical className="h-3.5 w-3.5" />
           </button>
         )}
       </td>
       {/* INGREDIENT + 출처/기능 뱃지 — 여기서는 재료명을 눌러도 재료 마스터로 이동하지 않는다.
           (배합을 고치려는 클릭이 엉뚱하게 재료 상세 페이지로 튕겨나가던 문제 수정) */}
-      <td className="break-words px-2 py-2 text-sm">
+      <td className="break-words px-2 py-1 text-sm">
         <span>{ing ? ingredientDisplayName(ing) : "—"}</span>
         {isFunctional && (
           <span className="label-caps ml-2 border border-foreground px-1.5 py-0.5 text-[10px]">
@@ -1826,13 +1845,13 @@ function UnifiedIngredientRow({
       </td>
 
       {/* BASE ×1 — amount 입력 (EDIT 중에만 실제로 바뀌고, SAVE 전까지 저장되지 않는다) */}
-      <td className="border-r border-border bg-secondary/40 px-2 py-2">
+      <td className="border-r border-border bg-secondary/40 px-2 py-1 align-top">
         <input
           type="number"
           inputMode="decimal"
           step="0.1"
           className={cn(
-            "min-h-[48px] w-24 border bg-background px-2 py-2 font-mono text-base tabular-nums outline-none focus:border-foreground disabled:opacity-60",
+            "h-7 w-20 border bg-background px-2 font-mono text-sm tabular-nums outline-none focus:border-foreground disabled:opacity-60",
             showSuggestion ? "border-dashed border-input text-muted-foreground" : "border-input",
           )}
           disabled={locked || !editing}
@@ -1840,7 +1859,7 @@ function UnifiedIngredientRow({
           value={editing ? (draft?.amount ?? "") : String(savedAmount)}
           onChange={(e) => onDraftChange({ amount: e.target.value })}
         />
-        {editing && !locked && (
+        {editing && !locked && moreOpen && (
           <AdjustInput
             current={amount}
             onApply={(next) => {
@@ -1857,19 +1876,19 @@ function UnifiedIngredientRow({
           />
         )}
         {/* 보조 계량 — 그램 외 개수/스푼 등을 표시용으로만 같이 적어둘 수 있다 (계산엔 관여 안 함) */}
-        {editing && !locked ? (
+        {editing && !locked && moreOpen ? (
           <div className="mt-1 flex items-center gap-1">
             <input
               type="number"
               inputMode="decimal"
               step="0.1"
-              className="min-h-[36px] w-14 border border-input bg-background px-1 py-1 font-mono text-xs tabular-nums outline-none focus:border-foreground"
+              className="h-7 w-14 border border-input bg-background px-1 font-mono text-xs tabular-nums outline-none focus:border-foreground"
               placeholder="개수"
               value={draft?.secondaryAmount ?? ""}
               onChange={(e) => onDraftChange({ secondaryAmount: e.target.value })}
             />
             <select
-              className="min-h-[36px] w-20 border border-input bg-background px-1 py-1 text-xs outline-none focus:border-foreground"
+              className="h-7 w-20 border border-input bg-background px-1 text-xs outline-none focus:border-foreground"
               value={draft?.secondaryUnit ?? ""}
               onChange={(e) => onDraftChange({ secondaryUnit: e.target.value })}
             >
@@ -1888,13 +1907,17 @@ function UnifiedIngredientRow({
             </select>
           </div>
         ) : (
-          row.secondary_amount != null &&
-          row.secondary_unit && (
-            <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
-              · {fmtNumber(Number(row.secondary_amount), 2)}
-              {row.secondary_unit}
-            </p>
-          )
+          (() => {
+            const secAmt =
+              editing && draft ? parseNumber(draft.secondaryAmount) : row.secondary_amount;
+            const secUnit = editing && draft ? draft.secondaryUnit : row.secondary_unit;
+            return secAmt != null && secAmt !== 0 && secUnit ? (
+              <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                · {fmtNumber(Number(secAmt), 2)}
+                {secUnit}
+              </p>
+            ) : null;
+          })()
         )}
         {showSuggestion && calc && (
           <div className="mt-1 space-y-1">
@@ -1964,7 +1987,7 @@ function UnifiedIngredientRow({
         return (
           <td
             key={preset.id}
-            className="border-r border-dashed border-border px-2 py-2 font-mono text-sm tabular-nums"
+            className="border-r border-dashed border-border px-2 py-1 font-mono text-sm tabular-nums"
           >
             {fmtNumber(scaled.scaled, 2)}
             {scaled.nonLinear && (
@@ -1985,9 +2008,9 @@ function UnifiedIngredientRow({
       })}
 
       {/* UNIT */}
-      <td className="px-2 py-2">
+      <td className="px-2 py-1">
         <select
-          className="min-h-[48px] w-20 border border-input bg-background px-2 py-2 font-mono text-sm disabled:opacity-60"
+          className="h-7 w-14 border border-input bg-background px-1 font-mono text-xs disabled:opacity-60"
           disabled={locked || !editing}
           value={unit}
           onChange={(e) => onDraftChange({ unit: e.target.value })}
@@ -2001,7 +2024,7 @@ function UnifiedIngredientRow({
       </td>
 
       {/* % / RATE */}
-      <td className="px-2 py-2 font-mono text-sm tabular-nums">
+      <td className="px-2 py-1 font-mono text-sm tabular-nums">
         {isFunctional && calc ? (
           calc.ratePct != null ? (
             <div className="flex items-center gap-2">
@@ -2035,19 +2058,35 @@ function UnifiedIngredientRow({
       </td>
 
       {/* FUNCTION */}
-      <td className="px-2 py-2 font-mono text-xs uppercase text-muted-foreground">
+      <td className="px-2 py-1 font-mono text-[11px] uppercase text-muted-foreground">
         {functions || "—"}
       </td>
 
-      <td className="px-2 py-2">
+      <td className="whitespace-nowrap px-1 py-1 text-right">
         {!locked && (
-          <button
-            type="button"
-            className="label-caps min-h-[48px] px-2 text-xs hover:bg-secondary"
-            onClick={onRemove}
-          >
-            REMOVE
-          </button>
+          <>
+            {editing && (
+              <button
+                type="button"
+                className={cn(
+                  "h-7 px-1.5 text-xs text-muted-foreground hover:bg-secondary",
+                  moreOpen && "bg-secondary text-foreground",
+                )}
+                title="증량(+20 ×1.2)·개수/단위 보조 입력 펼치기"
+                onClick={() => setMoreOpen((v) => !v)}
+              >
+                ⋯
+              </button>
+            )}
+            <button
+              type="button"
+              className="h-7 px-1.5 text-xs text-muted-foreground hover:bg-secondary hover:text-destructive"
+              title="재료 삭제"
+              onClick={onRemove}
+            >
+              ✕
+            </button>
+          </>
         )}
       </td>
     </tr>

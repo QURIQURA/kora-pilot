@@ -42,7 +42,7 @@ export function SectionCard({
         muted && "border-dashed opacity-70"
       )}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+      <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
         <h2 className="label-caps text-muted-foreground">{title}</h2>
         {action}
       </header>
