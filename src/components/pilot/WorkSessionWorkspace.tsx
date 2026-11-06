@@ -1695,7 +1695,9 @@ function EditFormulaVersionModal({
       /계란|전란|흰자|노른자|egg/i.test(`${r.ingredients.name} ${r.ingredients.name_en ?? ""}`),
     );
     const pick = eggs.find((r) => r.secondary_amount != null) ?? eggs[0];
-    setAnchorKey(pick ? pick.id : null);
+    setAnchorKey((prev) =>
+      prev && baseIngredients.data.some((r) => r.id === prev) ? prev : pick ? pick.id : null,
+    );
     setSeeded(true);
   }, [seeded, baseIngredients.data]);
 
@@ -1820,8 +1822,15 @@ function EditFormulaVersionModal({
   const autoSummary = useMemo(() => buildAutoSummary(draftRows), [draftRows]);
   const hasChanges = autoSummary !== "변경 없음";
 
+  // 상시 편집기(R&D) 자동 저장 — 저장 시작 시점의 초안을 기억해 두고, 저장 중에 또 고쳤는지 비교한다.
+  const draftRef = useRef(draftRows);
+  draftRef.current = draftRows;
+  const snapRef = useRef<EditDraftRow[] | null>(null);
+  const failedDraftRef = useRef<EditDraftRow[] | null>(null);
+
   const saveChanges = useMutation({
     mutationFn: async () => {
+      if (inline) snapRef.current = draftRows;
       const user_id = await currentUserId();
 
       if (saveMode === "new") {
@@ -2131,14 +2140,51 @@ function EditFormulaVersionModal({
         // 상시 편집기 — 저장한 값을 새 기준으로 다시 불러온다.
         await queryClient.invalidateQueries({ queryKey: ["formula_version_ingredients"] });
         await queryClient.invalidateQueries({ queryKey: ["version_ingredients"] });
-        setSeeded(false);
+        const snap = snapRef.current;
+        const cur = draftRef.current;
+        failedDraftRef.current = null;
+        if (
+          !snap ||
+          JSON.stringify(snap) === JSON.stringify(cur) ||
+          snap.some((r) => !r.removed && r.sourceId === null)
+        ) {
+          setSeeded(false);
+        } else {
+          // 저장 중에 더 고친 값은 그대로 두고, 저장된 값만 새 기준으로 삼는다.
+          setDraftRows((prev) =>
+            prev
+              .filter((r) => !(r.removed && r.sourceId))
+              .map((r) => {
+                const saved = snap.find((x) => x.key === r.key);
+                return saved && r.sourceId
+                  ? {
+                      ...r,
+                      originalAmount: Number(saved.amount),
+                      originalUnit: saved.unit,
+                      originalSecondaryAmount: saved.secondaryAmount,
+                      originalSecondaryUnit: saved.secondaryUnit,
+                    }
+                  : r;
+              }),
+          );
+        }
       }
       await onSaved();
     },
     onError: (e: unknown) => {
+      failedDraftRef.current = draftRef.current;
       setError(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
     },
   });
+
+  // 바꾸면 0.8초 뒤 자동 저장(저장 버튼 없음). 실패하면 같은 내용으로는 다시 시도하지 않고, 더 고치면 재시도.
+  useEffect(() => {
+    if (!inline || !seeded || !hasChanges || saveChanges.isPending) return;
+    if (failedDraftRef.current === draftRows) return;
+    const t = setTimeout(() => saveChanges.mutate(), 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inline, seeded, hasChanges, saveChanges.isPending, draftRows]);
 
   return (
     <div
@@ -2535,39 +2581,51 @@ function EditFormulaVersionModal({
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className={primaryButtonClass}
-              disabled={
-                saveChanges.isPending ||
-                // NEW_FORMULA는 포뮬라를 새로 만드는 행위 자체가 목적이라, 재료를 아직 안
-                // 고쳤어도(hasChanges===false) 이름만 정했으면 저장할 수 있게 한다.
-                (saveMode === "new_formula" ? !newFormulaName.trim() : !hasChanges)
-              }
-              onClick={() => saveChanges.mutate()}
-            >
-              {saveMode === "new" && "새 버전으로 저장"}
-              {saveMode === "overwrite" && (inline ? "저장 (실험 버전에 반영)" : "덮어쓰기")}
-              {saveMode === "new_formula" && "새 포뮬라로 저장"}
-            </button>
-            {inline ? (
+          {inline ? (
+            <p className="font-mono text-[11px] text-muted-foreground">
+              {saveChanges.isPending
+                ? "저장 중…"
+                : error
+                  ? "저장 실패 — 다시 고치면 재시도해요"
+                  : hasChanges
+                    ? "저장 대기 중…"
+                    : "✓ 자동 저장됨 (실험 버전에 바로 반영)"}
+            </p>
+          ) : (
+            <div className="flex gap-2">
               <button
                 type="button"
-                className={buttonClass}
-                onClick={() => {
-                  setSeeded(false);
-                  setLockedKeys(new Set());
-                }}
+                className={primaryButtonClass}
+                disabled={
+                  saveChanges.isPending ||
+                  // NEW_FORMULA는 포뮬라를 새로 만드는 행위 자체가 목적이라, 재료를 아직 안
+                  // 고쳤어도(hasChanges===false) 이름만 정했으면 저장할 수 있게 한다.
+                  (saveMode === "new_formula" ? !newFormulaName.trim() : !hasChanges)
+                }
+                onClick={() => saveChanges.mutate()}
               >
-                되돌리기
+                {saveMode === "new" && "새 버전으로 저장"}
+                {saveMode === "overwrite" && (inline ? "저장 (실험 버전에 반영)" : "덮어쓰기")}
+                {saveMode === "new_formula" && "새 포뮬라로 저장"}
               </button>
-            ) : (
-              <button type="button" className={buttonClass} onClick={onClose}>
-                CANCEL
-              </button>
-            )}
-          </div>
+              {inline ? (
+                <button
+                  type="button"
+                  className={buttonClass}
+                  onClick={() => {
+                    setSeeded(false);
+                    setLockedKeys(new Set());
+                  }}
+                >
+                  되돌리기
+                </button>
+              ) : (
+                <button type="button" className={buttonClass} onClick={onClose}>
+                  CANCEL
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
