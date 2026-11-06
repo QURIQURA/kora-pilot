@@ -52,6 +52,7 @@ import {
 } from "@/lib/production-quantity";
 import { resolveSlotGroup } from "@/lib/technique";
 import { mouldAbbr } from "@/lib/component-size";
+import { ExperimentCard } from "@/components/pilot/FormulaExperimentsTab";
 import { fmtNumber, toGrams, versionLabel, UNITS, type Mould } from "@/lib/formula";
 import { formatProductSizeLabel } from "@/lib/product-size";
 import { IngredientPicker } from "@/components/pilot/IngredientPicker";
@@ -944,6 +945,10 @@ function WeighingView({
   onProgressChanged: () => void;
   onEditColumn?: (column: WeighingColumn) => void;
 }) {
+  const rndExperiments = useQuery(formulaExperimentsQuery());
+  const rndVersionIds = new Set(
+    (rndExperiments.data ?? []).filter((x) => x.status === "OPEN").map((x) => x.version_id),
+  );
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [rowOrder, setRowOrder] = useState<string[]>([]);
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
@@ -1127,6 +1132,7 @@ function WeighingView({
                     id={col.selectionId}
                     formulaName={col.formulaName}
                     multiplier={col.multiplier}
+                    rnd={rndVersionIds.has(col.formulaVersionId)}
                     onResizeStart={(clientX) => startColumnResize(col.selectionId, clientX)}
                     onEdit={
                       !onEditColumn || (col.members && col.members.length > 1)
@@ -1189,12 +1195,15 @@ function MatrixColumnHeader({
   id,
   formulaName,
   multiplier,
+  rnd,
   onResizeStart,
   onEdit,
 }: {
   id: string;
   formulaName: string;
   multiplier: number;
+  /** R&D 실험 중인 버전 — 연두색으로 구분 */
+  rnd: boolean;
   onResizeStart: (clientX: number) => void;
   onEdit: (() => void) | undefined;
 }) {
@@ -1207,6 +1216,7 @@ function MatrixColumnHeader({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "sticky top-0 z-20 relative border-b border-l border-border bg-secondary px-3 py-2 text-left align-bottom",
+        rnd && "!bg-[#DCF0C8]",
         isDragging && "z-40 bg-secondary",
       )}
     >
@@ -1221,7 +1231,10 @@ function MatrixColumnHeader({
           <GripVertical className="h-3 w-3" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="whitespace-nowrap text-xs leading-tight">{formulaName}</p>
+          <p className="whitespace-nowrap text-xs leading-tight">
+            {rnd && <span className="label-caps mr-1 text-[10px] text-[#3F7A1F]">🧪 R&amp;D</span>}
+            {formulaName}
+          </p>
           <p className="label-caps whitespace-nowrap text-[11px] text-muted-foreground">
             ×{fmtNumber(multiplier, 3)}
           </p>
@@ -1982,10 +1995,20 @@ function EditFormulaVersionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-auto border border-border bg-background">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div
+        className={cn(
+          "max-h-[90vh] w-full max-w-lg overflow-auto border bg-background",
+          runningExperiment ? "border-[#7DB35A] bg-[#EEF8E4]" : "border-border",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center justify-between border-b px-4 py-3",
+            runningExperiment ? "border-[#7DB35A] bg-[#DCF0C8]" : "border-border",
+          )}
+        >
           <span className="label-caps">
-            EDIT {column.formulaName} (v{column.versionNumber})
+            {runningExperiment && "🧪 R&D · "}EDIT {column.formulaName} (v{column.versionNumber})
           </span>
           <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
             CLOSE
@@ -1993,16 +2016,21 @@ function EditFormulaVersionModal({
         </div>
 
         <div className="space-y-4 p-4">
+          {runningExperiment && (
+            <div className="space-y-1">
+              <p className="font-mono text-[11px]">
+                R&amp;D 실험 중 — 재료를 고쳐 "현재 버전에 덮어쓰기"로 저장하면 실험 버전이 바로
+                수정돼요. 구운 높이·메모를 적고 적용/보관/폐기도 여기서 정해요.
+              </p>
+              <ul>
+                <ExperimentCard experiment={runningExperiment} hideEditLink />
+              </ul>
+            </div>
+          )}
           {/* 2026-10-14 사용자 요청: "new 버전으로 저장할지 아니면 덮어쓸지도 선택할수 있게"
               2026-10-18 사용자 요청: "기존 formula말고 새로운 formula 생성이랑 이름도 바로
               정할수 있게해줘" — 세 번째 선택지로 완전히 새로운 포뮬라를 만드는 옵션을 추가. */}
           <div className="space-y-1">
-            {runningExperiment && (
-              <p className="border border-border bg-muted px-2 py-1 font-mono text-[11px]">
-                🧪 R&amp;D 실험 중 · {runningExperiment.title} — 재료를 고치고 "현재 버전에
-                덮어쓰기"로 저장하면 실험 버전이 바로 수정돼요.
-              </p>
-            )}
             <p className="label-caps text-xs text-muted-foreground">저장 방식</p>
             <div className="flex flex-wrap gap-2">
               <button

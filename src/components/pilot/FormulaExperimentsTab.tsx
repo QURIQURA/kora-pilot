@@ -167,7 +167,14 @@ const sessionHeightsQuery = (versionId: string | null) =>
     },
   });
 
-function ExperimentCard({ experiment: e }: { experiment: FormulaExperimentRow }) {
+export function ExperimentCard({
+  experiment: e,
+  hideEditLink = false,
+}: {
+  experiment: FormulaExperimentRow;
+  /** WORK VIEW 편집 창 안에서는 배합 편집 링크가 필요 없다 */
+  hideEditLink?: boolean;
+}) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const { changes, unchanged } = diffVersions(e.base, e.trial);
@@ -241,7 +248,7 @@ function ExperimentCard({ experiment: e }: { experiment: FormulaExperimentRow })
           </div>
           {e.hypothesis && <div className="mt-1 text-xs text-muted-foreground">{e.hypothesis}</div>}
         </div>
-        {e.trial && (
+        {e.trial && !hideEditLink && (
           <Link
             to="/formulas/$formulaId"
             params={{ formulaId: e.formula_id }}
