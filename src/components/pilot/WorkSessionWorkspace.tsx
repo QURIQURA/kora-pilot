@@ -1287,6 +1287,45 @@ function WeighingView({
   );
 }
 
+/** 표시용 배수(k)를 곱해 보여주고, 입력하면 기본(×1) 양으로 되돌려 저장하는 숫자 입력 — 입력 중에는 글자 그대로 둔다. */
+function ScaledAmountInput({
+  value,
+  k,
+  onChange,
+  className,
+}: {
+  value: string;
+  k: number;
+  onChange: (baseValue: string) => void;
+  className?: string;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const num = Number(value);
+  const shown =
+    value === "" || !Number.isFinite(num) || k === 1
+      ? value
+      : String(Math.round(num * k * 100) / 100);
+  return (
+    <input
+      className={className}
+      type="number"
+      step="any"
+      value={text ?? shown}
+      onFocus={() => setText(shown)}
+      onBlur={() => setText(null)}
+      onChange={(e) => {
+        setText(e.target.value);
+        const v = e.target.value;
+        onChange(
+          v === "" || k === 1 || !Number.isFinite(Number(v))
+            ? v
+            : String(Math.round((Number(v) / k) * 1e6) / 1e6),
+        );
+      }}
+    />
+  );
+}
+
 function MatrixColumnHeader({
   id,
   formulaName,
@@ -1881,7 +1920,10 @@ function EditFormulaVersionModal({
   };
   // 부족 재료 대치 — 없는 재료 하나를 다른 재료 여러 개(양을 나눠서)로 바꾼다. 예: 요거트 → 코코넛요거트 85 + 유청 나머지.
   const [shortKey, setShortKey] = useState<string | null>(null);
-  const [shortBasis, setShortBasis] = useState<"base" | "prod">("base");
+  // 표시 기준 — 기본(true=생산량 ×배수, false=기본 레시피 ×1). 저장되는 값은 항상 기본(×1) 양이다.
+  const [viewProd, setViewProd] = useState(true);
+  const viewK = viewProd ? column.multiplier : 1;
+  const shortBasis = viewProd ? "prod" : "base";
   const [shortSubs, setShortSubs] = useState<
     { id: string; ingredientId: string; name: string; amount: string; rest: boolean }[]
   >([]);
@@ -2519,25 +2561,39 @@ function EditFormulaVersionModal({
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
           )}
 
-          <p className="border border-border bg-secondary px-3 py-1 font-mono text-[11px]">
-            아래 표의 양은 <b>기본 레시피(×1)</b> 기준이에요 · 기본{" "}
-            {fmtNumber(
-              visibleRows.reduce(
-                (sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0),
+          <div className="flex flex-wrap items-center gap-2 border border-border bg-secondary px-3 py-1 font-mono text-[11px]">
+            <span>
+              표 기준:{" "}
+              <b>
+                {viewProd
+                  ? `실제 생산량 (기본 ×${fmtNumber(column.multiplier, 3)})`
+                  : "기본 레시피 (×1)"}
+              </b>{" "}
+              · 합계{" "}
+              {fmtNumber(
+                visibleRows.reduce(
+                  (sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0),
+                  0,
+                ) * viewK,
                 0,
-              ),
-              0,
-            )}
-            g · 이 열은 ×{fmtNumber(column.multiplier, 3)} → 실제 생산{" "}
-            {fmtNumber(
-              visibleRows.reduce(
-                (sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0),
-                0,
-              ) * column.multiplier,
-              0,
-            )}
-            g
-          </p>
+              )}
+              g
+            </span>
+            <button
+              type="button"
+              className={`${viewProd ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
+              onClick={() => setViewProd(true)}
+            >
+              생산량으로 보기
+            </button>
+            <button
+              type="button"
+              className={`${!viewProd ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
+              onClick={() => setViewProd(false)}
+            >
+              기본(×1)으로 보기
+            </button>
+          </div>
           {/* 재료 조정 도구 — 같은 계열(재료 양을 한꺼번에 바꾸는 기능)이라 한 묶음으로, 필요한 것만 펼쳐서 쓴다(둘 이상 동시에 펼치기 가능). */}
           <div className="border border-border bg-background/40">
             <div className="flex flex-wrap items-center gap-1 px-2 py-1">
@@ -2729,7 +2785,8 @@ function EditFormulaVersionModal({
                             })
                           }
                         >
-                          {r.ingredientName} {fmtNumber(Number(r.amount) || 0, 1)}
+                          {r.ingredientName}{" "}
+                          {fmtNumber((Number(r.amount) || 0) * (r.unit === "%" ? 1 : viewK), 1)}
                           {r.unit}
                         </button>
                       );
@@ -2745,7 +2802,7 @@ function EditFormulaVersionModal({
                             .reduce(
                               (sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0),
                               0,
-                            ),
+                            ) * viewK,
                           1,
                         )}
                         g)
@@ -2790,7 +2847,8 @@ function EditFormulaVersionModal({
                           setShortError(null);
                         }}
                       >
-                        {r.ingredientName} {fmtNumber(Number(r.amount) || 0, 1)}
+                        {r.ingredientName}{" "}
+                        {fmtNumber((Number(r.amount) || 0) * (r.unit === "%" ? 1 : viewK), 1)}
                         {r.unit}
                       </button>
                     ))}
@@ -2799,20 +2857,19 @@ function EditFormulaVersionModal({
                     <>
                       <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
                         <span>
-                          2) 대신 쓸 재료와 양 — 원래 {fmtNumber(shortTotalBase, 1)}g (생산{" "}
-                          {fmtNumber(shortTotalBase * column.multiplier, 1)}g)
+                          2) 대신 쓸 재료와 양 — 원래 {fmtNumber(shortTotalBase * viewK, 1)}g
                         </span>
                         <button
                           type="button"
                           className={`${shortBasis === "base" ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
-                          onClick={() => setShortBasis("base")}
+                          onClick={() => setViewProd(false)}
                         >
                           기본(×1) 기준 입력
                         </button>
                         <button
                           type="button"
                           className={`${shortBasis === "prod" ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
-                          onClick={() => setShortBasis("prod")}
+                          onClick={() => setViewProd(true)}
                         >
                           생산량(×{fmtNumber(column.multiplier, 3)}) 기준 입력
                         </button>
@@ -2921,10 +2978,10 @@ function EditFormulaVersionModal({
                               : "text-muted-foreground",
                           )}
                         >
-                          합계 {fmtNumber(shortFixedBase + Math.max(shortRestBase, 0), 1)}g / 원래{" "}
-                          {fmtNumber(shortTotalBase, 1)}g
+                          합계 {fmtNumber((shortFixedBase + Math.max(shortRestBase, 0)) * viewK, 1)}
+                          g / 원래 {fmtNumber(shortTotalBase * viewK, 1)}g
                           {!shortSubs.some((x) => x.rest) &&
-                            ` · 차이 ${fmtNumber(shortRestBase, 1)}g (나머지로 지정하면 자동으로 채워요)`}
+                            ` · 차이 ${fmtNumber(shortRestBase * viewK, 1)}g (나머지로 지정하면 자동으로 채워요)`}
                         </p>
                       )}
                     </>
@@ -2987,17 +3044,16 @@ function EditFormulaVersionModal({
                     {row.ingredientName}
                     {row.secondaryAmount != null && row.secondaryUnit && (
                       <span className="ml-1 font-mono text-[11px] text-muted-foreground">
-                        · {fmtNumber(row.secondaryAmount, 2)}
+                        · {fmtNumber(row.secondaryAmount * viewK, 2)}
                         {row.secondaryUnit}
                       </span>
                     )}
                   </span>
-                  <input
+                  <ScaledAmountInput
                     className={`${inputClass} !h-7 !min-h-0 !w-20 text-right`}
-                    type="number"
-                    step="any"
                     value={row.amount}
-                    onChange={(e) => patchRow(row.key, { amount: e.target.value })}
+                    k={row.unit === "%" ? 1 : viewK}
+                    onChange={(v) => patchRow(row.key, { amount: v })}
                   />
                   <select
                     className={`${selectClass} !h-7 !min-h-0 !w-16 !px-1 text-xs`}
@@ -3040,8 +3096,9 @@ function EditFormulaVersionModal({
                 {moreKeys.has(row.key) && (
                   <div className="flex justify-end pb-1">
                     <AdjustInput
-                      current={Number(row.amount) || 0}
-                      onApply={(next) => {
+                      current={(Number(row.amount) || 0) * viewK}
+                      onApply={(shownNext) => {
+                        const next = shownNext / viewK;
                         const cur = Number(row.amount) || 0;
                         patchRow(row.key, {
                           amount: String(next),
