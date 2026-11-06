@@ -200,6 +200,7 @@ type ObservationTask = {
   task_type: string | null;
   actual_started_at: string | null;
   completed_at: string | null;
+  status?: string | null;
 };
 
 /** 캔버라 시각 HH:mm. */
@@ -532,7 +533,7 @@ Deno.serve(async (req: Request) => {
       const { data: obsRows, error: obsError } = await kora
         .from("work_session_tasks")
         .select(
-          "id, observation_status, observation_height_start_mm, observation_height_mid_mm, observation_height_end_mm, observation_temperature_c, task_type, actual_started_at, completed_at",
+          "id, observation_status, observation_height_start_mm, observation_height_mid_mm, observation_height_end_mm, observation_temperature_c, task_type, actual_started_at, completed_at, status",
         )
         .in("id", taskIdsForObs);
       if (obsError) throw obsError;
@@ -638,6 +639,10 @@ Deno.serve(async (req: Request) => {
       if (insError) throw insError;
     };
 
+    const doneTask = (taskId: string | null): string | null => {
+      const t = taskId ? obsByTaskId.get(taskId) : undefined;
+      return t && t.status === "DONE" ? (t.completed_at ?? new Date().toISOString()) : null;
+    };
     const syncedTaskIds: string[] = [];
     for (const row of coreRows) {
       const baseTitle = taskTitle(row);
@@ -667,6 +672,11 @@ Deno.serve(async (req: Request) => {
             due_date: block.block_date,
             due_time: block.start_time,
             end_time: block.end_time,
+            // 2026-11-07: KORA 작업이 DONE이면 플래너 TASK도 완료로 — 반대(미완료 → 완료 해제)는 건드리지 않는다
+            // (플래너에서 직접 체크한 완료를 덮어쓰지 않기 위해).
+            ...(doneTask(block.work_session_task_id)
+              ? { completed: true, completed_at: doneTask(block.work_session_task_id) }
+              : {}),
           });
           syncedTaskIds.push(taskId);
           await syncObservationSubitem(

@@ -677,6 +677,8 @@ export function BlockTimerChip({
               .eq("user_id", userId);
             await refresh();
             await onRetime?.(block, task.actual_started_at, endIso);
+            // 완료를 플래너 TASK에도 반영(best-effort).
+            void syncWorkSessionToPlanner(sessionId);
           }}
         >
           ✔

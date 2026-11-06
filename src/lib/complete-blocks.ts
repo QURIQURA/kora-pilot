@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { currentUserId, type DashboardComponentRow, type WorkBlock } from "@/lib/queries";
 import { newTimer } from "@/lib/task-timers";
+import { syncWorkSessionToPlanner } from "@/lib/work-session";
 
 /** 블록 날짜+시각(로컬)을 ISO로 */
 function blockIso(date: string, time: string | null | undefined): string | null {
@@ -65,4 +66,6 @@ export async function completeComponentBlocks(
       .eq("user_id", userId);
     if (upErr) throw upErr;
   }
+  // 완료를 플래너 TASK에도 반영(best-effort).
+  await syncWorkSessionToPlanner(row.work_session_id);
 }
