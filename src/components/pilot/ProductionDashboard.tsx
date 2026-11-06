@@ -1611,6 +1611,7 @@ export function ProductionDashboard() {
             )}
             {detailItems.length > 0 && (
               <DayWorkView
+                part="COMPONENTS"
                 key={`${date}-${detailRowId}`}
                 items={detailItems}
                 focusedRowId={selected?.work_session_formula_version_id ?? null}
@@ -1739,6 +1740,20 @@ export function ProductionDashboard() {
           </aside>
         </div>
       </div>
+
+      {/* ── WORK VIEW(계량) — 그날 모든 포뮬라, 맨 아래 단일 열 ── */}
+      {dayWorkItems.length > 0 && (
+        <DayWorkView
+          part="WORK_VIEW"
+          key={`work-${date}`}
+          items={dayWorkItems}
+          mergedVersions={mergedVersions}
+          onToggleMerge={(versionId) => void toggleMergeAndAlign(versionId)}
+          labels={Object.fromEntries(
+            rows.map((r) => [r.id, `${r.order.order_number} · ${r.slot ?? ""}`]),
+          )}
+        />
+      )}
 
       {/* ── 세션 메모 ── */}
       {workspaceSessions.length > 0 ? (

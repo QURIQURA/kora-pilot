@@ -2334,7 +2334,10 @@ export function DayWorkView({
   renderHeaderExtra,
   focusedRowId,
   focusKey,
+  part = "ALL",
 }: {
+  /** COMPONENTS: 컴포넌트 생산 리스트만 / WORK_VIEW: 계량 표(WORK VIEW)만 / ALL: 둘 다 */
+  part?: "ALL" | "COMPONENTS" | "WORK_VIEW";
   renderRecords?: (selectionIds: string[]) => React.ReactNode;
   /** 컴포넌트 행 제목 옆(접어도 보임)에 붙는 것 — 타이머 */
   renderHeaderExtra?: (selectionIds: string[]) => React.ReactNode;
@@ -2463,79 +2466,83 @@ export function DayWorkView({
 
   if (ordered.length === 0) return null;
   return (
-    <div className="border-t border-border pt-4">
-      <section className="mb-4 border border-border bg-card" aria-label="컴포넌트 생산 리스트">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <h2 className="label-caps text-xs">COMPONENTS · PRODUCTION</h2>
-          <span className="text-xs text-muted-foreground">
-            수량은 바로 조절 · 행을 펼쳐 생산 기록
-          </span>
-        </div>
-        <div className="divide-y divide-border">
-          {quantityGroups.map((group) => (
-            <ComponentProductionRow
-              key={group.key}
-              members={group.members}
-              labels={labels}
-              focused={group.members.some((m) => m.id === focusedRowId)}
-              focusKey={focusKey ?? null}
-              renderRecords={renderRecords}
-              renderHeaderExtra={renderHeaderExtra}
-              quantity={
-                <ProductionQuantityRow
-                  compact
-                  members={group.members}
-                  labels={labels}
-                  lines={ingredientsByVersion[group.members[0]!.formula_version_id] ?? []}
-                  canMerge={
-                    ordered.filter(
-                      (o) => o.row.formula_version_id === group.members[0]!.formula_version_id,
-                    ).length > 1
-                  }
-                  onToggleMerge={() => onToggleMerge(group.members[0]!.formula_version_id)}
-                />
-              }
-            />
-          ))}
-        </div>
-      </section>
-      <SectionCard
-        title="WORK VIEW"
-        action={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className={viewMode === "WEIGHING" ? primaryButtonClass : buttonClass}
-              onClick={() => setViewMode("WEIGHING")}
-            >
-              WEIGHING MATRIX
-            </button>
-            <button
-              type="button"
-              className={viewMode === "FORMULA" ? primaryButtonClass : buttonClass}
-              onClick={() => setViewMode("FORMULA")}
-            >
-              FORMULA VIEW
-            </button>
+    <div className={part === "COMPONENTS" ? undefined : "border-t border-border pt-4"}>
+      {part !== "WORK_VIEW" && (
+        <section className="mb-4 border border-border bg-card" aria-label="컴포넌트 생산 리스트">
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+            <h2 className="label-caps text-xs">COMPONENTS · PRODUCTION</h2>
+            <span className="text-xs text-muted-foreground">
+              수량은 바로 조절 · 행을 펼쳐 생산 기록
+            </span>
           </div>
-        }
-      >
-        {viewMode === "WEIGHING" ? (
-          <WeighingView
-            sessionId={ordered[0]!.sessionId}
-            groups={groups}
-            columns={columns}
-            onProgressChanged={invalidateProgress}
-            onEditColumn={setEditingColumn}
-          />
-        ) : (
-          <FormulaView
-            rows={quantityGroups.map((g) => ({ ...g.members[0]!, multiplier: g.multiplier }))}
-            ingredientsByVersion={ingredientsByVersion}
-          />
-        )}
-      </SectionCard>
-      {editingColumn && (
+          <div className="divide-y divide-border">
+            {quantityGroups.map((group) => (
+              <ComponentProductionRow
+                key={group.key}
+                members={group.members}
+                labels={labels}
+                focused={group.members.some((m) => m.id === focusedRowId)}
+                focusKey={focusKey ?? null}
+                renderRecords={renderRecords}
+                renderHeaderExtra={renderHeaderExtra}
+                quantity={
+                  <ProductionQuantityRow
+                    compact
+                    members={group.members}
+                    labels={labels}
+                    lines={ingredientsByVersion[group.members[0]!.formula_version_id] ?? []}
+                    canMerge={
+                      ordered.filter(
+                        (o) => o.row.formula_version_id === group.members[0]!.formula_version_id,
+                      ).length > 1
+                    }
+                    onToggleMerge={() => onToggleMerge(group.members[0]!.formula_version_id)}
+                  />
+                }
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {part !== "COMPONENTS" && (
+        <SectionCard
+          title="WORK VIEW"
+          action={
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={viewMode === "WEIGHING" ? primaryButtonClass : buttonClass}
+                onClick={() => setViewMode("WEIGHING")}
+              >
+                WEIGHING MATRIX
+              </button>
+              <button
+                type="button"
+                className={viewMode === "FORMULA" ? primaryButtonClass : buttonClass}
+                onClick={() => setViewMode("FORMULA")}
+              >
+                FORMULA VIEW
+              </button>
+            </div>
+          }
+        >
+          {viewMode === "WEIGHING" ? (
+            <WeighingView
+              sessionId={ordered[0]!.sessionId}
+              groups={groups}
+              columns={columns}
+              onProgressChanged={invalidateProgress}
+              onEditColumn={setEditingColumn}
+            />
+          ) : (
+            <FormulaView
+              rows={quantityGroups.map((g) => ({ ...g.members[0]!, multiplier: g.multiplier }))}
+              ingredientsByVersion={ingredientsByVersion}
+            />
+          )}
+        </SectionCard>
+      )}
+      {part !== "COMPONENTS" && editingColumn && (
         <EditFormulaVersionModal
           column={editingColumn}
           onClose={() => setEditingColumn(null)}
