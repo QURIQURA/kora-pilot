@@ -579,3 +579,127 @@ export function BlockTimerInline({
     </div>
   );
 }
+
+/**
+ * 타임라인 블록 안에 들어가는 아주 작은 타이머 + 메모 표기.
+ * ▶ 시작 / 진행 중 남은(또는 경과) 시간 + ■ 완료 / ✓ 소요 시간, 그리고 TASK 메모 한 줄.
+ * 자세한 입력(시간 수정·관찰값·체크리스트)은 오른쪽 디테일 창에서 한다.
+ */
+export function BlockTimerChip({
+  block,
+  row,
+  onStarted,
+  onRetime,
+  part,
+}: {
+  block: WorkBlock;
+  row: DashboardComponentRow;
+  onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
+  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
+  /** timer: 블록 첫 줄의 타이머 / note: 블록 아래쪽의 메모 한 줄 */
+  part: "timer" | "note";
+}) {
+  const queryClient = useQueryClient();
+  const sessionId = row.work_session_id;
+  const tasks = useQuery(workSessionTasksQuery(sessionId));
+  const task = (tasks.data ?? []).find((t) => t.id === block.work_session_task_id);
+  const [now, setNow] = useState(() => new Date());
+  const running = task?.status === "IN_PROGRESS" && Boolean(task.actual_started_at);
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  if (!task) return null;
+
+  const update = async (patch: Record<string, unknown>) => {
+    const userId = await currentUserId();
+    await supabase
+      .from("work_session_tasks")
+      .update(patch as never)
+      .eq("id", task.id)
+      .eq("user_id", userId);
+    await queryClient.invalidateQueries({ queryKey: ["work_session_tasks", sessionId] });
+    await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
+  };
+  const elapsedSec = task.actual_started_at
+    ? (now.getTime() - new Date(task.actual_started_at).getTime()) / 1000
+    : 0;
+  const remainSec = task.timer_minutes != null ? task.timer_minutes * 60 - elapsedSec : null;
+  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
+  const chipButton =
+    "shrink-0 border border-current px-1 font-mono text-[11px] leading-4 hover:opacity-70";
+
+  let timer: React.ReactNode = null;
+  if (task.status === "NOT_STARTED") {
+    timer = (
+      <button
+        type="button"
+        draggable={false}
+        className={chipButton}
+        title={task.timer_minutes != null ? `타이머 ${task.timer_minutes}분 시작` : "시작"}
+        onMouseDown={stop}
+        onClick={async (e) => {
+          e.stopPropagation();
+          const iso = new Date().toISOString();
+          await update({ status: "IN_PROGRESS", actual_started_at: iso, completed_at: null });
+          await onStarted?.(sessionId, iso);
+          await onRetime?.(block, iso);
+        }}
+      >
+        ▶{task.timer_minutes != null ? ` ${task.timer_minutes}분` : ""}
+      </button>
+    );
+  } else if (running) {
+    const over = remainSec !== null && remainSec <= 0;
+    timer = (
+      <span className="flex shrink-0 items-center gap-1">
+        <span
+          className={`font-mono text-[11px] font-medium tabular-nums ${over ? "underline" : ""}`}
+        >
+          {task.timer_minutes != null
+            ? over
+              ? `+${formatDuration(Math.abs(remainSec ?? 0))}`
+              : formatDuration(remainSec ?? 0)
+            : formatDuration(elapsedSec)}
+        </span>
+        <button
+          type="button"
+          draggable={false}
+          className={chipButton}
+          title="완료"
+          onMouseDown={stop}
+          onClick={(e) => {
+            e.stopPropagation();
+            void update({ status: "DONE", completed_at: new Date().toISOString() });
+          }}
+        >
+          ■
+        </button>
+      </span>
+    );
+  } else if (task.status === "DONE") {
+    const spent =
+      task.actual_started_at && task.completed_at
+        ? Math.max(
+            1,
+            Math.round(
+              (new Date(task.completed_at).getTime() - new Date(task.actual_started_at).getTime()) /
+                60000,
+            ),
+          )
+        : null;
+    timer = (
+      <span className="shrink-0 font-mono text-[11px]">✓{spent != null ? ` ${spent}분` : ""}</span>
+    );
+  }
+
+  if (part === "note") {
+    return task.note ? (
+      <p className="truncate text-[11px] opacity-80" title={task.note}>
+        ✎ {task.note}
+      </p>
+    ) : null;
+  }
+  return <>{timer}</>;
+}
