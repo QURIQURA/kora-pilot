@@ -1760,7 +1760,7 @@ function EditFormulaVersionModal({
 
   const visibleRows = draftRows.filter((r) => !r.removed);
   // 재료 대치 — 고른 여러 재료(예: 쌀가루+옥수수전분)를 하나(예: 콜스 글루텐프리 가루)로 합쳐 같은 총량으로 바꾼다.
-  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [openTools, setOpenTools] = useState<Set<"anchor" | "scale" | "replace">>(() => new Set());
   const [replaceSel, setReplaceSel] = useState<Set<string>>(() => new Set());
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const replaceIngredients = async (ingredientId: string) => {
@@ -1812,7 +1812,11 @@ function EditFormulaVersionModal({
       ];
     });
     setReplaceSel(new Set());
-    setReplaceOpen(false);
+    setOpenTools((prev) => {
+      const next = new Set(prev);
+      next.delete("replace");
+      return next;
+    });
     setReplaceError(null);
   };
   const [moreKeys, setMoreKeys] = useState<Set<string>>(() => new Set());
@@ -2379,128 +2383,240 @@ function EditFormulaVersionModal({
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
           )}
 
-          <div className="space-y-1 border border-dashed border-border bg-background/60 p-2 text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="label-caps text-[11px] text-muted-foreground">⚓ 기준 재료</span>
-              <select
-                className={`${selectClass} !h-7 !min-h-0 !w-auto !px-1 text-xs`}
-                value={anchorKey ?? ""}
-                onChange={(e) => setAnchorKey(e.target.value || null)}
-              >
-                <option value="">선택 안 함</option>
-                {visibleRows.map((r) => (
-                  <option key={r.key} value={r.key}>
-                    {r.ingredientName}
-                  </option>
-                ))}
-              </select>
-              {anchorRow && column.baseMouldId && anchorMouldOptions.length > 0 && (
-                <select
-                  className={`${inputClass} !h-7 !min-h-0 !w-auto text-xs`}
-                  title="+1/−1 기준 몰드"
-                  value={anchorMouldId}
-                  onChange={(e) => setAnchorMouldChoice(e.target.value)}
-                >
-                  {anchorMouldOptions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      기준 몰드 {mouldAbbr(m)} ({fmtNumber(Number(m.reference_weight_g), 0)}g)
-                    </option>
-                  ))}
-                </select>
-              )}
-              {anchorRow && anchorCount != null && (
-                <span className="flex items-center gap-1">
+          {/* 재료 조정 도구 — 같은 계열(재료 양을 한꺼번에 바꾸는 기능)이라 한 묶음으로, 필요한 것만 펼쳐서 쓴다(둘 이상 동시에 펼치기 가능). */}
+          <div className="border border-border bg-background/40">
+            <div className="flex flex-wrap items-center gap-1 px-2 py-1">
+              <span className="label-caps mr-1 text-[11px] text-muted-foreground">재료 조정</span>
+              {(
+                [
+                  ["anchor", "⚓ 개수로 증량"],
+                  ["scale", "× 전체 배수"],
+                  ["replace", "🔁 합쳐서 대치"],
+                ] as const
+              ).map(([id, label]) => {
+                const open = openTools.has(id);
+                return (
                   <button
+                    key={id}
                     type="button"
-                    className={`${buttonClass} !h-7 !min-h-0 px-2 text-sm`}
-                    onClick={() => stepAnchor(-1)}
-                  >
-                    −1
-                  </button>
-                  <span className="min-w-12 text-center font-mono text-sm tabular-nums">
-                    {fmtNumber(anchorCount * anchorK, 2)}
-                    {anchorRow.secondaryUnit ?? ""}
-                  </span>
-                  {anchorMouldK && anchorK !== 1 && (
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      {anchorMouldK.t ? mouldAbbr(anchorMouldK.t) : ""} 1개 기준 · 레시피(
-                      {anchorMouldK.b ? mouldAbbr(anchorMouldK.b) : ""}) {fmtNumber(anchorCount, 2)}
-                      {anchorRow.secondaryUnit ?? ""}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className={`${primaryButtonClass} !h-7 !min-h-0 px-2 text-sm`}
-                    onClick={() => stepAnchor(1)}
-                  >
-                    +1
-                  </button>
-                </span>
-              )}
-              {anchorRow && anchorCount == null && (
-                <input
-                  type="number"
-                  step="any"
-                  className={`${inputClass} !h-7 !min-h-0 !w-28 text-xs`}
-                  placeholder={anchorK !== 1 ? "몰드 1개당 현재 개수" : "현재 개수 입력"}
-                  onBlur={(e) => {
-                    const n = Number(e.target.value);
-                    if (n > 0)
-                      patchRow(anchorRow.key, {
-                        secondaryAmount: n / anchorK,
-                        secondaryUnit: anchorRow.secondaryUnit ?? "개",
+                    aria-expanded={open}
+                    className={`${open ? primaryButtonClass : buttonClass} !h-7 !min-h-0 px-2 text-xs`}
+                    onClick={() => {
+                      setOpenTools((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
                       });
+                      if (id === "replace" && !open) {
+                        setReplaceSel(new Set());
+                        setReplaceError(null);
+                      }
+                    }}
+                  >
+                    {open ? "▾" : "▸"} {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="space-y-2 px-2 pb-2">
+              {openTools.has("anchor") && (
+                <div className="space-y-1 border border-dashed border-border bg-background/60 p-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="label-caps text-[11px] text-muted-foreground">
+                      ⚓ 기준 재료
+                    </span>
+                    <select
+                      className={`${selectClass} !h-7 !min-h-0 !w-auto !px-1 text-xs`}
+                      value={anchorKey ?? ""}
+                      onChange={(e) => setAnchorKey(e.target.value || null)}
+                    >
+                      <option value="">선택 안 함</option>
+                      {visibleRows.map((r) => (
+                        <option key={r.key} value={r.key}>
+                          {r.ingredientName}
+                        </option>
+                      ))}
+                    </select>
+                    {anchorRow && column.baseMouldId && anchorMouldOptions.length > 0 && (
+                      <select
+                        className={`${inputClass} !h-7 !min-h-0 !w-auto text-xs`}
+                        title="+1/−1 기준 몰드"
+                        value={anchorMouldId}
+                        onChange={(e) => setAnchorMouldChoice(e.target.value)}
+                      >
+                        {anchorMouldOptions.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            기준 몰드 {mouldAbbr(m)} ({fmtNumber(Number(m.reference_weight_g), 0)}g)
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {anchorRow && anchorCount != null && (
+                      <span className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className={`${buttonClass} !h-7 !min-h-0 px-2 text-sm`}
+                          onClick={() => stepAnchor(-1)}
+                        >
+                          −1
+                        </button>
+                        <span className="min-w-12 text-center font-mono text-sm tabular-nums">
+                          {fmtNumber(anchorCount * anchorK, 2)}
+                          {anchorRow.secondaryUnit ?? ""}
+                        </span>
+                        {anchorMouldK && anchorK !== 1 && (
+                          <span className="font-mono text-[11px] text-muted-foreground">
+                            {anchorMouldK.t ? mouldAbbr(anchorMouldK.t) : ""} 1개 기준 · 레시피(
+                            {anchorMouldK.b ? mouldAbbr(anchorMouldK.b) : ""}){" "}
+                            {fmtNumber(anchorCount, 2)}
+                            {anchorRow.secondaryUnit ?? ""}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className={`${primaryButtonClass} !h-7 !min-h-0 px-2 text-sm`}
+                          onClick={() => stepAnchor(1)}
+                        >
+                          +1
+                        </button>
+                      </span>
+                    )}
+                    {anchorRow && anchorCount == null && (
+                      <input
+                        type="number"
+                        step="any"
+                        className={`${inputClass} !h-7 !min-h-0 !w-28 text-xs`}
+                        placeholder={anchorK !== 1 ? "몰드 1개당 현재 개수" : "현재 개수 입력"}
+                        onBlur={(e) => {
+                          const n = Number(e.target.value);
+                          if (n > 0)
+                            patchRow(anchorRow.key, {
+                              secondaryAmount: n / anchorK,
+                              secondaryUnit: anchorRow.secondaryUnit ?? "개",
+                            });
+                        }}
+                      />
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="label-caps text-[11px] text-muted-foreground">연동/고정</span>
+                    <button
+                      type="button"
+                      className={`${buttonClass} !h-7 !min-h-0 px-2 text-[11px]`}
+                      onClick={() =>
+                        setLockedKeys(
+                          new Set(visibleRows.filter((r) => r.key !== anchorKey).map((r) => r.key)),
+                        )
+                      }
+                    >
+                      🔒 전체 고정
+                    </button>
+                    <button
+                      type="button"
+                      className={`${buttonClass} !h-7 !min-h-0 px-2 text-[11px]`}
+                      onClick={() => setLockedKeys(new Set())}
+                    >
+                      🔗 전체 해제(연동)
+                    </button>
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {lockedKeys.size > 0 ? `${lockedKeys.size}개 고정 중` : "모두 연동 중"}
+                    </span>
+                  </div>
+                  <p className="font-mono text-[10px] leading-snug text-muted-foreground">
+                    ⚓ 앵커(기준 재료) — +1/−1의 기준이 되는 재료 · 🔗 연동 — 기준 개수 비율대로
+                    같이 바뀜 · 🔒 고정 — 기준을 바꿔도 이 양은 그대로
+                  </p>
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    {anchorRow
+                      ? anchorCount != null
+                        ? "+1/−1을 누르면 🔗 연동된 재료가 같은 비율로 같이 바뀌어요. 🔒 고정한 재료와 직접 입력한 양은 그대로예요."
+                        : "이 재료가 현재 몇 개인지 먼저 입력하세요(예: 흰자 3). 그다음부터 +1/−1로 조절돼요."
+                      : "기준 재료를 고르면 개수 +1/−1로 다른 재료를 비율대로 같이 늘릴 수 있어요."}
+                  </p>
+                </div>
+              )}
+              {openTools.has("scale") && (
+                <ScaleAllPanel
+                  mode={scaleMode}
+                  value={scaleValue}
+                  currentTotal={currentTotal}
+                  onMode={setScaleMode}
+                  onValue={setScaleValue}
+                  onApply={(factor) => {
+                    applyScaleAll(factor);
+                    setScaleValue("");
                   }}
                 />
               )}
+              {openTools.has("replace") && (
+                <div className="space-y-2 border border-dashed border-border p-3">
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    1) 합칠 재료를 고르세요 — 고른 재료의 양을 모두 더한 만큼 하나의 재료로
+                    바뀌어요.
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {visibleRows.map((r) => {
+                      const on = replaceSel.has(r.key);
+                      return (
+                        <button
+                          key={r.key}
+                          type="button"
+                          className={`${on ? primaryButtonClass : buttonClass} !h-7 !min-h-0 px-2 text-xs`}
+                          onClick={() =>
+                            setReplaceSel((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(r.key)) next.delete(r.key);
+                              else next.add(r.key);
+                              return next;
+                            })
+                          }
+                        >
+                          {r.ingredientName} {fmtNumber(Number(r.amount) || 0, 1)}
+                          {r.unit}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {replaceSel.size > 0 && (
+                    <>
+                      <p className="font-mono text-[11px] text-muted-foreground">
+                        2) 대신 쓸 재료를 고르세요 (합계{" "}
+                        {fmtNumber(
+                          visibleRows
+                            .filter((r) => replaceSel.has(r.key))
+                            .reduce(
+                              (sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0),
+                              0,
+                            ),
+                          1,
+                        )}
+                        g)
+                      </p>
+                      <IngredientPicker
+                        onPick={(ingredientId) => {
+                          void replaceIngredients(ingredientId);
+                        }}
+                        onCancel={() =>
+                          setOpenTools((prev) => new Set([...prev].filter((t) => t !== "replace")))
+                        }
+                      />
+                    </>
+                  )}
+                  {replaceError && <p className="text-xs text-destructive">{replaceError}</p>}
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    onClick={() =>
+                      setOpenTools((prev) => new Set([...prev].filter((t) => t !== "replace")))
+                    }
+                  >
+                    취소
+                  </button>
+                </div>
+              )}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="label-caps text-[11px] text-muted-foreground">연동/고정</span>
-              <button
-                type="button"
-                className={`${buttonClass} !h-7 !min-h-0 px-2 text-[11px]`}
-                onClick={() =>
-                  setLockedKeys(
-                    new Set(visibleRows.filter((r) => r.key !== anchorKey).map((r) => r.key)),
-                  )
-                }
-              >
-                🔒 전체 고정
-              </button>
-              <button
-                type="button"
-                className={`${buttonClass} !h-7 !min-h-0 px-2 text-[11px]`}
-                onClick={() => setLockedKeys(new Set())}
-              >
-                🔗 전체 해제(연동)
-              </button>
-              <span className="font-mono text-[11px] text-muted-foreground">
-                {lockedKeys.size > 0 ? `${lockedKeys.size}개 고정 중` : "모두 연동 중"}
-              </span>
-            </div>
-            <p className="font-mono text-[10px] leading-snug text-muted-foreground">
-              ⚓ 앵커(기준 재료) — +1/−1의 기준이 되는 재료 · 🔗 연동 — 기준 개수 비율대로 같이 바뀜
-              · 🔒 고정 — 기준을 바꿔도 이 양은 그대로
-            </p>
-            <p className="font-mono text-[11px] text-muted-foreground">
-              {anchorRow
-                ? anchorCount != null
-                  ? "+1/−1을 누르면 🔗 연동된 재료가 같은 비율로 같이 바뀌어요. 🔒 고정한 재료와 직접 입력한 양은 그대로예요."
-                  : "이 재료가 현재 몇 개인지 먼저 입력하세요(예: 흰자 3). 그다음부터 +1/−1로 조절돼요."
-                : "기준 재료를 고르면 개수 +1/−1로 다른 재료를 비율대로 같이 늘릴 수 있어요."}
-            </p>
           </div>
-          <ScaleAllPanel
-            mode={scaleMode}
-            value={scaleValue}
-            currentTotal={currentTotal}
-            onMode={setScaleMode}
-            onValue={setScaleValue}
-            onApply={(factor) => {
-              applyScaleAll(factor);
-              setScaleValue("");
-            }}
-          />
           <ul className="divide-y divide-border border border-border">
             {visibleRows.map((row) => (
               <li key={row.key} className="px-3 py-1">
@@ -2611,72 +2727,6 @@ function EditFormulaVersionModal({
             )}
           </ul>
 
-          {replaceOpen ? (
-            <div className="space-y-2 border border-dashed border-border p-3">
-              <p className="font-mono text-[11px] text-muted-foreground">
-                1) 합칠 재료를 고르세요 — 고른 재료의 양을 모두 더한 만큼 하나의 재료로 바뀌어요.
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {visibleRows.map((r) => {
-                  const on = replaceSel.has(r.key);
-                  return (
-                    <button
-                      key={r.key}
-                      type="button"
-                      className={`${on ? primaryButtonClass : buttonClass} !h-7 !min-h-0 px-2 text-xs`}
-                      onClick={() =>
-                        setReplaceSel((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(r.key)) next.delete(r.key);
-                          else next.add(r.key);
-                          return next;
-                        })
-                      }
-                    >
-                      {r.ingredientName} {fmtNumber(Number(r.amount) || 0, 1)}
-                      {r.unit}
-                    </button>
-                  );
-                })}
-              </div>
-              {replaceSel.size > 0 && (
-                <>
-                  <p className="font-mono text-[11px] text-muted-foreground">
-                    2) 대신 쓸 재료를 고르세요 (합계{" "}
-                    {fmtNumber(
-                      visibleRows
-                        .filter((r) => replaceSel.has(r.key))
-                        .reduce((sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0), 0),
-                      1,
-                    )}
-                    g)
-                  </p>
-                  <IngredientPicker
-                    onPick={(ingredientId) => {
-                      void replaceIngredients(ingredientId);
-                    }}
-                    onCancel={() => setReplaceOpen(false)}
-                  />
-                </>
-              )}
-              {replaceError && <p className="text-xs text-destructive">{replaceError}</p>}
-              <button type="button" className={buttonClass} onClick={() => setReplaceOpen(false)}>
-                취소
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className={buttonClass}
-              onClick={() => {
-                setReplaceSel(new Set());
-                setReplaceError(null);
-                setReplaceOpen(true);
-              }}
-            >
-              🔁 재료 합쳐서 대치
-            </button>
-          )}
           {pickingIngredient ? (
             <div className="border border-dashed border-border p-3">
               <IngredientPicker
