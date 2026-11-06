@@ -95,32 +95,47 @@ type DragPayload =
 // 데일리 태스크(제품과 무관한 작업) 표시색 — 오더 색과 구분되는 무채색 톤.
 const DAILY_COLOR = { bg: "#ECECEC", accent: "#707070", text: "#2E2E2E" };
 
-/** 시간이 겹치는 블록을 나란히(레인) 배치한다 — 겹침 묶음마다 레인 수만큼 폭을 나눈다. */
-function layoutLanes(items: { id: string; start: number; end: number }[]) {
-  const sorted = [...items].sort((a, b) => a.start - b.start || a.end - b.end);
-  const result = new Map<string, { lane: number; lanes: number }>();
-  let cluster: { id: string; lane: number }[] = [];
-  let laneEnds: number[] = [];
-  let clusterEnd = -1;
-  const flush = () => {
-    for (const c of cluster) result.set(c.id, { lane: c.lane, lanes: laneEnds.length });
-    cluster = [];
-    laneEnds = [];
-  };
-  for (const it of sorted) {
-    if (cluster.length > 0 && it.start >= clusterEnd) flush();
-    let lane = laneEnds.findIndex((end) => end <= it.start);
-    if (lane === -1) {
-      lane = laneEnds.length;
-      laneEnds.push(it.end);
-    } else {
-      laneEnds[lane] = it.end;
-    }
-    cluster.push({ id: it.id, lane });
-    clusterEnd = Math.max(clusterEnd, it.end);
+const END_ROW_H = 20;
+const CARD_EST_H = 48;
+const LANE_W = 8;
+
+/**
+ * 타임라인 배치(WANN weekly 방식): 각 작업은 시작 시각에 카드, 끝 시각에 작은 종료 줄로 놓고
+ * 둘을 같은 색 세로선으로 잇는다. 카드는 길이와 상관없이 폭을 다 쓰며 안 잘린다 — 위아래로
+ * 겹치면 아래로 밀어 쌓는다. 선(진행 구간)이 겹치면 왼쪽 선 칸을 나눠 쓴다.
+ */
+function layoutStack(
+  items: { id: string; start: number; end: number }[],
+  heightOf: (id: string) => number,
+) {
+  type Entry = { id: string; kind: "start" | "end"; min: number; h: number };
+  const entries: Entry[] = [];
+  for (const it of items) {
+    entries.push({ id: it.id, kind: "start", min: it.start, h: heightOf(it.id) });
+    entries.push({ id: it.id, kind: "end", min: it.end, h: END_ROW_H });
   }
-  flush();
-  return result;
+  entries.sort((a, b) => a.min - b.min || (a.kind === b.kind ? 0 : a.kind === "end" ? -1 : 1));
+  const tops = new Map<string, { cardTop: number; endTop: number }>();
+  let cursor = 0;
+  for (const e of entries) {
+    const top = Math.max((e.min - DAY_START_MIN) * PX_PER_MIN, cursor);
+    cursor = top + e.h + 2;
+    const cur = tops.get(e.id) ?? { cardTop: 0, endTop: 0 };
+    if (e.kind === "start") cur.cardTop = top;
+    else cur.endTop = top;
+    tops.set(e.id, cur);
+  }
+  // 선 칸(레인): 구간이 겹치면 다른 칸
+  const laneEnds: number[] = [];
+  const lanes = new Map<string, number>();
+  for (const it of [...items].sort((a, b) => a.start - b.start || a.end - b.end)) {
+    let lane = laneEnds.findIndex((end) => end <= it.start);
+    if (lane === -1) lane = laneEnds.length;
+    laneEnds[lane] = it.end;
+    lanes.set(it.id, lane);
+  }
+  const laneCount = Math.max(laneEnds.length, 1);
+  return { tops, lanes, laneCount, height: cursor + 8 };
 }
 
 export function ProductionDashboard() {
@@ -223,14 +238,6 @@ export function ProductionDashboard() {
     [dailyQuery.data, date],
   );
   const dailyEnd = (t: DailyTask) => (resize?.id === t.id ? resize.endMin : toMin(t.end_time));
-  const dailyLanes = useMemo(
-    () =>
-      layoutLanes(
-        dayDailies.map((t) => ({ id: t.id, start: toMin(t.start_time), end: dailyEnd(t) })),
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dayDailies, resize],
-  );
   // 컴포넌트 블록이 선택돼 있으면 그쪽이 우선(둘이 동시에 선택되지 않게).
   const selectedDaily = selectedId
     ? null
@@ -321,13 +328,47 @@ export function ProductionDashboard() {
     () => dayBlocks.filter((b) => !mergeGroups.hidden.has(b.id)),
     [dayBlocks, mergeGroups],
   );
-  const lanes = useMemo(
+  // 카드 실제 높이(글이 줄바꿈되면 커짐)를 재서, 겹치지 않게 쌓는 배치에 쓴다.
+  const [cardHeights, setCardHeights] = useState<Map<string, number>>(() => new Map());
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const measureRef = (el: HTMLElement | null) => {
+    if (!el) return;
+    if (!observerRef.current && typeof ResizeObserver !== "undefined") {
+      observerRef.current = new ResizeObserver((entries) => {
+        setCardHeights((prev) => {
+          let next: Map<string, number> | null = null;
+          for (const en of entries) {
+            const id = (en.target as HTMLElement).dataset["measureId"];
+            const h = Math.ceil(en.target.getBoundingClientRect().height);
+            if (id && h > 0 && prev.get(id) !== h) {
+              next ??= new Map(prev);
+              next.set(id, h);
+            }
+          }
+          return next ?? prev;
+        });
+      });
+    }
+    observerRef.current?.observe(el);
+  };
+  useEffect(() => () => observerRef.current?.disconnect(), []);
+  const blockStack = useMemo(
     () =>
-      layoutLanes(
+      layoutStack(
         visibleBlocks.map((b) => ({ id: b.id, start: toMin(b.start_time), end: effectiveEnd(b) })),
+        (id) => cardHeights.get(id) ?? CARD_EST_H,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visibleBlocks, resize],
+    [visibleBlocks, resize, cardHeights],
+  );
+  const dailyStack = useMemo(
+    () =>
+      layoutStack(
+        dayDailies.map((t) => ({ id: t.id, start: toMin(t.start_time), end: dailyEnd(t) })),
+        (id) => cardHeights.get(id) ?? CARD_EST_H,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dayDailies, resize, cardHeights],
   );
 
   const refresh = async () => {
@@ -813,7 +854,7 @@ export function ProductionDashboard() {
     setPickedRowIds([]);
   };
 
-  const gridHeight = HOURS.length * PX_PER_HOUR;
+  const gridHeight = Math.max(HOURS.length * PX_PER_HOUR, blockStack.height, dailyStack.height);
 
   return (
     <div className="space-y-3">
@@ -1176,79 +1217,105 @@ export function ProductionDashboard() {
                     const color = orderColor(row.order.id);
                     const start = toMin(b.start_time);
                     const end = effectiveEnd(b);
-                    const pos = lanes.get(b.id) ?? { lane: 0, lanes: 1 };
+                    const t = blockStack.tops.get(b.id) ?? { cardTop: 0, endTop: 0 };
+                    const lane = blockStack.lanes.get(b.id) ?? 0;
+                    const gutter = blockStack.laneCount * LANE_W + 2;
                     const isSelected = b.id === selectedId;
                     return (
-                      <div
-                        key={b.id}
-                        role="button"
-                        tabIndex={0}
-                        draggable={!resize}
-                        onDragStart={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const offsetMin = ((e.clientY - rect.top) / PX_PER_HOUR) * 60;
-                          e.dataTransfer.setData(
-                            "text/plain",
-                            JSON.stringify({
-                              kind: "block",
-                              blockId: b.id,
-                              offsetMin,
-                            } satisfies DragPayload),
-                          );
-                          e.dataTransfer.effectAllowed = "move";
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedId(b.id);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setSelectedId(b.id);
-                          }
-                        }}
-                        className={cn(
-                          "absolute cursor-grab overflow-hidden px-2 py-1 text-left",
-                          isSelected
-                            ? "outline outline-2 outline-foreground"
-                            : "border border-border",
-                        )}
-                        style={{
-                          top: (start - DAY_START_MIN) * PX_PER_MIN,
-                          height: Math.max((end - start) * PX_PER_MIN, 26),
-                          left: `calc(${(pos.lane / pos.lanes) * 100}% + 2px)`,
-                          width: `calc(${100 / pos.lanes}% - 4px)`,
-                          background: color.bg,
-                          color: color.text,
-                          borderLeft: `3px solid ${color.accent}`,
-                        }}
-                      >
-                        <div className="flex items-center gap-1">
-                          <p className="min-w-0 flex-1 truncate text-xs font-medium">
-                            <span className="label-caps mr-1 text-[10px] opacity-70">
-                              {row.slot ?? "CORE"}
-                            </span>
-                            {blockTitle(b, row)}
-                          </p>
-                          <BlockTimerChip
-                            part="timer"
-                            block={b}
-                            row={row}
-                            onStarted={ensureSessionStarted}
-                            onRetime={retimeBlock}
-                          />
-                        </div>
-                        <p className="truncate font-mono text-[11px] opacity-80">
-                          {merged
-                            ? `MERGED ${merged.orders.length} · ${merged.orders.join(" + ")}`
-                            : row.order.order_number}{" "}
-                          · {hm(start)}–{hm(end)}
-                        </p>
-                        <BlockTimerChip part="note" block={b} row={row} />
+                      <div key={b.id}>
+                        {/* 진행 구간 선 — 시작 카드에서 종료 줄까지 같은 색으로 이어진다 */}
                         <div
-                          className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
-                          title="길이 조절"
+                          className="pointer-events-none absolute"
+                          style={{
+                            left: lane * LANE_W + 2,
+                            top: t.cardTop,
+                            height: Math.max(t.endTop + END_ROW_H / 2 - t.cardTop, 4),
+                            width: 4,
+                            background: color.accent,
+                          }}
+                        />
+                        <div
+                          ref={measureRef}
+                          data-measure-id={b.id}
+                          role="button"
+                          tabIndex={0}
+                          draggable={!resize}
+                          onDragStart={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const offsetMin = ((e.clientY - rect.top) / PX_PER_HOUR) * 60;
+                            e.dataTransfer.setData(
+                              "text/plain",
+                              JSON.stringify({
+                                kind: "block",
+                                blockId: b.id,
+                                offsetMin,
+                              } satisfies DragPayload),
+                            );
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId(b.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSelectedId(b.id);
+                            }
+                          }}
+                          className={cn(
+                            "absolute cursor-grab px-2 py-1 text-left",
+                            isSelected
+                              ? "outline outline-2 outline-foreground"
+                              : "border border-border",
+                          )}
+                          style={{
+                            top: t.cardTop,
+                            left: gutter + 4,
+                            right: 2,
+                            background: color.bg,
+                            color: color.text,
+                          }}
+                        >
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span className="font-mono text-[11px] opacity-80">
+                              {hm(start)}–{hm(end)}
+                            </span>
+                            <span className="min-w-0 flex-1 break-words text-xs font-medium">
+                              <span className="label-caps mr-1 text-[10px] opacity-70">
+                                {row.slot ?? "CORE"}
+                              </span>
+                              {blockTitle(b, row)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <BlockTimerChip
+                                part="timer"
+                                block={b}
+                                row={row}
+                                onStarted={ensureSessionStarted}
+                                onRetime={retimeBlock}
+                              />
+                            </span>
+                          </div>
+                          <p className="break-words font-mono text-[11px] opacity-80">
+                            {merged
+                              ? `MERGED ${merged.orders.length} · ${merged.orders.join(" + ")}`
+                              : row.order.order_number}
+                          </p>
+                          <BlockTimerChip part="note" block={b} row={row} />
+                        </div>
+                        {/* 종료 줄 — 위아래로 끌면 길이 조절 */}
+                        <div
+                          className="absolute flex cursor-ns-resize items-center gap-1 px-2 font-mono text-[11px] opacity-70"
+                          title="끌어서 종료 시각 조절"
                           draggable={false}
+                          style={{
+                            top: t.endTop,
+                            left: gutter + 4,
+                            right: 2,
+                            height: END_ROW_H,
+                            color: color.text,
+                          }}
                           onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -1256,7 +1323,8 @@ export function ProductionDashboard() {
                           onPointerDown={(e) => startResize(e, b)}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="mx-auto mt-1 h-0.5 w-6 bg-current opacity-40" />
+                          <span>{hm(end)}</span>
+                          <span className="truncate">■ {blockTitle(b, row)} [end]</span>
                         </div>
                       </div>
                     );
@@ -1279,70 +1347,90 @@ export function ProductionDashboard() {
                   {dayDailies.map((t) => {
                     const start = toMin(t.start_time);
                     const end = dailyEnd(t);
-                    const pos = dailyLanes.get(t.id) ?? { lane: 0, lanes: 1 };
+                    const tp = dailyStack.tops.get(t.id) ?? { cardTop: 0, endTop: 0 };
+                    const lane = dailyStack.lanes.get(t.id) ?? 0;
+                    const gutter = dailyStack.laneCount * LANE_W + 2;
                     const isSel = t.id === selectedDaily?.id;
                     return (
-                      <div
-                        key={t.id}
-                        role="button"
-                        tabIndex={0}
-                        draggable={!resize}
-                        onDragStart={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          e.dataTransfer.setData(
-                            "text/plain",
-                            JSON.stringify({
-                              kind: "daily",
-                              taskId: t.id,
-                              offsetMin: ((e.clientY - rect.top) / PX_PER_HOUR) * 60,
-                            } satisfies DragPayload),
-                          );
-                          e.dataTransfer.effectAllowed = "move";
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedId(null);
-                          setSelectedDailyId(t.id);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
+                      <div key={t.id}>
+                        <div
+                          className="pointer-events-none absolute"
+                          style={{
+                            left: lane * LANE_W + 2,
+                            top: tp.cardTop,
+                            height: Math.max(tp.endTop + END_ROW_H / 2 - tp.cardTop, 4),
+                            width: 4,
+                            background: DAILY_COLOR.accent,
+                          }}
+                        />
+                        <div
+                          ref={measureRef}
+                          data-measure-id={t.id}
+                          role="button"
+                          tabIndex={0}
+                          draggable={!resize}
+                          onDragStart={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            e.dataTransfer.setData(
+                              "text/plain",
+                              JSON.stringify({
+                                kind: "daily",
+                                taskId: t.id,
+                                offsetMin: ((e.clientY - rect.top) / PX_PER_HOUR) * 60,
+                              } satisfies DragPayload),
+                            );
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSelectedId(null);
                             setSelectedDailyId(t.id);
-                          }
-                        }}
-                        className={cn(
-                          "absolute cursor-grab overflow-hidden px-2 py-1 text-left",
-                          isSel ? "outline outline-2 outline-foreground" : "border border-border",
-                        )}
-                        style={{
-                          top: (start - DAY_START_MIN) * PX_PER_MIN,
-                          height: Math.max((end - start) * PX_PER_MIN, 26),
-                          left: `calc(${(pos.lane / pos.lanes) * 100}% + 2px)`,
-                          width: `calc(${100 / pos.lanes}% - 4px)`,
-                          background: DAILY_COLOR.bg,
-                          color: DAILY_COLOR.text,
-                          borderLeft: `3px solid ${DAILY_COLOR.accent}`,
-                        }}
-                      >
-                        <p className="truncate text-xs font-medium">
-                          {t.order_id && (
-                            <span className="label-caps mr-1 text-[10px] opacity-70">
-                              {
-                                (ordersData.data ?? []).find((o) => o.id === t.order_id)
-                                  ?.order_number
-                              }
-                            </span>
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSelectedId(null);
+                              setSelectedDailyId(t.id);
+                            }
+                          }}
+                          className={cn(
+                            "absolute cursor-grab px-2 py-1 text-left",
+                            isSel ? "outline outline-2 outline-foreground" : "border border-border",
                           )}
-                          {t.name}
-                        </p>
-                        <p className="truncate font-mono text-[11px] opacity-80">
-                          {hm(start)}–{hm(end)}
-                        </p>
+                          style={{
+                            top: tp.cardTop,
+                            left: gutter + 4,
+                            right: 2,
+                            background: DAILY_COLOR.bg,
+                            color: DAILY_COLOR.text,
+                          }}
+                        >
+                          <p className="font-mono text-[11px] opacity-80">
+                            {hm(start)}–{hm(end)}
+                          </p>
+                          <p className="break-words text-xs font-medium">
+                            {t.order_id && (
+                              <span className="label-caps mr-1 text-[10px] opacity-70">
+                                {
+                                  (ordersData.data ?? []).find((o) => o.id === t.order_id)
+                                    ?.order_number
+                                }
+                              </span>
+                            )}
+                            {t.name}
+                          </p>
+                        </div>
                         <div
-                          className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize"
-                          title="길이 조절"
+                          className="absolute flex cursor-ns-resize items-center gap-1 px-2 font-mono text-[11px] opacity-70"
+                          title="끌어서 종료 시각 조절"
                           draggable={false}
+                          style={{
+                            top: tp.endTop,
+                            left: gutter + 4,
+                            right: 2,
+                            height: END_ROW_H,
+                            color: DAILY_COLOR.text,
+                          }}
                           onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -1350,7 +1438,8 @@ export function ProductionDashboard() {
                           onPointerDown={(e) => startDailyResize(e, t)}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="mx-auto mt-1 h-0.5 w-6 bg-current opacity-40" />
+                          <span>{hm(end)}</span>
+                          <span className="truncate">■ {t.name} [end]</span>
                         </div>
                       </div>
                     );
