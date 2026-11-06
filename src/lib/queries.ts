@@ -2673,3 +2673,76 @@ export const workflowTemplateStepsQuery = () =>
           .order("sort_order", { ascending: true }),
       ),
   });
+
+/* ── 포뮬라 R&D 실험 (2026-11-06) ── */
+export interface ExperimentIngredientRow {
+  ingredient_id: string;
+  amount: number;
+  unit: string;
+  ingredients: { name: string } | null;
+}
+export interface ExperimentVersion {
+  id: string;
+  version_number: number;
+  status: string;
+  formula_version_ingredients: ExperimentIngredientRow[];
+}
+export interface FormulaExperimentRow {
+  id: string;
+  formula_id: string;
+  base_version_id: string | null;
+  version_id: string | null;
+  title: string;
+  hypothesis: string | null;
+  result_height_mm: number | null;
+  result_notes: string | null;
+  status: "OPEN" | "PROMOTED" | "KEPT" | "DISCARDED";
+  decided_at: string | null;
+  created_at: string;
+  formulas: { name: string; components: { name: string } | null } | null;
+  base: ExperimentVersion | null;
+  trial: ExperimentVersion | null;
+}
+
+const EXPERIMENT_VERSION_SELECT =
+  "id, version_number, status, formula_version_ingredients(ingredient_id, amount, unit, ingredients(name))";
+
+export const formulaExperimentsQuery = () =>
+  queryOptions({
+    queryKey: ["formula_experiments"],
+    queryFn: async (): Promise<FormulaExperimentRow[]> =>
+      unwrap(
+        await supabase
+          .from("formula_experiments")
+          .select(
+            `*, formulas(name, components(name)), base:formula_versions!formula_experiments_base_version_id_fkey(${EXPERIMENT_VERSION_SELECT}), trial:formula_versions!formula_experiments_version_id_fkey(${EXPERIMENT_VERSION_SELECT})`,
+          )
+          .order("created_at", { ascending: false }),
+      ) as unknown as FormulaExperimentRow[],
+  });
+
+export interface ArchivedVersionRow {
+  id: string;
+  formula_id: string;
+  version_number: number;
+  status: string;
+  change_summary: string | null;
+  updated_at: string;
+  formulas: { name: string; components: { name: string } | null } | null;
+}
+
+/** 보관 탭 — ARCHIVED(실험 기록·옛 초안·폐기)와 SUPERSEDED(교체된 이전 버전) */
+export const archivedVersionsQuery = () =>
+  queryOptions({
+    queryKey: ["formula_versions", "archived"],
+    queryFn: async (): Promise<ArchivedVersionRow[]> =>
+      unwrap(
+        await supabase
+          .from("formula_versions")
+          .select(
+            "id, formula_id, version_number, status, change_summary, updated_at, formulas(name, components(name))",
+          )
+          .in("status", ["ARCHIVED", "SUPERSEDED"])
+          .order("updated_at", { ascending: false }),
+      ) as unknown as ArchivedVersionRow[],
+  });

@@ -921,6 +921,54 @@ export type Database = {
           },
         ];
       };
+      formula_experiments: {
+        Row: {
+          id: string;
+          user_id: string;
+          formula_id: string;
+          base_version_id: string | null;
+          version_id: string | null;
+          title: string;
+          hypothesis: string | null;
+          result_height_mm: number | null;
+          result_notes: string | null;
+          status: string;
+          decided_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string;
+          formula_id: string;
+          base_version_id?: string | null;
+          version_id?: string | null;
+          title: string;
+          hypothesis?: string | null;
+          result_height_mm?: number | null;
+          result_notes?: string | null;
+          status?: string;
+          decided_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          formula_id?: string;
+          base_version_id?: string | null;
+          version_id?: string | null;
+          title?: string;
+          hypothesis?: string | null;
+          result_height_mm?: number | null;
+          result_notes?: string | null;
+          status?: string;
+          decided_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       formula_versions: {
         Row: {
           basis_overrides: Json;
@@ -3802,6 +3850,19 @@ export type Database = {
           p_version_pinned?: boolean;
         };
         Returns: Json;
+      };
+      start_formula_experiment: {
+        Args: {
+          p_formula_id: string;
+          p_base_version_id: string;
+          p_title: string;
+          p_hypothesis?: string | undefined;
+        };
+        Returns: string;
+      };
+      decide_formula_experiment: {
+        Args: { p_id: string; p_decision: string };
+        Returns: undefined;
       };
       save_popup_stage: {
         Args: { p_order_id: string; p_stage_id: string; p_expected_updated_at: string };
