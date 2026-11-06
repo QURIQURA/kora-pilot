@@ -150,6 +150,10 @@ export function ProductionDashboard() {
   const queryClient = useQueryClient();
   const components = useQuery(dashboardComponentsQuery());
   const blocksQuery = useQuery(workBlocksQuery());
+  const todayStr = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  })();
   const doneTaskIds = useQuery(doneTaskIdsQuery());
   const [date, setDate] = useState(() => toLocalDateString());
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -212,7 +216,13 @@ export function ProductionDashboard() {
       if (
         rbAll.length > 0 &&
         doneTaskIds.data &&
-        rbAll.every((b) => b.work_session_task_id && doneTaskIds.data.has(b.work_session_task_id))
+        rbAll.every(
+          (b) =>
+            b.work_session_task_id &&
+            doneTaskIds.data.has(b.work_session_task_id) &&
+            // 미래 날짜로 옮겨진 블록은 완료로 보지 않는다(옛 완료 기록 때문에 대기공간에서 사라지는 것 방지).
+            b.block_date <= todayStr,
+        )
       )
         continue;
       const g = groups.get(r.order.id) ?? { order: r.order, rows: [] };
@@ -222,7 +232,7 @@ export function ProductionDashboard() {
     return [...groups.values()].sort((a, b) =>
       a.order.order_number.localeCompare(b.order.order_number),
     );
-  }, [rows, blocksByRow, doneTaskIds.data]);
+  }, [rows, blocksByRow, doneTaskIds.data, todayStr]);
   // 일정(블록 종료 시각)이 이미 지났는데 TASK가 완료되지 않은 컴포넌트 — 알림 표시 대상.
   const overdueIds = useMemo(() => {
     const ids = new Set<string>();
