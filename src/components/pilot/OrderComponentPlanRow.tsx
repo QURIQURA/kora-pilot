@@ -30,8 +30,8 @@ const fromRow = (row: WorkSessionFormulaVersionRow) => ({
   mould: row.mould_id ?? "",
   qty: "",
   // 기준중량 기준 생산: SETTINGS > BASE WEIGHTS 프리셋 id / 개수
-  bw: "",
-  bwQty: "1",
+  bw: row.base_weight_id ?? "",
+  bwQty: row.base_weight_qty == null ? "1" : String(row.base_weight_qty),
 });
 
 /** Order and Production edit one selection record; this is not a second recipe copy. */
@@ -108,7 +108,14 @@ export function OrderComponentPlanRow({
     bwTargetG != null ? Math.round((bwTargetG / base) * 10000) / 10000 : Number.NaN;
   // 저장된 목표 중량이 어떤 기준중량의 정수배면 그 프리셋을 처음부터 선택해 보여준다.
   useEffect(() => {
-    if (mouldMode || draft.bw || !baseWeights.data || row.target_quantity_g == null) return;
+    if (
+      mouldMode ||
+      draft.bw ||
+      row.base_weight_id ||
+      !baseWeights.data ||
+      row.target_quantity_g == null
+    )
+      return;
     if (JSON.stringify(draft) !== JSON.stringify(baseline.current.draft)) return;
     const target = Number(row.target_quantity_g);
     const hit = [...baseWeights.data]
@@ -147,7 +154,7 @@ export function OrderComponentPlanRow({
           : parseComponentPlan(draft.multiplier, draft.target, row.multiplier);
       if (!Number.isFinite(plan.multiplier) || plan.multiplier <= 0)
         throw new Error("생산 배수를 계산할 수 없어요 — 몰드의 기준중량을 확인하세요");
-      const { data, error } = await supabase.rpc("save_order_component_plan_v2", {
+      const { data, error } = await supabase.rpc("save_order_component_plan_v3", {
         p_selection_id: row.id,
         p_expected_updated_at: baseline.current.updatedAt,
         p_version_id: draft.version,
@@ -156,6 +163,8 @@ export function OrderComponentPlanRow({
         p_version_pinned: draft.pinned,
         p_mould_id: useMould ? draft.mould : null,
         p_mould_qty: useMould ? Number(qtyText) : null,
+        p_base_weight_id: useBase ? draft.bw : null,
+        p_base_weight_qty: useBase ? bwQtyNum : null,
       });
       if (error) throw error;
       return data as {
@@ -166,6 +175,8 @@ export function OrderComponentPlanRow({
         version_pinned: boolean;
         mould_id: string | null;
         mould_qty: number | null;
+        base_weight_id: string | null;
+        base_weight_qty: number | null;
         updated_at: string;
       };
     },
@@ -178,8 +189,8 @@ export function OrderComponentPlanRow({
         pinned: saved.version_pinned,
         mould: saved.mould_id ?? "",
         qty: "",
-        bw: draft.bw,
-        bwQty: draft.bwQty,
+        bw: saved.base_weight_id ?? "",
+        bwQty: saved.base_weight_qty == null ? "1" : String(saved.base_weight_qty),
       };
       baseline.current = { draft: next, updatedAt: saved.updated_at };
       setDraft(next);

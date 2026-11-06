@@ -29,7 +29,7 @@ export function ComponentPlanReadout({ row }: { row: WorkSessionFormulaVersionRo
         ? `${mouldAbbr(mould)} ×${fmtNumber(qtyByMould ?? Number(row.mould_qty ?? row.multiplier), 2)}`
         : null
       : (preset?.weight_g ?? (ingredients.isSuccess && baseGrams > 0 ? baseGrams : null)) != null
-        ? `기준 ${fmtNumber(Number(preset?.weight_g ?? baseGrams))}g ×${fmtNumber(Number(row.base_weight_qty ?? row.multiplier), 2)}`
+        ? `${preset ? preset.name : "기준"} ${fmtNumber(Number(preset?.weight_g ?? baseGrams))}g ×${fmtNumber(Number(row.base_weight_qty ?? row.multiplier), 2)}`
         : null;
   return (
     <span>

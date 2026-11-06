@@ -27,6 +27,7 @@ import {
   dailyTasksQuery,
   dailyTaskTemplatesQuery,
   dashboardComponentsQuery,
+  baseWeightsQuery,
   mouldsQuery,
   ordersQuery,
   workBlocksQuery,
@@ -229,10 +230,17 @@ export function ProductionDashboard() {
     () => new Map((mouldsData.data ?? []).map((m) => [m.id, m])),
     [mouldsData.data],
   );
+  const baseWeightsData = useQuery(baseWeightsQuery());
+  const baseWeightById = useMemo(
+    () => new Map((baseWeightsData.data ?? []).map((b) => [b.id, b])),
+    [baseWeightsData.data],
+  );
   const sizeText = (r: DashboardComponentRow) => {
     const parts: string[] = [];
     const m = r.mouldId ? mouldById.get(r.mouldId) : null;
     if (m) parts.push(`${mouldAbbr(m)}${r.mouldQty ? ` ×${r.mouldQty}` : ""}`);
+    const bw = r.baseWeightId ? baseWeightById.get(r.baseWeightId) : null;
+    if (bw) parts.push(`${bw.name}${r.baseWeightQty ? ` ×${r.baseWeightQty}` : ""}`);
     if (r.targetQuantityG) parts.push(`${Math.round(r.targetQuantityG)}g`);
     if (r.multiplier && r.multiplier !== 1)
       parts.push(`배수 ×${Math.round(r.multiplier * 100) / 100}`);

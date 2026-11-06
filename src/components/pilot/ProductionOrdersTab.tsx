@@ -455,7 +455,32 @@ function ProductionOrderComponentItem({
             ? `${block.date.slice(5)} ${block.time}${block.count > 1 ? ` +${block.count - 1}` : ""}`
             : "시간 미배정"}
         </span>
+        {!readOnly && (
+          <button
+            type="button"
+            title="이 주문에서 컴포넌트 삭제"
+            aria-label="이 주문에서 컴포넌트 삭제"
+            className="border border-border px-1.5 font-mono text-[11px] leading-5 text-muted-foreground hover:border-destructive hover:text-destructive"
+            disabled={remove.isPending}
+            onClick={() => {
+              if (
+                confirm(
+                  `이 주문의 ${row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name} 지정을 삭제할까요? 예정 블록도 제거되며 원본 레시피는 유지됩니다.`,
+                )
+              )
+                remove.mutate();
+            }}
+          >
+            {remove.isPending ? "…" : "✕ 삭제"}
+          </button>
+        )}
       </div>
+      {(remove.isError || removeWarning) && (
+        <p role="alert" className="text-xs text-destructive">
+          {remove.error?.message ?? removeWarning}
+        </p>
+      )}
+
       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
         <ComponentPlanReadout row={row} />
         {!readOnly && (
@@ -472,26 +497,6 @@ function ProductionOrderComponentItem({
       {expanded && !readOnly && (
         <div className="space-y-2">
           <OrderComponentPlanRow row={row} allowFormulaChange />
-          <button
-            type="button"
-            className={buttonClass + " text-xs text-destructive"}
-            disabled={remove.isPending}
-            onClick={() => {
-              if (
-                confirm(
-                  `이 주문의 ${row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name} 지정을 삭제할까요? 예정 블록도 제거되며 원본 레시피는 유지됩니다.`,
-                )
-              )
-                remove.mutate();
-            }}
-          >
-            {remove.isPending ? "삭제 중…" : "이 주문에서 컴포넌트 삭제"}
-          </button>
-          {(remove.isError || removeWarning) && (
-            <p role="alert" className="text-xs text-destructive">
-              {remove.error?.message ?? removeWarning}
-            </p>
-          )}
         </div>
       )}
     </li>

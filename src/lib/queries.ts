@@ -1158,6 +1158,8 @@ export interface DashboardComponentRow {
   /** 대기공간 표기용 — 생산 사이즈(몰드)·개수와 목표 중량 */
   mouldId: string | null;
   mouldQty: number | null;
+  baseWeightId: string | null;
+  baseWeightQty: number | null;
   targetQuantityG: number | null;
   formulaVersionId: string;
   slot: string | null;
@@ -1189,7 +1191,7 @@ export const dashboardComponentsQuery = () =>
         await supabase
           .from("work_session_formula_versions")
           .select(
-            "id, multiplier, mould_id, mould_qty, target_quantity_g, formula_version_id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, least_liked_flavours, products(name), customers(name)))",
+            "id, multiplier, mould_id, mould_qty, base_weight_id, base_weight_qty, target_quantity_g, formula_version_id, slot, work_session_id, planner_task_id, sort_order, formula_versions(id, formula_version_ingredients(amount_source), formulas(id, name, derived_from_formula_id, components(id, name))), work_sessions!inner(id, status, order_id, orders(id, order_number, status, pickup_at, event_date, least_liked_flavours, products(name), customers(name)))",
           )
           .eq("kind", "CORE")
           .order("sort_order", { ascending: true }),
@@ -1198,6 +1200,8 @@ export const dashboardComponentsQuery = () =>
         multiplier: number;
         mould_id: string | null;
         mould_qty: number | null;
+        base_weight_id: string | null;
+        base_weight_qty: number | null;
         target_quantity_g: number | null;
         formula_version_id: string;
         slot: string | null;
@@ -1265,6 +1269,8 @@ export const dashboardComponentsQuery = () =>
           multiplier: Number(r.multiplier),
           mouldId: r.mould_id,
           mouldQty: r.mould_qty != null ? Number(r.mould_qty) : null,
+          baseWeightId: r.base_weight_id,
+          baseWeightQty: r.base_weight_qty != null ? Number(r.base_weight_qty) : null,
           targetQuantityG: r.target_quantity_g != null ? Number(r.target_quantity_g) : null,
           formulaVersionId: r.formula_version_id,
           slot: r.slot,
