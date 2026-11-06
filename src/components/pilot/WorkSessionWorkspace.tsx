@@ -1818,7 +1818,9 @@ function EditFormulaVersionModal({
 
   const visibleRows = draftRows.filter((r) => !r.removed);
   // 재료 대치 — 고른 여러 재료(예: 쌀가루+옥수수전분)를 하나(예: 콜스 글루텐프리 가루)로 합쳐 같은 총량으로 바꾼다.
-  const [openTools, setOpenTools] = useState<Set<"anchor" | "scale" | "replace">>(() => new Set());
+  const [openTools, setOpenTools] = useState<Set<"anchor" | "scale" | "replace" | "shortage">>(
+    () => new Set(),
+  );
   const [replaceSel, setReplaceSel] = useState<Set<string>>(() => new Set());
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const replaceIngredients = async (ingredientId: string) => {
@@ -1876,6 +1878,82 @@ function EditFormulaVersionModal({
       return next;
     });
     setReplaceError(null);
+  };
+  // 부족 재료 대치 — 없는 재료 하나를 다른 재료 여러 개(양을 나눠서)로 바꾼다. 예: 요거트 → 코코넛요거트 85 + 유청 나머지.
+  const [shortKey, setShortKey] = useState<string | null>(null);
+  const [shortBasis, setShortBasis] = useState<"base" | "prod">("base");
+  const [shortSubs, setShortSubs] = useState<
+    { id: string; ingredientId: string; name: string; amount: string; rest: boolean }[]
+  >([]);
+  const [shortPicking, setShortPicking] = useState(false);
+  const [shortError, setShortError] = useState<string | null>(null);
+  const shortRow = shortKey ? visibleRows.find((r) => r.key === shortKey) : undefined;
+  const shortTotalBase = shortRow ? (toGrams(Number(shortRow.amount) || 0, shortRow.unit) ?? 0) : 0;
+  // 입력 기준(기본 ×1 / 생산량 ×배수) → 기본 레시피 g로 환산
+  const shortFactor = shortBasis === "prod" ? 1 / Math.max(column.multiplier, 1e-9) : 1;
+  const shortFixedBase = shortSubs
+    .filter((x) => !x.rest)
+    .reduce((sum, x) => sum + (Number(x.amount) || 0) * shortFactor, 0);
+  const shortRestBase = round2(shortTotalBase - shortFixedBase);
+  const resetShortage = () => {
+    setShortKey(null);
+    setShortSubs([]);
+    setShortPicking(false);
+    setShortError(null);
+  };
+  const applyShortage = () => {
+    if (!shortRow || shortSubs.length === 0) return;
+    const restCount = shortSubs.filter((x) => x.rest).length;
+    if (restCount > 1) {
+      setShortError("'나머지'는 한 재료에만 지정할 수 있어요.");
+      return;
+    }
+    if (shortRestBase < 0) {
+      setShortError("대치 재료 합계가 원래 양보다 많아요.");
+      return;
+    }
+    const grams = shortSubs.map((x) =>
+      x.rest ? shortRestBase : round2((Number(x.amount) || 0) * shortFactor),
+    );
+    setDraftRows((prev) => {
+      let next = prev.map((r) => (r.key === shortRow.key ? { ...r, removed: true } : r));
+      // 새로 추가한 행(sourceId 없음)은 그냥 지운다.
+      next = next.filter((r) => !(r.key === shortRow.key && r.sourceId === null));
+      shortSubs.forEach((x, i) => {
+        const g = grams[i] ?? 0;
+        if (g <= 0) return;
+        const existing = next.find((r) => !r.removed && r.ingredientId === x.ingredientId);
+        if (existing) {
+          const base = toGrams(Number(existing.amount) || 0, existing.unit) ?? 0;
+          next = next.map((r) =>
+            r.key === existing.key
+              ? { ...r, amount: String(round2(base + g)), unit: "g", secondaryAmount: null }
+              : r,
+          );
+        } else {
+          next = [
+            ...next,
+            {
+              key: `new-${x.ingredientId}-${Date.now()}-${i}`,
+              sourceId: null,
+              ingredientId: x.ingredientId,
+              ingredientName: x.name,
+              unit: "g",
+              amount: String(g),
+              originalAmount: null,
+              originalUnit: null,
+              note: `${shortRow.ingredientName} 대치`,
+              secondaryAmount: null,
+              secondaryUnit: null,
+              removed: false,
+            },
+          ];
+        }
+      });
+      return next;
+    });
+    resetShortage();
+    setOpenTools((prev) => new Set([...prev].filter((t) => t !== "shortage")));
   };
   const [moreKeys, setMoreKeys] = useState<Set<string>>(() => new Set());
   // 기준 재료(예: 계란) 개수를 ±1 하면 🔗 연동된 재료가 같은 비율로 같이 바뀐다. 🔒 고정한 재료는 그대로.
@@ -2441,6 +2519,25 @@ function EditFormulaVersionModal({
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
           )}
 
+          <p className="border border-border bg-secondary px-3 py-1 font-mono text-[11px]">
+            아래 표의 양은 <b>기본 레시피(×1)</b> 기준이에요 · 기본{" "}
+            {fmtNumber(
+              visibleRows.reduce(
+                (sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0),
+                0,
+              ),
+              0,
+            )}
+            g · 이 열은 ×{fmtNumber(column.multiplier, 3)} → 실제 생산{" "}
+            {fmtNumber(
+              visibleRows.reduce(
+                (sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0),
+                0,
+              ) * column.multiplier,
+              0,
+            )}
+            g
+          </p>
           {/* 재료 조정 도구 — 같은 계열(재료 양을 한꺼번에 바꾸는 기능)이라 한 묶음으로, 필요한 것만 펼쳐서 쓴다(둘 이상 동시에 펼치기 가능). */}
           <div className="border border-border bg-background/40">
             <div className="flex flex-wrap items-center gap-1 px-2 py-1">
@@ -2450,6 +2547,7 @@ function EditFormulaVersionModal({
                   ["anchor", "⚓ 개수로 증량"],
                   ["scale", "× 전체 배수"],
                   ["replace", "🔁 합쳐서 대치"],
+                  ["shortage", "🧩 부족 재료 대치"],
                 ] as const
               ).map(([id, label]) => {
                 const open = openTools.has(id);
@@ -2470,6 +2568,7 @@ function EditFormulaVersionModal({
                         setReplaceSel(new Set());
                         setReplaceError(null);
                       }
+                      if (id === "shortage" && !open) resetShortage();
                     }}
                   >
                     {open ? "▾" : "▸"} {label}
@@ -2671,6 +2770,186 @@ function EditFormulaVersionModal({
                   >
                     취소
                   </button>
+                </div>
+              )}
+              {openTools.has("shortage") && (
+                <div className="space-y-2 border border-dashed border-border p-3">
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    1) 없는 재료를 고르세요 — 그 재료가 빠지고, 아래에서 정한 재료들로 나눠서
+                    채워져요.
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {visibleRows.map((r) => (
+                      <button
+                        key={r.key}
+                        type="button"
+                        className={`${shortKey === r.key ? primaryButtonClass : buttonClass} !h-7 !min-h-0 px-2 text-xs`}
+                        onClick={() => {
+                          setShortKey(r.key);
+                          setShortSubs([]);
+                          setShortError(null);
+                        }}
+                      >
+                        {r.ingredientName} {fmtNumber(Number(r.amount) || 0, 1)}
+                        {r.unit}
+                      </button>
+                    ))}
+                  </div>
+                  {shortRow && (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+                        <span>
+                          2) 대신 쓸 재료와 양 — 원래 {fmtNumber(shortTotalBase, 1)}g (생산{" "}
+                          {fmtNumber(shortTotalBase * column.multiplier, 1)}g)
+                        </span>
+                        <button
+                          type="button"
+                          className={`${shortBasis === "base" ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
+                          onClick={() => setShortBasis("base")}
+                        >
+                          기본(×1) 기준 입력
+                        </button>
+                        <button
+                          type="button"
+                          className={`${shortBasis === "prod" ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
+                          onClick={() => setShortBasis("prod")}
+                        >
+                          생산량(×{fmtNumber(column.multiplier, 3)}) 기준 입력
+                        </button>
+                      </div>
+                      <ul className="space-y-1">
+                        {shortSubs.map((x) => (
+                          <li key={x.id} className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="min-w-[8rem] flex-1">{x.name}</span>
+                            {x.rest ? (
+                              <span className="font-mono">
+                                나머지 ={" "}
+                                {fmtNumber(
+                                  shortBasis === "prod"
+                                    ? shortRestBase * column.multiplier
+                                    : shortRestBase,
+                                  1,
+                                )}
+                                g
+                              </span>
+                            ) : (
+                              <input
+                                type="number"
+                                step="any"
+                                className={`${inputClass} !w-24 text-right`}
+                                value={x.amount}
+                                onChange={(e) =>
+                                  setShortSubs((prev) =>
+                                    prev.map((y) =>
+                                      y.id === x.id ? { ...y, amount: e.target.value } : y,
+                                    ),
+                                  )
+                                }
+                              />
+                            )}
+                            <span className="font-mono text-[11px] text-muted-foreground">g</span>
+                            <button
+                              type="button"
+                              className={`${x.rest ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
+                              onClick={() =>
+                                setShortSubs((prev) =>
+                                  prev.map((y) => ({
+                                    ...y,
+                                    rest: y.id === x.id ? !y.rest : false,
+                                  })),
+                                )
+                              }
+                            >
+                              나머지로
+                            </button>
+                            <button
+                              type="button"
+                              className="px-1 text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                setShortSubs((prev) => prev.filter((y) => y.id !== x.id))
+                              }
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      {shortPicking ? (
+                        <IngredientPicker
+                          onPick={(ingredientId) => {
+                            void (async () => {
+                              const { data } = await supabase
+                                .from("ingredients")
+                                .select("name, name_en")
+                                .eq("id", ingredientId)
+                                .single();
+                              const name = data
+                                ? data.name_en
+                                  ? `${data.name} (${data.name_en})`
+                                  : data.name
+                                : "…";
+                              setShortSubs((prev) => [
+                                ...prev,
+                                {
+                                  id: `${ingredientId}-${Date.now()}`,
+                                  ingredientId,
+                                  name,
+                                  amount: "",
+                                  rest: false,
+                                },
+                              ]);
+                              setShortPicking(false);
+                            })();
+                          }}
+                          onCancel={() => setShortPicking(false)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className={buttonClass}
+                          onClick={() => setShortPicking(true)}
+                        >
+                          + 대치 재료 추가
+                        </button>
+                      )}
+                      {shortSubs.length > 0 && (
+                        <p
+                          className={cn(
+                            "font-mono text-[11px]",
+                            shortRestBase < 0 && !shortSubs.some((x) => x.rest)
+                              ? "text-destructive"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          합계 {fmtNumber(shortFixedBase + Math.max(shortRestBase, 0), 1)}g / 원래{" "}
+                          {fmtNumber(shortTotalBase, 1)}g
+                          {!shortSubs.some((x) => x.rest) &&
+                            ` · 차이 ${fmtNumber(shortRestBase, 1)}g (나머지로 지정하면 자동으로 채워요)`}
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {shortError && <p className="text-xs text-destructive">{shortError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={primaryButtonClass}
+                      disabled={!shortRow || shortSubs.length === 0}
+                      onClick={applyShortage}
+                    >
+                      대치 적용
+                    </button>
+                    <button
+                      type="button"
+                      className={buttonClass}
+                      onClick={() => {
+                        resetShortage();
+                        setOpenTools((prev) => new Set([...prev].filter((t) => t !== "shortage")));
+                      }}
+                    >
+                      취소
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
