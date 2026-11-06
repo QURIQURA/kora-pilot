@@ -128,7 +128,9 @@ export function BlockTaskDetails({
   /** TASK 시작시각이 기록되면 세션이 PLANNED일 때 IN_PROGRESS로 올리도록 알린다 */
   onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
   /** 실제 시작시각이 정해지면 타임라인 블록을 그 시각에 맞춘다 */
-  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
+  onRetime?:
+    | ((block: WorkBlock, startIso: string | null, endIso?: string) => void | Promise<void>)
+    | undefined;
 }) {
   const queryClient = useQueryClient();
   const sessionId = row.work_session_id;
@@ -263,7 +265,8 @@ export function BlockTaskDetails({
     else await refresh();
     if (taskPatch.actual_started_at) {
       await onStarted?.(sessionId, taskPatch.actual_started_at);
-      await onRetime?.(block, taskPatch.actual_started_at);
+      // 블록의 시작·종료도 타이머 시작·종료에 맞춘다(진행 중 타이머가 있으면 종료는 건드리지 않음).
+      await onRetime?.(block, taskPatch.actual_started_at, taskPatch.completed_at ?? undefined);
     }
   };
   const patchTimer = (id: string, patch: Partial<TaskTimer>) =>
@@ -531,7 +534,9 @@ export function BlockTimerChip({
   block: WorkBlock;
   row: DashboardComponentRow;
   onStarted?: (sessionId: string, iso: string) => void | Promise<void>;
-  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
+  onRetime?:
+    | ((block: WorkBlock, startIso: string | null, endIso?: string) => void | Promise<void>)
+    | undefined;
   /** timer: 블록 첫 줄의 타이머 / note: 블록 아래쪽의 메모 한 줄 */
   part: "timer" | "note";
 }) {
@@ -593,7 +598,15 @@ export function BlockTimerChip({
                 onMouseDown={stop}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void patchTimer(t.id, { done_at: new Date().toISOString() });
+                  const endIso = new Date().toISOString();
+                  void (async () => {
+                    await patchTimer(t.id, { done_at: endIso });
+                    // 마지막으로 돌던 타이머가 끝나면 블록 종료도 그 시각으로 맞춘다.
+                    const othersRunning = timers.some(
+                      (x) => x.id !== t.id && x.started_at && !x.done_at,
+                    );
+                    if (!othersRunning) await onRetime?.(block, task.actual_started_at, endIso);
+                  })();
                 }}
               >
                 ■
@@ -655,13 +668,15 @@ export function BlockTimerChip({
           onMouseDown={stop}
           onClick={async (e) => {
             e.stopPropagation();
+            const endIso = new Date().toISOString();
             const userId = await currentUserId();
             await supabase
               .from("work_session_tasks")
-              .update({ status: "DONE", completed_at: new Date().toISOString() })
+              .update({ status: "DONE", completed_at: endIso })
               .eq("id", task.id)
               .eq("user_id", userId);
             await refresh();
+            await onRetime?.(block, task.actual_started_at, endIso);
           }}
         >
           ✔

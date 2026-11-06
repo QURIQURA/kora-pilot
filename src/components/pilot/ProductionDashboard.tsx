@@ -513,14 +513,22 @@ export function ProductionDashboard() {
     onSuccess: refresh,
   });
 
-  /** 타이머 실제 시작시각에 맞춰 블록을 이동(길이 유지). 병합 대표면 같이 굽는 블록도 따라간다. */
-  const retimeBlock = async (block: WorkBlock, iso: string) => {
-    const d = new Date(iso);
-    const startMin = d.getHours() * 60 + d.getMinutes();
+  /**
+   * 타이머 실제 시각에 맞춰 블록을 맞춘다 — 시작은 타이머 시작, 종료는 타이머 종료(주어질 때).
+   * 종료가 없으면 길이를 유지한 채 이동. 병합 대표면 같이 굽는 블록도 따라간다.
+   */
+  const retimeBlock = async (block: WorkBlock, startIso: string | null, endIso?: string) => {
+    const hm = (iso: string) => {
+      const d = new Date(iso);
+      return d.getHours() * 60 + d.getMinutes();
+    };
     const oldStart = toMin(block.start_time);
-    if (startMin === oldStart) return;
-    const duration = toMin(block.end_time) - oldStart;
-    await updateBlock.mutateAsync({ block, startMin, endMin: startMin + duration });
+    const oldEnd = toMin(block.end_time);
+    const startMin = startIso ? hm(startIso) : oldStart;
+    let endMin = startMin + (oldEnd - oldStart);
+    if (endIso && hm(endIso) > startMin) endMin = hm(endIso);
+    if (startMin === oldStart && endMin === oldEnd) return;
+    await updateBlock.mutateAsync({ block, startMin, endMin });
   };
 
   /** MERGE를 켜는 순간 같은 단계의 블록들을 가장 이른 블록의 시간으로 맞춘다. */
@@ -2036,7 +2044,9 @@ function ProductionBlockRecord({
   title: string;
   active: boolean;
   onStarted: (sessionId: string, iso: string) => void | Promise<void>;
-  onRetime?: ((block: WorkBlock, iso: string) => void | Promise<void>) | undefined;
+  onRetime?:
+    | ((block: WorkBlock, startIso: string | null, endIso?: string) => void | Promise<void>)
+    | undefined;
   /** 병합 컴포넌트의 한 벌 기록 — 이 기록이 함께 다루는 오더들 */
   mergedLabel?: string;
 }) {
