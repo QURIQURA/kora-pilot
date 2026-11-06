@@ -3863,6 +3863,10 @@ export type Database = {
         };
         Returns: string;
       };
+      convert_session_row_to_experiment: {
+        Args: { p_row_id: string; p_title: string; p_hypothesis?: string };
+        Returns: string;
+      };
       decide_formula_experiment: {
         Args: { p_id: string; p_decision: string };
         Returns: undefined;

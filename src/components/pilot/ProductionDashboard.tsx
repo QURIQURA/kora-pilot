@@ -22,6 +22,7 @@ import {
   BlockTimerChip,
   BlockTimerInline,
 } from "@/components/pilot/BlockTaskDetails";
+import { SessionExperimentButton } from "@/components/pilot/SessionExperimentButton";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1595,6 +1596,9 @@ export function ProductionDashboard() {
                 블록을 누르면 시간 수정·분할·배정 해제를 할 수 있어요. 아래쪽 가장자리를 끌면 길이가
                 바뀌어요.
               </p>
+            )}
+            {detailRowId && rowById.get(detailRowId) && (
+              <SessionExperimentButton row={rowById.get(detailRowId)!} />
             )}
             {detailItems.length > 0 && (
               <DayWorkView
