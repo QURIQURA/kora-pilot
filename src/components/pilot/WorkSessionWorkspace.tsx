@@ -1141,6 +1141,8 @@ function WeighingView({
                     key={col.selectionId}
                     id={col.selectionId}
                     formulaName={col.formulaName}
+                    formulaId={col.formulaId}
+                    versionId={col.formulaVersionId}
                     multiplier={col.multiplier}
                     rnd={rndVersionIds.has(col.formulaVersionId)}
                     onResizeStart={(clientX) => startColumnResize(col.selectionId, clientX)}
@@ -1248,6 +1250,8 @@ function WeighingView({
 function MatrixColumnHeader({
   id,
   formulaName,
+  formulaId,
+  versionId,
   multiplier,
   rnd,
   onResizeStart,
@@ -1255,6 +1259,8 @@ function MatrixColumnHeader({
 }: {
   id: string;
   formulaName: string;
+  formulaId: string;
+  versionId: string;
   multiplier: number;
   /** R&D 실험 중인 버전 — 연두색으로 구분 */
   rnd: boolean;
@@ -1287,7 +1293,16 @@ function MatrixColumnHeader({
         <div className="min-w-0 flex-1">
           <p className="whitespace-nowrap text-xs leading-tight">
             {rnd && <span className="label-caps mr-1 text-[10px] text-[#3F7A1F]">🧪 R&amp;D</span>}
-            {formulaName}
+            <Link
+              to="/formulas/$formulaId"
+              params={{ formulaId }}
+              search={{ version: versionId }}
+              className="underline-offset-2 hover:underline"
+              title="포뮬라 페이지 열기"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              {formulaName}
+            </Link>
           </p>
           <p className="label-caps whitespace-nowrap text-[11px] text-muted-foreground">
             ×{fmtNumber(multiplier, 3)}

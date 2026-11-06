@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   currentUserId,
   baseWeightsQuery,
+  capacitiesQuery,
+  sizeSpecLinesQuery,
   formulasQuery,
   mouldsQuery,
   techniqueCategoriesQuery,
@@ -140,6 +142,31 @@ export function OrderComponentPlanRow({
           base,
         )
       : null;
+  // 규격 스펙: 이 주문의 완성 사이즈에 이 역할(SHEET/CREAM…)로 정의된 줄이 있으면 눌러서 그대로 적용한다.
+  const sessionSize = useQuery({
+    queryKey: ["work_sessions", "cake_size_id", row.work_session_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("work_sessions")
+        .select("cake_size_id")
+        .eq("id", row.work_session_id)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.cake_size_id ?? null;
+    },
+  });
+  const specLines = useQuery(sizeSpecLinesQuery());
+  const capacities = useQuery(capacitiesQuery());
+  const specChoices = (specLines.data ?? []).filter(
+    (l) => l.cake_size_id === sessionSize.data && l.slot === row.slot,
+  );
+  const applySpec = (line: (typeof specChoices)[number]) => {
+    const cap = (capacities.data ?? []).find((c) => c.id === line.capacity_id);
+    if (!cap) return;
+    if (cap.kind === "MOULD")
+      setDraft((d) => ({ ...d, mould: cap.id, qty: String(line.capacity_qty), bw: "" }));
+    else setDraft((d) => ({ ...d, bw: cap.id, bwQty: String(line.capacity_qty), mould: "" }));
+  };
   const save = useMutation({
     mutationFn: async () => {
       if (!draft.version) throw new Error("레시피 버전을 선택하세요");
@@ -260,6 +287,26 @@ export function OrderComponentPlanRow({
               ))}
           </select>
         </label>
+        {specChoices.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 text-[11px]">
+            <span className="label-caps text-muted-foreground">규격 스펙</span>
+            {specChoices.map((l) => {
+              const cap = (capacities.data ?? []).find((c) => c.id === l.capacity_id);
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  className={`${buttonClass} !h-7 !min-h-0 px-2 text-[11px]`}
+                  disabled={!cap}
+                  title={cap ? "이 규격 스펙대로 적용" : "SETTINGS > 규격 스펙에서 기준을 정하세요"}
+                  onClick={() => applySpec(l)}
+                >
+                  {l.label || l.slot} · {cap ? `${cap.name} ×${l.capacity_qty}` : "기준 미정"}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {mouldMode ? (
           <div className="space-y-1 border border-border p-2">
             <p className="text-[11px] text-muted-foreground">

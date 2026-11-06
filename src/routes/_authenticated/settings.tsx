@@ -6,6 +6,7 @@ import { CakeSizeMouldPairs } from "@/components/pilot/CakeSizeMouldPairs";
 import { MouldManager } from "@/components/pilot/MouldManager";
 import { PastryMeasurementGuide } from "@/components/pilot/PastryMeasurementGuide";
 import { CakeSizeManager } from "@/components/pilot/CakeSizeManager";
+import { SizeSpecManager } from "@/components/pilot/SizeSpecManager";
 import { BaseWeightManager } from "@/components/pilot/BaseWeightManager";
 import { TechniqueCategoryManager } from "@/components/pilot/TechniqueCategoryManager";
 import { MethodManager } from "@/components/pilot/MethodManager";
@@ -138,6 +139,10 @@ function SettingsPage() {
             <MouldManager />
           </div>
         </div>
+      </SettingsSection>
+
+      <SettingsSection title="규격 스펙 (완성 사이즈 = 기준 × 개수의 합)" defaultOpen>
+        <SizeSpecManager />
       </SettingsSection>
 
       <SettingsGroup label="PRODUCTS">

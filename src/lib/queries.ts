@@ -2545,6 +2545,25 @@ export const cakeSizesQuery = () =>
       unwrap(await supabase.from("cake_sizes").select("*").order("sort_order").order("name")),
   });
 
+// 2026-11-06: 규격 스펙 — 최종 사이즈 1개 = 컴포넌트 역할별 "기준(CAPACITY) × 개수 = 목표 g" 줄들
+export type SizeSpecLine = Tables<"size_spec_lines">;
+export type Capacity = Tables<"capacities">;
+
+export const sizeSpecLinesQuery = () =>
+  queryOptions({
+    queryKey: ["size_spec_lines"],
+    queryFn: async (): Promise<SizeSpecLine[]> =>
+      unwrap(await supabase.from("size_spec_lines").select("*").order("sort_order")),
+  });
+
+/** 몰드 + 기준중량 통합 목록(capacities) */
+export const capacitiesQuery = () =>
+  queryOptions({
+    queryKey: ["capacities"],
+    queryFn: async (): Promise<Capacity[]> =>
+      unwrap(await supabase.from("capacities").select("*").order("kind").order("name")),
+  });
+
 // 2026-10-21: DIETARY TAGS — SETTINGS에서 관리하는 전역 식이 분류(복수 선택). 주문은 order_dietary_tags로 연결한다.
 export type DietaryTag = Tables<"dietary_tags">;
 export type OrderDietaryTagLink = Tables<"order_dietary_tags">;

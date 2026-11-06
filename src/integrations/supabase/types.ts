@@ -71,6 +71,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      size_spec_lines: {
+        Row: {
+          cake_size_id: string;
+          capacity_id: string | null;
+          capacity_qty: number;
+          created_at: string;
+          id: string;
+          label: string;
+          notes: string | null;
+          slot: string;
+          sort_order: number;
+          target_g: number | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          cake_size_id: string;
+          capacity_id?: string | null;
+          capacity_qty?: number;
+          created_at?: string;
+          id?: string;
+          label?: string;
+          notes?: string | null;
+          slot?: string;
+          sort_order?: number;
+          target_g?: number | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Update: {
+          cake_size_id?: string;
+          capacity_id?: string | null;
+          capacity_qty?: number;
+          created_at?: string;
+          id?: string;
+          label?: string;
+          notes?: string | null;
+          slot?: string;
+          sort_order?: number;
+          target_g?: number | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       cake_sizes: {
         Row: {
           cream_g: number | null;
@@ -138,6 +183,7 @@ export type Database = {
       };
       capacities: {
         Row: {
+          volume_cm3: number | null;
           created_at: string;
           diameter_mm: number | null;
           height_mm: number | null;
@@ -151,6 +197,7 @@ export type Database = {
           weight_g: number | null;
         };
         Insert: {
+          volume_cm3?: number | null;
           created_at?: string;
           diameter_mm?: number | null;
           height_mm?: number | null;
@@ -164,6 +211,7 @@ export type Database = {
           weight_g?: number | null;
         };
         Update: {
+          volume_cm3?: number | null;
           created_at?: string;
           diameter_mm?: number | null;
           height_mm?: number | null;
@@ -971,6 +1019,7 @@ export type Database = {
       };
       formula_versions: {
         Row: {
+          density_g_per_cm3: number | null;
           basis_overrides: Json;
           component_sources: Json;
           bath_water_g: number | null;
@@ -990,6 +1039,7 @@ export type Database = {
           yield_quantity: number | null;
         };
         Insert: {
+          density_g_per_cm3?: number | null;
           basis_overrides?: Json;
           component_sources?: Json;
           bath_water_g?: number | null;
@@ -1009,6 +1059,7 @@ export type Database = {
           yield_quantity?: number | null;
         };
         Update: {
+          density_g_per_cm3?: number | null;
           basis_overrides?: Json;
           component_sources?: Json;
           bath_water_g?: number | null;
