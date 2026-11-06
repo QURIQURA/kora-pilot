@@ -72,6 +72,11 @@ const ORDER_PALETTE = [
   { bg: "#EEE9D2", accent: "#B5A242", text: "#5A4E12" },
 ];
 
+const nowMin = (): number => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+};
+
 function toMin(t: string): number {
   const [h, m] = t.split(":");
   return Number(h) * 60 + Number(m);
@@ -1523,6 +1528,22 @@ export function ProductionDashboard() {
                       }}
                     />
                   </label>
+                  <button
+                    type="button"
+                    title="현재 시각 적용"
+                    className={cn(buttonClass, "!min-h-[36px] px-2 text-[11px]")}
+                    disabled={busy}
+                    onClick={() => {
+                      const m = nowMin();
+                      const dur = toMin(selectedDaily.end_time) - toMin(selectedDaily.start_time);
+                      if (m < toMin(selectedDaily.end_time))
+                        updateDaily.mutate({ task: selectedDaily, startMin: m });
+                      else
+                        updateDaily.mutate({ task: selectedDaily, startMin: m, endMin: m + dur });
+                    }}
+                  >
+                    지금
+                  </button>
                   <label className="space-y-1">
                     <span className="label-caps block text-[11px] text-muted-foreground">END</span>
                     <input
@@ -1541,6 +1562,20 @@ export function ProductionDashboard() {
                       }}
                     />
                   </label>
+                  <button
+                    type="button"
+                    title="현재 시각 적용"
+                    className={cn(buttonClass, "!min-h-[36px] px-2 text-[11px]")}
+                    disabled={busy}
+                    onClick={() => {
+                      const m = nowMin();
+                      if (m > toMin(selectedDaily.start_time))
+                        updateDaily.mutate({ task: selectedDaily, endMin: m });
+                      else setWarning("지금 시각이 시작 시각보다 빨라서 END에 적용할 수 없어요.");
+                    }}
+                  >
+                    지금
+                  </button>
                   <button
                     type="button"
                     className={cn(buttonClass, "hover:text-destructive")}
@@ -1636,6 +1671,21 @@ export function ProductionDashboard() {
                       }}
                     />
                   </label>
+                  <button
+                    type="button"
+                    title="현재 시각 적용"
+                    className={cn(buttonClass, "!min-h-[36px] px-2 text-[11px]")}
+                    disabled={busy}
+                    onClick={() => {
+                      const m = nowMin();
+                      const dur = toMin(selected.end_time) - toMin(selected.start_time);
+                      if (m < toMin(selected.end_time))
+                        updateBlock.mutate({ block: selected, startMin: m });
+                      else updateBlock.mutate({ block: selected, startMin: m, endMin: m + dur });
+                    }}
+                  >
+                    지금
+                  </button>
                   <label className="space-y-1">
                     <span className="label-caps block text-[11px] text-muted-foreground">END</span>
                     <input
@@ -1653,6 +1703,20 @@ export function ProductionDashboard() {
                       }}
                     />
                   </label>
+                  <button
+                    type="button"
+                    title="현재 시각 적용"
+                    className={cn(buttonClass, "!min-h-[36px] px-2 text-[11px]")}
+                    disabled={busy}
+                    onClick={() => {
+                      const m = nowMin();
+                      if (m > toMin(selected.start_time))
+                        updateBlock.mutate({ block: selected, endMin: m });
+                      else setWarning("지금 시각이 시작 시각보다 빨라서 END에 적용할 수 없어요.");
+                    }}
+                  >
+                    지금
+                  </button>
                   {selected.step_name ? (
                     <span className="font-mono text-[11px] text-muted-foreground">
                       템플릿 단계 {selected.part_no}: {selected.step_name}
