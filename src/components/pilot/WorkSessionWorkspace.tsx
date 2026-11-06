@@ -1754,9 +1754,14 @@ function EditFormulaVersionModal({
   // 레시피는 기본 몰드(6″) 기준으로 저장되지만 지금 만드는 건 8″ — 기준 재료 개수는 이 열의 몰드 1개 기준으로
   // 보여 주고(+1 = 8″ 케이크 1개당 계란 1알), 레시피에는 몰드 비율만큼(6″는 0.5알) 소수점으로 반영한다.
   const mouldsForAnchor = useQuery(mouldsQuery());
+  const [anchorMouldChoice, setAnchorMouldChoice] = useState<string | null>(null);
+  const anchorMouldOptions = (mouldsForAnchor.data ?? []).filter(
+    (m) => m.reference_weight_g != null && Number(m.reference_weight_g) > 0,
+  );
+  const anchorMouldId = anchorMouldChoice ?? column.mouldId ?? column.baseMouldId ?? "";
   const anchorMouldK = (() => {
     const list = mouldsForAnchor.data ?? [];
-    const t = column.mouldId ? list.find((m) => m.id === column.mouldId) : null;
+    const t = anchorMouldId ? list.find((m) => m.id === anchorMouldId) : null;
     const b = column.baseMouldId ? list.find((m) => m.id === column.baseMouldId) : null;
     const tw = t?.reference_weight_g != null ? Number(t.reference_weight_g) : 0;
     const bw = b?.reference_weight_g != null ? Number(b.reference_weight_g) : 0;
@@ -2277,6 +2282,20 @@ function EditFormulaVersionModal({
                   </option>
                 ))}
               </select>
+              {anchorRow && column.baseMouldId && anchorMouldOptions.length > 0 && (
+                <select
+                  className={`${inputClass} !h-7 !min-h-0 !w-auto text-xs`}
+                  title="+1/−1 기준 몰드"
+                  value={anchorMouldId}
+                  onChange={(e) => setAnchorMouldChoice(e.target.value)}
+                >
+                  {anchorMouldOptions.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      기준 몰드 {mouldAbbr(m)} ({fmtNumber(Number(m.reference_weight_g), 0)}g)
+                    </option>
+                  ))}
+                </select>
+              )}
               {anchorRow && anchorCount != null && (
                 <span className="flex items-center gap-1">
                   <button
