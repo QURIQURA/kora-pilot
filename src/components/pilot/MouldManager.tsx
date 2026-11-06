@@ -83,8 +83,9 @@ export function MouldManager() {
       )}
 
       <p className="mb-3 font-mono text-[11px] text-muted-foreground">
-        몰드 숫자 치수는 도구 자체의 내부 치수(cm)입니다. 완성 케이크 규격과 별도로 관리합니다.
-        원형은 지름을 기준으로 면적을 계산하며, 비어 있는 치수는 이름에서 추정하지 않습니다.
+        몰드의 지름·가로·세로는 도구 내부 치수(cm)이고, 높이는 몰드 깊이가 아니라 구운 뒤 케이크
+        높이입니다. 완성 케이크 규격과 별도로 관리합니다. 원형은 지름을 기준으로 면적을 계산하며,
+        비어 있는 치수는 이름에서 추정하지 않습니다.
       </p>
 
       <details className="mb-3 border border-border p-3 text-xs">
@@ -209,7 +210,7 @@ export function MouldManager() {
                     step="0.1"
                     min="0"
                     className={`${inputClass} !w-20 border-transparent text-right hover:border-input`}
-                    placeholder="높이"
+                    placeholder="구운 높이"
                     defaultValue={mould.height_mm != null ? mmToCm(mould.height_mm) : ""}
                     onBlur={(e) => {
                       const next = e.target.value.trim() ? Number(e.target.value) * 10 : null;

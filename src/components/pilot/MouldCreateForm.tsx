@@ -123,8 +123,8 @@ export function MouldCreateForm({
       </Field>
       <p className="text-xs text-muted-foreground">
         6/8/10인치≈15/20/25cm의 명목 참고값입니다. 높이 10cm·바닥분리형은 지정 조건이며 보유 몰드의
-        실측값이 아닙니다. 중앙 기둥이 있으면 아래 부피는 외곽 기준입니다. 반죽량은 레시피별로
-        확인한 뒤 입력하세요.
+        실측값이 아닙니다. 높이는 몰드 깊이가 아니라 구운 뒤 케이크 높이를 적습니다. 중앙 기둥이
+        있으면 아래 부피는 외곽 기준입니다. 반죽량은 레시피별로 확인한 뒤 입력하세요.
       </p>
       <Field label="NAME">
         <input
@@ -182,7 +182,7 @@ export function MouldCreateForm({
             </Field>
           </>
         )}
-        <Field label="도구 높이 (cm)">
+        <Field label="구운 높이 (cm)">
           <input
             type="number"
             step="any"

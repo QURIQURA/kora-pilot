@@ -56,8 +56,8 @@ export function CakeSizeMouldPairs() {
                   <td className="px-2 py-1 font-mono text-xs text-muted-foreground">
                     {m
                       ? m.diameter_mm
-                        ? `Ø${cm(m.diameter_mm)} × H${cm(m.height_mm)}cm`
-                        : `${cm(m.length_mm)}×${cm(m.width_mm)} × H${cm(m.height_mm)}cm`
+                        ? `Ø${cm(m.diameter_mm)} × 구운 H${cm(m.height_mm)}cm`
+                        : `${cm(m.length_mm)}×${cm(m.width_mm)} × 구운 H${cm(m.height_mm)}cm`
                       : ""}
                   </td>
                   <td className="px-2 py-1 text-right font-mono">
@@ -83,8 +83,8 @@ export function CakeSizeMouldPairs() {
                 <td className="px-2 py-1 font-mono">{mouldAbbr(m)}</td>
                 <td className="px-2 py-1 font-mono text-xs text-muted-foreground">
                   {m.diameter_mm
-                    ? `Ø${cm(m.diameter_mm)} × H${cm(m.height_mm)}cm`
-                    : `${cm(m.length_mm)}×${cm(m.width_mm)} × H${cm(m.height_mm)}cm`}
+                    ? `Ø${cm(m.diameter_mm)} × 구운 H${cm(m.height_mm)}cm`
+                    : `${cm(m.length_mm)}×${cm(m.width_mm)} × 구운 H${cm(m.height_mm)}cm`}
                 </td>
                 <td className="px-2 py-1 text-right font-mono">
                   {m.reference_weight_g ? `${fmtNumber(Number(m.reference_weight_g))}g` : "—"}
