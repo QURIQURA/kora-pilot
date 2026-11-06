@@ -1751,6 +1751,18 @@ function EditFormulaVersionModal({
   // 기준 재료(예: 계란) 개수를 ±1 하면 🔗 연동된 재료가 같은 비율로 같이 바뀐다. 🔒 고정한 재료는 그대로.
   const [lockedKeys, setLockedKeys] = useState<Set<string>>(() => new Set());
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
+  // 레시피는 기본 몰드(6″) 기준으로 저장되지만 지금 만드는 건 8″ — 기준 재료 개수는 이 열의 몰드 1개 기준으로
+  // 보여 주고(+1 = 8″ 케이크 1개당 계란 1알), 레시피에는 몰드 비율만큼(6″는 0.5알) 소수점으로 반영한다.
+  const mouldsForAnchor = useQuery(mouldsQuery());
+  const anchorMouldK = (() => {
+    const list = mouldsForAnchor.data ?? [];
+    const t = column.mouldId ? list.find((m) => m.id === column.mouldId) : null;
+    const b = column.baseMouldId ? list.find((m) => m.id === column.baseMouldId) : null;
+    const tw = t?.reference_weight_g != null ? Number(t.reference_weight_g) : 0;
+    const bw = b?.reference_weight_g != null ? Number(b.reference_weight_g) : 0;
+    return tw > 0 && bw > 0 ? { k: tw / bw, t, b } : null;
+  })();
+  const anchorK = anchorMouldK?.k ?? 1;
   const anchorRow = draftRows.find((r) => r.key === anchorKey && !r.removed) ?? null;
   const anchorCount =
     anchorRow?.secondaryAmount != null && anchorRow.secondaryAmount > 0
@@ -1758,7 +1770,7 @@ function EditFormulaVersionModal({
       : null;
   const stepAnchor = (delta: number) => {
     if (!anchorRow || anchorCount == null) return;
-    const next = anchorCount + delta;
+    const next = anchorCount + delta / anchorK;
     if (next <= 0) return;
     const factor = next / anchorCount;
     setDraftRows((prev) =>
@@ -2275,9 +2287,16 @@ function EditFormulaVersionModal({
                     −1
                   </button>
                   <span className="min-w-12 text-center font-mono text-sm tabular-nums">
-                    {fmtNumber(anchorCount, 2)}
+                    {fmtNumber(anchorCount * anchorK, 2)}
                     {anchorRow.secondaryUnit ?? ""}
                   </span>
+                  {anchorMouldK && anchorK !== 1 && (
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      {anchorMouldK.t ? mouldAbbr(anchorMouldK.t) : ""} 1개 기준 · 레시피(
+                      {anchorMouldK.b ? mouldAbbr(anchorMouldK.b) : ""}) {fmtNumber(anchorCount, 2)}
+                      {anchorRow.secondaryUnit ?? ""}
+                    </span>
+                  )}
                   <button
                     type="button"
                     className={`${primaryButtonClass} !h-7 !min-h-0 px-2 text-sm`}
@@ -2292,12 +2311,12 @@ function EditFormulaVersionModal({
                   type="number"
                   step="any"
                   className={`${inputClass} !h-7 !min-h-0 !w-28 text-xs`}
-                  placeholder="현재 개수 입력"
+                  placeholder={anchorK !== 1 ? "몰드 1개당 현재 개수" : "현재 개수 입력"}
                   onBlur={(e) => {
                     const n = Number(e.target.value);
                     if (n > 0)
                       patchRow(anchorRow.key, {
-                        secondaryAmount: n,
+                        secondaryAmount: n / anchorK,
                         secondaryUnit: anchorRow.secondaryUnit ?? "개",
                       });
                   }}
