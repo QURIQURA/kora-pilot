@@ -1,4 +1,6 @@
 import { BlendSourcesPanel } from "@/components/pilot/BlendSourcesPanel";
+import { BlendIngredientBreakdown } from "@/components/pilot/BlendIngredientBreakdown";
+import { readBlendSources } from "@/lib/component-blend";
 import { type ScaleMode } from "@/lib/recipe-scale";
 import { AdjustInput, ScaleAllPanel } from "@/components/pilot/RecipeScaleControls";
 import { FormulaVersionDietaryTags } from "@/components/pilot/FormulaVersionDietaryTags";
@@ -179,6 +181,8 @@ function FormulaDetailPage() {
   const [versionId, setVersionId] = useState<string | null>(requestedVersion ?? null);
   const [batch, setBatch] = useState("1");
   const [basisId, setBasisId] = useState(""); // baker's % 기준 재료
+  // 합성 컴포넌트: 재료를 원본별로 분리해서(기본) 볼지, 합산 표(편집용)로 볼지
+  const [blendView, setBlendView] = useState<"split" | "merged">("split");
   const [adding, setAdding] = useState(false);
   // "+ ADD BATCH" 1단계 추가 폼 — 몰드+개수를 바로 입력해서 배수 열을 만든다(2026-09-24)
   const [addingBatch, setAddingBatch] = useState(false);
@@ -275,6 +279,7 @@ function FormulaDetailPage() {
   ]);
 
   const batchValue = Math.max(parseNumber(batch) || 0, 0) || 1;
+  const isBlend = readBlendSources(version?.component_sources).length >= 2;
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ["formula_version_costs"] });
@@ -1124,6 +1129,20 @@ function FormulaDetailPage() {
         title="INGREDIENTS"
         action={
           <div className="flex flex-wrap items-center gap-2">
+            {isBlend && (
+              <span className="flex border border-input text-[11px]">
+                {(["split", "merged"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={`label-caps px-2 py-1 ${blendView === v ? "bg-foreground text-background" : "hover:bg-secondary"}`}
+                    onClick={() => setBlendView(v)}
+                  >
+                    {v === "split" ? "원본별" : "합산(편집)"}
+                  </button>
+                ))}
+              </span>
+            )}
             <select
               className="label-caps border border-input bg-background px-1.5 py-1 text-[11px]"
               value={basisId}
@@ -1202,7 +1221,9 @@ function FormulaDetailPage() {
             }}
           />
         )}
-        {rows.length === 0 ? (
+        {isBlend && blendView === "split" ? (
+          <BlendIngredientBreakdown sources={version?.component_sources} multiplier={batchValue} />
+        ) : rows.length === 0 ? (
           <p className="font-mono text-xs uppercase text-muted-foreground">
             NO INGREDIENTS IN THIS VERSION
           </p>
