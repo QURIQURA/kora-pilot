@@ -4,7 +4,7 @@
  * 블록이 처음 선택될 때 행이 없으면 만들어 work_blocks.work_session_task_id로 잇는다.
  * 효율(작업시간·생산량)은 여기서 입력하지 않고 EFFICIENCY 화면에서 상세로 본다(2026-11-06).
  */
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -19,6 +19,7 @@ import { hasObservationFields, type ChecklistItem, type WorkSessionTask } from "
 import { syncWorkSessionToPlanner } from "@/lib/work-session";
 import { newTimer, readTimers, timerElapsedSec, type TaskTimer } from "@/lib/task-timers";
 import { buttonClass, primaryButtonClass } from "@/components/pilot/ui";
+import { cn } from "@/lib/utils";
 
 const smallInput = "h-7 border border-border bg-background px-1.5 text-xs tabular-nums";
 
@@ -27,6 +28,56 @@ function wholeMinutes(startIso: string, endIso: string): number {
   return (
     Math.floor(new Date(endIso).getTime() / 60_000) -
     Math.floor(new Date(startIso).getTime() / 60_000)
+  );
+}
+
+/** 24시간제 시각 입력 — "17:30", "1730", "930" 모두 허용. 잘못된 값은 되돌리고 비우면 ""로 확정한다. */
+function TimeText({
+  value,
+  onCommit,
+  className,
+  title,
+  placeholder,
+}: {
+  value: string;
+  onCommit: (hm: string) => void;
+  className?: string | undefined;
+  title?: string | undefined;
+  placeholder?: string | undefined;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  return (
+    <input
+      className={`${className ?? ""} text-center tabular-nums`}
+      inputMode="numeric"
+      maxLength={5}
+      title={title}
+      placeholder={placeholder ?? "--:--"}
+      value={text ?? value}
+      onFocus={(e) => {
+        setText(value);
+        e.target.select();
+      }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        const raw = (text ?? value).trim();
+        setText(null);
+        if (raw === value) return;
+        if (raw === "") {
+          onCommit("");
+          return;
+        }
+        const m = /^(\d{1,2}):?(\d{2})?$/.exec(raw);
+        const h = m ? Number(m[1]) : NaN;
+        const mi = m ? Number(m[2] ?? 0) : NaN;
+        if (!m || h > 23 || mi > 59) return;
+        const hm = `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+        if (hm !== value) onCommit(hm);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+      }}
+    />
   );
 }
 
@@ -166,68 +217,6 @@ export function BlockTaskDetails({
   const observationOverrides: Record<string, boolean> = {};
   for (const d of typeDefs.data ?? []) observationOverrides[d.key] = d.has_observation_fields;
 
-  const setTime = async (field: "actual_started_at" | "completed_at", value: string) => {
-    const iso = value ? localDateTimeToISO(block.block_date, value) : null;
-    await update({ [field]: iso }, "시간");
-    // 수기로 고친 Start/End가 해당 타이머 기록에도 그대로 반영되게 한다(따로 놀지 않도록).
-    // 타이머가 여러 개면 Start가 일치하는 타이머(없으면 진행 중 → 마지막으로 시작한 타이머)를 대상으로 삼는다.
-    const all = readTimers(task);
-    const oldStart = task.actual_started_at ? new Date(task.actual_started_at).getTime() : null;
-    const target =
-      all.length === 1
-        ? all[0]
-        : ((oldStart !== null
-            ? all.find(
-                (t) =>
-                  t.started_at && Math.abs(new Date(t.started_at).getTime() - oldStart) < 60_000,
-              )
-            : undefined) ??
-          all.find((t) => t.started_at && !t.done_at) ??
-          [...all].reverse().find((t) => t.started_at));
-    if (target) {
-      const next: TaskTimer =
-        field === "actual_started_at"
-          ? {
-              ...target,
-              started_at: iso,
-              done_at: iso
-                ? (target.done_at ?? (all.length === 1 ? task.completed_at : null))
-                : null,
-            }
-          : {
-              ...target,
-              done_at: iso,
-              started_at: iso
-                ? (target.started_at ?? (all.length === 1 ? task.actual_started_at : null))
-                : target.started_at,
-            };
-      const e = await saveTimers(
-        task,
-        all.map((t) => (t.id === target.id ? next : t)),
-      );
-      if (e) setError(`타이머 저장 실패 — ${e.message}`);
-      await refresh();
-    }
-    if (field === "actual_started_at" && iso) {
-      await onStarted?.(sessionId, iso);
-      await onRetime?.(block, iso);
-    }
-  };
-
-  // 진행 시간(분)을 직접 입력 — Start(없으면 블록 시작 시각)에 분을 더해 End를 정한다.
-  const setDuration = async (minutes: number) => {
-    let startIso = task.actual_started_at;
-    if (!startIso) {
-      startIso = localDateTimeToISO(block.block_date, block.start_time.slice(0, 5));
-      await setTime("actual_started_at", block.start_time.slice(0, 5));
-    }
-    // 시작 시각의 초는 버리고(분 단위로 맞춤) 분을 더한다 — 초가 남으면 60분이 59분으로 줄어든다.
-    const startMin = Math.floor(new Date(startIso).getTime() / 60_000);
-    const end = new Date((startMin + minutes) * 60_000);
-    const hm = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
-    await setTime("completed_at", hm);
-  };
-
   const timers = readTimers(task);
   const saveTimerList = async (next: TaskTimer[]) => {
     const e = await saveTimers(task, next);
@@ -284,6 +273,11 @@ export function BlockTaskDetails({
       ? Math.floor(new Date(task.completed_at).getTime() / 60_000) -
         Math.floor(new Date(task.actual_started_at).getTime() / 60_000)
       : null;
+  const workMinutes = timers.reduce(
+    (sum, t) =>
+      t.started_at && t.done_at ? sum + Math.max(0, wholeMinutes(t.started_at, t.done_at)) : sum,
+    0,
+  );
   const checklist = (task.checklist_items as unknown as ChecklistItem[] | null) ?? [];
   const k = task.updated_at; // 저장 뒤 입력칸 defaultValue를 새로 반영
 
@@ -296,91 +290,120 @@ export function BlockTaskDetails({
         <p className="border border-destructive px-2 py-1 text-xs text-destructive">{error}</p>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {/* 시간 */}
-        <label className="space-y-1">
-          <span className="label-caps block text-[11px] text-muted-foreground">Start → End</span>
-          <span className="flex flex-wrap items-center gap-1">
-            <button
-              type="button"
-              title="타이머 추가"
-              className={`${buttonClass} !min-h-[28px] !w-7 px-0 text-sm leading-none`}
-              onClick={(e) => {
-                e.preventDefault();
-                void saveTimerList([...timers, newTimer()]);
-              }}
-            >
-              +
-            </button>
-            <input
-              key={`s-${k}`}
-              type="time"
-              className={`${smallInput} w-32 min-w-[8rem]`}
-              defaultValue={timeValue(task.actual_started_at)}
-              onBlur={(e) => {
-                if (e.target.value !== timeValue(task.actual_started_at))
-                  void setTime("actual_started_at", e.target.value);
-              }}
-            />
-            <button
-              type="button"
-              title="현재 시각 적용"
-              className={`${buttonClass} !min-h-[28px] px-1.5 text-[11px]`}
-              onClick={(e) => {
-                e.preventDefault();
-                void setTime("actual_started_at", nowHm());
-              }}
-            >
-              지금
-            </button>
-            <input
-              key={`d-${k}`}
-              type="number"
-              min={1}
-              step={1}
-              className={`${smallInput} w-16 text-right`}
-              placeholder="분"
-              title="진행 시간(분) — 입력하면 End가 Start + 분으로 바뀝니다"
-              defaultValue={doneMinutes !== null && doneMinutes > 0 ? Math.round(doneMinutes) : ""}
-              onBlur={(e) => {
-                const m = Number(e.target.value);
-                if (!e.target.value || !Number.isFinite(m) || m <= 0) return;
-                if (doneMinutes !== null && Math.round(doneMinutes) === Math.round(m)) return;
-                void setDuration(m);
-              }}
-            />
-            <span className="text-xs text-muted-foreground">분</span>
-            <span className="text-muted-foreground">→</span>
-            <input
-              key={`e-${k}`}
-              type="time"
-              className={`${smallInput} w-32 min-w-[8rem]`}
-              defaultValue={timeValue(task.completed_at)}
-              onBlur={(e) => {
-                if (e.target.value !== timeValue(task.completed_at))
-                  void setTime("completed_at", e.target.value);
-              }}
-            />
-            <button
-              type="button"
-              title="현재 시각 적용"
-              className={`${buttonClass} !min-h-[28px] px-1.5 text-[11px]`}
-              onClick={(e) => {
-                e.preventDefault();
-                void setTime("completed_at", nowHm());
-              }}
-            >
-              지금
-            </button>
-            {doneMinutes !== null && doneMinutes > 0 && (
-              <span className="text-xs text-muted-foreground">· {Math.round(doneMinutes)} MIN</span>
-            )}
-            {doneMinutes !== null && doneMinutes < 0 && (
-              <span className="text-xs text-destructive">⚠ End가 Start보다 빨라요</span>
-            )}
+      {/* 시간 기록 — 타이머마다 한 줄. 작업 전체 Start/End는 타이머에서 자동 계산(요약) */}
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+          <span className="label-caps text-[11px] text-muted-foreground">시간 기록</span>
+          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+            {task.actual_started_at ? timeValue(task.actual_started_at) : "--:--"} →{" "}
+            {task.completed_at ? timeValue(task.completed_at) : "진행 중"}
+            {doneMinutes !== null && doneMinutes > 0 && <> · 총 {doneMinutes}분</>}
+            {workMinutes > 0 && workMinutes !== doneMinutes && <> · 실작업 {workMinutes}분</>}
           </span>
-        </label>
+        </div>
+        <div className="grid grid-cols-[1rem_minmax(5rem,1fr)_4rem_4rem_3rem_4.5rem] items-center gap-x-1.5 gap-y-1">
+          <span />
+          <span className="text-[10px] text-muted-foreground">이름</span>
+          <span className="text-[10px] text-muted-foreground">시작</span>
+          <span className="text-[10px] text-muted-foreground">종료</span>
+          <span className="text-[10px] text-muted-foreground">분</span>
+          <span />
+          {timers.map((t, idx) => {
+            const spent =
+              t.started_at && t.done_at ? Math.max(1, wholeMinutes(t.started_at, t.done_at)) : null;
+            const running = Boolean(t.started_at && !t.done_at);
+            return (
+              <Fragment key={`${t.id}-${k}`}>
+                <span
+                  className={cn(
+                    "font-mono text-[11px] text-muted-foreground",
+                    running && "font-semibold text-[#6B5BB5]",
+                  )}
+                >
+                  {idx + 1}
+                </span>
+                <input
+                  className={`${smallInput} min-w-0`}
+                  placeholder="이름"
+                  defaultValue={t.label}
+                  onBlur={(e) => {
+                    if (e.target.value.trim() !== t.label)
+                      void patchTimer(t.id, { label: e.target.value.trim() });
+                  }}
+                />
+                <TimeText
+                  className={smallInput}
+                  title="시작 시각 (24시간, 예: 17:30 또는 1730)"
+                  value={timeValue(t.started_at)}
+                  onCommit={(hm) => void editTimer(t, { start: hm })}
+                />
+                <TimeText
+                  className={cn(smallInput, running && "border-[#6B5BB5]")}
+                  title={running ? "진행 중 — 시각을 입력하면 종료돼요" : "종료 시각 (24시간)"}
+                  placeholder={running ? "진행중" : ""}
+                  value={timeValue(t.done_at)}
+                  onCommit={(hm) => void editTimer(t, { end: hm })}
+                />
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className={`${smallInput} text-right`}
+                  title="진행 분 — 입력하면 종료가 시작 + 분으로 바뀝니다"
+                  defaultValue={spent ?? ""}
+                  onBlur={(e) => {
+                    const m = Number(e.target.value);
+                    if (!e.target.value || !Number.isFinite(m) || m <= 0 || m === spent) return;
+                    void editTimer(t, { minutes: m });
+                  }}
+                />
+                <span className="flex items-center justify-end gap-1">
+                  {!t.started_at ? (
+                    <button
+                      type="button"
+                      className={`${buttonClass} !min-h-[26px] px-1.5 text-[11px]`}
+                      title="지금 시작"
+                      onClick={() => void editTimer(t, { start: nowHm() })}
+                    >
+                      ▶
+                    </button>
+                  ) : running ? (
+                    <button
+                      type="button"
+                      className={`${buttonClass} !min-h-[26px] px-1.5 text-[11px]`}
+                      title="지금 종료"
+                      onClick={() => void editTimer(t, { end: nowHm() })}
+                    >
+                      ■
+                    </button>
+                  ) : (
+                    <span className="px-1.5 text-[11px] text-[#3E8E5A]">✓</span>
+                  )}
+                  {timers.length > 1 && (
+                    <button
+                      type="button"
+                      className="px-1 text-xs text-muted-foreground hover:text-destructive"
+                      title="타이머 삭제"
+                      onClick={() => void saveTimerList(timers.filter((x) => x.id !== t.id))}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </span>
+              </Fragment>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          className={`${buttonClass} !min-h-[26px] px-2 text-[11px]`}
+          onClick={() => void saveTimerList([...timers, newTimer()])}
+        >
+          ＋ 타이머 추가
+        </button>
+      </div>
 
+      <div className="grid gap-3 md:grid-cols-2">
         {/* 반죽 높이 */}
         <label className="space-y-1">
           <span className="label-caps block text-[11px] text-muted-foreground">반죽 높이</span>
@@ -437,77 +460,6 @@ export function BlockTaskDetails({
             </span>
           </div>
         )}
-      </div>
-
-      {/* 타이머 기록 — 시작/종료는 왼쪽 타임라인에서, 여기는 표기·메모용 */}
-      <div className="space-y-1.5">
-        {timers.map((t, idx) => {
-          const spent =
-            t.started_at && t.done_at ? Math.max(1, wholeMinutes(t.started_at, t.done_at)) : null;
-          return (
-            <div
-              key={`${t.id}-${k}`}
-              className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
-            >
-              <span className="w-4 font-mono text-[11px] text-muted-foreground">{idx + 1}</span>
-              <input
-                type="time"
-                className={`${smallInput} w-32 min-w-[8rem]`}
-                title="타이머 시작 시각"
-                defaultValue={timeValue(t.started_at)}
-                onBlur={(e) => {
-                  if (e.target.value === timeValue(t.started_at)) return;
-                  void editTimer(t, { start: e.target.value });
-                }}
-              />
-              <span className="text-muted-foreground">–</span>
-              <input
-                type="time"
-                className={`${smallInput} w-32 min-w-[8rem]`}
-                title={t.done_at ? "타이머 종료 시각" : "진행 중 — 시각을 입력하면 종료돼요"}
-                defaultValue={timeValue(t.done_at)}
-                onBlur={(e) => {
-                  if (e.target.value === timeValue(t.done_at)) return;
-                  void editTimer(t, { end: e.target.value });
-                }}
-              />
-              <input
-                type="number"
-                min={1}
-                step={1}
-                className={`${smallInput} w-16 text-right`}
-                placeholder="분"
-                title="이 타이머의 진행 시간(분) — 입력하면 종료가 시작 + 분으로 바뀝니다"
-                defaultValue={spent ?? ""}
-                onBlur={(e) => {
-                  const m = Number(e.target.value);
-                  if (!e.target.value || !Number.isFinite(m) || m <= 0 || m === spent) return;
-                  void editTimer(t, { minutes: m });
-                }}
-              />
-              <span className="text-muted-foreground">분</span>
-              <input
-                className={`${smallInput} min-w-0 flex-1 basis-32`}
-                placeholder=""
-                defaultValue={t.label}
-                onBlur={(e) => {
-                  if (e.target.value.trim() !== t.label)
-                    void patchTimer(t.id, { label: e.target.value.trim() });
-                }}
-              />
-              {timers.length > 1 && (
-                <button
-                  type="button"
-                  className="px-1 text-xs text-muted-foreground hover:text-destructive"
-                  title="타이머 삭제"
-                  onClick={() => void saveTimerList(timers.filter((x) => x.id !== t.id))}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          );
-        })}
       </div>
 
       {/* 체크리스트 */}
