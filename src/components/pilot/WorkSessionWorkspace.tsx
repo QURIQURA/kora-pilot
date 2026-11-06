@@ -52,6 +52,8 @@ import {
 } from "@/lib/production-quantity";
 import { resolveSlotGroup } from "@/lib/technique";
 import { mouldAbbr } from "@/lib/component-size";
+import { AdjustInput, ScaleAllPanel } from "@/components/pilot/RecipeScaleControls";
+import { round2, type ScaleMode } from "@/lib/recipe-scale";
 import { ExperimentCard } from "@/components/pilot/FormulaExperimentsTab";
 import { fmtNumber, toGrams, versionLabel, UNITS, type Mould } from "@/lib/formula";
 import { formatProductSizeLabel } from "@/lib/product-size";
@@ -1685,6 +1687,27 @@ function EditFormulaVersionModal({
   };
 
   const visibleRows = draftRows.filter((r) => !r.removed);
+  const [scaleMode, setScaleMode] = useState<ScaleMode>("FACTOR");
+  const [scaleValue, setScaleValue] = useState("");
+  const currentTotal = visibleRows.reduce(
+    (sum, r) => sum + (toGrams(Number(r.amount) || 0, r.unit) ?? 0),
+    0,
+  );
+  /** 모든 재료(단위 %는 제외)에 같은 배수를 곱한다 — 보조 계량(개수)도 같은 비율로 */
+  const applyScaleAll = (factor: number) => {
+    setDraftRows((prev) =>
+      prev.map((r) => {
+        const amount = Number(r.amount);
+        if (r.removed || r.unit === "%" || !(amount > 0)) return r;
+        return {
+          ...r,
+          amount: String(round2(amount * factor)),
+          secondaryAmount:
+            r.secondaryAmount != null ? round2(Number(r.secondaryAmount) * factor) : null,
+        };
+      }),
+    );
+  };
   const autoSummary = useMemo(() => buildAutoSummary(draftRows), [draftRows]);
   const hasChanges = autoSummary !== "변경 없음";
 
@@ -2107,17 +2130,42 @@ function EditFormulaVersionModal({
             <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
           )}
 
+          <ScaleAllPanel
+            mode={scaleMode}
+            value={scaleValue}
+            currentTotal={currentTotal}
+            onMode={setScaleMode}
+            onValue={setScaleValue}
+            onApply={(factor) => {
+              applyScaleAll(factor);
+              setScaleValue("");
+            }}
+          />
           <ul className="divide-y divide-border border border-border">
             {visibleRows.map((row) => (
               <li key={row.key} className="flex items-center gap-2 px-3 py-2">
                 <span className="flex-1 text-sm">{row.ingredientName}</span>
-                <input
-                  className={`${inputClass} !w-24 text-right`}
-                  type="number"
-                  step="any"
-                  value={row.amount}
-                  onChange={(e) => patchRow(row.key, { amount: e.target.value })}
-                />
+                <div className="flex flex-col items-end">
+                  <input
+                    className={`${inputClass} !w-24 text-right`}
+                    type="number"
+                    step="any"
+                    value={row.amount}
+                    onChange={(e) => patchRow(row.key, { amount: e.target.value })}
+                  />
+                  <AdjustInput
+                    current={Number(row.amount) || 0}
+                    onApply={(next) => {
+                      const cur = Number(row.amount) || 0;
+                      patchRow(row.key, {
+                        amount: String(next),
+                        ...(row.secondaryAmount != null && cur > 0
+                          ? { secondaryAmount: round2((Number(row.secondaryAmount) * next) / cur) }
+                          : {}),
+                      });
+                    }}
+                  />
+                </div>
                 <select
                   className={`${selectClass} !w-20`}
                   value={row.unit}
