@@ -1424,7 +1424,7 @@ export function ProductionDashboard() {
                               </span>
                               {blockTitle(b, row)}
                             </span>
-                            <span className="flex items-center gap-1">
+                            <span className="flex w-full flex-wrap items-center gap-x-3 gap-y-0.5">
                               <BlockTimerChip
                                 part="timer"
                                 block={b}

@@ -481,13 +481,8 @@ export function BlockTimerChip({
     "shrink-0 border border-current px-1 font-mono text-[11px] leading-4 hover:opacity-70";
 
   if (part === "note") {
-    const labels = timers.filter((t) => t.label);
-    const text = [
-      task.note,
-      ...labels.map((t) => `${t.label}${t.minutes ? ` ${t.minutes}분` : ""}`),
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    // 타이머 이름은 위 타이머 칩에 "1. 이름: 시간"으로 표시되므로 여기엔 메모만 둔다.
+    const text = [task.note].filter(Boolean).join(" · ");
     return text ? (
       <p className="truncate text-[11px] opacity-80" title={text}>
         ✎ {text}
