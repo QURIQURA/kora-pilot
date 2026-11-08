@@ -1673,6 +1673,7 @@ export type Database = {
       };
       design_moodboard_items: {
         Row: {
+          board_id: string;
           color: string | null;
           color2: string | null;
           content: string | null;
@@ -1692,6 +1693,8 @@ export type Database = {
           z_index: number;
         };
         Insert: {
+          board_id: string;
+
           color?: string | null;
           color2?: string | null;
           content?: string | null;
@@ -1711,6 +1714,8 @@ export type Database = {
           z_index?: number;
         };
         Update: {
+          board_id?: string;
+
           color?: string | null;
           color2?: string | null;
           content?: string | null;
@@ -1728,6 +1733,32 @@ export type Database = {
           x?: number;
           y?: number;
           z_index?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "design_moodboard_items_board_id_fkey";
+            columns: ["board_id"];
+            isOneToOne: false;
+            referencedRelation: "design_moodboards";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      design_moodboards: {
+        Row: { created_at: string; id: string; title: string; updated_at: string; user_id: string };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          title?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          title?: string;
+          updated_at?: string;
+          user_id?: string;
         };
         Relationships: [];
       };

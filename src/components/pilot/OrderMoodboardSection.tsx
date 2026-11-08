@@ -72,7 +72,8 @@ type OrderMoodboardItem = Omit<OrderMoodboardRow, "order_id">;
  * 보드 소속 — "order"는 ORDER 상세(order_moodboard_items), "design"은 오더와 무관한 시그니처
  * 디자인 전용 무드보드(design_moodboard_items, 2026-11-08 사용자 요청). 기능은 100% 동일하다.
  */
-export type MoodboardScope = { kind: "order"; orderId: string } | { kind: "design" };
+export type MoodboardScope =
+  { kind: "order"; orderId: string } | { kind: "design"; boardId: string };
 
 const BOARD_HEIGHT = 440;
 const DEFAULT_IMAGE_WIDTH = 200;
@@ -223,8 +224,8 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   return <MoodboardBoard scope={{ kind: "order", orderId }} />;
 }
 
-export function DesignMoodboardSection() {
-  return <MoodboardBoard scope={{ kind: "design" }} title="SIGNATURE DESIGN MOOD BOARD" />;
+export function DesignMoodboardSection({ boardId, title }: { boardId: string; title: string }) {
+  return <MoodboardBoard scope={{ kind: "design", boardId }} title={title} />;
 }
 
 function MoodboardBoard({
@@ -238,10 +239,10 @@ function MoodboardBoard({
   const isOrder = scope.kind === "order";
   const table = isOrder ? "order_moodboard_items" : "design_moodboard_items";
   const tableName = table as "order_moodboard_items";
-  const folder = isOrder ? scope.orderId : "design";
-  const scopeFields = isOrder ? { order_id: scope.orderId } : {};
+  const folder = isOrder ? scope.orderId : `design/${scope.boardId}`;
+  const scopeFields = isOrder ? { order_id: scope.orderId } : { board_id: scope.boardId };
   const queryOpts = (
-    isOrder ? orderMoodboardItemsQuery(scope.orderId) : designMoodboardItemsQuery()
+    isOrder ? orderMoodboardItemsQuery(scope.orderId) : designMoodboardItemsQuery(scope.boardId)
   ) as ReturnType<typeof designMoodboardItemsQuery>;
   const items = useQuery(queryOpts);
   const boardRef = useRef<HTMLDivElement>(null);

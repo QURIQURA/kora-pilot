@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-11-08 — 디자인 무드보드: 컨셉별 보드 여러 개
+
+- DESIGN BOARD 탭에 보드 목록 + `+ NEW BOARD` 추가. 보드마다 제목 수정(입력 후 포커스 이동/Enter), `DELETE BOARD`(확인 후 안의 아이템 포함 삭제).
+- DB: `design_moodboards`(보드) 신설, `design_moodboard_items.board_id`(FK, 보드 삭제 시 cascade). 기존 아이템은 "Board 1"로 이관.
+- 배포 워크플로: setup-bun이 GitHub 릴리스 504로 실패해서 `npm install -g bun`으로 교체.
+
 ## 2026-11-08 — 시그니처 디자인 무드보드 탭
 
 - 사이드 네비에 **DESIGN BOARD** 탭 추가(`/design-moodboard`). 오더 하위가 아닌 디자인 전용 독립 무드보드.

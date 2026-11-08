@@ -1897,13 +1897,27 @@ export const orderMoodboardItemsQuery = (orderId: string) =>
       ),
   });
 
-/** PILOT 시그니처 디자인 무드보드(2026-11-08) — 오더와 무관한 디자인 전용 보드. z_index 순 정렬 */
-export type DesignMoodboardItem = Tables<"design_moodboard_items">;
-export const designMoodboardItemsQuery = () =>
+/** PILOT 시그니처 디자인 무드보드(2026-11-08) — 오더와 무관한 디자인 전용 보드, 컨셉별 보드 여러 개 */
+export type DesignMoodboard = Tables<"design_moodboards">;
+export const designMoodboardsQuery = () =>
   queryOptions({
-    queryKey: ["design_moodboard_items"],
+    queryKey: ["design_moodboards"],
+    queryFn: async (): Promise<DesignMoodboard[]> =>
+      unwrap(await supabase.from("design_moodboards").select("*").order("created_at")),
+  });
+
+export type DesignMoodboardItem = Tables<"design_moodboard_items">;
+export const designMoodboardItemsQuery = (boardId: string) =>
+  queryOptions({
+    queryKey: ["design_moodboard_items", boardId],
     queryFn: async (): Promise<DesignMoodboardItem[]> =>
-      unwrap(await supabase.from("design_moodboard_items").select("*").order("z_index")),
+      unwrap(
+        await supabase
+          .from("design_moodboard_items")
+          .select("*")
+          .eq("board_id", boardId)
+          .order("z_index"),
+      ),
   });
 
 /** ORDER 상세 VISUALS 탭 — 결과물(완성작) 사진 갤러리(2026-10-15). sort_order 기준 정렬. */
