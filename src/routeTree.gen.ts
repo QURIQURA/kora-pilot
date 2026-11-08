@@ -13,6 +13,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedCostRouteImport } from './routes/_authenticated/cost'
+import { Route as AuthenticatedDesignMoodboardRouteImport } from './routes/_authenticated/design-moodboard'
 import { Route as AuthenticatedDietaryRouteImport } from './routes/_authenticated/dietary'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedReferencesRouteImport } from './routes/_authenticated/references'
@@ -53,6 +54,12 @@ const AuthenticatedCostRoute = AuthenticatedCostRouteImport.update({
   path: '/cost',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDesignMoodboardRoute =
+  AuthenticatedDesignMoodboardRouteImport.update({
+    id: '/design-moodboard',
+    path: '/design-moodboard',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDietaryRoute = AuthenticatedDietaryRouteImport.update({
   id: '/dietary',
   path: '/dietary',
@@ -174,6 +181,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/cost': typeof AuthenticatedCostRoute
+  '/design-moodboard': typeof AuthenticatedDesignMoodboardRoute
   '/dietary': typeof AuthenticatedDietaryRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/references': typeof AuthenticatedReferencesRoute
@@ -198,6 +206,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/cost': typeof AuthenticatedCostRoute
+  '/design-moodboard': typeof AuthenticatedDesignMoodboardRoute
   '/dietary': typeof AuthenticatedDietaryRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/references': typeof AuthenticatedReferencesRoute
@@ -225,6 +234,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/cost': typeof AuthenticatedCostRoute
+  '/_authenticated/design-moodboard': typeof AuthenticatedDesignMoodboardRoute
   '/_authenticated/dietary': typeof AuthenticatedDietaryRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/references': typeof AuthenticatedReferencesRoute
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/cost'
+    | '/design-moodboard'
     | '/dietary'
     | '/inventory'
     | '/references'
@@ -277,6 +288,7 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/cost'
+    | '/design-moodboard'
     | '/dietary'
     | '/inventory'
     | '/references'
@@ -303,6 +315,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/cost'
+    | '/_authenticated/design-moodboard'
     | '/_authenticated/dietary'
     | '/_authenticated/inventory'
     | '/_authenticated/references'
@@ -359,6 +372,13 @@ declare module '@tanstack/react-router' {
       path: '/cost'
       fullPath: '/cost'
       preLoaderRoute: typeof AuthenticatedCostRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/design-moodboard': {
+      id: '/_authenticated/design-moodboard'
+      path: '/design-moodboard'
+      fullPath: '/design-moodboard'
+      preLoaderRoute: typeof AuthenticatedDesignMoodboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dietary': {
@@ -506,6 +526,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCostRoute: typeof AuthenticatedCostRoute
+  AuthenticatedDesignMoodboardRoute: typeof AuthenticatedDesignMoodboardRoute
   AuthenticatedDietaryRoute: typeof AuthenticatedDietaryRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedReferencesRoute: typeof AuthenticatedReferencesRoute
@@ -531,6 +552,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCostRoute: AuthenticatedCostRoute,
+  AuthenticatedDesignMoodboardRoute: AuthenticatedDesignMoodboardRoute,
   AuthenticatedDietaryRoute: AuthenticatedDietaryRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedReferencesRoute: AuthenticatedReferencesRoute,

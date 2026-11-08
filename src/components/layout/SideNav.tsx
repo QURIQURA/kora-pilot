@@ -12,6 +12,7 @@ const TOP_ITEMS = [
   ...(DIETARY_ASSEMBLY_ENABLED ? [{ label: "DIETARY", to: "/dietary" }] : []),
   { label: "COST", to: "/cost" },
   { label: "PRODUCTION", to: "/production" },
+  { label: "DESIGN BOARD", to: "/design-moodboard" },
   { label: "EFFICIENCY", to: "/efficiency" },
   { label: "INVENTORY", to: "/inventory" },
   { label: "INGREDIENTS", to: "/ingredients" },

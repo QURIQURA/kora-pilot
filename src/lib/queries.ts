@@ -1897,6 +1897,15 @@ export const orderMoodboardItemsQuery = (orderId: string) =>
       ),
   });
 
+/** PILOT 시그니처 디자인 무드보드(2026-11-08) — 오더와 무관한 디자인 전용 보드. z_index 순 정렬 */
+export type DesignMoodboardItem = Tables<"design_moodboard_items">;
+export const designMoodboardItemsQuery = () =>
+  queryOptions({
+    queryKey: ["design_moodboard_items"],
+    queryFn: async (): Promise<DesignMoodboardItem[]> =>
+      unwrap(await supabase.from("design_moodboard_items").select("*").order("z_index")),
+  });
+
 /** ORDER 상세 VISUALS 탭 — 결과물(완성작) 사진 갤러리(2026-10-15). sort_order 기준 정렬. */
 export type OrderResultPhoto = Tables<"order_result_photos">;
 export const orderResultPhotosQuery = (orderId: string) =>

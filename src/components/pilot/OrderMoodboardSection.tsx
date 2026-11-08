@@ -3,7 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eraser, ImagePlus, Move, RotateCw, StickyNote, X } from "lucide-react";
 import { removeBackground } from "@imgly/background-removal";
 import { supabase } from "@/integrations/supabase/client";
-import { currentUserId, orderMoodboardItemsQuery, type OrderMoodboardItem } from "@/lib/queries";
+import {
+  currentUserId,
+  designMoodboardItemsQuery,
+  orderMoodboardItemsQuery,
+  type OrderMoodboardItem as OrderMoodboardRow,
+} from "@/lib/queries";
 import { SectionCard, buttonClass } from "@/components/pilot/ui";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +65,15 @@ import { cn } from "@/lib/utils";
  *   않는다(약간의 스토리지 누적은 감수 — 완전한 되돌리기가 더 중요하다는 판단). 텍스트 박스 안에서
  *   누른 ⌘Z/Ctrl+Z는 브라우저 기본 텍스트 되돌리기로 그대로 넘긴다(여기서 가로채지 않음).
  */
+/** 오더 무드보드/디자인 무드보드가 공유하는 아이템 형태(디자인 쪽엔 order_id가 없다) */
+type OrderMoodboardItem = Omit<OrderMoodboardRow, "order_id">;
+
+/**
+ * 보드 소속 — "order"는 ORDER 상세(order_moodboard_items), "design"은 오더와 무관한 시그니처
+ * 디자인 전용 무드보드(design_moodboard_items, 2026-11-08 사용자 요청). 기능은 100% 동일하다.
+ */
+export type MoodboardScope = { kind: "order"; orderId: string } | { kind: "design" };
+
 const BOARD_HEIGHT = 440;
 const DEFAULT_IMAGE_WIDTH = 200;
 const DEFAULT_NOTE_SIZE = { width: 180, height: 140 };
@@ -206,8 +220,30 @@ type UndoEntry =
 const MAX_UNDO_ENTRIES = 50;
 
 export function OrderMoodboardSection({ orderId }: { orderId: string }) {
+  return <MoodboardBoard scope={{ kind: "order", orderId }} />;
+}
+
+export function DesignMoodboardSection() {
+  return <MoodboardBoard scope={{ kind: "design" }} title="SIGNATURE DESIGN MOOD BOARD" />;
+}
+
+function MoodboardBoard({
+  scope,
+  title = "MOOD BOARD",
+}: {
+  scope: MoodboardScope;
+  title?: string;
+}) {
   const queryClient = useQueryClient();
-  const items = useQuery(orderMoodboardItemsQuery(orderId));
+  const isOrder = scope.kind === "order";
+  const table = isOrder ? "order_moodboard_items" : "design_moodboard_items";
+  const tableName = table as "order_moodboard_items";
+  const folder = isOrder ? scope.orderId : "design";
+  const scopeFields = isOrder ? { order_id: scope.orderId } : {};
+  const queryOpts = (
+    isOrder ? orderMoodboardItemsQuery(scope.orderId) : designMoodboardItemsQuery()
+  ) as ReturnType<typeof designMoodboardItemsQuery>;
+  const items = useQuery(queryOpts);
   const boardRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -228,7 +264,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
   >(new Map());
 
   const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["order_moodboard_items", orderId] });
+    await queryClient.invalidateQueries({ queryKey: queryOpts.queryKey });
   };
 
   const rows = items.data ?? [];
@@ -268,20 +304,15 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
     try {
       if (entry.type === "update") {
         const { error: undoError } = await supabase
-          .from("order_moodboard_items")
+          .from(tableName)
           .update(entry.before)
           .eq("id", entry.id);
         if (undoError) throw undoError;
       } else if (entry.type === "insert") {
-        const { error: undoError } = await supabase
-          .from("order_moodboard_items")
-          .delete()
-          .eq("id", entry.id);
+        const { error: undoError } = await supabase.from(tableName).delete().eq("id", entry.id);
         if (undoError) throw undoError;
       } else {
-        const { error: undoError } = await supabase
-          .from("order_moodboard_items")
-          .insert(entry.item);
+        const { error: undoError } = await supabase.from(tableName).insert(entry.item as never);
         if (undoError) throw undoError;
       }
       await invalidate();
@@ -304,7 +335,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
     mutationFn: async ({ file, x, y }: { file: File; x: number; y: number }) => {
       const userId = await currentUserId();
       const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${userId}/${orderId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const path = `${userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("order-moodboards")
         .upload(path, file, file.type ? { contentType: file.type } : undefined);
@@ -314,10 +345,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       const width = Math.min(dims.width || DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_WIDTH * 1.4);
       const height = dims.width ? (dims.height * width) / dims.width : DEFAULT_IMAGE_WIDTH;
       const { data: inserted, error: insertError } = await supabase
-        .from("order_moodboard_items")
+        .from(tableName)
         .insert({
           user_id: userId,
-          order_id: orderId,
+          ...scopeFields,
           kind: "image",
           image_url: data.publicUrl,
           x,
@@ -329,7 +360,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
           // 조정하는 핸들이 생겼으니 시작은 0도(정각)로 두고 조정은 사용자가 하게 한다.
           rotation: 0,
           z_index: maxZ + 1,
-        })
+        } as never)
         .select("id")
         .single();
       if (insertError) throw insertError;
@@ -347,10 +378,10 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       const userId = await currentUserId();
       const color = NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)] ?? NOTE_COLORS[0]!;
       const { data: inserted, error: insertError } = await supabase
-        .from("order_moodboard_items")
+        .from(tableName)
         .insert({
           user_id: userId,
-          order_id: orderId,
+          ...scopeFields,
           kind: "note",
           content: "",
           x,
@@ -360,7 +391,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
           rotation: 0, // 2026-10-13 사용자 요청: 처음엔 정각으로, 틸트는 핸들로 직접 조정
           z_index: maxZ + 1,
           color,
-        })
+        } as never)
         .select("id")
         .single();
       if (insertError) throw insertError;
@@ -375,10 +406,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
 
   const update = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<OrderMoodboardItem> }) => {
-      const { error: updateError } = await supabase
-        .from("order_moodboard_items")
-        .update(patch)
-        .eq("id", id);
+      const { error: updateError } = await supabase.from(tableName).update(patch).eq("id", id);
       if (updateError) throw updateError;
     },
     onSuccess: invalidate,
@@ -388,10 +416,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
     // 2026-10-14 사용자 요청으로 실행취소를 지원하게 되면서, 삭제해도 Storage의 이미지 파일은
     // 더 이상 지우지 않는다 — 지워버리면 되돌리기(재삽입) 했을 때 image_url이 깨진 링크가 된다.
     mutationFn: async (item: OrderMoodboardItem) => {
-      const { error: deleteError } = await supabase
-        .from("order_moodboard_items")
-        .delete()
-        .eq("id", item.id);
+      const { error: deleteError } = await supabase.from(tableName).delete().eq("id", item.id);
       if (deleteError) throw deleteError;
       return item;
     },
@@ -419,7 +444,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       const resultBlob = await removeBackground(sourceBlob);
 
       const userId = await currentUserId();
-      const path = `${userId}/${orderId}/${Date.now()}-${Math.random().toString(36).slice(2)}-nobg.png`;
+      const path = `${userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}-nobg.png`;
       const { error: uploadError } = await supabase.storage
         .from("order-moodboards")
         .upload(path, resultBlob, { contentType: "image/png" });
@@ -427,7 +452,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
       const { data } = supabase.storage.from("order-moodboards").getPublicUrl(path);
 
       const { error: updateError } = await supabase
-        .from("order_moodboard_items")
+        .from(tableName)
         .update({ image_url: data.publicUrl })
         .eq("id", item.id);
       if (updateError) throw updateError;
@@ -641,7 +666,7 @@ export function OrderMoodboardSection({ orderId }: { orderId: string }) {
 
   return (
     <SectionCard
-      title="MOOD BOARD"
+      title={title}
       action={
         <div className="flex items-center gap-2">
           <input

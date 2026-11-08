@@ -1671,6 +1671,66 @@ export type Database = {
           },
         ];
       };
+      design_moodboard_items: {
+        Row: {
+          color: string | null;
+          color2: string | null;
+          content: string | null;
+          created_at: string;
+          height: number;
+          id: string;
+          image_url: string | null;
+          kind: string;
+          pattern: string;
+          rotation: number;
+          shape: string;
+          updated_at: string;
+          user_id: string;
+          width: number;
+          x: number;
+          y: number;
+          z_index: number;
+        };
+        Insert: {
+          color?: string | null;
+          color2?: string | null;
+          content?: string | null;
+          created_at?: string;
+          height?: number;
+          id?: string;
+          image_url?: string | null;
+          kind?: string;
+          pattern?: string;
+          rotation?: number;
+          shape?: string;
+          updated_at?: string;
+          user_id?: string;
+          width?: number;
+          x?: number;
+          y?: number;
+          z_index?: number;
+        };
+        Update: {
+          color?: string | null;
+          color2?: string | null;
+          content?: string | null;
+          created_at?: string;
+          height?: number;
+          id?: string;
+          image_url?: string | null;
+          kind?: string;
+          pattern?: string;
+          rotation?: number;
+          shape?: string;
+          updated_at?: string;
+          user_id?: string;
+          width?: number;
+          x?: number;
+          y?: number;
+          z_index?: number;
+        };
+        Relationships: [];
+      };
       order_moodboard_items: {
         Row: {
           color: string | null;

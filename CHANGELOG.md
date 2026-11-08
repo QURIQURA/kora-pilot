@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-11-08 — 시그니처 디자인 무드보드 탭
+
+- 사이드 네비에 **DESIGN BOARD** 탭 추가(`/design-moodboard`). 오더 하위가 아닌 디자인 전용 독립 무드보드.
+- 오더 무드보드와 기능 동일: Ctrl+V 이미지 붙여넣기, +IMAGE 업로드, +NOTE, 드래그/리사이즈/회전, 메모 색/그라데이션/패턴/셰입, 배경 제거, ⌘Z 실행취소.
+- `OrderMoodboardSection`을 `MoodboardBoard`(scope: order | design)로 일반화해 코드를 공유. 새 테이블 `design_moodboard_items`(본인 행만 접근 RLS), 이미지는 기존 `order-moodboards` 버킷의 `{userId}/design/` 경로.
+
 ## 2026-11-07 — WEIGHING MATRIX 헤더: 빈 줄·스크롤 겹침 수정
 
 - 블렌드 묶음 제목을 별도 sticky 행으로 두던 방식(행 높이/고정 위치 어긋남으로 첫 열 위에 빈 줄이 생기고 스크롤 시 겹침)을 없애고, 헤더를 한 줄로 되돌린 뒤 원본 열마다 위에 굵은 띠를 두고 첫 열에 "🔗 제목 · BLEND"를 표시.
