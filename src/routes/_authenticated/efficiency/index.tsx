@@ -52,7 +52,7 @@ function EfficiencyDashboardPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader title="EFFICIENCY" />
       <p className="font-mono text-xs text-muted-foreground">
         Minutes/Unit · Units/Hour 등 — 노동비 계산이 아니라 시간당 몇 개 만드는지, 어디서 시간을
@@ -65,7 +65,7 @@ function EfficiencyDashboardPage() {
           아직 BATCH SIZE가 연결된 생산 기록이 없습니다.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {[...byProduct.entries()].map(([productId, entry]) => (
             <ProductCard key={productId} productId={productId} name={entry.name} rows={entry.rows} />
           ))}

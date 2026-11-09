@@ -11,7 +11,7 @@ export function Breadcrumb() {
   const segments: CrumbSegment[] = override ?? buildSegments(pathname);
 
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-background px-4 py-3 md:px-6">
+    <header className="sticky top-0 z-10 border-b border-border bg-background px-3 py-1.5 md:px-3">
       <nav aria-label="Breadcrumb" className="flex items-center">
         <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-sm">
           {segments.map((segment, index) => {

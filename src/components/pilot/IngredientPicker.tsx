@@ -70,7 +70,7 @@ export function IngredientPicker({
 
       <ul className="max-h-60 divide-y divide-border overflow-auto border border-border">
         {rows.length === 0 && (
-          <li className="px-3 py-3 font-mono text-xs uppercase text-muted-foreground">
+          <li className="px-3 py-2 font-mono text-xs uppercase text-muted-foreground">
             NO MATCH
           </li>
         )}
@@ -78,7 +78,7 @@ export function IngredientPicker({
           <li key={row.id}>
             <button
               type="button"
-              className="flex min-h-[48px] w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-secondary"
+              className="flex min-h-[32px] w-full items-center justify-between gap-2 px-2.5 py-1 text-left hover:bg-secondary"
               onClick={() => onPick(row.id, row.default_unit)}
             >
               <span className="text-sm">

@@ -84,7 +84,7 @@ export function FormulaExperimentsTab({ formulas }: { formulas: FormulaListRow[]
   const decided = rows.filter((e) => e.status !== "OPEN");
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <p className="font-mono text-xs text-muted-foreground">
           기존 포뮬라를 복사해 일부만 바꾸고, 구워 본 결과를 보고 적용·보관·폐기를 정해요.
@@ -441,16 +441,16 @@ function NewExperimentModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
       <div className="w-full max-w-md border border-border bg-background">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="label-caps">NEW EXPERIMENT</span>
           <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
             CLOSE
           </button>
         </div>
         <form
-          className="space-y-4 p-4"
+          className="space-y-3 p-3"
           onSubmit={(ev) => {
             ev.preventDefault();
             if (formulaId && baseId && title.trim()) start.mutate();

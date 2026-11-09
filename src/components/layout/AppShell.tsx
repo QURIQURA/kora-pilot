@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen flex-col bg-background font-body text-foreground md:flex-row">
         <MobileHeader />
         {!collapsed && (
-          <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-background md:sticky md:top-0 md:flex md:h-screen">
+          <aside className="hidden w-48 shrink-0 flex-col border-r border-border bg-background md:sticky md:top-0 md:flex md:h-screen">
             <SideNav onCollapse={() => setCollapsed(true)} />
           </aside>
         )}
@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 aria-label="메뉴 열기"
-                className="label-caps hidden shrink-0 border-b border-r border-border px-4 hover:bg-secondary md:block"
+                className="label-caps hidden shrink-0 border-b border-r border-border px-3 hover:bg-secondary md:block"
                 onClick={() => setDrawer(true)}
               >
                 ☰ MENU
@@ -66,11 +66,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Breadcrumb />
             </div>
           </div>
-          <div className="flex-1 p-4 md:p-6">{children}</div>
+          <div className="flex-1 p-3 md:p-4">{children}</div>
         </main>
         {collapsed && drawer && (
           <div className="fixed inset-0 z-50 hidden md:flex">
-            <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-background shadow-lg">
+            <aside className="flex w-48 shrink-0 flex-col border-r border-border bg-background shadow-lg">
               <SideNav
                 onNavigate={() => setDrawer(false)}
                 onCollapse={() => {

@@ -9,6 +9,13 @@
 - 원인: 앞서 Delivery 체크는 PRODUCTION > ORDERS 드롭다운에만 걸려 있어서, ORDERS 목록 드롭다운이나 오더 상세 저장으로 COMPLETED 처리한 오더(Kate Crews SH-011.1 등)는 플래너 Delivery가 체크되지 않았다. 이미 COMPLETED인 오더들의 Delivery는 직접 체크 처리.
 - PILOT → 플래너: 오더 상태가 COMPLETED로 바뀌는 모든 경로(ORDERS 목록 / 오더 상세 저장 / PRODUCTION > ORDERS)에서 Delivery 체크, COMPLETED에서 되돌리면 체크 해제(`src/lib/order-planner-sync.ts`).
 - 플래너 → PILOT: 플래너에서 Delivery를 체크하면 PILOT 오더가 COMPLETED로 넘어감. WANN은 별도 프로젝트라 푸시가 불가해서 앱을 열 때·창으로 돌아올 때·1분마다 확인(edge function `pull_planner_deliveries`, `use-planner-delivery-pull`).
+## 2026-11-09 — 전체 UI 컴팩트화 (모든 탭)
+
+- 앱 전체 여백 단위를 약 12% 줄이고(`--spacing`), 글자 크기 스케일을 낮춤(기본 14px, 본문 13px). 화면마다 따로 고치지 않아도 모든 탭이 한 번에 촘촘해짐(`src/styles.css`).
+- 공통 버튼/입력칸 높이 32→28px, 카드·섹션 헤더·페이지 헤더 여백 축소, 상태 배지 소형화, 큰 터치 영역(44~52px)이던 목록 행·탭·접이식 헤더는 30~36px로 축소(PRODUCTION 타이머의 START/COMPLETE 같은 현장용 큰 버튼은 그대로).
+- 왼쪽 메뉴 폭 256→192px, 메뉴 항목 높이 48→30px, 상단 경로(브레딕럼)와 본문 바깥 여백 축소. 대화상자/EmptyState/카드 여백도 같이 축소.
+- 주문의 컴포넌트 생산 계획 카드: 요약 아래에 따로 놓이던 `생산 계획 수정` 버튼과 `현재 주문에 연결된 레시피 열기` 링크를 제목 줄 오른쪽의 작은 버튼(`생산 계획 수정` / `레시피 ↗`)으로 이동.
+- 확인: 각 탭(ORDERS/PRODUCTS/COMPONENTS/FORMULAS/COST/PRODUCTION/INVENTORY/INGREDIENTS/SETTINGS 등)을 열어 글자가 잘리거나 숫자 입력칸이 좁아 보이는 곳이 없는지 확인.
 
 ## 2026-11-09 — 생산 계획: 요약 먼저 + 수정 버튼, 재료 기준 저장, 버전 고정 체크박스 제거
 

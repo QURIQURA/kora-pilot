@@ -113,14 +113,14 @@ export function ProductSelect({
           // 쓰일 때 이 모달이 같은 DOM 트리에 있으면 <form> 중첩으로 CREATE가 바깥쪽 폼을 제출해버린다
           // (페이지 새로고침 + 화면 이탈). document.body로 포탈링해서 방지.
           <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3"
             // 포털이어도 React 트리상 부모(<label>/폼)로 이벤트가 올라가므로, 입력 이벤트는 여기서 끊는다.
             onKeyDown={(e) => e.stopPropagation()}
             onKeyUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-full max-w-md border border-border bg-background">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center justify-between border-b border-border px-3 py-2">
                 <span className="label-caps">NEW PRODUCT</span>
                 <button
                   type="button"
@@ -134,7 +134,7 @@ export function ProductSelect({
                 </button>
               </div>
               <form
-                className="space-y-3 p-4"
+                className="space-y-3 p-3"
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (name.trim()) create.mutate();

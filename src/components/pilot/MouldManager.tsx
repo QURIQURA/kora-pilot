@@ -77,7 +77,7 @@ export function MouldManager() {
       }
     >
       {adding && (
-        <div className="mb-4 border border-border p-4">
+        <div className="mb-4 border border-border p-3">
           <MouldCreateForm onCancel={() => setAdding(false)} onCreated={() => setAdding(false)} />
         </div>
       )}

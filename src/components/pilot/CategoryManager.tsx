@@ -71,9 +71,9 @@ export function CategoryManager() {
         </button>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         {adding && (
-          <div className="border border-dashed border-border p-4">
+          <div className="border border-dashed border-border p-3">
             <CategoryCreateForm
               onCancel={() => setAdding(false)}
               onCreated={() => setAdding(false)}
@@ -202,15 +202,15 @@ function DeleteCategoryDialog({
   const options = flattenCategories(categories).filter(({ category: c }) => c.id !== category.id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
       <div className="w-full max-w-md border border-border bg-background">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="label-caps">DELETE {category.name}</span>
           <button type="button" className="label-caps px-2 py-2" onClick={onCancel}>
             CLOSE
           </button>
         </div>
-        <div className="space-y-4 p-4">
+        <div className="space-y-3 p-3">
           <p className="font-mono text-xs uppercase text-foreground">
             {usage?.total ?? 0}개 항목이 사용 중
           </p>

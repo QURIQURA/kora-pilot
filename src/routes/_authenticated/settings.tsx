@@ -58,7 +58,7 @@ function SettingsSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex min-h-[48px] w-full items-center justify-between gap-2 border border-border bg-card px-4 py-3 text-left hover:bg-secondary",
+          "flex min-h-[32px] w-full items-center justify-between gap-2 border border-border bg-card px-3 py-1.5 text-left hover:bg-secondary",
         )}
       >
         <span className="label-caps text-muted-foreground">{title}</span>
@@ -76,14 +76,14 @@ function SettingsGroup({ label, children }: { label: string; children: ReactNode
   return (
     <div className="space-y-2">
       <p className="label-caps text-[11px] text-muted-foreground">{label}</p>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
     </div>
   );
 }
 
 function SettingsPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="border-b border-border pb-4">
         <h1 className="label-caps text-foreground">SETTINGS</h1>
       </div>
@@ -131,7 +131,7 @@ function SettingsPage() {
           <CakeSizeMouldPairs />
         </div>
         {/* 2026-11-05: 공용 완성 규격 ↔ 시트 몰드를 나란히 놓고 비교하며 정리한다(좁은 화면에서는 위아래). */}
-        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
           <div className="min-w-0">
             <CakeSizeManager />
           </div>
@@ -177,7 +177,7 @@ function SettingsPage() {
           <IngredientFunctionManager />
         </SettingsSection>
         <SettingsSection title="INGREDIENT GROUPS (공정별 재료 분류 — WORK SESSION 자동 정렬 기준)">
-          <div className="space-y-4">
+          <div className="space-y-3">
             <IngredientGroupManager />
             <IngredientGroupBulkAssign />
           </div>

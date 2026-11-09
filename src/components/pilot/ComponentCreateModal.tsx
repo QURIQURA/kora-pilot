@@ -48,16 +48,16 @@ export function ComponentCreateModal({ onClose }: { onClose: () => void }) {
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 p-0 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 p-0 sm:items-center sm:p-3">
       <div className="w-full max-w-md border border-border bg-background">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="label-caps">NEW COMPONENT</span>
           <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
             CLOSE
           </button>
         </div>
         <form
-          className="space-y-4 p-4"
+          className="space-y-3 p-3"
           onSubmit={(e) => {
             e.preventDefault();
             if (name.trim()) create.mutate();

@@ -66,7 +66,7 @@ export function AromaTagManager() {
 
   return (
     <SectionCard title="AROMA TAGS">
-      <div className="space-y-4">
+      <div className="space-y-3">
         <p className="font-mono text-xs uppercase text-muted-foreground">
           실제 재료에 쓰인 태그만 표시됩니다. 기본 후보 24종은 코드에 내장되어
           여기서 수정할 수 없습니다.
@@ -93,9 +93,9 @@ export function AromaTagManager() {
       </div>
 
       {pendingDelete && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
           <div className="w-full max-w-md border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <span className="label-caps">DELETE {pendingDelete.tag}</span>
               <button
                 type="button"
@@ -105,7 +105,7 @@ export function AromaTagManager() {
                 CLOSE
               </button>
             </div>
-            <div className="space-y-4 p-4">
+            <div className="space-y-3 p-3">
               <p className="font-mono text-xs uppercase text-foreground">
                 {pendingDelete.count}개 재료에서 사용 중
               </p>

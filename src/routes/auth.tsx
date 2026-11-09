@@ -73,12 +73,12 @@ function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4 font-body text-foreground">
+    <div className="flex min-h-screen items-center justify-center bg-background p-3 font-body text-foreground">
       <div className="w-full max-w-sm border border-border bg-card">
-        <div className="border-b border-border px-4 py-3">
+        <div className="border-b border-border px-3 py-2">
           <span className="label-caps">PILOT</span>
         </div>
-        <form onSubmit={submit} className="space-y-4 p-4">
+        <form onSubmit={submit} className="space-y-3 p-3">
           <p className="label-caps text-xs text-muted-foreground">
             {mode === "signin" ? "SIGN IN" : "CREATE ACCOUNT"}
           </p>

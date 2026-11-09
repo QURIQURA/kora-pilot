@@ -70,7 +70,7 @@ export function FlavourFamilyManager() {
       }
     >
       {adding && (
-        <div className="mb-4 border border-border p-4">
+        <div className="mb-4 border border-border p-3">
           <FlavourFamilyCreateForm
             onCancel={() => setAdding(false)}
             onCreated={() => setAdding(false)}

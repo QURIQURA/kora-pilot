@@ -863,7 +863,7 @@ function FormulaDetailPage() {
   const fieldsDisabled = !editing;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* HEADER */}
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
@@ -1088,7 +1088,7 @@ function FormulaDetailPage() {
 
       {/* 공정 주의 — 배수 ≥ 2 + process_note 보유 재료 */}
       {processCautions.length > 0 && (
-        <div className="border border-dashed border-foreground px-4 py-3">
+        <div className="border border-dashed border-foreground px-3 py-2">
           <p className="label-caps text-xs">PROCESS CAUTION — 배수 ×{fmtNumber(batchValue, 2)}</p>
           <ul className="mt-1 space-y-1">
             {processCautions.map((row) => (
@@ -1416,9 +1416,9 @@ function FormulaDetailPage() {
       </button>
 
       {adding && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
           <div className="w-full max-w-md border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <span className="label-caps">ADD INGREDIENT</span>
               <button
                 type="button"
@@ -1428,7 +1428,7 @@ function FormulaDetailPage() {
                 CLOSE
               </button>
             </div>
-            <div className="p-4">
+            <div className="p-3">
               <IngredientPicker
                 onCancel={() => setAdding(false)}
                 onPick={(id, unit) => {
@@ -1442,9 +1442,9 @@ function FormulaDetailPage() {
       )}
 
       {addingBatch && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
           <div className="w-full max-w-md border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <span className="label-caps">ADD BATCH</span>
               <button
                 type="button"
@@ -1454,7 +1454,7 @@ function FormulaDetailPage() {
                 CLOSE
               </button>
             </div>
-            <div className="space-y-3 p-4">
+            <div className="space-y-3 p-3">
               <input
                 className={inputClass}
                 placeholder="이름 (예: 8인치 시폰몰드)"
@@ -1589,9 +1589,9 @@ function FormulaDetailPage() {
       )}
 
       {editingBatchId && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
           <div className="w-full max-w-md border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <span className="label-caps">EDIT BATCH</span>
               <button
                 type="button"
@@ -1601,7 +1601,7 @@ function FormulaDetailPage() {
                 CLOSE
               </button>
             </div>
-            <div className="space-y-3 p-4">
+            <div className="space-y-3 p-3">
               <input
                 className={inputClass}
                 placeholder="이름 (예: 8인치 시폰몰드)"
@@ -1833,7 +1833,7 @@ function UnifiedIngredientRow({
             <input
               type="number"
               inputMode="decimal"
-              className="min-h-[44px] w-20 border border-input bg-background px-2 py-1 text-base outline-none focus:border-foreground"
+              className="min-h-[32px] w-20 border border-input bg-background px-2 py-1 text-base outline-none focus:border-foreground"
               value={myBloom}
               onChange={(e) => setMyBloom(e.target.value)}
             />
@@ -1968,7 +1968,7 @@ function UnifiedIngredientRow({
                   type="number"
                   inputMode="decimal"
                   step="0.1"
-                  className="min-h-[44px] w-20 border border-input bg-background px-2 py-1 font-mono text-base outline-none focus:border-foreground"
+                  className="min-h-[32px] w-20 border border-input bg-background px-2 py-1 font-mono text-base outline-none focus:border-foreground"
                   placeholder="%"
                   value={targetPct}
                   onChange={(e) => setTargetPct(e.target.value)}
@@ -2150,7 +2150,7 @@ function VersionHistory({
       </p>
       <ul className="divide-y divide-border border border-border">
         {versions.map((version) => (
-          <li key={version.id} className="flex flex-wrap items-center gap-2 px-3 py-3">
+          <li key={version.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
             <button
               type="button"
               className="label-caps min-w-[3rem] text-left hover:underline"
@@ -2212,16 +2212,16 @@ function NewVersionModal({
   const [summary, setSummary] = useState("");
   const [reason, setReason] = useState("");
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
       <div className="w-full max-w-md border border-border bg-background">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="label-caps">NEW VERSION FROM {fromLabel}</span>
           <button type="button" className="label-caps px-2 py-2" onClick={onCancel}>
             CLOSE
           </button>
         </div>
         <form
-          className="space-y-4 p-4"
+          className="space-y-3 p-3"
           onSubmit={(e) => {
             e.preventDefault();
             onCreate(summary.trim(), reason.trim());

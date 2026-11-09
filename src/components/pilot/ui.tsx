@@ -3,20 +3,21 @@ import { cn } from "@/lib/utils";
 import type { ProductStatus } from "@/lib/pilot";
 import { readableTextColor } from "@/lib/pilot";
 
+// 2026-11-09: min-h 32→28px, 글자 13px로 한 번 더 컴팩트화 (전역 --spacing/글자 스케일은 styles.css).
 // 2026-09-30: 전체적으로 입력칸/버튼이 크고 공간을 많이 차지한다는 사용자 피드백에 따라
 // min-h 44px → 32px, 여백도 줄여 더 컴팩트하게 — 이 파일이 앱 전체 공통 클래스라 여기 한 곳만
 // 고치면 PRODUCTS/PRODUCTION/SETTINGS 등 모든 화면에 한 번에 반영된다. 손끝으로 눌러야 하는
 // PRODUCTION의 START/COMPLETE 같은 핵심 버튼은 각자 min-h-12 등으로 이 기본값을 덮어써 크기를 유지한다.
 export const inputClass =
-  "w-full min-h-[32px] border border-input bg-background px-2 py-1 font-body text-sm text-foreground outline-none focus:border-foreground";
+  "w-full min-h-[28px] border border-input bg-background px-2 py-0.5 font-body text-[13px] text-foreground outline-none focus:border-foreground";
 
 export const selectClass = inputClass;
 
 export const buttonClass =
-  "label-caps inline-flex min-h-[32px] items-center justify-center border border-input bg-background px-2.5 py-1 text-foreground transition-colors hover:bg-secondary disabled:opacity-40";
+  "label-caps inline-flex min-h-[28px] items-center justify-center gap-1 border border-input bg-background px-2.5 py-0.5 text-foreground transition-colors hover:bg-secondary disabled:opacity-40";
 
 export const primaryButtonClass =
-  "label-caps inline-flex min-h-[32px] items-center justify-center border border-foreground bg-foreground px-2.5 py-1 text-background transition-colors hover:opacity-90 disabled:opacity-40";
+  "label-caps inline-flex min-h-[28px] items-center justify-center gap-1 border border-foreground bg-foreground px-2.5 py-0.5 text-background transition-colors hover:opacity-90 disabled:opacity-40";
 
 export function SectionCard({
   title,
@@ -42,16 +43,16 @@ export function SectionCard({
         muted && "border-dashed opacity-70"
       )}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+      <header className="flex items-center justify-between gap-2 border-b border-border px-2.5 py-1">
         <h2 className="label-caps text-muted-foreground">{title}</h2>
         {action}
       </header>
       {subtitle && (
-        <div className="border-b border-dashed border-border bg-muted/30 px-3 py-1.5 font-mono text-xs tabular-nums text-foreground">
+        <div className="border-b border-dashed border-border bg-muted/30 px-2.5 py-1 font-mono text-xs tabular-nums text-foreground">
           {subtitle}
         </div>
       )}
-      <div className={cn("p-3", bodyClassName)}>{children}</div>
+      <div className={cn("p-2.5", bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -64,7 +65,7 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <label className="block space-y-1">
+    <label className="block space-y-0.5">
       <span className="label-caps block text-xs text-muted-foreground">
         {label}
       </span>
@@ -84,7 +85,7 @@ export function StatusBadge({ status }: { status: ProductStatus | string }) {
   return (
     <span
       className={cn(
-        "label-caps inline-block border px-2 py-0.5 text-[11px]",
+        "label-caps inline-block border px-1.5 py-0 text-[10px] leading-4",
         solid && "border-foreground bg-foreground text-background",
         dashed && "border-dashed border-border text-foreground",
         faded && "border-border text-muted-foreground opacity-60",
@@ -110,7 +111,7 @@ export function CategoryBadge({
   }
   return (
     <span
-      className="label-caps inline-block px-2 py-0.5 text-[11px]"
+      className="label-caps inline-block px-1.5 py-0 text-[10px] leading-4"
       style={{ backgroundColor: color, color: readableTextColor(color) }}
     >
       {label}
@@ -147,7 +148,7 @@ export function CollapsibleSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-secondary",
+          "flex min-h-[30px] w-full items-center justify-between gap-2 px-2.5 py-1 text-left hover:bg-secondary",
           open && "border-b border-border"
         )}
       >
@@ -159,7 +160,7 @@ export function CollapsibleSection({
           </span>
         </span>
       </button>
-      {open && <div className="p-3">{children}</div>}
+      {open && <div className="p-2.5">{children}</div>}
     </section>
   );
 }
@@ -172,7 +173,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
       <h1 className="label-caps text-foreground">{title}</h1>
       {action}
     </div>

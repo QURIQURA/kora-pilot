@@ -939,7 +939,7 @@ export function ProductionDashboard() {
         </p>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* ── 작업 대기공간 (맨 위 1열) ── */}
         <section
           className={cn(
@@ -1169,7 +1169,7 @@ export function ProductionDashboard() {
           )}
         </section>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,1fr)] lg:items-start">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,1fr)] lg:items-start">
           {/* ── 데일리 타임라인 ── */}
           <section className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -1757,7 +1757,7 @@ export function ProductionDashboard() {
                     NOTE (플래너 TASK 노트)
                   </span>
                   <textarea
-                    className={cn(inputClass, "min-h-[52px] w-full")}
+                    className={cn(inputClass, "min-h-[36px] w-full")}
                     defaultValue={selectedDaily.note ?? ""}
                     onBlur={(e) => {
                       const v = e.target.value.trim();

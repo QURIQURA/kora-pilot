@@ -69,7 +69,7 @@ export function SizeSpecManager() {
         기준(CAPACITY)은 몰드 또는 BASE WEIGHT, 목표 g = 기준 g × 개수(직접 적으면 그 값 우선).
         숫자는 나중에 채워도 돼요. 주문의 컴포넌트 설정에서 이 줄을 눌러 그대로 적용할 수 있어요.
       </p>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {(sizes.data ?? []).map((size) => {
           const sizeLines = (lines.data ?? []).filter((l) => l.cake_size_id === size.id);
           const total = sizeLines.reduce(

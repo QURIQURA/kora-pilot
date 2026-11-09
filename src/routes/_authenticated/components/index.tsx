@@ -77,7 +77,7 @@ function ComponentsPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="COMPONENTS"
         action={
@@ -91,7 +91,7 @@ function ComponentsPage() {
           </div>
         }
       />
-      <div className="border border-border bg-card p-4">
+      <div className="border border-border bg-card p-3">
         <Field label="SEARCH">
           <input
             className={inputClass}
@@ -112,10 +112,10 @@ function ComponentsPage() {
           onAction={() => setCreating(true)}
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {groupedRows.map(({ category, items }) => (
             <div key={category?.id ?? "__unassigned"} className="border border-border bg-card">
-              <div className="label-caps flex items-center justify-between gap-2 border-b border-border bg-secondary/40 px-4 py-2 text-xs text-muted-foreground">
+              <div className="label-caps flex items-center justify-between gap-2 border-b border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
                 <span>
                   {category ? category.name : "미분류"}
                   {category?.name_en && (
@@ -143,7 +143,7 @@ function ComponentsPage() {
                     <Link
                       to="/components/$componentId"
                       params={{ componentId: component.id }}
-                      className="flex flex-1 flex-wrap items-center justify-between gap-2 py-3 pr-4 hover:bg-secondary"
+                      className="flex flex-1 flex-wrap items-center justify-between gap-2 py-2 pr-4 hover:bg-secondary"
                     >
                       <span className="text-sm">{component.name}</span>
                       <span className="font-mono text-xs uppercase text-muted-foreground">

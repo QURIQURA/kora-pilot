@@ -137,7 +137,7 @@ function OrdersPage() {
   const tabRows = tab === "POPUP" ? popupRows : orderRows;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="ORDERS"
         action={
@@ -186,7 +186,7 @@ function OrdersPage() {
             aria-selected={tab === key}
             onClick={() => setTab(key)}
             className={cn(
-              "label-caps -mb-px min-h-[44px] border-b-2 px-4 text-xs transition-colors",
+              "label-caps -mb-px min-h-[30px] border-b-2 px-3 text-xs transition-colors",
               tab === key
                 ? "border-foreground text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground",
@@ -726,7 +726,7 @@ function OrderRow({
             void navigate({ to: "/orders/$orderId", params: { orderId: o.id } });
         }}
         className={cn(
-          "grid grid-cols-1 gap-1 border-l-4 px-3 py-3 cursor-pointer md:items-center md:gap-x-4 md:gap-y-1",
+          "grid grid-cols-1 gap-1 border-l-4 px-3 py-2 cursor-pointer md:items-center md:gap-x-4 md:gap-y-1",
           o.is_in_progress
             ? "border-l-amber-400 bg-amber-50 hover:bg-amber-100"
             : "border-l-transparent hover:bg-secondary",

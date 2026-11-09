@@ -102,7 +102,7 @@ export function AromaTagsInput({
                 // blur보다 먼저 선택이 발생하도록
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => add(candidate.value)}
-                className="flex min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-secondary"
+                className="flex min-h-[32px] w-full items-center justify-between gap-2 px-2.5 py-1 text-left hover:bg-secondary"
               >
                 <span className="text-sm">{candidate.value}</span>
                 {candidate.en && (
@@ -117,7 +117,7 @@ export function AromaTagsInput({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => add(draft)}
-                className="flex min-h-[44px] w-full items-center gap-2 border-t border-dashed border-border px-3 py-2 text-left hover:bg-secondary"
+                className="flex min-h-[32px] w-full items-center gap-2 border-t border-dashed border-border px-3 py-2 text-left hover:bg-secondary"
               >
                 <span className="label-caps text-xs text-muted-foreground">
                   + ADD

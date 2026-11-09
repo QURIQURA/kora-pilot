@@ -48,7 +48,7 @@ export function BaseWeightCreateForm({
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (name.trim() && weightG.trim()) create.mutate();

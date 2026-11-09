@@ -106,7 +106,7 @@ export function ComponentBlendModal({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="blend-title"
-        className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto border border-border bg-background p-4"
+        className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto border border-border bg-background p-3"
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="blend-title" className="label-caps">
@@ -122,7 +122,7 @@ export function ComponentBlendModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <form
-          className="space-y-4"
+          className="space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
             if (ready && !validation && name.trim()) create.mutate();

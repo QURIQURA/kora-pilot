@@ -285,7 +285,7 @@ export function WorkSessionWorkspace({
     );
 
   return (
-    <div className={embedded ? "flex flex-col gap-4" : "space-y-4"}>
+    <div className={embedded ? "flex flex-col gap-3" : "space-y-3"}>
       {mirror && (
         <div className="flex flex-wrap items-center justify-between gap-2 border border-border bg-secondary px-3 py-2 font-mono text-[11px]">
           <span>
@@ -877,7 +877,7 @@ function FormulaVersionRow({
     enabled: showHistory,
   });
   return (
-    <li className="space-y-2 px-3 py-3">
+    <li className="space-y-2 px-3 py-2">
       <ProductionQuantityRow
         members={[{ ...row, sessionId }]}
         lines={lines}
@@ -1619,7 +1619,7 @@ function FormulaView({
 }) {
   if (rows.length === 0) return null;
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {rows.map((row) => {
         const lines = ingredientsByVersion[row.formula_version_id] ?? [];
         const multiplier = Number(row.multiplier);
@@ -2424,7 +2424,7 @@ function EditFormulaVersionModal({
       className={
         inline
           ? ""
-          : "fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4"
+          : "fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3"
       }
     >
       <div
@@ -2436,7 +2436,7 @@ function EditFormulaVersionModal({
       >
         <div
           className={cn(
-            "flex items-center justify-between border-b px-4 py-3",
+            "flex items-center justify-between border-b px-3 py-2",
             runningExperiment ? "border-[#7DB35A] bg-[#DCF0C8]" : "border-border",
           )}
         >
@@ -2452,7 +2452,7 @@ function EditFormulaVersionModal({
           )}
         </div>
 
-        <div className="space-y-4 p-4">
+        <div className="space-y-3 p-3">
           {runningExperiment && (
             <div className="space-y-1">
               <p className="font-mono text-[11px]">
@@ -3115,7 +3115,7 @@ function EditFormulaVersionModal({
               </li>
             ))}
             {visibleRows.length === 0 && !baseIngredients.isLoading && (
-              <li className="px-3 py-3 font-mono text-xs uppercase text-muted-foreground">
+              <li className="px-3 py-2 font-mono text-xs uppercase text-muted-foreground">
                 NO INGREDIENTS
               </li>
             )}

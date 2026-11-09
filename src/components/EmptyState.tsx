@@ -16,7 +16,7 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-start justify-center gap-4 border border-border bg-card p-6 md:p-8",
+        "flex flex-col items-start justify-center gap-3 border border-border bg-card p-4 md:p-5",
         className
       )}
     >
@@ -27,7 +27,7 @@ export function EmptyState({
         <button
           type="button"
           onClick={onAction}
-          className="label-caps min-h-[48px] border border-input bg-background px-4 py-2 text-foreground transition-colors hover:bg-secondary"
+          className="label-caps min-h-[30px] border border-input bg-background px-3 py-1 text-foreground transition-colors hover:bg-secondary"
         >
           {actionLabel}
         </button>

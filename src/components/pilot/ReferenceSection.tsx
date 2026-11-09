@@ -381,7 +381,7 @@ export function ReferenceItem({
 
   if (editing) {
     return (
-      <li className="space-y-3 border-l-2 border-foreground px-3 py-3">
+      <li className="space-y-3 border-l-2 border-foreground px-3 py-2">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="TITLE">
             <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -457,7 +457,7 @@ export function ReferenceItem({
 
   return (
     <li>
-      <div className="space-y-2 px-3 py-3">
+      <div className="space-y-2 px-3 py-2">
         <button
           type="button"
           className="block w-full space-y-2 text-left hover:bg-secondary"

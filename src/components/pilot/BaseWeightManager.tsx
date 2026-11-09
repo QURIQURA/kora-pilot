@@ -61,7 +61,7 @@ export function BaseWeightManager() {
         PRODUCTION에서 배수를 자동 계산하는 데 쓰입니다.
       </p>
       {adding && (
-        <div className="mb-4 border border-border p-4">
+        <div className="mb-4 border border-border p-3">
           <BaseWeightCreateForm
             onCancel={() => setAdding(false)}
             onCreated={() => setAdding(false)}

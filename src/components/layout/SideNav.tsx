@@ -36,7 +36,7 @@ export function SideNav({
 }) {
   return (
     <nav className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-border p-4">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
         <Link
           to="/"
           className="label-caps block text-foreground hover:text-muted-foreground"
@@ -66,8 +66,8 @@ export function SideNav({
           )}
         </div>
       </div>
-      <div className="flex-1 overflow-auto py-2">
-        <ul className="space-y-0.5 px-2">
+      <div className="flex-1 overflow-auto py-1.5">
+        <ul className="space-y-px px-1.5">
           {TOP_ITEMS.map((item) => (
             <li key={item.to}>
               <NavItem item={item} onClick={onNavigate} />
@@ -75,7 +75,7 @@ export function SideNav({
           ))}
         </ul>
       </div>
-      <div className="border-t border-border p-2">
+      <div className="border-t border-border p-1.5">
         <NavItem item={{ label: "SETTINGS", to: "/settings" }} onClick={onNavigate} />
       </div>
     </nav>
@@ -96,7 +96,7 @@ function NavItem({
       activeOptions={{ exact: item.to === "/" }}
       activeProps={{ className: "bg-foreground text-background" }}
       inactiveProps={{ className: "text-foreground hover:bg-secondary" }}
-      className={cn("label-caps block px-3 py-3 transition-colors", "min-h-[48px] content-center")}
+      className={cn("label-caps block px-2.5 py-1.5 transition-colors", "min-h-[30px] content-center")}
     >
       {item.label}
     </Link>

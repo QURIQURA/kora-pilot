@@ -129,7 +129,7 @@ function CalibrationPage() {
   const baseIndex = columns.findIndex((c) => c.formula.is_base_formula);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* HEADER */}
       <div className="space-y-2 border-b border-border pb-4">
         <p className="label-caps text-xs text-muted-foreground">
@@ -175,7 +175,7 @@ function CalibrationPage() {
                     to="/formulas/$formulaId"
                     params={{ formulaId: row.id }}
                     className={cn(
-                      "grid grid-cols-1 gap-1 px-4 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2",
+                      "grid grid-cols-1 gap-1 px-3 py-2 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2",
                       row.is_base_formula && "bg-secondary/60"
                     )}
                   >

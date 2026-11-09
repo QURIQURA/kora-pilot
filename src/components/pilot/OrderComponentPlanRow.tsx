@@ -309,23 +309,39 @@ export function OrderComponentPlanRow({
   else
     planText = `배수 직접 입력 — 레시피 ×${fmtNumber(Number(draft.multiplier) || row.multiplier, 4)}`;
   return (
-    <div className="mt-2 space-y-2">
-      <p className="text-xs">
-        {row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name}
-      </p>
-      {!editing && (
-        <div className="space-y-1">
-          <p className="font-mono text-[11px]">
-            {versionText} · {planText}
-            {productionText}
+    <div className="mt-1 space-y-1.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs">
+            {row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name}
           </p>
-          {!disabled && (
-            <button type="button" className={buttonClass} onClick={() => setEditing(true)}>
+          {!editing && (
+            <p className="font-mono text-[11px] text-muted-foreground">
+              {versionText} · {planText}
+              {productionText}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {!editing && !disabled && (
+            <button
+              type="button"
+              className={`${buttonClass} !min-h-[24px] !px-2 !text-[11px]`}
+              onClick={() => setEditing(true)}
+            >
               생산 계획 수정
             </button>
           )}
+          <Link
+            className={`${buttonClass} !min-h-[24px] !px-2 !text-[11px]`}
+            to="/formulas/$formulaId"
+            params={{ formulaId: row.formula_versions.formulas.id }}
+            search={{ version: row.formula_version_id }}
+          >
+            레시피 ↗
+          </Link>
         </div>
-      )}
+      </div>
       {editing && (
         <fieldset disabled={disabled || save.isPending} className="space-y-2">
           {allowFormulaChange && (
@@ -624,14 +640,6 @@ export function OrderComponentPlanRow({
           </button>
         </fieldset>
       )}
-      <Link
-        className="block text-[11px] underline"
-        to="/formulas/$formulaId"
-        params={{ formulaId: row.formula_versions.formulas.id }}
-        search={{ version: row.formula_version_id }}
-      >
-        현재 주문에 연결된 레시피 열기
-      </Link>
       {conflict && (
         <div role="alert" className="text-xs text-destructive">
           다른 화면에서 계획이 변경됐어요.{" "}

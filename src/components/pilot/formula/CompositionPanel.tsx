@@ -94,7 +94,7 @@ export function CompositionPanel({
 
       {/* 미입력 경고 — 조용히 틀린 숫자를 보여주지 않는다 */}
       {totals.missing.length > 0 && (
-        <div className="mt-3 border border-dashed border-foreground px-3 py-3">
+        <div className="mt-3 border border-dashed border-foreground px-3 py-2">
           <p className="font-mono text-xs uppercase">
             재료 {totals.missing.length}개의 조성 미입력 — 계산이 실제보다 낮게 나옵니다
           </p>

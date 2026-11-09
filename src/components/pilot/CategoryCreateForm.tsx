@@ -58,7 +58,7 @@ export function CategoryCreateForm({
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (name.trim()) create.mutate();

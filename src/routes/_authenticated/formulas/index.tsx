@@ -153,7 +153,7 @@ function FormulasPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="FORMULAS"
         action={
@@ -178,7 +178,7 @@ function FormulasPage() {
             aria-selected={tab === key}
             onClick={() => setTab(key)}
             className={cn(
-              "label-caps -mb-px min-h-[44px] border-b-2 px-4 text-xs transition-colors",
+              "label-caps -mb-px min-h-[30px] border-b-2 px-3 text-xs transition-colors",
               tab === key
                 ? "border-foreground text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground",
@@ -193,7 +193,7 @@ function FormulasPage() {
       {tab === "ARCHIVE" && <FormulaArchiveTab />}
 
       {tab === "PRODUCTION" && (
-        <div className="grid grid-cols-1 gap-4 border border-border bg-card p-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 border border-border bg-card p-3 sm:grid-cols-2">
           <Field label="COMPONENT">
             <select
               className={selectClass}
@@ -238,7 +238,7 @@ function FormulasPage() {
           />
         ) : (
           <div className="border border-border bg-card">
-            <div className="hidden grid-cols-12 gap-2 border-b border-border px-4 py-2 md:grid">
+            <div className="hidden grid-cols-12 gap-2 border-b border-border px-3 py-2 md:grid">
               <span className="label-caps col-span-4 text-xs text-muted-foreground">NAME</span>
               <span className="label-caps col-span-3 text-xs text-muted-foreground">COMPONENT</span>
               <span className="label-caps col-span-1 text-xs text-muted-foreground">VERSION</span>
@@ -253,7 +253,7 @@ function FormulasPage() {
                     <Link
                       to="/formulas/$formulaId"
                       params={{ formulaId: row.id }}
-                      className="grid grid-cols-1 gap-1 px-4 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
+                      className="grid grid-cols-1 gap-1 px-3 py-2 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
                     >
                       <span className="col-span-4 text-sm">{row.name}</span>
                       <span className="col-span-3 font-mono text-xs uppercase text-muted-foreground">
@@ -316,16 +316,16 @@ function NewFormulaModal({
   const [methodId, setMethodId] = useState("");
   const [isBase, setIsBase] = useState(false);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
       <div className="w-full max-w-md border border-border bg-background">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="label-caps">NEW FORMULA</span>
           <button type="button" className="label-caps px-2 py-2" onClick={onCancel}>
             CLOSE
           </button>
         </div>
         <form
-          className="space-y-4 p-4"
+          className="space-y-3 p-3"
           onSubmit={(e) => {
             e.preventDefault();
             if (name.trim() && componentId)
@@ -379,7 +379,7 @@ function NewFormulaModal({
               onChange={setMethodId}
             />
           </Field>
-          <label className="flex min-h-[44px] items-center gap-2">
+          <label className="flex min-h-[32px] items-center gap-2">
             <input
               type="checkbox"
               className="h-5 w-5 border border-input"

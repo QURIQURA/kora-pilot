@@ -133,7 +133,7 @@ function IngredientsPage() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="INGREDIENTS"
         action={
@@ -147,7 +147,7 @@ function IngredientsPage() {
         }
       />
 
-      <div className="space-y-3 border border-border bg-card p-4">
+      <div className="space-y-3 border border-border bg-card p-3">
         <Field label="SEARCH (한글 · ENGLISH · FUNCTION)">
           <input
             className={inputClass}
@@ -162,7 +162,7 @@ function IngredientsPage() {
               type="button"
               onClick={filter.onToggle}
               className={cn(
-                "label-caps min-h-[44px] border px-3 py-2 text-[11px]",
+                "label-caps min-h-[32px] border px-3 py-2 text-[11px]",
                 filter.active
                   ? "border-foreground bg-foreground text-background"
                   : "border-border text-muted-foreground hover:text-foreground"
@@ -214,7 +214,7 @@ function IngredientsPage() {
         />
       ) : (
         <div className="border border-border bg-card">
-          <div className="hidden grid-cols-12 gap-2 border-b border-border px-4 py-2 md:grid">
+          <div className="hidden grid-cols-12 gap-2 border-b border-border px-3 py-2 md:grid">
             <span className="label-caps col-span-3 text-xs text-muted-foreground">
               NAME
             </span>
@@ -249,7 +249,7 @@ function IngredientsPage() {
                 <Link
                   to="/ingredients/$ingredientId"
                   params={{ ingredientId: ingredient.id }}
-                  className="grid grid-cols-1 gap-1 px-4 py-3 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
+                  className="grid grid-cols-1 gap-1 px-3 py-2 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
                 >
                   <span className="col-span-3 text-sm">
                     <span className="block md:inline">{ingredient.name}</span>{" "}
@@ -420,16 +420,16 @@ function CreateIngredientDialog({ onClose }: { onClose: () => void }) {
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
       <div className="w-full max-w-md border border-border bg-background">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="label-caps">NEW INGREDIENT</span>
           <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
             CLOSE
           </button>
         </div>
         <form
-          className="space-y-4 p-4"
+          className="space-y-3 p-3"
           onSubmit={(e) => {
             e.preventDefault();
             if (name.trim()) create.mutate();

@@ -50,7 +50,7 @@ export function CustomerCreateForm({
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
         create.mutate();

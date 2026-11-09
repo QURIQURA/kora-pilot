@@ -60,7 +60,7 @@ function CustomersPage() {
   }, [rows, counts]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="CUSTOMERS"
         action={
@@ -71,7 +71,7 @@ function CustomersPage() {
       />
 
       {creating && (
-        <div className="border border-border bg-card p-4">
+        <div className="border border-border bg-card p-3">
           <CustomerCreateForm onCancel={() => setCreating(false)} onCreated={() => setCreating(false)} />
         </div>
       )}
@@ -85,7 +85,7 @@ function CustomersPage() {
           onAction={() => setCreating(true)}
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-3">
           <CustomerSection
             title="단골 REGULAR"
             count={regulars.length}

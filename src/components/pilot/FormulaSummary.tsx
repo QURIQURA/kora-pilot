@@ -24,7 +24,7 @@ export function currentVersion(formula: FormulaListRow) {
 function FormulaRow({ formula }: { formula: FormulaListRow }) {
   const version = currentVersion(formula);
   return (
-    <li className="flex flex-wrap items-center gap-2 px-3 py-3">
+    <li className="flex flex-wrap items-center gap-2 px-3 py-2">
       <Link
         to="/formulas/$formulaId"
         params={{ formulaId: formula.id }}
@@ -175,7 +175,7 @@ function ComponentFormulaGroup({
         </Link>
       </div>
       {rows.length === 0 ? (
-        <p className="px-3 py-3 font-mono text-xs uppercase text-muted-foreground">
+        <p className="px-3 py-2 font-mono text-xs uppercase text-muted-foreground">
           NO FORMULA
         </p>
       ) : (

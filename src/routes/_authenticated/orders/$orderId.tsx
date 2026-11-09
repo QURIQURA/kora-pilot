@@ -671,7 +671,7 @@ function OrderDetailPage() {
     return <PopupOrderWorkspace key={order.data.id} order={order.data} />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
         <div className="space-y-1">
           <Link
@@ -730,7 +730,7 @@ function OrderDetailPage() {
       </div>
 
       {activeTab === "VISUALS" ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* 2026-10-13 사용자 요청: "오더마다 무드보드를 만들고싶은데, 디자인 아이디어 구상용으로.
               피그마 ppt 처럼 이미지를 스크랩해서 바로 붙여넣기할수 있는 보드" */}
           <OrderMoodboardSection orderId={order.data.id} />
@@ -1015,7 +1015,7 @@ function OrderDetailPage() {
           분리. Maker/Customer Satisfaction을 각각 독립 필드로 관리(향후 둘을 비교 분석하기 위함).
           SAVE/DELETE 버튼은 기존과 동일하게 이 페이지 전체(주문 정보 + Satisfaction)에 공통 적용. */}
           <SectionCard title="SATISFACTION">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="MAKER SATISFACTION">
                 <StarRating value={makerSatisfaction} onChange={setMakerSatisfaction} />
               </Field>
@@ -1377,7 +1377,7 @@ function OrderDetailPage() {
         </>
       )}
 
-      <div className="border border-border bg-card p-4">
+      <div className="border border-border bg-card p-3">
         {save.isError && (
           <p className="mb-2 font-mono text-xs uppercase text-destructive">
             {(save.error as Error).message}

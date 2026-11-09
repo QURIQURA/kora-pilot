@@ -167,7 +167,7 @@ function GroupBlock({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-[48px] w-full items-center justify-between gap-2 px-3 py-3 text-left hover:bg-secondary"
+        className="flex min-h-[32px] w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-secondary"
       >
         <span className="label-caps">
           {node.category.name}

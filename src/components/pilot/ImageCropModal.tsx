@@ -39,7 +39,7 @@ export function ImageCropModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-foreground/80 p-4">
+    <div className="fixed inset-0 z-50 flex flex-col bg-foreground/80 p-3">
       <div className="flex items-center justify-between pb-3">
         <h2 className="label-caps text-background">{label} — 1:1 크롭</h2>
         <span className="font-mono text-xs uppercase text-background/70">

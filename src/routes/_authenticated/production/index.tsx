@@ -51,9 +51,9 @@ function ProductionDashboardPage() {
   const tab = Route.useSearch().tab ?? "DASHBOARD";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader title="PRODUCTION" />
-      <div className="flex gap-4 border-b border-border" role="tablist">
+      <div className="flex gap-3 border-b border-border" role="tablist">
         {(["DASHBOARD", "ORDERS", "ORDER HISTORY", "HISTORY"] as const).map((t) => (
           <Link
             key={t}
@@ -93,7 +93,7 @@ function WorkSessionHistory() {
   const rows = sessions.data ?? [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex justify-end">
         <button type="button" className={primaryButtonClass} onClick={() => setCreating(true)}>
           + CREATE WORK SESSION
@@ -115,7 +115,7 @@ function WorkSessionHistory() {
           <ul>
             {rows.map((session) => (
               <li key={session.id} className="border-b border-border last:border-b-0">
-                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 hover:bg-secondary">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-4 hover:bg-secondary">
                   <Link
                     to="/production/$sessionId"
                     params={{ sessionId: session.id }}
@@ -335,7 +335,7 @@ function WorkSessionCreateForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form
-      className="space-y-4 border border-dashed border-border p-4"
+      className="space-y-3 border border-dashed border-border p-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (name.trim()) create.mutate();

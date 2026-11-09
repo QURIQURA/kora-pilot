@@ -31,7 +31,7 @@ export function CostItemManager() {
   const usageMap = usage.data ?? {};
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {CATEGORIES.map((cat) => {
         const catRows = rows.filter((r) => r.category === cat.value);
         return (
@@ -51,7 +51,7 @@ export function CostItemManager() {
             }
           >
             {addingCategory === cat.value && (
-              <div className="mb-4 border border-border p-4">
+              <div className="mb-4 border border-border p-3">
                 <CostItemCreateForm
                   defaultCategory={cat.value}
                   onCancel={() => setAddingCategory(null)}

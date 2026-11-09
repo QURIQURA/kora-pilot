@@ -263,7 +263,7 @@ function InventoryPage() {
   const components = rows.filter((r) => r.item_type === "COMPONENT");
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="INVENTORY (냉동 재고)"
         action={
@@ -288,7 +288,7 @@ function InventoryPage() {
             aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
             className={cn(
-              "label-caps border border-b-0 border-border px-4 py-2 text-xs",
+              "label-caps border border-b-0 border-border px-3 py-2 text-xs",
               tab === t.key
                 ? "bg-foreground text-background"
                 : "bg-secondary text-muted-foreground hover:text-foreground",
@@ -529,7 +529,7 @@ function ComponentBox({ row }: { row: StockItemRow }) {
   });
 
   return (
-    <li className="space-y-1 px-3 py-3">
+    <li className="space-y-1 px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm">{row.group_label}</p>
         <button type="button" className={buttonClass} onClick={() => setAddingLine((v) => !v)}>

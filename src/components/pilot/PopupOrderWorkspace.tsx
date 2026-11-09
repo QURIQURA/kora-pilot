@@ -115,7 +115,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
     setDraft((d) => ({ ...d, plan: { ...d.plan, ...patch } }));
   const changed = dirty || end !== inputTime(plan.ends_at || null);
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
         <div className="min-w-0 flex-1">
           <Link to="/orders" className="text-xs underline">
@@ -160,12 +160,12 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
         ))}
       </div>
       {tab === "VISUALS" ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <OrderMoodboardSection orderId={order.id} />
           <OrderResultPhotosSection orderId={order.id} />
         </div>
       ) : (
-        <fieldset disabled={pending} className="space-y-4">
+        <fieldset disabled={pending} className="space-y-3">
           <SectionCard title="POP UP DETAIL">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="팝업 이름">

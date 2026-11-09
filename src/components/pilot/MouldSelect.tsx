@@ -74,9 +74,9 @@ export function MouldSelect({
           // 네이티브 폼 제출(페이지 새로고침 — "화면이 하얗게 깜빡") 후 바깥쪽 화면(PRODUCT 등)으로
           // 튕기는 증상이었다. document.body로 포탈링해서 어떤 부모 <form> 안에서 쓰이든 항상
           // DOM 트리 바깥에 독립적으로 뜨도록 고쳤다.
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
             <div className="w-full max-w-md border border-border bg-background">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center justify-between border-b border-border px-3 py-2">
                 <span className="label-caps">NEW MOULD</span>
                 <button
                   type="button"
@@ -86,7 +86,7 @@ export function MouldSelect({
                   CLOSE
                 </button>
               </div>
-              <div className="p-4">
+              <div className="p-3">
                 <MouldCreateForm
                   onCancel={() => setCreating(false)}
                   onCreated={(id) => {

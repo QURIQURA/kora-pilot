@@ -64,7 +64,7 @@ export function BlendRatioEditor({
     })
     .join(", ");
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <p className="text-xs text-muted-foreground">총 {fmtNumber(total, 2)}g 유지 · 합계 100%</p>
       <Slider.Root
         className="relative flex h-11 w-full touch-none select-none items-center"

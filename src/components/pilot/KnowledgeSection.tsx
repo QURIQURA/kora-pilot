@@ -298,7 +298,7 @@ export function KnowledgeItem({
 
   if (editing) {
     return (
-      <li className="space-y-3 border-l-2 border-foreground px-3 py-3">
+      <li className="space-y-3 border-l-2 border-foreground px-3 py-2">
         <Field label="TITLE">
           <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
@@ -368,7 +368,7 @@ export function KnowledgeItem({
     <li>
       <button
         type="button"
-        className="block w-full space-y-2 px-3 py-3 text-left hover:bg-secondary"
+        className="block w-full space-y-2 px-3 py-2 text-left hover:bg-secondary"
         onClick={() => setEditing(true)}
       >
         <span className="block text-sm text-foreground">{entry.title}</span>

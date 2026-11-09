@@ -210,7 +210,7 @@ function FunctionalRow({
             <input
               type="number"
               inputMode="decimal"
-              className="min-h-[44px] w-20 border border-input bg-background px-2 py-1 text-base outline-none focus:border-foreground"
+              className="min-h-[32px] w-20 border border-input bg-background px-2 py-1 text-base outline-none focus:border-foreground"
               value={myBloom}
               onChange={(e) => setMyBloom(e.target.value)}
             />
@@ -241,7 +241,7 @@ function FunctionalRow({
           inputMode="decimal"
           step="0.1"
           className={cn(
-            "min-h-[48px] w-24 border bg-background px-2 py-2 font-mono text-base tabular-nums outline-none focus:border-foreground disabled:opacity-60",
+            "min-h-[32px] w-24 border bg-background px-2 py-2 font-mono text-base tabular-nums outline-none focus:border-foreground disabled:opacity-60",
             amount === 0 && showSuggestion
               ? "border-dashed border-input text-muted-foreground"
               : "border-input"
@@ -299,7 +299,7 @@ function FunctionalRow({
                   type="number"
                   inputMode="decimal"
                   step="0.1"
-                  className="min-h-[44px] w-20 border border-input bg-background px-2 py-1 font-mono text-base outline-none focus:border-foreground"
+                  className="min-h-[32px] w-20 border border-input bg-background px-2 py-1 font-mono text-base outline-none focus:border-foreground"
                   placeholder="%"
                   value={targetPct}
                   onChange={(e) => setTargetPct(e.target.value)}
@@ -336,7 +336,7 @@ function FunctionalRow({
       {/* UNIT */}
       <td className="px-2 py-2">
         <select
-          className="min-h-[48px] w-20 border border-input bg-background px-2 py-2 font-mono text-sm disabled:opacity-60"
+          className="min-h-[32px] w-20 border border-input bg-background px-2 py-2 font-mono text-sm disabled:opacity-60"
           disabled={locked}
           value={row.unit}
           onChange={(e) => onPatch({ unit: e.target.value })}
@@ -391,7 +391,7 @@ function FunctionalRow({
       {/* NOTE */}
       <td className="px-2 py-2">
         <input
-          className="min-h-[48px] w-36 border border-input bg-background px-2 py-2 text-base outline-none focus:border-foreground disabled:opacity-60"
+          className="min-h-[32px] w-36 border border-input bg-background px-2 py-2 text-base outline-none focus:border-foreground disabled:opacity-60"
           disabled={locked}
           defaultValue={row.note ?? ""}
           key={`note-${row.id}`}
@@ -411,7 +411,7 @@ function FunctionalRow({
         {!locked && (
           <button
             type="button"
-            className="label-caps min-h-[48px] px-2 text-xs hover:bg-secondary"
+            className="label-caps min-h-[32px] px-2 text-xs hover:bg-secondary"
             onClick={onRemove}
           >
             REMOVE

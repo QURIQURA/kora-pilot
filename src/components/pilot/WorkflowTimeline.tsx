@@ -488,7 +488,7 @@ export function WorkflowView({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {error && (
         <div className="border border-destructive p-2 text-xs text-destructive">{error}</div>
       )}
@@ -544,7 +544,7 @@ export function WorkflowView({
       )}
 
       {tasks.length === 0 ? (
-        <div className="border border-border p-6 text-center text-xs tracking-wider text-muted-foreground">
+        <div className="border border-border p-3 text-center text-xs tracking-wider text-muted-foreground">
           NO TASKS YET
         </div>
       ) : (
@@ -1051,8 +1051,8 @@ export function WorkflowView({
           const current = colTasks.find((t) => t.status !== "DONE" && t.status !== "SKIPPED");
           const label = columnLabelOf(focusColumnKey === GENERAL_KEY ? null : focusColumnKey);
           return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 p-4">
-              <div className="w-full max-w-md border-2 border-foreground bg-background p-6 text-center">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 p-3">
+              <div className="w-full max-w-md border-2 border-foreground bg-background p-3 text-center">
                 <button
                   type="button"
                   className="mb-4 ml-auto block text-xs tracking-wider text-muted-foreground hover:text-foreground"

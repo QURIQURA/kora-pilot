@@ -80,7 +80,7 @@ export function IngredientGroupManager() {
         그룹에 속하는지는 아래 "재료별 그룹 배정"에서 한 번에 검토/수정하세요.
       </p>
       {adding && (
-        <div className="mb-4 border border-border p-4">
+        <div className="mb-4 border border-border p-3">
           <GroupCreateForm nextSortOrder={rows.length + 1} onDone={() => setAdding(false)} />
         </div>
       )}

@@ -91,7 +91,7 @@ export function IngredientFunctionManager() {
       }
     >
       {adding && (
-        <div className="mb-4 border border-border p-4">
+        <div className="mb-4 border border-border p-3">
           <FunctionCreateForm
             nextSortOrder={rows.length + 1}
             onDone={() => setAdding(false)}

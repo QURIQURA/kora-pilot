@@ -51,7 +51,7 @@ function CostDashboardPage() {
   const maxFullCost = Math.max(1, ...rows.map((r) => r.fullCost ?? 0));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div>
           <h1 className="text-lg">COST</h1>
@@ -82,7 +82,7 @@ function CostDashboardPage() {
 
       {/* 2026-10-13 사용자 요청: "포뮬라 단가비교랑 제품 순위가 섞여 보여서 혼동됨" — 실선으로
           구역을 명확히 나눔(단순 여백만으로는 두 SectionCard가 시각적으로 이어져 보였음) */}
-      <div className="space-y-4 border-t-2 border-foreground pt-4">
+      <div className="space-y-3 border-t-2 border-foreground pt-4">
         <p className="label-caps text-xs text-muted-foreground">PRODUCT 원가 순위</p>
         <SectionCard title={`PRODUCT × SIZE (${sorted.length})`}>
           {dashboard.isLoading ? (
@@ -122,7 +122,7 @@ function CostDashboardRowItem({
           : "text-foreground";
 
   return (
-    <li className="space-y-2 px-3 py-3">
+    <li className="space-y-2 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
           to="/products/$productId"

@@ -135,13 +135,13 @@ export function DailyTaskTemplateManager() {
         ))}
       </datalist>
       <textarea
-        className={`${inputClass} min-h-[52px] w-full`}
+        className={`${inputClass} min-h-[36px] w-full`}
         placeholder="메모 (플래너 TASK 노트로 들어갑니다)"
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
       <textarea
-        className={`${inputClass} min-h-[52px] w-full`}
+        className={`${inputClass} min-h-[36px] w-full`}
         placeholder="체크리스트 — 한 줄에 하나 (나중에 TASK DETAILS에서 쓸 예정)"
         value={checklist}
         onChange={(e) => setChecklist(e.target.value)}
@@ -211,7 +211,7 @@ export function DailyTaskTemplateManager() {
             </li>
           ))}
           {rows.length === 0 && editingId !== "new" && (
-            <li className="px-3 py-3 font-mono text-xs uppercase text-muted-foreground">
+            <li className="px-3 py-2 font-mono text-xs uppercase text-muted-foreground">
               등록된 DAILY TASK 없음
             </li>
           )}

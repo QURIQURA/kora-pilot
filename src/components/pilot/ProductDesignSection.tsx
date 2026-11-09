@@ -42,7 +42,7 @@ export function ProductDesignSection({ productId, product }: { productId: string
 
   return (
     <SectionCard title="PRODUCT DESIGN">
-      <div className="space-y-4">
+      <div className="space-y-3">
         <Field label="TARGET CUSTOMER (타겟 고객 디테일)">
           <textarea
             rows={3}

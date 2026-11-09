@@ -176,7 +176,7 @@ function DietaryPageInner() {
   const activeTag = (tags.data ?? []).find((t) => t.id === activeTagId);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div>
           <h1 className="text-lg">DIETARY</h1>

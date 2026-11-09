@@ -510,7 +510,7 @@ function ProductDetailPage() {
   const data = product.data;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
           <InlineName value={data.name} onSave={(name) => updateProduct.mutate({ name })} />
@@ -653,7 +653,7 @@ function ProductDetailPage() {
             </SectionCard>
           ),
           DEVELOPMENT: (
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-3">
               <ProductFormulasSection productId={productId} />
             </div>
           ),
@@ -674,7 +674,7 @@ function ProductDetailPage() {
                 </select>
               </Field>
               {/* 총원가 — 2026-09-30: 2/3열 위에 좁게 끼어있던 걸 상단 풀와이드 배너로 올림(가독성 개선) */}
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-border bg-card p-3">
                 <div>
                   <p className="label-caps text-muted-foreground">총원가</p>
                   <p className="mt-1 font-mono text-3xl font-semibold tabular-nums text-foreground">
@@ -789,7 +789,7 @@ function ProductDetailPage() {
                             : null;
                           const groupHasMissingPrice = groupCosts.some((c) => c == null);
                           return (
-                            <li key={group.key} className="space-y-2 px-3 py-3">
+                            <li key={group.key} className="space-y-2 px-3 py-2">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 {group.kind === "component" ? (
                                   <Link

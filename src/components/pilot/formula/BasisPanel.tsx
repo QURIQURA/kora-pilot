@@ -61,7 +61,7 @@ export function BasisPanel({
               disabled={key === "bath" ? locked : !basis.adjustable || basis.members.length === 0}
               onClick={() => setOpenKey(isOpen ? null : key)}
               className={cn(
-                "flex min-h-[48px] flex-col items-start justify-center bg-card px-3 py-2 text-left",
+                "flex min-h-[32px] flex-col items-start justify-center bg-card px-3 py-2 text-left",
                 basis.adjustable && basis.members.length > 0 && "hover:bg-secondary",
                 isOpen && "bg-secondary"
               )}

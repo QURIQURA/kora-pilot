@@ -47,9 +47,9 @@ export function CustomerSelect({
       </select>
 
       {creating && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 sm:items-center sm:p-3">
           <div className="w-full max-w-md border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <span className="label-caps">NEW CUSTOMER</span>
               <button
                 type="button"
@@ -59,7 +59,7 @@ export function CustomerSelect({
                 CLOSE
               </button>
             </div>
-            <div className="p-4">
+            <div className="p-3">
               <CustomerCreateForm
                 initialName={initialNameForCreate ?? ""}
                 onCancel={() => setCreating(false)}

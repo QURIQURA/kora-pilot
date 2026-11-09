@@ -85,7 +85,7 @@ function ProductsPage() {
   }, [products.data, categoryList, categoryFilter]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="PRODUCTS"
         action={
@@ -99,7 +99,7 @@ function ProductsPage() {
         }
       />
 
-      <div className="border border-border bg-card p-4">
+      <div className="border border-border bg-card p-3">
         <Field label="CATEGORY">
           <select
             className={selectClass + " max-w-xs"}
@@ -174,7 +174,7 @@ function ProductsPage() {
                 <Link
                   to="/products/$productId"
                   params={{ productId: product.id }}
-                  className="grid flex-1 grid-cols-1 gap-1 py-3 pr-4 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
+                  className="grid flex-1 grid-cols-1 gap-1 py-2 pr-4 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2"
                 >
                   <span className="col-span-4 text-sm">{product.name}</span>
                   <span className="col-span-3 font-mono text-xs uppercase">

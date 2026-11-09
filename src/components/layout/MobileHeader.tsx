@@ -11,7 +11,7 @@ export function MobileHeader() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="label-caps min-h-[48px] px-3 text-foreground"
+          className="label-caps min-h-[40px] px-3 text-foreground"
           aria-label="Open navigation"
         >
           MENU
@@ -24,7 +24,7 @@ export function MobileHeader() {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="label-caps min-h-[48px] px-3 text-foreground"
+              className="label-caps min-h-[40px] px-3 text-foreground"
               aria-label="Close navigation"
             >
               CLOSE

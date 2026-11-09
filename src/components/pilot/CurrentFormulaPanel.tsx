@@ -199,7 +199,7 @@ export function CurrentFormulaPanel({
                 <li key={base.id}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-2 px-3 py-3 text-left hover:bg-secondary disabled:opacity-40"
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-secondary disabled:opacity-40"
                     disabled={startFromBase.isPending}
                     onClick={() => startFromBase.mutate(base)}
                   >
@@ -233,7 +233,7 @@ export function CurrentFormulaPanel({
         </Link>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{formula.name}</span>
           {version && (

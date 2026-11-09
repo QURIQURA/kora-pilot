@@ -88,10 +88,10 @@ function DesignMoodboardPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader title="DESIGN MOOD BOARD" />
       {error && <p className="font-mono text-xs text-destructive">{error}</p>}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
         <div className="space-y-2">
           <button
             type="button"

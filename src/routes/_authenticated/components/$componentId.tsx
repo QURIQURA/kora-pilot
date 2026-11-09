@@ -89,7 +89,7 @@ function ComponentDetailPage() {
   const data = component.data;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
           <InlineText
@@ -146,7 +146,7 @@ function ComponentDetailPage() {
                 <Link
                   to="/products/$productId"
                   params={{ productId: row.products.id }}
-                  className="flex items-center justify-between gap-2 px-3 py-3 hover:bg-secondary"
+                  className="flex items-center justify-between gap-2 px-3 py-2 hover:bg-secondary"
                 >
                   <span className="text-sm">{row.products.name}</span>
                 </Link>

@@ -36,7 +36,7 @@ export function FormulaArchiveTab() {
   return (
     <div className="border border-border bg-card">
       {restore.isError && (
-        <p role="alert" className="border-b border-border px-4 py-2 text-xs text-destructive">
+        <p role="alert" className="border-b border-border px-3 py-2 text-xs text-destructive">
           {restore.error.message}
         </p>
       )}
@@ -52,7 +52,7 @@ export function FormulaArchiveTab() {
                   ? "이전 버전"
                   : "보관";
           return (
-            <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+            <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
               <Link
                 to="/formulas/$formulaId"
                 params={{ formulaId: v.formula_id }}

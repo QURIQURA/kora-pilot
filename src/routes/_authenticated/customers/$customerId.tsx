@@ -111,7 +111,7 @@ function CustomerDetailPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="border-b border-border pb-3">
         <Link to="/customers" className="label-caps text-xs text-muted-foreground hover:text-foreground">
           ← CUSTOMERS
@@ -203,7 +203,7 @@ function CustomerDetailPage() {
                 <Link
                   to="/orders/$orderId"
                   params={{ orderId: o.id }}
-                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-3 hover:bg-secondary"
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 hover:bg-secondary"
                 >
                   <span className="font-mono text-sm">{o.order_number}</span>
                   <span className="text-sm text-muted-foreground">{o.occasion || "—"}</span>

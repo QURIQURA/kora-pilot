@@ -189,7 +189,7 @@ function IngredientDetailPage() {
     });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div className="space-y-2">
           <InlineText
@@ -230,7 +230,7 @@ function IngredientDetailPage() {
 
       {/* 기본 */}
       <CollapsibleSection title="기본 BASIC" defaultOpen>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="영문명 NAME (ENGLISH)">
             <InlineInput
               value={data.name_en ?? ""}
@@ -270,7 +270,7 @@ function IngredientDetailPage() {
           ) : undefined
         }
       >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <Field label="구입가 PURCHASE PRICE (AUD)">
             <NullableNumberInput
               value={data.purchase_price}
@@ -305,7 +305,7 @@ function IngredientDetailPage() {
 
       {/* 기능 */}
       <CollapsibleSection title="기능 FUNCTION">
-        <div className="space-y-4">
+        <div className="space-y-3">
           <FunctionPicker
             options={(functions.data ?? []).map((f) => f.name)}
             labels={Object.fromEntries(
@@ -343,14 +343,14 @@ function IngredientDetailPage() {
           ) : undefined
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
           <CheckRow
             label="기능성 재료 — 소량으로 텍스처 조절"
             checked={data.is_functional}
             onChange={(v) => update.mutate({ is_functional: v })}
           />
           {data.is_functional && (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field label="사용률 기준 REFERENCE BASIS">
                 <EnumSelect
                   value={data.reference_basis}
@@ -421,8 +421,8 @@ function IngredientDetailPage() {
           ) : undefined
         }
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             {COMPOSITION_FIELDS.map((field) => (
               <Field key={field.key} label={`${field.label} %`}>
                 <NullableNumberInput
@@ -446,7 +446,7 @@ function IngredientDetailPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <Field label="지방 종류 FAT TYPE">
               <EnumSelect
                 value={data.fat_type}
@@ -525,8 +525,8 @@ function IngredientDetailPage() {
           ) : undefined
         }
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <Field label="향미 계열 FAMILY">
               <FlavourFamilySelect
                 value={data.flavour_family_id ?? ""}
@@ -624,7 +624,7 @@ function IngredientDetailPage() {
                   <Link
                     to="/formulas/$formulaId"
                     params={{ formulaId: formula.id }}
-                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-3 hover:bg-secondary"
+                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 hover:bg-secondary"
                   >
                     <span className="text-sm">
                       {formula.name}
@@ -802,7 +802,7 @@ function CheckRow({
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className="flex min-h-[48px] w-full items-center gap-3 border border-border px-3 py-2 text-left hover:bg-secondary"
+      className="flex min-h-[32px] w-full items-center gap-3 border border-border px-3 py-2 text-left hover:bg-secondary"
     >
       <span
         className={cn(

@@ -14,6 +14,28 @@
  * - No shadows, no gradients, no rounded cards, no decorative SaaS dashboard styling
  */
 
+/*
+ * 2026-11-09 COMPACT PASS — 앱 전체를 한 번에 촘촘하게 만드는 전역 토큰.
+ * - --spacing: Tailwind 간격 단위(p-/m-/gap-/space-/w-/h-) 기본 4px → 3.5px (약 12% 축소)
+ * - 글자 크기 스케일: base 16→14px, sm 14→13px 등. 12px(text-xs)·label-caps는 그대로.
+ * 화면별로 따로 손대지 않아도 여백·글자가 같은 비율로 줄어든다.
+ */
+@theme {
+  --spacing: 0.21875rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.125rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.25rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.375rem;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.5rem;
+  --text-2xl: 1.25rem;
+  --text-2xl--line-height: 1.625rem;
+  --text-3xl: 1.5rem;
+  --text-3xl--line-height: 1.875rem;
+}
+
 @theme inline {
   --radius-sm: 0px;
   --radius-md: 0px;
@@ -100,6 +122,8 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-size: 0.8125rem;
+    line-height: 1.4;
   }
 }
 

@@ -67,7 +67,7 @@ export function BalancePanel({
       title={`BALANCE — 배합 균형${batch !== 1 ? ` (×${fmtNumber(batch, 2)})` : ""}`}
       defaultOpen
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <BalanceRatioBar
           leftLabel="강화 TOUGHENER"
           rightLabel="연화 TENDERIZER"
