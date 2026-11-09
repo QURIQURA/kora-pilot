@@ -5,7 +5,13 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { cakeSizesQuery, productsQuery, type OrderListRow, type OrderStatus } from "@/lib/queries";
+import {
+  cakeSizesQuery,
+  productComponentsQuery,
+  productsQuery,
+  type OrderListRow,
+  type OrderStatus,
+} from "@/lib/queries";
 import { formatDateTime, formatTime, localDateTimeToISO, toLocalDateString } from "@/lib/datetime";
 import { readPopupPlan, validatePopupPlan, type PopupItem } from "@/lib/popup";
 import { invalidateProductionSync } from "@/lib/production-sync";
@@ -71,7 +77,12 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
         p_status: draft.status,
       });
       if (error) throw error;
-      const result = data as { updated_at: string; status: string; popup_plan: Json; order_number: string };
+      const result = data as {
+        updated_at: string;
+        status: string;
+        popup_plan: Json;
+        order_number: string;
+      };
       return {
         state: {
           ...saved,
@@ -90,8 +101,8 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
   });
   const session = useMutation({
     mutationFn: async (item: PopupItem) => {
-      if (dirty || end !== inputTime(plan.ends_at || null))
-        throw new Error("변경 내용을 먼저 저장하세요");
+      // 새로 추가한 품목처럼 미저장 변경이 있으면 먼저 저장한 뒤(2026-11-09) 세션을 만든다.
+      if (dirty || end !== inputTime(plan.ends_at || null)) await save.mutateAsync();
       const { data, error } = await supabase.rpc("create_popup_item_session", {
         p_order_id: order.id,
         p_item_id: item.id,
@@ -237,7 +248,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                     <div className="min-w-0 flex-1">
                       <ProductSelect
                         value={item.product_id}
-                        emptyLabel="직접 입력 / 제품 선택"
+                        emptyLabel="제품 선택 (제품이 없으면 아래에 이름 직접 입력)"
                         onChange={(id) => {
                           const product = products.data?.find((p) => p.id === id);
                           changeItem(item.id, {
@@ -261,6 +272,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                       제거
                     </button>
                   </div>
+                  {item.product_id && <PopupItemComponents productId={item.product_id} />}
                   <Field label="품목 이름">
                     <input
                       className={inputClass}
@@ -344,10 +356,15 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                     <button
                       type="button"
                       className={buttonClass}
-                      disabled={pending || changed || draft.status === "COMPLETED"}
+                      disabled={
+                        pending ||
+                        draft.status === "COMPLETED" ||
+                        (changed && (!!validation || conflict || !draft.orderNumber.trim()))
+                      }
+                      title={changed ? "저장한 뒤 생산 세션을 만듭니다" : undefined}
                       onClick={() => session.mutate(item)}
                     >
-                      생산 세션 만들기
+                      {changed ? "저장 후 생산 세션 만들기" : "생산 세션 만들기"}
                     </button>
                   )}
                 </div>
@@ -409,6 +426,42 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 팝업 품목에 연결된 제품의 하위 컴포넌트 목록(2026-11-09) — 제품을 고르면 무엇을 만들어야 하는지 바로 보인다. */
+function PopupItemComponents({ productId }: { productId: string }) {
+  const comps = useQuery(productComponentsQuery(productId));
+  if (comps.isLoading)
+    return <p className="text-xs text-muted-foreground">하위 컴포넌트 불러오는 중…</p>;
+  const rows = comps.data ?? [];
+  if (rows.length === 0)
+    return (
+      <p className="text-xs text-muted-foreground">이 제품에는 하위 컴포넌트가 아직 없어요.</p>
+    );
+  return (
+    <div className="space-y-1 border border-dashed border-border p-2">
+      <p className="label-caps text-[10px] text-muted-foreground">
+        하위 컴포넌트 · {rows.length}개
+      </p>
+      <ul className="space-y-0.5 text-xs">
+        {rows.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-baseline gap-2">
+            <span>{r.components?.name ?? r.ingredients?.name ?? "—"}</span>
+            {r.quantity_g != null && (
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {Number(r.quantity_g)}g
+              </span>
+            )}
+            {r.formula_versions && (
+              <span className="font-mono text-[11px] text-muted-foreground">
+                V{r.formula_versions.version_number}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
