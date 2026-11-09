@@ -1,7 +1,7 @@
 import { popupStageLabel, readPopupStages } from "@/lib/popup-workflow";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { readPopupPlan } from "@/lib/popup";
 import { formatDateTime } from "@/lib/datetime";
 import {
@@ -14,6 +14,7 @@ import { invalidateProductionSync } from "@/lib/production-sync";
 import { AddFormulaVersionForm } from "./WorkSessionWorkspace";
 import { OrderComponentPlanRow } from "./OrderComponentPlanRow";
 import { slotBoxClass } from "@/lib/slot-color";
+import { addProductComponentsToSession } from "@/lib/product-session-components";
 import { buttonClass } from "./ui";
 
 export function PopupProductionCard({ order }: { order: OrderListRow }) {
@@ -46,6 +47,7 @@ export function PopupProductionCard({ order }: { order: OrderListRow }) {
           {item.work_session_id && (
             <PopupItemProduction
               sessionId={item.work_session_id}
+              productId={item.product_id}
               readOnly={order.status === "COMPLETED"}
             />
           )}
@@ -61,7 +63,15 @@ export function PopupProductionCard({ order }: { order: OrderListRow }) {
     </section>
   );
 }
-function PopupItemProduction({ sessionId, readOnly }: { sessionId: string; readOnly: boolean }) {
+function PopupItemProduction({
+  sessionId,
+  productId,
+  readOnly,
+}: {
+  sessionId: string;
+  productId: string;
+  readOnly: boolean;
+}) {
   const client = useQueryClient();
   const rows = useQuery(workSessionFormulaVersionsQuery(sessionId));
   const session = useQuery(workSessionQuery(sessionId));
@@ -72,6 +82,19 @@ function PopupItemProduction({ sessionId, readOnly }: { sessionId: string; readO
     session.data?.status === "COMPLETED" ||
     session.data?.status === "CANCELLED";
   const [adding, setAdding] = useState(false);
+  // 제품이 연결된 품목은 제품에 저장된 하위 컴포넌트를 세션에 불러온다 — 세션이 비어 있으면 자동으로 한 번,
+  // 이후엔 "제품 컴포넌트 불러오기" 버튼으로(이미 있는 건 건너뜀).
+  const loadProduct = useMutation({
+    mutationFn: () => addProductComponentsToSession(client, sessionId, productId),
+    onSettled: () => void invalidateProductionSync(client),
+  });
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (autoTried.current || !productId || locked || !rows.isSuccess) return;
+    autoTried.current = true;
+    if ((rows.data ?? []).length === 0) loadProduct.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.isSuccess, locked, productId]);
   return (
     <div className="space-y-2">
       {rows.isError && (
@@ -85,9 +108,31 @@ function PopupItemProduction({ sessionId, readOnly }: { sessionId: string; readO
         </div>
       ))}
       {!locked && (
-        <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
-          {adding ? "닫기" : "+ 생산 컴포넌트 지정"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {productId && (
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={loadProduct.isPending}
+              onClick={() => loadProduct.mutate()}
+            >
+              {loadProduct.isPending ? "불러오는 중…" : "제품 컴포넌트 불러오기"}
+            </button>
+          )}
+          <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
+            {adding ? "닫기" : "+ 생산 컴포넌트 지정"}
+          </button>
+        </div>
+      )}
+      {loadProduct.isError && (
+        <p role="alert" className="text-xs text-destructive">
+          {(loadProduct.error as Error).message}
+        </p>
+      )}
+      {loadProduct.isSuccess && loadProduct.data === 0 && (rows.data ?? []).length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          이 제품에 불러올 수 있는 하위 컴포넌트가 없어요(컴포넌트 연결·레시피·기법 분류 확인).
+        </p>
       )}
       {adding && !locked && (
         <AddFormulaVersionForm
