@@ -1569,10 +1569,11 @@ export function ProductionDashboard() {
                             color: DAILY_COLOR.text,
                           }}
                         >
-                          <p className="font-mono text-[11px] opacity-80">
-                            {hm(start)}–{hm(end)}
-                          </p>
                           <p className="break-words text-xs font-medium">
+                            <span className="mr-2 font-mono text-[11px] opacity-80">
+                              {hm(start)}
+                            </span>
+                            <span className="mr-1 font-mono text-[10px] opacity-70">[start]</span>
                             {t.order_id && (
                               <span className="label-caps mr-1 text-[10px] opacity-70">
                                 {
@@ -1603,7 +1604,7 @@ export function ProductionDashboard() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <span>{hm(end)}</span>
-                          <span className="truncate">■ {t.name} [end]</span>
+                          <span>■ [end]</span>
                         </div>
                       </div>
                     );
