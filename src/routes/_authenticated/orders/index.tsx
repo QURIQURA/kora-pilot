@@ -10,7 +10,9 @@ import {
 import { GripVertical, Flame } from "lucide-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { syncOrderDeliveryToPlanner } from "@/lib/order-planner-sync";
 import type { Json } from "@/integrations/supabase/types";
 import {
   currentUserId,
@@ -525,8 +527,19 @@ function OrderRow({
 
   const updateStatus = useMutation({
     mutationFn: async (status: OrderStatus) => {
+      const wasCompleted = o.status === "COMPLETED";
+      const isCompleted = status === "COMPLETED";
+      // COMPLETED에서 되돌릴 땐 플래너 체크를 먼저 풀어야 주기적 pull이 다시 COMPLETED로 되돌리지 않는다.
+      if (wasCompleted && !isCompleted) {
+        const msg = await syncOrderDeliveryToPlanner(o.id, false);
+        if (msg) toast.error(`플래너 Delivery 체크 해제 실패 — ${msg}`);
+      }
       const { error } = await supabase.from("orders").update({ status }).eq("id", o.id);
       if (error) throw error;
+      if (!wasCompleted && isCompleted) {
+        const msg = await syncOrderDeliveryToPlanner(o.id, true);
+        if (msg) toast.error(`플래너 Delivery 완료 체크 실패 — ${msg}`);
+      }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
   });

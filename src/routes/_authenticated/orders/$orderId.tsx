@@ -1,6 +1,8 @@
 import { PopupOrderWorkspace } from "@/components/pilot/PopupOrderWorkspace";
 import { ComponentPlanReadout } from "@/components/pilot/ComponentPlanReadout";
+import { toast } from "sonner";
 import { slotBoxClass } from "@/lib/slot-color";
+import { syncOrderDeliveryToPlanner } from "@/lib/order-planner-sync";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -540,6 +542,11 @@ function OrderDetailPage() {
         throw new Error(
           `저장되지 않았습니다. 다른 화면의 최신 변경을 확인한 뒤 다시 저장해 주세요. (${error.message})`,
         );
+      // 오더 COMPLETED ↔ 플래너 Delivery 체크 동기화(2026-11-09). 저장 자체는 성공으로 두고 실패만 알린다.
+      if ((previous.status === "COMPLETED") !== (status === "COMPLETED")) {
+        const msg = await syncOrderDeliveryToPlanner(orderId, status === "COMPLETED");
+        if (msg) toast.error(`플래너 Delivery 동기화 실패 — ${msg}`);
+      }
 
       // DIETARY 태그 연결: 서버 값과 비교해 빠진 것만 지우고 새로 고른 것만 추가한다.
       if (dietaryTagIds !== null) {

@@ -263,13 +263,16 @@ Deno.serve(async (req: Request) => {
     const deleteIds: string[] = Array.isArray(body.delete_planner_task_ids)
       ? body.delete_planner_task_ids.filter((s: unknown) => typeof s === "string")
       : [];
-    const completeOrderId: string | null = body.complete_order_delivery_id ?? null;
+    const completeOrderId: string | null =
+      body.complete_order_delivery_id ?? body.order_delivery?.order_id ?? null;
+    const pullDeliveries = Boolean(body.pull_planner_deliveries);
     if (
       !sessionId &&
       !removeBlockId &&
       !body.daily_task_id &&
       !body.remove_daily_task_id &&
-      !completeOrderId
+      !completeOrderId &&
+      !pullDeliveries
     )
       return json({ error: "work_session_id required" }, 400);
 
@@ -283,25 +286,62 @@ Deno.serve(async (req: Request) => {
     }
     const wann = createClient(WANN_OS_URL, wannServiceKey);
 
-    // 2026-11-09: 오더를 COMPLETED로 바꾸면 그 오더의 WANN 프로젝트(orders.wann_project_id) 안
-    // Delivery(is_delivery) TASK를 완료 체크한다. 이미 완료된 건 건드리지 않는다.
-    if (completeOrderId) {
+    // 2026-11-09 오더 완료 ↔ 플래너 Delivery 양방향 동기화.
+    // - order_delivery { order_id, completed }: 오더 상태가 COMPLETED로 바뀌면 그 오더 WANN 프로젝트
+    //   (orders.wann_project_id) 안 Delivery(is_delivery) TASK를 체크, COMPLETED에서 되돌리면 체크 해제.
+    // - pull_planner_deliveries: 플래너에서 Delivery를 체크했는데 아직 COMPLETED가 아닌 오더를 COMPLETED로 넘긴다
+    //   (WANN은 별도 프로젝트라 푸시할 수 없어서, KORA 앱이 주기적으로 이 호출을 한다).
+    const orderDelivery = body.order_delivery as
+      { order_id?: string; completed?: boolean } | undefined;
+    const legacyCompleteId: string | null = body.complete_order_delivery_id ?? null;
+    if (orderDelivery?.order_id || legacyCompleteId) {
+      const orderId = orderDelivery?.order_id ?? legacyCompleteId!;
+      const completed = orderDelivery ? Boolean(orderDelivery.completed) : true;
       const { data: ord, error: ordErr } = await kora
         .from("orders")
         .select("wann_project_id")
-        .eq("id", completeOrderId)
+        .eq("id", orderId)
         .maybeSingle();
       if (ordErr) return json({ error: ordErr.message }, 500);
-      if (!ord?.wann_project_id) return json({ ok: true, delivery_completed: 0 });
-      const { data: done, error: doneErr } = await wann
+      if (!ord?.wann_project_id) return json({ ok: true, delivery_changed: 0 });
+      const { data: changed, error: changeErr } = await wann
         .from("planner_tasks")
-        .update({ completed: true, completed_at: new Date().toISOString() })
+        .update({ completed, completed_at: completed ? new Date().toISOString() : null })
         .eq("multiple_task_id", ord.wann_project_id)
         .eq("is_delivery", true)
-        .eq("completed", false)
+        .eq("completed", !completed)
         .select("id");
-      if (doneErr) return json({ error: doneErr.message }, 500);
-      return json({ ok: true, delivery_completed: done?.length ?? 0 });
+      if (changeErr) return json({ error: changeErr.message }, 500);
+      return json({ ok: true, delivery_changed: changed?.length ?? 0 });
+    }
+    if (body.pull_planner_deliveries) {
+      const { data: open, error: openErr } = await kora
+        .from("orders")
+        .select("id, wann_project_id")
+        .not("wann_project_id", "is", null)
+        .not("status", "in", "(COMPLETED,CANCELLED)");
+      if (openErr) return json({ error: openErr.message }, 500);
+      const projectIds = (open ?? []).map((o) => o.wann_project_id as string);
+      if (projectIds.length === 0) return json({ ok: true, completed_orders: 0 });
+      const { data: doneDeliveries, error: pullErr } = await wann
+        .from("planner_tasks")
+        .select("multiple_task_id")
+        .in("multiple_task_id", projectIds)
+        .eq("is_delivery", true)
+        .eq("completed", true);
+      if (pullErr) return json({ error: pullErr.message }, 500);
+      const doneProjects = new Set((doneDeliveries ?? []).map((t) => t.multiple_task_id as string));
+      const orderIds = (open ?? [])
+        .filter((o) => doneProjects.has(o.wann_project_id as string))
+        .map((o) => o.id as string);
+      if (orderIds.length > 0) {
+        const { error: upErr } = await kora
+          .from("orders")
+          .update({ status: "COMPLETED" })
+          .in("id", orderIds);
+        if (upErr) return json({ error: upErr.message }, 500);
+      }
+      return json({ ok: true, completed_orders: orderIds.length });
     }
 
     const deleteWannTasks = async (ids: string[]) => {

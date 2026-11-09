@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/layout/AppShell";
 
 import { useProductionSync } from "@/hooks/use-production-sync";
+import { usePlannerDeliveryPull } from "@/hooks/use-planner-delivery-pull";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthenticatedLayout() {
   const { user } = Route.useRouteContext();
   useProductionSync(user.id);
+  usePlannerDeliveryPull();
   return (
     <AppShell>
       <Outlet />

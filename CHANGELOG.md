@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-11-09 — 오더 완료 ↔ 플래너 Delivery 양방향 동기화
+
+- 원인: 앞서 Delivery 체크는 PRODUCTION > ORDERS 드롭다운에만 걸려 있어서, ORDERS 목록 드롭다운이나 오더 상세 저장으로 COMPLETED 처리한 오더(Kate Crews SH-011.1 등)는 플래너 Delivery가 체크되지 않았다. 이미 COMPLETED인 오더들의 Delivery는 직접 체크 처리.
+- PILOT → 플래너: 오더 상태가 COMPLETED로 바뀌는 모든 경로(ORDERS 목록 / 오더 상세 저장 / PRODUCTION > ORDERS)에서 Delivery 체크, COMPLETED에서 되돌리면 체크 해제(`src/lib/order-planner-sync.ts`).
+- 플래너 → PILOT: 플래너에서 Delivery를 체크하면 PILOT 오더가 COMPLETED로 넘어감. WANN은 별도 프로젝트라 푸시가 불가해서 앱을 열 때·창으로 돌아올 때·1분마다 확인(edge function `pull_planner_deliveries`, `use-planner-delivery-pull`).
+
 ## 2026-11-09 — 생산 계획: 요약 먼저 + 수정 버튼, 재료 기준 저장, 버전 고정 체크박스 제거
 
 - 컴포넌트 생산 계획을 평소엔 텍스트 요약으로만 표시(`V2 · DRAFT · 재료 기준 — 버터 420g → 레시피 ×1.68 · 생산 3120.6g` 등, 몰드/기준중량/배수 방식도 입력한 그대로). `생산 계획 수정`을 눌러야 입력 방식·버전·입력칸이 열리고, 저장하면 다시 요약으로 돌아감(취소 버튼 추가).

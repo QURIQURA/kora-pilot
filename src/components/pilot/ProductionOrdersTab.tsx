@@ -37,6 +37,7 @@ import {
 import { CopyWarning, OrderFlagBoxes, orderTitle, useOrderDietaryNames } from "./OrderTitle";
 import { buttonClass, selectClass } from "./ui";
 import { supabase } from "@/integrations/supabase/client";
+import { syncOrderDeliveryToPlanner } from "@/lib/order-planner-sync";
 
 /**
  * PRODUCTION > ORDERS 탭(2026-10-22 사용자 요청) — 진행 중인 오더(완료 전) 전체 목록.
@@ -102,17 +103,16 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
   // COMPLETED로 바꾸면 이 탭(진행 중)에서 빠지고 ORDER HISTORY로 넘어간다.
   const setOrderStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const previous = (orders.data ?? []).find((o) => o.id === id)?.status;
+      if (previous === "COMPLETED" && status !== "COMPLETED") {
+        const msg = await syncOrderDeliveryToPlanner(id, false);
+        if (msg) toast.error(`플래너 Delivery 체크 해제 실패 — ${msg}`);
+      }
       const { error } = await supabase.from("orders").update({ status }).eq("id", id);
       if (error) throw error;
       // COMPLETED → 플래너의 Delivery TASK도 완료 체크(2026-11-09). 실패해도 상태 변경은 유지하고 알림만.
-      if (status === "COMPLETED") {
-        const { data, error: fnError } = await supabase.functions.invoke(
-          "sync-work-session-to-planner",
-          { body: { complete_order_delivery_id: id } },
-        );
-        const msg =
-          fnError?.message ??
-          (data && typeof data === "object" && "error" in data ? String(data.error) : null);
+      if (status === "COMPLETED" && previous !== "COMPLETED") {
+        const msg = await syncOrderDeliveryToPlanner(id, true);
         if (msg) toast.error(`플래너 Delivery 완료 체크 실패 — ${msg}`);
       }
     },
