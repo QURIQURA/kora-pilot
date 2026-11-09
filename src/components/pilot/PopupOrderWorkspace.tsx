@@ -241,9 +241,13 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
               </button>
             }
           >
-            <div className="space-y-3">
+            {/* 품목은 2열 — 1개뿐이어도 카드 폭은 같게(절반) 가운데 배치, 홀수 개의 마지막 카드도 가운데 */}
+            <div className="flex flex-wrap justify-center gap-2">
               {plan.items.map((item) => (
-                <div key={item.id} className="space-y-2 border border-border p-2.5">
+                <div
+                  key={item.id}
+                  className="w-full space-y-2 border border-border p-2.5 lg:w-[calc(50%-0.25rem)]"
+                >
                   <div className="grid items-end gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                     <Field label="제품">
                       <ProductSelect
