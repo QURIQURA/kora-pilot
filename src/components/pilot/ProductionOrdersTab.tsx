@@ -2,7 +2,10 @@ import { PopupProductionCard } from "./PopupProductionCard";
 import { toast } from "sonner";
 import { ComponentPlanReadout } from "./ComponentPlanReadout";
 import { ProductionOrderSizeEditor } from "./ProductionOrderSizeEditor";
-import { removePlannedComponent } from "@/lib/production-plan-actions";
+import {
+  removePlannedComponent,
+  reopenComponentForProduction,
+} from "@/lib/production-plan-actions";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
@@ -471,6 +474,14 @@ function ProductionOrderComponentItem({
       void invalidateProductionSync(client);
     },
   });
+  const reopen = useMutation({
+    mutationFn: () => reopenComponentForProduction(row),
+    onSuccess: () => toast.success("작업 대기공간으로 되돌렸어요"),
+    onError: (error) => toast.error(error.message),
+    onSettled: () => {
+      void invalidateProductionSync(client);
+    },
+  });
   return (
     <li className="px-2 py-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -486,6 +497,24 @@ function ProductionOrderComponentItem({
           >
             ✓ 생산 완료
           </span>
+        )}
+        {produced && !readOnly && (
+          <button
+            type="button"
+            title="생산했지만 다른 용도로 써서 다시 만들어야 할 때 — 작업 대기공간으로 되돌립니다"
+            className="border border-border px-1.5 font-mono text-[11px] leading-5 hover:bg-muted"
+            disabled={reopen.isPending}
+            onClick={() => {
+              if (
+                confirm(
+                  `${row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name}를 다시 생산 목록에 넣을까요? 이 컴포넌트의 작업 기록(시작/완료 시각·타이머)이 초기화되고 시간 배정이 풀립니다.`,
+                )
+              )
+                reopen.mutate();
+            }}
+          >
+            {reopen.isPending ? "…" : "↻ 다시 생산"}
+          </button>
         )}
         <span className="font-mono text-[10px] text-muted-foreground">
           {block

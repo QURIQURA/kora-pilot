@@ -120,3 +120,42 @@ export async function removePlannedComponent(row: WorkSessionFormulaVersionRow) 
   ];
   return await syncWorkSessionToPlanner(row.work_session_id, { deletePlannerTaskIds: plannerIds });
 }
+
+/**
+ * 이미 생산한(또는 생산 날짜가 지난) 컴포넌트를 다른 용도로 써버려서 다시 만들어야 할 때 —
+ * 2026-11-09 사용자 요청("컴포넌트별로 적용"). 그 컴포넌트 행 하나만:
+ *  1) 연결된 작업 기록(work_session_tasks)을 NOT_STARTED로 되돌리고 시작/완료 시각·타이머를 비운다.
+ *  2) 시간 배정(work_blocks)을 풀면서 플래너 TASK도 함께 지운다(edge function remove_block_id).
+ * 결과적으로 시간 미배정 상태로 DASHBOARD 작업 대기공간에 다시 올라간다. 오더·레시피·계량 기록은 건드리지 않는다.
+ */
+export async function reopenComponentForProduction(row: WorkSessionFormulaVersionRow) {
+  const uid = await currentUserId();
+  if (row.user_id !== uid) throw new Error("작업 항목에 접근할 수 없습니다");
+  const { data: blocks, error: blockError } = await supabase
+    .from("work_blocks")
+    .select("id,work_session_task_id")
+    .eq("user_id", uid)
+    .eq("work_session_formula_version_id", row.id);
+  if (blockError) throw blockError;
+  const taskIds = [
+    ...new Set(
+      (blocks ?? []).flatMap((b) => (b.work_session_task_id ? [b.work_session_task_id] : [])),
+    ),
+  ];
+  if (taskIds.length) {
+    const { error: resetError } = await supabase
+      .from("work_session_tasks")
+      .update({ status: "NOT_STARTED", actual_started_at: null, completed_at: null, timers: [] })
+      .eq("user_id", uid)
+      .in("id", taskIds);
+    if (resetError) throw resetError;
+  }
+  for (const block of blocks ?? []) {
+    const { data, error } = await supabase.functions.invoke("sync-work-session-to-planner", {
+      body: { remove_block_id: block.id, work_session_id: row.work_session_id },
+    });
+    if (error) throw error;
+    if (data && typeof data === "object" && "error" in data && data.error)
+      throw new Error(String((data as { error: unknown }).error));
+  }
+}
