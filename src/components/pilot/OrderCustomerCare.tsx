@@ -316,7 +316,7 @@ export function OrderCustomerCareSection({
                   {open && (
                     <tr className="border-b border-border bg-secondary/40">
                       <td colSpan={3} className="px-2 pb-3 pt-1">
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                           <MessageBox label="TEXT" body={text} />
                           <MessageBox label="EMAIL" subject={subject} body={emailBody} />
                         </div>

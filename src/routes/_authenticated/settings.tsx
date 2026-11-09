@@ -76,7 +76,7 @@ function SettingsGroup({ label, children }: { label: string; children: ReactNode
   return (
     <div className="space-y-2">
       <p className="label-caps text-[11px] text-muted-foreground">{label}</p>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{children}</div>
     </div>
   );
 }

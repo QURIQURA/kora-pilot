@@ -112,7 +112,7 @@ function ReferencesPage() {
 
       {creating && <ReferenceCreateForm onDone={() => setCreating(false)} />}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Field label="FILTER">
           <select
             className={selectClass}

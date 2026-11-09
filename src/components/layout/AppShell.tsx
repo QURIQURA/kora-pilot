@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Breadcrumb />
             </div>
           </div>
-          <div className="flex-1 p-3 md:p-4">{children}</div>
+          <div className="mx-auto w-full max-w-[1600px] flex-1 p-3 md:p-4">{children}</div>
         </main>
         {collapsed && drawer && (
           <div className="fixed inset-0 z-50 hidden md:flex">

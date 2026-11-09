@@ -68,7 +68,7 @@ export function ReferenceLinkSelects({
   const techniqueList = techniques.data ?? [];
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       <Field label="PRODUCT">
         <select
           className={selectClass}
@@ -190,7 +190,7 @@ export function ReferenceCreateForm({
         create.mutate();
       }}
     >
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Field label="TITLE">
           <input
             autoFocus
@@ -382,7 +382,7 @@ export function ReferenceItem({
   if (editing) {
     return (
       <li className="space-y-3 border-l-2 border-foreground px-3 py-2">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <Field label="TITLE">
             <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />
           </Field>

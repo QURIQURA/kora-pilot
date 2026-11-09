@@ -36,7 +36,7 @@ export function MonthlyOverheadSettings() {
 
   return (
     <SectionCard title="MONTHLY OVERHEAD">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="월 고정비 총액 (AUD) — 임대료/보험/구독료 등">
           <input
             type="number"

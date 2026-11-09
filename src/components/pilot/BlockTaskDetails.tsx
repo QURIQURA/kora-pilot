@@ -406,7 +406,7 @@ export function BlockTaskDetails({
         </button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {/* 반죽 높이 */}
         <label className="space-y-1">
           <span className="label-caps block text-[11px] text-muted-foreground">반죽 높이</span>

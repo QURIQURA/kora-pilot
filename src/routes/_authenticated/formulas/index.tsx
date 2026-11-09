@@ -193,7 +193,7 @@ function FormulasPage() {
       {tab === "ARCHIVE" && <FormulaArchiveTab />}
 
       {tab === "PRODUCTION" && (
-        <div className="grid grid-cols-1 gap-3 border border-border bg-card p-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 border border-border bg-card p-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="COMPONENT">
             <select
               className={selectClass}

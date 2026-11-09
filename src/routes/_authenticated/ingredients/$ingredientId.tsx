@@ -230,7 +230,7 @@ function IngredientDetailPage() {
 
       {/* 기본 */}
       <CollapsibleSection title="기본 BASIC" defaultOpen>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <Field label="영문명 NAME (ENGLISH)">
             <InlineInput
               value={data.name_en ?? ""}
@@ -318,7 +318,7 @@ function IngredientDetailPage() {
             <span className="label-caps block text-xs text-muted-foreground">
               배합 균형 역할 BALANCE ROLES
             </span>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {BALANCE_ROLES.map((role) => (
                 <CheckRow
                   key={role.key}
@@ -350,7 +350,7 @@ function IngredientDetailPage() {
             onChange={(v) => update.mutate({ is_functional: v })}
           />
           {data.is_functional && (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <Field label="사용률 기준 REFERENCE BASIS">
                 <EnumSelect
                   value={data.reference_basis}
@@ -446,7 +446,7 @@ function IngredientDetailPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <Field label="지방 종류 FAT TYPE">
               <EnumSelect
                 value={data.fat_type}
@@ -526,7 +526,7 @@ function IngredientDetailPage() {
         }
       >
         <div className="space-y-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <Field label="향미 계열 FAMILY">
               <FlavourFamilySelect
                 value={data.flavour_family_id ?? ""}

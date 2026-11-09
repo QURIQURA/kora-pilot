@@ -754,7 +754,7 @@ function OrderDetailPage() {
         <>
           <SectionCard title="CUSTOMER DETAILS">
             {/* 2026-10-20 사용자 요청: 2열 기준 필드 순서 재배치 */}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <Field label="CUSTOMER">
                 <CustomerSelect value={customerId} onChange={setCustomerId} />
               </Field>
@@ -1015,7 +1015,7 @@ function OrderDetailPage() {
           분리. Maker/Customer Satisfaction을 각각 독립 필드로 관리(향후 둘을 비교 분석하기 위함).
           SAVE/DELETE 버튼은 기존과 동일하게 이 페이지 전체(주문 정보 + Satisfaction)에 공통 적용. */}
           <SectionCard title="SATISFACTION">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <Field label="MAKER SATISFACTION">
                 <StarRating value={makerSatisfaction} onChange={setMakerSatisfaction} />
               </Field>
@@ -1034,7 +1034,7 @@ function OrderDetailPage() {
                 </div>
               </Field>
             </div>
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <Field label="CUSTOMER FEEDBACK">
                 <AutoGrowTextarea
                   rows={3}
@@ -1063,7 +1063,7 @@ function OrderDetailPage() {
           두 박스로 분리. */}
           <SectionCard title="PRODUCTION DETAILS">
             {/* 2026-10-20 사용자 요청: 2열 기준 필드 순서 재배치, FORMULA 드롭다운 3개는 아래 행에 3열 */}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <Field label="PRODUCT LINE">
                 <select
                   className={selectClass}

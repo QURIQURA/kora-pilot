@@ -120,7 +120,7 @@ function CustomerDetailPage() {
       </div>
 
       <SectionCard title="CUSTOMER INFO">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <Field label="NAME">
             <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>

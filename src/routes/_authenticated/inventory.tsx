@@ -431,7 +431,7 @@ function AddStockForm({ onDone }: { onDone: () => void }) {
 
   return (
     <SectionCard title="신규 재고 항목">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="유형">
           <select
             className={selectClass}
@@ -464,7 +464,7 @@ function AddStockForm({ onDone }: { onDone: () => void }) {
         {itemType === "COMPONENT" ? (
           <LineFields form={form} onChange={(p) => setForm((f) => ({ ...f, ...p }))} />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="수량">
               <input
                 className={inputClass}

@@ -178,7 +178,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
       ) : (
         <fieldset disabled={pending} className="space-y-3">
           <SectionCard title="POP UP DETAIL">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1.3fr)_minmax(0,1.3fr)]">
               <Field label="팝업 이름">
                 <input
                   className={inputClass}
@@ -243,12 +243,12 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
           >
             <div className="space-y-3">
               {plan.items.map((item) => (
-                <div key={item.id} className="space-y-2 border border-border p-3">
-                  <div className="flex gap-2">
-                    <div className="min-w-0 flex-1">
+                <div key={item.id} className="space-y-2 border border-border p-2.5">
+                  <div className="grid items-end gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <Field label="제품">
                       <ProductSelect
                         value={item.product_id}
-                        emptyLabel="제품 선택 (제품이 없으면 아래에 이름 직접 입력)"
+                        emptyLabel="제품 선택 (없으면 오른쪽에 직접 입력)"
                         onChange={(id) => {
                           const product = products.data?.find((p) => p.id === id);
                           changeItem(item.id, {
@@ -257,7 +257,16 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                           });
                         }}
                       />
-                    </div>
+                    </Field>
+                    <Field label="품목 이름">
+                      <input
+                        className={inputClass}
+                        value={item.label}
+                        maxLength={300}
+                        placeholder="예: 커스타드 프로피테롤"
+                        onChange={(e) => changeItem(item.id, { label: e.target.value })}
+                      />
+                    </Field>
                     <button
                       type="button"
                       className={buttonClass}
@@ -273,16 +282,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                     </button>
                   </div>
                   {item.product_id && <PopupItemComponents productId={item.product_id} />}
-                  <Field label="품목 이름">
-                    <input
-                      className={inputClass}
-                      value={item.label}
-                      maxLength={300}
-                      placeholder="예: 커스타드 프로피테롤"
-                      onChange={(e) => changeItem(item.id, { label: e.target.value })}
-                    />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1.6fr)_6rem_6rem_5rem]">
                     <Field label="공용 완성 규격">
                       <select
                         className={selectClass}
@@ -337,36 +337,38 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                       />
                     </Field>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    준비 {Number.isFinite(item.ready_quantity) ? item.ready_quantity : 0} /{" "}
-                    {Number.isFinite(item.quantity) ? item.quantity : 0} {item.unit} ·{" "}
-                    {item.work_session_id
-                      ? "생산 세션 연결됨"
-                      : "생산 배수는 세션에서 별도로 설정합니다."}
-                  </p>
-                  {item.work_session_id ? (
-                    <Link
-                      className={buttonClass}
-                      to="/production/$sessionId"
-                      params={{ sessionId: item.work_session_id }}
-                    >
-                      생산 세션 열기
-                    </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      className={buttonClass}
-                      disabled={
-                        pending ||
-                        draft.status === "COMPLETED" ||
-                        (changed && (!!validation || conflict || !draft.orderNumber.trim()))
-                      }
-                      title={changed ? "저장한 뒤 생산 세션을 만듭니다" : undefined}
-                      onClick={() => session.mutate(item)}
-                    >
-                      {changed ? "저장 후 생산 세션 만들기" : "생산 세션 만들기"}
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      준비 {Number.isFinite(item.ready_quantity) ? item.ready_quantity : 0} /{" "}
+                      {Number.isFinite(item.quantity) ? item.quantity : 0} {item.unit} ·{" "}
+                      {item.work_session_id
+                        ? "생산 세션 연결됨"
+                        : "생산 배수는 세션에서 별도로 설정합니다."}
+                    </p>
+                    {item.work_session_id ? (
+                      <Link
+                        className={buttonClass}
+                        to="/production/$sessionId"
+                        params={{ sessionId: item.work_session_id }}
+                      >
+                        생산 세션 열기
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        className={buttonClass}
+                        disabled={
+                          pending ||
+                          draft.status === "COMPLETED" ||
+                          (changed && (!!validation || conflict || !draft.orderNumber.trim()))
+                        }
+                        title={changed ? "저장한 뒤 생산 세션을 만듭니다" : undefined}
+                        onClick={() => session.mutate(item)}
+                      >
+                        {changed ? "저장 후 생산 세션 만들기" : "생산 세션 만들기"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
