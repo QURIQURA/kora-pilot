@@ -3346,6 +3346,8 @@ export type Database = {
           version_pinned: boolean;
           parent_selection_id: string | null;
           source_index: number | null;
+          plan_ingredient_g: number | null;
+          plan_ingredient_id: string | null;
           planner_task_id: string | null;
           slot: string | null;
           sort_order: number;
@@ -3369,6 +3371,8 @@ export type Database = {
           version_pinned?: boolean;
           parent_selection_id?: string | null;
           source_index?: number | null;
+          plan_ingredient_g?: number | null;
+          plan_ingredient_id?: string | null;
           planner_task_id?: string | null;
           slot?: string | null;
           sort_order?: number;
@@ -3392,6 +3396,8 @@ export type Database = {
           version_pinned?: boolean;
           parent_selection_id?: string | null;
           source_index?: number | null;
+          plan_ingredient_g?: number | null;
+          plan_ingredient_id?: string | null;
           planner_task_id?: string | null;
           slot?: string | null;
           sort_order?: number;
