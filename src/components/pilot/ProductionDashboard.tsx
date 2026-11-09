@@ -842,13 +842,17 @@ export function ProductionDashboard() {
     }
   };
 
-  // 새 데일리 태스크를 그날 마지막 데일리 뒤(없으면 09:00)에 넣는다.
+  // 새 데일리 태스크 시작 시각 — 오늘 날짜를 보고 있으면 "생성하는 현재 시각"(2026-11-09 사용자
+  // 요청), 다른 날짜면 그날 마지막 데일리 뒤(없으면 09:00)에 넣는다.
   const quickAddDaily = (name: string, minutes: number, template?: DailyTaskTemplate) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const dur = Math.max(SNAP_MIN, Math.ceil(minutes / SNAP_MIN) * SNAP_MIN);
     const lastEnd = dayDailies.reduce((m, t) => Math.max(m, toMin(t.end_time)), 0);
-    const startMin = clamp(lastEnd > 0 ? lastEnd : 9 * 60, DAY_START_MIN, DAY_END_MIN - dur);
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const baseMin = date === todayStr ? nowMin : lastEnd > 0 ? lastEnd : 9 * 60;
+    const startMin = clamp(baseMin, DAY_START_MIN, DAY_END_MIN - dur);
     createDaily.mutate({
       name: trimmed,
       startMin,
