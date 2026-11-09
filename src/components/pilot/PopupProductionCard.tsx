@@ -13,6 +13,7 @@ import {
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { AddFormulaVersionForm } from "./WorkSessionWorkspace";
 import { OrderComponentPlanRow } from "./OrderComponentPlanRow";
+import { slotBoxClass } from "@/lib/slot-color";
 import { buttonClass } from "./ui";
 
 export function PopupProductionCard({ order }: { order: OrderListRow }) {
@@ -79,7 +80,9 @@ function PopupItemProduction({ sessionId, readOnly }: { sessionId: string; readO
         </p>
       )}
       {(rows.data ?? []).map((row) => (
-        <OrderComponentPlanRow key={row.id} row={row} disabled={locked} />
+        <div key={row.id} className={`border p-2 ${slotBoxClass(row.slot)}`}>
+          <OrderComponentPlanRow row={row} disabled={locked} />
+        </div>
       ))}
       {!locked && (
         <button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>

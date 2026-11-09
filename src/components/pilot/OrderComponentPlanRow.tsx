@@ -38,6 +38,8 @@ const fromRow = (row: WorkSessionFormulaVersionRow) => ({
   // 재료 기준 배수 자동 계산(저장되지 않는 입력값): 기준 재료 라인 id / 그 재료의 목표 g
   ing: "",
   ingG: "",
+  // 입력 방식(MOULD/BASE/MULT/ING). ""이면 저장된 값으로 자동 판단.
+  mode: "",
 });
 
 /** Order and Production edit one selection record; this is not a second recipe copy. */
@@ -100,14 +102,16 @@ export function OrderComponentPlanRow({
   const mouldMode = Boolean(baseMould?.reference_weight_g);
   const derivedQty = targetMould ? (mouldQty(row.multiplier, baseMould, targetMould) ?? 1) : 1;
   const qtyText = draft.qty !== "" ? draft.qty : String(derivedQty);
-  const useMould = mouldMode && Boolean(targetMould?.reference_weight_g);
+  const autoMode = draft.mould ? "MOULD" : draft.bw ? "BASE" : "MULT";
+  const mode = draft.mode || autoMode;
+  const useMould = mode === "MOULD" && mouldMode && Boolean(targetMould?.reference_weight_g);
   const effectiveMultiplier = useMould
     ? (mouldMultiplier(Number(qtyText), baseMould, targetMould) ?? Number.NaN)
     : Number(draft.multiplier);
   // 기준중량 기준(가나슈/크림/필링 등 몰드 없는 컴포넌트): 설정의 기준중량 × 개수 = 목표 중량 → 배수 자동 계산.
   const baseWeights = useQuery(baseWeightsQuery());
   const bwPreset = (baseWeights.data ?? []).find((b) => b.id === draft.bw);
-  const useBase = !mouldMode && Boolean(bwPreset?.weight_g) && base > 0;
+  const useBase = mode === "BASE" && !mouldMode && Boolean(bwPreset?.weight_g) && base > 0;
   const bwQtyNum = Number(draft.bwQty);
   const bwTargetG = useBase && bwQtyNum > 0 ? Number(bwPreset!.weight_g) * bwQtyNum : null;
   const bwMultiplier =
@@ -147,7 +151,7 @@ export function OrderComponentPlanRow({
   });
   const ingLine = ingLines.find((l) => l.id === draft.ing);
   const ingTarget = Number(draft.ingG);
-  const useIng = !useMould && !useBase && Boolean(ingLine) && ingTarget > 0;
+  const useIng = mode === "ING" && Boolean(ingLine) && ingTarget > 0;
   const ingMultiplier = useIng ? Math.round((ingTarget / ingLine!.g) * 10000) / 10000 : Number.NaN;
   const effectiveMultiplierAll = useBase
     ? bwMultiplier
@@ -248,6 +252,7 @@ export function OrderComponentPlanRow({
         bwQty: saved.base_weight_qty == null ? "1" : String(saved.base_weight_qty),
         ing: "",
         ingG: "",
+        mode: "",
       };
       baseline.current = { draft: next, updatedAt: saved.updated_at };
       setDraft(next);
@@ -263,7 +268,7 @@ export function OrderComponentPlanRow({
     },
   });
   return (
-    <div className="mt-2 space-y-2 border-t border-dashed border-border pt-2">
+    <div className="mt-2 space-y-2">
       <p className="text-xs">
         {row.formula_versions.formulas.components?.name ?? row.formula_versions.formulas.name}
       </p>
@@ -337,177 +342,196 @@ export function OrderComponentPlanRow({
             })}
           </div>
         )}
-        {mouldMode ? (
-          <div className="space-y-1 border border-border p-2">
-            <p className="text-[11px] text-muted-foreground">
-              레시피 기본 몰드: {baseMould ? mouldAbbr(baseMould) : "—"} (
-              {fmtNumber(Number(baseMould?.reference_weight_g ?? 0))}g)
-            </p>
-            <div className="grid grid-cols-[1fr_5rem] gap-2">
-              <label className="text-[11px]">
-                생산 몰드
-                <select
-                  aria-label="생산 몰드"
-                  className={selectClass}
-                  value={draft.mould}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      mould: e.target.value,
-                      qty: d.mould ? qtyText : "1",
-                    }))
-                  }
-                >
-                  <option value="">몰드 없이 배수로 직접 입력</option>
-                  {(moulds.data ?? []).map((m) => (
-                    <option key={m.id} value={m.id} disabled={!m.reference_weight_g}>
-                      {mouldAbbr(m)}
-                      {m.reference_weight_g
-                        ? ` · ${fmtNumber(Number(m.reference_weight_g))}g`
-                        : " · 기준중량 없음"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {useMould && (
-                <label className="text-[11px]">
-                  개수
-                  <input
-                    aria-label="생산 몰드 개수"
-                    type="number"
-                    min="0"
-                    step="any"
-                    className={inputClass}
-                    value={qtyText}
-                    onChange={(e) => setDraft((d) => ({ ...d, qty: e.target.value }))}
-                  />
-                </label>
+        <div className="space-y-2 border border-border/70 bg-background/60 p-2">
+          <label className="block text-[11px]">
+            입력 방식
+            <select
+              aria-label="입력 방식"
+              className={selectClass}
+              value={mode}
+              onChange={(e) => {
+                const next = e.target.value;
+                setDraft((d) => ({
+                  ...d,
+                  mode: next,
+                  // 다른 방식으로 바꾸면 이전 방식의 몰드/기준중량 선택은 비운다(저장 시 섞이지 않게).
+                  mould: next === "MOULD" ? d.mould : "",
+                  qty: next === "MOULD" ? d.qty : "",
+                  bw: next === "BASE" ? d.bw : "",
+                  bwQty: next === "BASE" ? d.bwQty : "1",
+                }));
+              }}
+            >
+              {mouldMode ? (
+                <option value="MOULD">몰드 기준</option>
+              ) : (
+                <option value="BASE">기준중량 기준</option>
               )}
-            </div>
-            {useMould ? (
-              <p className="font-mono text-[11px]">
-                {mouldAbbr(targetMould!)} ×{fmtNumber(Number(qtyText), 2)} = 레시피(
-                {baseMould ? mouldAbbr(baseMould) : "기본"} 기준) ×
-                {Number.isFinite(effectiveMultiplier) ? fmtNumber(effectiveMultiplier, 4) : "?"}
-              </p>
-            ) : (
-              <label className="block text-[11px]">
-                생산 배수 ×
-                <input
-                  aria-label="주문 생산 배수"
-                  type="number"
-                  min="1"
-                  step="1"
-                  className={inputClass}
-                  value={draft.multiplier}
-                  onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
-                />
-              </label>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-1 border border-border p-2">
-            <div className="grid grid-cols-[1fr_5rem] gap-2">
-              <label className="text-[11px]">
-                기준중량 (SETTINGS)
-                <select
-                  aria-label="기준중량"
-                  className={selectClass}
-                  value={draft.bw}
-                  onChange={(e) => setDraft((d) => ({ ...d, bw: e.target.value, bwQty: "1" }))}
-                >
-                  <option value="">기준중량 없이 배수로 직접 입력</option>
-                  {(baseWeights.data ?? []).map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} · {fmtNumber(Number(b.weight_g))}g
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {useBase && (
-                <label className="text-[11px]">
-                  개수
-                  <input
-                    aria-label="기준중량 개수"
-                    type="number"
-                    min="0"
-                    step="any"
-                    className={inputClass}
-                    value={draft.bwQty}
-                    onChange={(e) => setDraft((d) => ({ ...d, bwQty: e.target.value }))}
-                  />
-                </label>
-              )}
-            </div>
-            {useBase ? (
-              <p className="font-mono text-[11px]">
-                {bwPreset!.name} ×{fmtNumber(bwQtyNum, 2)} = 목표{" "}
-                {bwTargetG != null ? fmtNumber(bwTargetG) : "?"}g → 레시피 ×
-                {Number.isFinite(bwMultiplier) ? fmtNumber(bwMultiplier, 4) : "?"}
-              </p>
-            ) : (
-              <label className="block text-[11px]">
-                생산 배수 ×
-                <input
-                  aria-label="주문 생산 배수"
-                  type="number"
-                  min="1"
-                  step="1"
-                  className={inputClass}
-                  value={draft.multiplier}
-                  onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
-                />
-              </label>
-            )}
-            {draft.bw && base <= 0 && (
+              <option value="MULT">배수 직접 입력</option>
+              <option value="ING">재료 기준</option>
+            </select>
+          </label>
+          {mode === "MOULD" && mouldMode && (
+            <>
               <p className="text-[11px] text-muted-foreground">
-                이 버전의 재료 합계(g)를 알 수 없어 기준중량으로 배수를 계산할 수 없어요.
+                레시피 기본 몰드: {baseMould ? mouldAbbr(baseMould) : "—"} (
+                {fmtNumber(Number(baseMould?.reference_weight_g ?? 0))}g)
               </p>
-            )}
-          </div>
-        )}
-        {!useMould && !useBase && ingLines.length > 0 && (
-          <div className="space-y-1 border border-border p-2">
-            <div className="grid grid-cols-[1fr_6rem] gap-2">
-              <label className="text-[11px]">
-                재료 기준으로 배수 자동 조정
-                <select
-                  aria-label="기준 재료"
-                  className={selectClass}
-                  value={draft.ing}
-                  onChange={(e) => setDraft((d) => ({ ...d, ing: e.target.value, ingG: "" }))}
-                >
-                  <option value="">사용 안 함</option>
-                  {ingLines.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name} · 레시피 {fmtNumber(l.g)}g
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {ingLine && (
+              <div className="grid grid-cols-[1fr_5rem] gap-2">
                 <label className="text-[11px]">
-                  목표 (g)
-                  <input
-                    aria-label="기준 재료 목표 g"
-                    type="number"
-                    min="0"
-                    step="any"
-                    className={inputClass}
-                    value={draft.ingG}
-                    onChange={(e) => setDraft((d) => ({ ...d, ingG: e.target.value }))}
-                  />
+                  생산 몰드
+                  <select
+                    aria-label="생산 몰드"
+                    className={selectClass}
+                    value={draft.mould}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        mould: e.target.value,
+                        qty: d.mould ? qtyText : "1",
+                      }))
+                    }
+                  >
+                    <option value="">몰드 선택…</option>
+                    {(moulds.data ?? []).map((m) => (
+                      <option key={m.id} value={m.id} disabled={!m.reference_weight_g}>
+                        {mouldAbbr(m)}
+                        {m.reference_weight_g
+                          ? ` · ${fmtNumber(Number(m.reference_weight_g))}g`
+                          : " · 기준중량 없음"}
+                      </option>
+                    ))}
+                  </select>
                 </label>
+                {useMould && (
+                  <label className="text-[11px]">
+                    개수
+                    <input
+                      aria-label="생산 몰드 개수"
+                      type="number"
+                      min="0"
+                      step="any"
+                      className={inputClass}
+                      value={qtyText}
+                      onChange={(e) => setDraft((d) => ({ ...d, qty: e.target.value }))}
+                    />
+                  </label>
+                )}
+              </div>
+              {useMould && (
+                <p className="font-mono text-[11px]">
+                  {mouldAbbr(targetMould!)} ×{fmtNumber(Number(qtyText), 2)} = 레시피(
+                  {baseMould ? mouldAbbr(baseMould) : "기본"} 기준) ×
+                  {Number.isFinite(effectiveMultiplier) ? fmtNumber(effectiveMultiplier, 4) : "?"}
+                </p>
               )}
-            </div>
-            {ingLine && (
-              <p className="font-mono text-[11px]">
-                {ingLine.name} {draft.ingG ? fmtNumber(ingTarget) : "?"}g ÷ {fmtNumber(ingLine.g)}g
-                → 레시피 ×{Number.isFinite(ingMultiplier) ? fmtNumber(ingMultiplier, 4) : "?"}
-              </p>
-            )}
-          </div>
-        )}
+            </>
+          )}
+          {mode === "BASE" && !mouldMode && (
+            <>
+              <div className="grid grid-cols-[1fr_5rem] gap-2">
+                <label className="text-[11px]">
+                  기준중량 (SETTINGS)
+                  <select
+                    aria-label="기준중량"
+                    className={selectClass}
+                    value={draft.bw}
+                    onChange={(e) => setDraft((d) => ({ ...d, bw: e.target.value, bwQty: "1" }))}
+                  >
+                    <option value="">기준중량 선택…</option>
+                    {(baseWeights.data ?? []).map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} · {fmtNumber(Number(b.weight_g))}g
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {useBase && (
+                  <label className="text-[11px]">
+                    개수
+                    <input
+                      aria-label="기준중량 개수"
+                      type="number"
+                      min="0"
+                      step="any"
+                      className={inputClass}
+                      value={draft.bwQty}
+                      onChange={(e) => setDraft((d) => ({ ...d, bwQty: e.target.value }))}
+                    />
+                  </label>
+                )}
+              </div>
+              {useBase && (
+                <p className="font-mono text-[11px]">
+                  {bwPreset!.name} ×{fmtNumber(bwQtyNum, 2)} = 목표{" "}
+                  {bwTargetG != null ? fmtNumber(bwTargetG) : "?"}g → 레시피 ×
+                  {Number.isFinite(bwMultiplier) ? fmtNumber(bwMultiplier, 4) : "?"}
+                </p>
+              )}
+              {draft.bw && base <= 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  이 버전의 재료 합계(g)를 알 수 없어 기준중량으로 배수를 계산할 수 없어요.
+                </p>
+              )}
+            </>
+          )}
+          {mode === "MULT" && (
+            <label className="block text-[11px]">
+              생산 배수 ×
+              <input
+                aria-label="주문 생산 배수"
+                type="number"
+                min="1"
+                step="1"
+                className={inputClass}
+                value={draft.multiplier}
+                onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
+              />
+            </label>
+          )}
+          {mode === "ING" && (
+            <>
+              <div className="grid grid-cols-[1fr_6rem] gap-2">
+                <label className="text-[11px]">
+                  기준 재료
+                  <select
+                    aria-label="기준 재료"
+                    className={selectClass}
+                    value={draft.ing}
+                    onChange={(e) => setDraft((d) => ({ ...d, ing: e.target.value, ingG: "" }))}
+                  >
+                    <option value="">재료 선택…</option>
+                    {ingLines.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name} · 레시피 {fmtNumber(l.g)}g
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {ingLine && (
+                  <label className="text-[11px]">
+                    목표 (g)
+                    <input
+                      aria-label="기준 재료 목표 g"
+                      type="number"
+                      min="0"
+                      step="any"
+                      className={inputClass}
+                      value={draft.ingG}
+                      onChange={(e) => setDraft((d) => ({ ...d, ingG: e.target.value }))}
+                    />
+                  </label>
+                )}
+              </div>
+              {ingLine && (
+                <p className="font-mono text-[11px]">
+                  {ingLine.name} {draft.ingG ? fmtNumber(ingTarget) : "?"}g ÷ {fmtNumber(ingLine.g)}
+                  g → 레시피 ×{Number.isFinite(ingMultiplier) ? fmtNumber(ingMultiplier, 4) : "?"}
+                </p>
+              )}
+            </>
+          )}
+        </div>
         {!Number.isInteger(row.multiplier) && (
           <p className="text-[11px] text-muted-foreground">
             MERGE에서 나눈 주문 배정분입니다. 배수를 직접 바꿀 때는 정수로 입력하세요.

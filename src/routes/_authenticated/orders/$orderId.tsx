@@ -1,5 +1,6 @@
 import { PopupOrderWorkspace } from "@/components/pilot/PopupOrderWorkspace";
 import { ComponentPlanReadout } from "@/components/pilot/ComponentPlanReadout";
+import { slotBoxClass } from "@/lib/slot-color";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1110,7 +1111,7 @@ function OrderDetailPage() {
                       (r) => r.kind === "CORE" && r.slot === slot,
                     );
                     return (
-                      <div key={slot} className="space-y-2 border border-border p-2">
+                      <div key={slot} className={`space-y-2 border p-2 ${slotBoxClass(slot)}`}>
                         <p className="label-caps text-[10px] text-muted-foreground">
                           {CORE_SLOT_LABELS[slot]}
                         </p>
