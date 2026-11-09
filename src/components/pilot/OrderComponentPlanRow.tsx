@@ -13,6 +13,7 @@ import {
   versionIngredientsQuery,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
+import { openEditorOnMount } from "@/lib/open-editor-on-mount";
 import { parseComponentPlan, productionDemandSummary } from "@/lib/order-component-plan";
 import { resolveSlotGroup } from "@/lib/technique";
 import { sumBaseGrams } from "@/lib/work-session";
@@ -55,7 +56,8 @@ export function OrderComponentPlanRow({
   const client = useQueryClient();
   const [draft, setDraft] = useState(() => fromRow(row));
   // 평소엔 저장된 계획을 텍스트 요약으로만 보여주고, "생산 계획 수정"을 눌러야 입력칸이 열린다(2026-11-09).
-  const [editing, setEditing] = useState(false);
+  // 방금 "컴포넌트 추가"로 만든 행은 입력 방식 설정이 바로 열린 채로 시작한다.
+  const [editing, setEditing] = useState(() => openEditorOnMount.delete(row.id));
   const baseline = useRef({ draft: fromRow(row), updatedAt: row.updated_at });
   const dirty = JSON.stringify(draft) !== JSON.stringify(baseline.current.draft);
   const conflict = row.updated_at !== baseline.current.updatedAt && dirty;
@@ -557,8 +559,8 @@ export function OrderComponentPlanRow({
                 <input
                   aria-label="주문 생산 배수"
                   type="number"
-                  min="1"
-                  step="1"
+                  min="0"
+                  step="any"
                   className={inputClass}
                   value={draft.multiplier}
                   onChange={(e) => setDraft((d) => ({ ...d, multiplier: e.target.value }))}
@@ -610,9 +612,7 @@ export function OrderComponentPlanRow({
             )}
           </div>
           {mode === "MULT" && !Number.isInteger(row.multiplier) && (
-            <p className="text-[11px] text-muted-foreground">
-              MERGE에서 나눈 주문 배정분입니다. 배수를 직접 바꿀 때는 정수로 입력하세요.
-            </p>
+            <p className="text-[11px] text-muted-foreground">MERGE에서 나눈 주문 배정분입니다.</p>
           )}
           {ingredients.isSuccess && preview && (
             <p className="font-mono text-[11px]">

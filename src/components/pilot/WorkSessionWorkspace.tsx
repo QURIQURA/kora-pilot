@@ -1,5 +1,6 @@
 import { ensureStandardProfile } from "@/lib/standard-profile";
 import { parseComponentPlan } from "@/lib/order-component-plan";
+import { openEditorOnMount } from "@/lib/open-editor-on-mount";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -653,7 +654,7 @@ export function AddFormulaVersionForm({
 }: {
   sessionId: string;
   nextSort: number;
-  onDone: () => void;
+  onDone: (createdId?: string) => void;
   /** 2026-10-06: CORE(Sheet/Cream/Filling 고정 슬롯)에서 추가할 때 전달 — 기본은 자유 추가인 DECORATIVE */
   kind?: "CORE" | "DECORATIVE";
   slot?: CoreSlot | null;
@@ -678,8 +679,9 @@ export function AddFormulaVersionForm({
   });
   const [formulaId, setFormulaId] = useState("");
   const [versionId, setVersionId] = useState("");
-  const [planMultiplier, setPlanMultiplier] = useState("1");
-  const [planTarget, setPlanTarget] = useState("");
+  // 추가는 ×1로 하고, 배수·몰드·재료 기준 설정은 추가 직후 열리는 수정 창에서 한다.
+  const planMultiplier = "1";
+  const planTarget = "";
   const formula = formulaList.find((f) => f.id === formulaId) ?? null;
   const versionOptions = [...(formula?.formula_versions ?? [])].sort(
     (a, b) => b.version_number - a.version_number,
@@ -709,22 +711,26 @@ export function AddFormulaVersionForm({
       // 2026-10-07 사용자 요청: 같은 FORMULA VERSION도 이 WORK SESSION에 중복으로 추가할 수
       // 있다(예: 같은 레시피를 다른 몰드/배치로 각각) — 더 이상 막지 않는다.
       const user_id = await currentUserId();
-      const { error } = await supabase.from("work_session_formula_versions").insert({
-        user_id,
-        work_session_id: sessionId,
-        formula_version_id: versionId,
-        // New selections start at one recipe batch. Only ADJUST QUANTITY changes the multiplier.
-        multiplier: plan.multiplier,
-        target_quantity_g: plan.target_quantity_g,
-        version_pinned: true,
-        mould_id: scalingMode === "MOULD" ? (selectedVersion?.default_mould_id ?? null) : null,
-        mould_qty: null,
-        capacity_id: scalingMode === "MOULD" ? (selectedVersion?.default_mould_id ?? null) : null,
-        capacity_qty: null,
-        sort_order: nextSort,
-        kind,
-        slot,
-      });
+      const { data: created, error } = await supabase
+        .from("work_session_formula_versions")
+        .insert({
+          user_id,
+          work_session_id: sessionId,
+          formula_version_id: versionId,
+          // New selections start at one recipe batch. Only ADJUST QUANTITY changes the multiplier.
+          multiplier: plan.multiplier,
+          target_quantity_g: plan.target_quantity_g,
+          version_pinned: true,
+          mould_id: scalingMode === "MOULD" ? (selectedVersion?.default_mould_id ?? null) : null,
+          mould_qty: null,
+          capacity_id: scalingMode === "MOULD" ? (selectedVersion?.default_mould_id ?? null) : null,
+          capacity_qty: null,
+          sort_order: nextSort,
+          kind,
+          slot,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
       // Component에 기본 WORKFLOW TEMPLATE이 등록돼 있고 "자동 적용"이 켜져 있으면, 이 Formula
       // Version(=열/품목)에 바로 TASK를 깔아준다(2026-09-24) — 매번 수동으로 템플릿 불러오기를
@@ -743,9 +749,12 @@ export function AddFormulaVersionForm({
         // 선택 자체는 이미 성공했으니 기본 워크플로 적용 실패는 조용히 콘솔에만 남기고 흐름을 막지 않는다.
         console.error("기본 워크플로 자동 적용 실패:", templateError);
       }
+      return created.id;
     },
-    onSuccess: async () => {
-      onDone();
+    onSuccess: async (createdId) => {
+      // 추가 직후 그 컴포넌트의 "입력 방식" 설정이 바로 열리게 한다(몰드/기본중량/배수/재료 기준).
+      openEditorOnMount.add(createdId);
+      onDone(createdId);
       // 2026-10-21: CORE(SHEET/CREAM/FILLING)를 새로 추가하면 Planner에도 TASK가 생겨야 한다 —
       // 예전에는 일정을 저장할 때만 동기화돼서, 일정을 먼저 잡고 나중에 추가한 CREAM 등은 누락됐다.
       if (kind === "CORE") await syncWorkSessionToPlanner(sessionId);
@@ -831,20 +840,9 @@ export function AddFormulaVersionForm({
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        이 주문의 계획으로 저장합니다. 다른 화면에는 같은 계획이 표시됩니다.
+        ADD를 누르면 ×1로 추가되고, 입력 방식(몰드·기본중량·배수·재료 기준) 설정이 바로 열려요. 이
+        주문의 계획으로 저장되며 다른 화면에도 같은 계획이 표시됩니다.
       </p>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="생산 배수 ×">
-          <input
-            className={inputClass}
-            type="number"
-            min="1"
-            step="1"
-            value={planMultiplier}
-            onChange={(e) => setPlanMultiplier(e.target.value)}
-          />
-        </Field>
-      </div>
       {add.isError && (
         <p className="font-mono text-xs uppercase text-destructive">
           {(add.error as Error).message}
@@ -854,7 +852,7 @@ export function AddFormulaVersionForm({
         <button type="submit" className={primaryButtonClass} disabled={add.isPending}>
           ADD
         </button>
-        <button type="button" className={buttonClass} onClick={onDone}>
+        <button type="button" className={buttonClass} onClick={() => onDone()}>
           CANCEL
         </button>
       </div>
