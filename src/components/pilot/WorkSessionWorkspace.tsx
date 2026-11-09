@@ -1909,20 +1909,27 @@ function EditFormulaVersionModal({
     { id: string; ingredientId: string; name: string; amount: string; rest: boolean }[]
   >([]);
   const [shortPicking, setShortPicking] = useState(false);
+  // 입력 단위 — g(양) 또는 %(원래 재료 양에 대한 비율). 예: 요거트 → 탈지분유 22% + 물 나머지.
+  const [shortUnit, setShortUnit] = useState<"g" | "pct">("g");
   const [shortError, setShortError] = useState<string | null>(null);
   const shortRow = shortKey ? visibleRows.find((r) => r.key === shortKey) : undefined;
   const shortTotalBase = shortRow ? (toGrams(Number(shortRow.amount) || 0, shortRow.unit) ?? 0) : 0;
   // 입력 기준(기본 ×1 / 생산량 ×배수) → 기본 레시피 g로 환산
   const shortFactor = shortBasis === "prod" ? 1 / Math.max(column.multiplier, 1e-9) : 1;
+  const shortSubBase = (x: { amount: string }) =>
+    shortUnit === "pct"
+      ? (shortTotalBase * (Number(x.amount) || 0)) / 100
+      : (Number(x.amount) || 0) * shortFactor;
   const shortFixedBase = shortSubs
     .filter((x) => !x.rest)
-    .reduce((sum, x) => sum + (Number(x.amount) || 0) * shortFactor, 0);
+    .reduce((sum, x) => sum + shortSubBase(x), 0);
   const shortRestBase = round2(shortTotalBase - shortFixedBase);
   const resetShortage = () => {
     setShortKey(null);
     setShortSubs([]);
     setShortPicking(false);
     setShortError(null);
+    setShortUnit("g");
   };
   // 재료 대치 도구를 적용하기 직전 상태를 쌓아 두고 "되돌리기"로 한 단계씩 복구한다.
   const [undoStack, setUndoStack] = useState<(typeof draftRows)[]>([]);
@@ -1939,9 +1946,7 @@ function EditFormulaVersionModal({
       return;
     }
     pushUndo();
-    const grams = shortSubs.map((x) =>
-      x.rest ? shortRestBase : round2((Number(x.amount) || 0) * shortFactor),
-    );
+    const grams = shortSubs.map((x) => (x.rest ? shortRestBase : round2(shortSubBase(x))));
     setDraftRows((prev) => {
       let next = prev.map((r) => (r.key === shortRow.key ? { ...r, removed: true } : r));
       // 새로 추가한 행(sourceId 없음)은 그냥 지운다.
@@ -2874,6 +2879,24 @@ function EditFormulaVersionModal({
                           생산량(×{fmtNumber(column.multiplier, 3)}) 기준 입력
                         </button>
                       </div>
+                      <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+                        <span>입력 단위</span>
+                        {(["g", "pct"] as const).map((u) => (
+                          <button
+                            key={u}
+                            type="button"
+                            className={`${shortUnit === u ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
+                            onClick={() => setShortUnit(u)}
+                          >
+                            {u === "g" ? "양(g)" : "비율(%)"}
+                          </button>
+                        ))}
+                        {shortUnit === "pct" && (
+                          <span className="text-muted-foreground">
+                            원래 재료 양 대비 % · 나머지는 &quot;나머지로&quot;로 채우세요
+                          </span>
+                        )}
+                      </div>
                       <ul className="space-y-1">
                         {shortSubs.map((x) => (
                           <li key={x.id} className="flex flex-wrap items-center gap-2 text-xs">
@@ -2881,13 +2904,22 @@ function EditFormulaVersionModal({
                             {x.rest ? (
                               <span className="font-mono">
                                 나머지 ={" "}
-                                {fmtNumber(
-                                  shortBasis === "prod"
-                                    ? shortRestBase * column.multiplier
-                                    : shortRestBase,
-                                  1,
-                                )}
-                                g
+                                {shortUnit === "pct"
+                                  ? fmtNumber(
+                                      shortTotalBase > 0
+                                        ? (shortRestBase / shortTotalBase) * 100
+                                        : 0,
+                                      1,
+                                    )
+                                  : fmtNumber(
+                                      shortBasis === "prod"
+                                        ? shortRestBase * column.multiplier
+                                        : shortRestBase,
+                                      1,
+                                    )}
+                                {shortUnit === "pct"
+                                  ? `% (${fmtNumber(shortRestBase * viewK, 1)}g)`
+                                  : "g"}
                               </span>
                             ) : (
                               <input
@@ -2904,7 +2936,12 @@ function EditFormulaVersionModal({
                                 }
                               />
                             )}
-                            <span className="font-mono text-[11px] text-muted-foreground">g</span>
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              {x.rest ? "" : shortUnit === "pct" ? "%" : "g"}
+                              {!x.rest &&
+                                shortUnit === "pct" &&
+                                ` = ${fmtNumber(shortSubBase(x) * viewK, 1)}g`}
+                            </span>
                             <button
                               type="button"
                               className={`${x.rest ? primaryButtonClass : buttonClass} !h-6 !min-h-0 px-2 text-[11px]`}
