@@ -16,7 +16,8 @@ import {
 import { parseComponentPlan, productionDemandSummary } from "@/lib/order-component-plan";
 import { resolveSlotGroup } from "@/lib/technique";
 import { sumBaseGrams } from "@/lib/work-session";
-import { fmtNumber } from "@/lib/formula";
+import { fmtNumber, toGrams } from "@/lib/formula";
+import { ingredientDisplayName } from "@/lib/pilot";
 import { mouldAbbr, mouldMultiplier, mouldQty } from "@/lib/component-size";
 import { invalidateProductionSync } from "@/lib/production-sync";
 import { syncWorkSessionToPlanner } from "@/lib/work-session";
@@ -34,6 +35,9 @@ const fromRow = (row: WorkSessionFormulaVersionRow) => ({
   // 기준중량 기준 생산: SETTINGS > BASE WEIGHTS 프리셋 id / 개수
   bw: row.base_weight_id ?? "",
   bwQty: row.base_weight_qty == null ? "1" : String(row.base_weight_qty),
+  // 재료 기준 배수 자동 계산(저장되지 않는 입력값): 기준 재료 라인 id / 그 재료의 목표 g
+  ing: "",
+  ingG: "",
 });
 
 /** Order and Production edit one selection record; this is not a second recipe copy. */
@@ -133,8 +137,30 @@ export function OrderComponentPlanRow({
     setDraft(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mouldMode, baseWeights.data, row.target_quantity_g]);
-  const effectiveMultiplierAll = useBase ? bwMultiplier : effectiveMultiplier;
-  const parsedTarget = useBase ? bwTargetG : draft.target.trim() ? Number(draft.target) : null;
+  // 재료 기준(2026-11-09 사용자 요청): 재료 하나의 목표 g을 넣으면 전체 배수 = 목표 ÷ 그 재료의 레시피(×1) g.
+  // 몰드/기준중량을 쓰지 않는 직접 입력 상태에서만 쓴다.
+  const ingLines = (ingredients.data ?? []).flatMap((l) => {
+    const g = toGrams(Number(l.amount), l.unit);
+    return g != null && g > 0 && l.ingredients
+      ? [{ id: l.id, name: ingredientDisplayName(l.ingredients), g }]
+      : [];
+  });
+  const ingLine = ingLines.find((l) => l.id === draft.ing);
+  const ingTarget = Number(draft.ingG);
+  const useIng = !useMould && !useBase && Boolean(ingLine) && ingTarget > 0;
+  const ingMultiplier = useIng ? Math.round((ingTarget / ingLine!.g) * 10000) / 10000 : Number.NaN;
+  const effectiveMultiplierAll = useBase
+    ? bwMultiplier
+    : useIng
+      ? ingMultiplier
+      : effectiveMultiplier;
+  const parsedTarget = useBase
+    ? bwTargetG
+    : useIng
+      ? null
+      : draft.target.trim()
+        ? Number(draft.target)
+        : null;
   const preview =
     Number.isFinite(effectiveMultiplierAll) && effectiveMultiplierAll > 0
       ? productionDemandSummary(
@@ -178,7 +204,9 @@ export function OrderComponentPlanRow({
         ? { multiplier: effectiveMultiplier, target_quantity_g: parsedTarget }
         : useBase
           ? { multiplier: bwMultiplier, target_quantity_g: bwTargetG }
-          : parseComponentPlan(draft.multiplier, draft.target, row.multiplier);
+          : useIng
+            ? { multiplier: ingMultiplier, target_quantity_g: null }
+            : parseComponentPlan(draft.multiplier, draft.target, row.multiplier);
       if (!Number.isFinite(plan.multiplier) || plan.multiplier <= 0)
         throw new Error("생산 배수를 계산할 수 없어요 — 몰드의 기준중량을 확인하세요");
       const { data, error } = await supabase.rpc("save_order_component_plan_v3", {
@@ -218,6 +246,8 @@ export function OrderComponentPlanRow({
         qty: "",
         bw: saved.base_weight_id ?? "",
         bwQty: saved.base_weight_qty == null ? "1" : String(saved.base_weight_qty),
+        ing: "",
+        ingG: "",
       };
       baseline.current = { draft: next, updatedAt: saved.updated_at };
       setDraft(next);
@@ -432,6 +462,48 @@ export function OrderComponentPlanRow({
             {draft.bw && base <= 0 && (
               <p className="text-[11px] text-muted-foreground">
                 이 버전의 재료 합계(g)를 알 수 없어 기준중량으로 배수를 계산할 수 없어요.
+              </p>
+            )}
+          </div>
+        )}
+        {!useMould && !useBase && ingLines.length > 0 && (
+          <div className="space-y-1 border border-border p-2">
+            <div className="grid grid-cols-[1fr_6rem] gap-2">
+              <label className="text-[11px]">
+                재료 기준으로 배수 자동 조정
+                <select
+                  aria-label="기준 재료"
+                  className={selectClass}
+                  value={draft.ing}
+                  onChange={(e) => setDraft((d) => ({ ...d, ing: e.target.value, ingG: "" }))}
+                >
+                  <option value="">사용 안 함</option>
+                  {ingLines.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} · 레시피 {fmtNumber(l.g)}g
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {ingLine && (
+                <label className="text-[11px]">
+                  목표 (g)
+                  <input
+                    aria-label="기준 재료 목표 g"
+                    type="number"
+                    min="0"
+                    step="any"
+                    className={inputClass}
+                    value={draft.ingG}
+                    onChange={(e) => setDraft((d) => ({ ...d, ingG: e.target.value }))}
+                  />
+                </label>
+              )}
+            </div>
+            {ingLine && (
+              <p className="font-mono text-[11px]">
+                {ingLine.name} {draft.ingG ? fmtNumber(ingTarget) : "?"}g ÷ {fmtNumber(ingLine.g)}g
+                → 레시피 ×{Number.isFinite(ingMultiplier) ? fmtNumber(ingMultiplier, 4) : "?"}
               </p>
             )}
           </div>
