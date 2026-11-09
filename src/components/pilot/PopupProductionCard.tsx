@@ -14,6 +14,8 @@ import { invalidateProductionSync } from "@/lib/production-sync";
 import { AddFormulaVersionForm } from "./WorkSessionWorkspace";
 import { OrderComponentPlanRow } from "./OrderComponentPlanRow";
 import { slotBoxClass } from "@/lib/slot-color";
+import { removePlannedComponent } from "@/lib/production-plan-actions";
+import { toast } from "sonner";
 import { addProductComponentsToSession } from "@/lib/product-session-components";
 import { buttonClass } from "./ui";
 
@@ -88,6 +90,14 @@ function PopupItemProduction({
     mutationFn: () => addProductComponentsToSession(client, sessionId, productId),
     onSettled: () => void invalidateProductionSync(client),
   });
+  const removeRow = useMutation({
+    mutationFn: (row: NonNullable<typeof rows.data>[number]) => removePlannedComponent(row),
+    onSuccess: (warning) => {
+      if (warning) toast.error(warning);
+    },
+    onError: (error) => toast.error(error.message),
+    onSettled: () => void invalidateProductionSync(client),
+  });
   const autoTried = useRef(false);
   useEffect(() => {
     if (autoTried.current || !productId || locked || !rows.isSuccess) return;
@@ -105,6 +115,29 @@ function PopupItemProduction({
       {(rows.data ?? []).map((row) => (
         <div key={row.id} className={`border p-2 ${slotBoxClass(row.slot)}`}>
           <OrderComponentPlanRow row={row} disabled={locked} />
+          {!locked && (
+            <div className="mt-1 text-right">
+              <button
+                type="button"
+                title="이 품목에서 컴포넌트 삭제"
+                className="border border-border px-1.5 font-mono text-[11px] leading-5 text-muted-foreground hover:border-destructive hover:text-destructive"
+                disabled={removeRow.isPending}
+                onClick={() => {
+                  const name =
+                    row.formula_versions.formulas.components?.name ??
+                    row.formula_versions.formulas.name;
+                  if (
+                    confirm(
+                      `${name} 지정을 삭제할까요? 예정 블록도 제거되며 원본 레시피는 유지됩니다.`,
+                    )
+                  )
+                    removeRow.mutate(row);
+                }}
+              >
+                {removeRow.isPending ? "…" : "✕ 삭제"}
+              </button>
+            </div>
+          )}
         </div>
       ))}
       {!locked && (
