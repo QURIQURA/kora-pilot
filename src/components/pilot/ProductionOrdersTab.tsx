@@ -11,6 +11,7 @@ import {
   CORE_SLOTS,
   CORE_SLOT_LABELS,
   dashboardComponentsQuery,
+  ORDER_STATUSES,
   orderStatusLabel,
   ordersQuery,
   workBlocksQuery,
@@ -30,7 +31,8 @@ import {
   DashboardComponentNewForm,
 } from "@/components/pilot/DashboardComponentCopyForm";
 import { CopyWarning, OrderFlagBoxes, orderTitle, useOrderDietaryNames } from "./OrderTitle";
-import { buttonClass } from "./ui";
+import { buttonClass, selectClass } from "./ui";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * PRODUCTION > ORDERS 탭(2026-10-22 사용자 요청) — 진행 중인 오더(완료 전) 전체 목록.
@@ -91,6 +93,31 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
     await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
     await queryClient.invalidateQueries({ queryKey: ["work_blocks"] });
   };
+
+  // 2026-11-09 사용자 요청: 오더 카드에서 바로 STATUS를 바꿔 직접 COMPLETED 처리할 수 있게 한다.
+  // COMPLETED로 바꾸면 이 탭(진행 중)에서 빠지고 ORDER HISTORY로 넘어간다.
+  const setOrderStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from("orders").update({ status }).eq("id", id);
+      if (error) throw error;
+      // COMPLETED → 플래너의 Delivery TASK도 완료 체크(2026-11-09). 실패해도 상태 변경은 유지하고 알림만.
+      if (status === "COMPLETED") {
+        const { data, error: fnError } = await supabase.functions.invoke(
+          "sync-work-session-to-planner",
+          { body: { complete_order_delivery_id: id } },
+        );
+        const msg =
+          fnError?.message ??
+          (data && typeof data === "object" && "error" in data ? String(data.error) : null);
+        if (msg) toast.error(`플래너 Delivery 완료 체크 실패 — ${msg}`);
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      await invalidateProductionSync(queryClient);
+    },
+    onError: (e) => toast.error(`상태 변경 실패 — ${(e as Error).message}`),
+  });
 
   const createSession = useMutation({
     mutationFn: async (order: NonNullable<typeof orders.data>[number]) => {
@@ -197,9 +224,19 @@ export function ProductionOrdersTab({ completed = false }: { completed?: boolean
                   dietary={dietaryOf(order.id)}
                   leastLiked={order.least_liked_flavours}
                 />
-                <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                  {orderStatusLabel(order.status)}
-                </span>
+                <select
+                  className={cn(selectClass, "w-auto py-0.5 text-[11px] uppercase")}
+                  value={order.status}
+                  disabled={setOrderStatus.isPending}
+                  onChange={(e) => setOrderStatus.mutate({ id: order.id, status: e.target.value })}
+                  aria-label="오더 상태"
+                >
+                  {ORDER_STATUSES.map((st) => (
+                    <option key={st} value={st}>
+                      {orderStatusLabel(st)}
+                    </option>
+                  ))}
+                </select>
                 {formatDelivery(order.pickup_at, order.event_date) && (
                   <span className="ml-auto font-mono text-[11px]">
                     🚚 {formatDelivery(order.pickup_at, order.event_date)}

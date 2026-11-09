@@ -263,7 +263,14 @@ Deno.serve(async (req: Request) => {
     const deleteIds: string[] = Array.isArray(body.delete_planner_task_ids)
       ? body.delete_planner_task_ids.filter((s: unknown) => typeof s === "string")
       : [];
-    if (!sessionId && !removeBlockId && !body.daily_task_id && !body.remove_daily_task_id)
+    const completeOrderId: string | null = body.complete_order_delivery_id ?? null;
+    if (
+      !sessionId &&
+      !removeBlockId &&
+      !body.daily_task_id &&
+      !body.remove_daily_task_id &&
+      !completeOrderId
+    )
       return json({ error: "work_session_id required" }, 400);
 
     const kora = createClient(
@@ -275,6 +282,27 @@ Deno.serve(async (req: Request) => {
       return json({ error: "WANN_OS_SERVICE_ROLE_KEY secret이 설정되지 않았습니다." }, 500);
     }
     const wann = createClient(WANN_OS_URL, wannServiceKey);
+
+    // 2026-11-09: 오더를 COMPLETED로 바꾸면 그 오더의 WANN 프로젝트(orders.wann_project_id) 안
+    // Delivery(is_delivery) TASK를 완료 체크한다. 이미 완료된 건 건드리지 않는다.
+    if (completeOrderId) {
+      const { data: ord, error: ordErr } = await kora
+        .from("orders")
+        .select("wann_project_id")
+        .eq("id", completeOrderId)
+        .maybeSingle();
+      if (ordErr) return json({ error: ordErr.message }, 500);
+      if (!ord?.wann_project_id) return json({ ok: true, delivery_completed: 0 });
+      const { data: done, error: doneErr } = await wann
+        .from("planner_tasks")
+        .update({ completed: true, completed_at: new Date().toISOString() })
+        .eq("multiple_task_id", ord.wann_project_id)
+        .eq("is_delivery", true)
+        .eq("completed", false)
+        .select("id");
+      if (doneErr) return json({ error: doneErr.message }, 500);
+      return json({ ok: true, delivery_completed: done?.length ?? 0 });
+    }
 
     const deleteWannTasks = async (ids: string[]) => {
       if (ids.length === 0) return;

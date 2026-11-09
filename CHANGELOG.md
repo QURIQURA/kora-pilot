@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-11-09 — PRODUCTION > ORDERS 상태 드롭다운 + 완료 시 Delivery 체크
+
+- PRODUCTION > ORDERS 오더 카드의 상태 라벨을 드롭다운으로 바꿔 거기서 바로 STATUS(COMPLETED 포함)를 변경할 수 있게 함. COMPLETED로 바꾸면 이 탭에서 빠지고 ORDER HISTORY로 이동.
+- COMPLETED로 바꾸면 WANN 플래너의 그 오더 프로젝트 안 `Delivery` 항목도 자동 완료 체크(edge function `sync-work-session-to-planner`에 `complete_order_delivery_id` 추가, `orders.wann_project_id` 기준). 되돌릴 때(COMPLETED 해제)는 플래너 체크를 건드리지 않음.
+
 ## 2026-11-09 — 데일리 태스크 빠른 추가: 현재 시각으로 시작
 
 - DAILY TASKS · QUICK ADD로 추가한 데일리 태스크의 시작 시각을, 오늘 날짜를 보고 있을 때는 추가한 현재 시각으로 잡는다(기존: 항상 09:00 또는 그날 마지막 데일리 뒤). 다른 날짜에 추가할 때는 기존 규칙 유지.
