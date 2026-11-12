@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { currentUserId, designMoodboardsQuery } from "@/lib/queries";
 import { DesignMoodboardSection } from "@/components/pilot/OrderMoodboardSection";
+import { DesignMindmap } from "@/components/pilot/DesignMindmap";
 import { PageHeader, buttonClass, inputClass, primaryButtonClass } from "@/components/pilot/ui";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +27,9 @@ export const Route = createFileRoute("/_authenticated/design-moodboard")({
 function DesignMoodboardPage() {
   const queryClient = useQueryClient();
   const boards = useQuery(designMoodboardsQuery());
-  const rows = boards.data ?? [];
+  // Figma처럼 목적별 탭 — MOODBOARD(이미지·색·메모) / MINDMAP(자유 캔버스). 보드는 만들 때 종류가 정해진다.
+  const [tab, setTab] = useState<"MOOD" | "MIND">("MOOD");
+  const rows = (boards.data ?? []).filter((b) => b.kind === tab);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +46,11 @@ function DesignMoodboardPage() {
       const userId = await currentUserId();
       const { data, error: e } = await supabase
         .from("design_moodboards")
-        .insert({ user_id: userId, title: `Board ${rows.length + 1}` })
+        .insert({
+          user_id: userId,
+          kind: tab,
+          title: `${tab === "MIND" ? "Mindmap" : "Board"} ${rows.length + 1}`,
+        })
         .select("id")
         .single();
       if (e) throw e;
@@ -90,6 +97,29 @@ function DesignMoodboardPage() {
   return (
     <div className="space-y-3">
       <PageHeader title="DESIGN MOOD BOARD" />
+      <div className="flex gap-1">
+        {(
+          [
+            ["MOOD", "MOODBOARD"],
+            ["MIND", "MINDMAP"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => {
+              setTab(id);
+              setSelectedId(null);
+            }}
+            className={cn(
+              "border px-4 py-1.5 font-mono text-xs uppercase",
+              tab === id ? "border-foreground bg-foreground text-background" : "hover:bg-muted",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {error && <p className="font-mono text-xs text-destructive">{error}</p>}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
         <div className="space-y-2">
@@ -99,11 +129,12 @@ function DesignMoodboardPage() {
             disabled={create.isPending}
             onClick={() => create.mutate()}
           >
-            + NEW BOARD
+            + NEW {tab === "MIND" ? "MINDMAP" : "BOARD"}
           </button>
           {rows.length === 0 && !boards.isLoading && (
             <p className="font-mono text-xs text-muted-foreground">
-              보드가 없습니다. NEW BOARD로 첫 컨셉 보드를 만드세요.
+              아직 없습니다. 위 NEW 버튼으로 첫 {tab === "MIND" ? "마인드맵" : "컨셉 보드"}를
+              만드세요.
             </p>
           )}
           <ul className="space-y-1">
@@ -141,18 +172,22 @@ function DesignMoodboardPage() {
                 type="button"
                 className={buttonClass}
                 onClick={() => {
-                  if (window.confirm(`"${selected.title}" 보드와 안의 모든 아이템을 삭제할까요?`))
+                  if (window.confirm(`"${selected.title}" 를 안의 모든 내용과 함께 삭제할까요?`))
                     remove.mutate(selected.id);
                 }}
               >
-                DELETE BOARD
+                DELETE
               </button>
             </div>
-            <DesignMoodboardSection
-              key={selected.id}
-              boardId={selected.id}
-              title={selected.title}
-            />
+            {tab === "MOOD" ? (
+              <DesignMoodboardSection
+                key={selected.id}
+                boardId={selected.id}
+                title={selected.title}
+              />
+            ) : (
+              <DesignMindmap key={selected.id} boardId={selected.id} />
+            )}
           </div>
         )}
       </div>

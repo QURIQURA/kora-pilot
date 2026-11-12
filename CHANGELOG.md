@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-11-13 — DESIGN BOARD 마인드맵(Miro식) + 목적별 탭
+
+- DESIGN BOARD 상단에 `MOODBOARD` / `MINDMAP` 탭을 나눴다(Figma처럼 보드 종류별). 보드는 만들 때의 탭 종류로 정해지고, 기존 보드는 모두 MOODBOARD(`design_moodboards.kind`).
+- MINDMAP: 무한 캔버스(드래그 이동·휠 확대/축소·미니맵), `+ 노트`/`+ 하위 노트`, 색상 6종, 노트 연결선(양옆 점 드래그), Delete로 삭제, 0.8초 뒤 자동 저장(`design_moodboards.mindmap` jsonb). `@xyflow/react` 사용.
+
 ## 2026-11-09 — 컴포넌트 추가 후 입력 방식 바로 열기 · 1 미만 배수 허용
 
 - 컴포넌트 추가 폼(`ADD`)에서 배수 입력칸을 없애고, ×1로 추가한 직후 그 컴포넌트의 `입력 방식`(몰드·기본중량·배수·재료 기준) 수정 창이 바로 열리게 했다.

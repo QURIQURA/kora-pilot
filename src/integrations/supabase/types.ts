@@ -1745,10 +1745,20 @@ export type Database = {
         ];
       };
       design_moodboards: {
-        Row: { created_at: string; id: string; title: string; updated_at: string; user_id: string };
+        Row: {
+          created_at: string;
+          id: string;
+          kind: string;
+          mindmap: Json;
+          title: string;
+          updated_at: string;
+          user_id: string;
+        };
         Insert: {
           created_at?: string;
           id?: string;
+          kind?: string;
+          mindmap?: Json;
           title?: string;
           updated_at?: string;
           user_id?: string;
@@ -1756,6 +1766,8 @@ export type Database = {
         Update: {
           created_at?: string;
           id?: string;
+          kind?: string;
+          mindmap?: Json;
           title?: string;
           updated_at?: string;
           user_id?: string;
