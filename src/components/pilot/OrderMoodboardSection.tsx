@@ -75,7 +75,9 @@ type OrderMoodboardItem = Omit<OrderMoodboardRow, "order_id">;
 export type MoodboardScope =
   { kind: "order"; orderId: string } | { kind: "design"; boardId: string };
 
-const BOARD_HEIGHT = 440;
+const BOARD_HEIGHT = 620;
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 4;
 const DEFAULT_IMAGE_WIDTH = 200;
 const DEFAULT_NOTE_SIZE = { width: 180, height: 140 };
 const NOTE_COLORS = ["#fde68a", "#fecaca", "#bbf7d0", "#bfdbfe", "#e9d5ff"];
@@ -246,6 +248,24 @@ function MoodboardBoard({
   ) as ReturnType<typeof designMoodboardItemsQuery>;
   const items = useQuery(queryOpts);
   const boardRef = useRef<HTMLDivElement>(null);
+  // 확대/축소·이동(Miro/Figma식, 2026-11-13) — view = 월드 원점의 화면 오프셋(x,y)과 배율(z).
+  // Ctrl/⌘+휠·핀치 = 확대/축소(커서 기준), 휠 = 이동, 빈 곳 드래그 = 이동. 아이템 좌표는 항상 월드 좌표.
+  const [view, setView] = useState({ x: 0, y: 0, z: 1 });
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const worldRef = useRef<HTMLDivElement>(null);
+  const panSession = useRef<{ sx: number; sy: number; vx: number; vy: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  const zoomAt = (factor: number, cx: number, cy: number) =>
+    setView((v) => {
+      const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.z * factor));
+      const k = z / v.z;
+      return { z, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k };
+    });
+  const zoomCenter = (factor: number) => {
+    const r = boardRef.current?.getBoundingClientRect();
+    zoomAt(factor, (r?.width ?? 800) / 2, BOARD_HEIGHT / 2);
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [livePos, setLivePos] = useState<LivePos | null>(null);
@@ -472,12 +492,39 @@ function MoodboardBoard({
     update.mutate({ id: item.id, patch: { z_index: maxZ + 1 } });
   };
 
+  const fitAll = () => {
+    const r = boardRef.current?.getBoundingClientRect();
+    if (!r || rows.length === 0) return setView({ x: 0, y: 0, z: 1 });
+    const minX = Math.min(...rows.map((i) => i.x));
+    const minY = Math.min(...rows.map((i) => i.y));
+    const maxX = Math.max(...rows.map((i) => i.x + i.width));
+    const maxY = Math.max(...rows.map((i) => i.y + i.height));
+    const pad = 40;
+    const z = Math.min(
+      MAX_ZOOM,
+      Math.max(
+        MIN_ZOOM,
+        Math.min(
+          (r.width - pad * 2) / (maxX - minX || 1),
+          (BOARD_HEIGHT - pad * 2) / (maxY - minY || 1),
+        ),
+      ),
+    );
+    setView({
+      z,
+      x: (r.width - (maxX - minX) * z) / 2 - minX * z,
+      y: (BOARD_HEIGHT - (maxY - minY) * z) / 2 - minY * z,
+    });
+  };
+
   const cascadeOffset = (i: number) => i * 24;
 
   const defaultDropPoint = (i = 0) => {
+    // 지금 보이는 화면 중앙(월드 좌표)에 놓는다.
     const rect = boardRef.current?.getBoundingClientRect();
-    const cx = rect ? rect.width / 2 - DEFAULT_IMAGE_WIDTH / 2 : 40;
-    const cy = rect ? BOARD_HEIGHT / 2 - DEFAULT_IMAGE_WIDTH / 2 : 40;
+    const v = viewRef.current;
+    const cx = rect ? (rect.width / 2 - v.x) / v.z - DEFAULT_IMAGE_WIDTH / 2 : 40;
+    const cy = rect ? (BOARD_HEIGHT / 2 - v.y) / v.z - DEFAULT_IMAGE_WIDTH / 2 : 40;
     return { x: cx + cascadeOffset(i), y: cy + cascadeOffset(i) };
   };
 
@@ -554,8 +601,9 @@ function MoodboardBoard({
     e.stopPropagation();
     bringToFront(item);
     const rect = boardRef.current?.getBoundingClientRect();
-    const centerX = (rect?.left ?? 0) + item.x + item.width / 2;
-    const centerY = (rect?.top ?? 0) + item.y + item.height / 2;
+    const v = viewRef.current;
+    const centerX = (rect?.left ?? 0) + v.x + (item.x + item.width / 2) * v.z;
+    const centerY = (rect?.top ?? 0) + v.y + (item.y + item.height / 2) * v.z;
     const startAngle = (Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180) / Math.PI;
     dragSession.current = {
       id: item.id,
@@ -584,33 +632,64 @@ function MoodboardBoard({
   };
 
   useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      if (e.ctrlKey || e.metaKey) {
+        zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+      } else {
+        setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  useEffect(() => {
+    function onPanMove(e: PointerEvent) {
+      const p = panSession.current;
+      if (!p) return;
+      setView((v) => ({ ...v, x: p.vx + e.clientX - p.sx, y: p.vy + e.clientY - p.sy }));
+    }
+    function onPanUp() {
+      panSession.current = null;
+      setPanning(false);
+    }
+    window.addEventListener("pointermove", onPanMove);
+    window.addEventListener("pointerup", onPanUp);
+    return () => {
+      window.removeEventListener("pointermove", onPanMove);
+      window.removeEventListener("pointerup", onPanUp);
+    };
+  }, []);
+
+  useEffect(() => {
     function onMove(e: PointerEvent) {
       const s = dragSession.current;
       if (!s) return;
       const rect = boardRef.current?.getBoundingClientRect();
-      const boardWidth = rect?.width ?? 2000;
-      const dx = e.clientX - s.startX;
-      const dy = e.clientY - s.startY;
+      void rect;
+      const z = viewRef.current.z;
+      const dx = (e.clientX - s.startX) / z;
+      const dy = (e.clientY - s.startY) / z;
       if (s.mode === "move") {
-        const maxX = Math.max(0, boardWidth - s.orig.width);
-        const maxY = Math.max(0, BOARD_HEIGHT - s.orig.height);
         setLivePos({
           id: s.id,
-          x: Math.min(Math.max(0, s.orig.x + dx), maxX),
-          y: Math.min(Math.max(0, s.orig.y + dy), maxY),
+          x: s.orig.x + dx,
+          y: s.orig.y + dy,
           width: s.orig.width,
           height: s.orig.height,
           rotation: s.orig.rotation,
         });
       } else if (s.mode === "resize") {
-        const maxWidth = Math.max(60, boardWidth - s.orig.x);
-        const maxHeight = Math.max(60, BOARD_HEIGHT - s.orig.y);
         setLivePos({
           id: s.id,
           x: s.orig.x,
           y: s.orig.y,
-          width: Math.min(Math.max(60, s.orig.width + dx), maxWidth),
-          height: Math.min(Math.max(60, s.orig.height + dy), maxHeight),
+          width: Math.max(60, s.orig.width + dx),
+          height: Math.max(60, s.orig.height + dy),
           rotation: s.orig.rotation,
         });
       } else {
@@ -705,284 +784,346 @@ function MoodboardBoard({
         tabIndex={0}
         onPaste={handlePaste}
         onKeyDown={handleBoardKeyDown}
-        className="relative overflow-hidden border border-dashed border-border bg-secondary/30 outline-none focus:border-foreground"
-        style={{ height: BOARD_HEIGHT }}
+        className={cn(
+          "relative touch-none select-none overflow-hidden border border-dashed border-border bg-secondary/30 outline-none focus:border-foreground",
+          panning ? "cursor-grabbing" : "cursor-grab",
+        )}
+        style={{
+          height: BOARD_HEIGHT,
+          backgroundImage: "radial-gradient(circle, rgba(0,0,0,0.12) 1px, transparent 1px)",
+          backgroundSize: `${24 * view.z}px ${24 * view.z}px`,
+          backgroundPosition: `${view.x}px ${view.y}px`,
+        }}
+        onPointerDown={(e) => {
+          // 아이템이 아닌 빈 곳을 누르면 캔버스를 잡고 이동한다.
+          if (e.target !== e.currentTarget && e.target !== worldRef.current) return;
+          panSession.current = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y };
+          setPanning(true);
+        }}
       >
         {rows.length === 0 && (
           <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center font-mono text-xs uppercase text-muted-foreground">
             Click here, then paste an image (Ctrl+V) · or use the IMAGE / NOTE buttons
           </p>
         )}
-        {rows.map((item) => {
-          const pos = livePos && livePos.id === item.id ? livePos : item;
-          return (
-            <div
-              key={item.id}
-              className="group absolute"
-              style={{
-                left: pos.x,
-                top: pos.y,
-                width: pos.width,
-                height: pos.height,
-                transform: `rotate(${pos.rotation}deg)`,
-                zIndex: item.z_index,
-              }}
-              // 2026-10-14 사용자 요청: "도형 어디를 눌러도 맨앞으로 당겨지도록, 이미지처럼" —
-              // 캡처 단계에서 먼저 실행되므로 헤더/텍스트영역의 stopPropagation과 무관하게
-              // 카드 어디를 클릭하든(텍스트영역 포함) 항상 맨 앞으로 올라온다.
-              onPointerDownCapture={() => bringToFront(item)}
-            >
-              {/* (A) 셰입 클리핑 사각지대 대책 — 잘리지 않는 전체 박스 투명 이동 레이어를
+        <div
+          ref={worldRef}
+          className="absolute left-0 top-0"
+          style={{
+            width: 1,
+            height: 1,
+            transform: `translate(${view.x}px, ${view.y}px) scale(${view.z})`,
+            transformOrigin: "0 0",
+          }}
+        >
+          {rows.map((item) => {
+            const pos = livePos && livePos.id === item.id ? livePos : item;
+            return (
+              <div
+                key={item.id}
+                className="group absolute"
+                style={{
+                  left: pos.x,
+                  top: pos.y,
+                  width: pos.width,
+                  height: pos.height,
+                  transform: `rotate(${pos.rotation}deg)`,
+                  zIndex: item.z_index,
+                }}
+                // 2026-10-14 사용자 요청: "도형 어디를 눌러도 맨앞으로 당겨지도록, 이미지처럼" —
+                // 캡처 단계에서 먼저 실행되므로 헤더/텍스트영역의 stopPropagation과 무관하게
+                // 카드 어디를 클릭하든(텍스트영역 포함) 항상 맨 앞으로 올라온다.
+                onPointerDownCapture={() => bringToFront(item)}
+              >
+                {/* (A) 셰입 클리핑 사각지대 대책 — 잘리지 않는 전체 박스 투명 이동 레이어를
                   셰입 박스보다 먼저(= 아래에) 둔다. 셰입이 그려진 부분은 그 위의 실제 헤더/
                   텍스트가 클릭을 받고, clip-path로 잘려나간 모서리만 이 레이어가 받아 이동으로
                   처리한다(2026-10-14 사용자 리포트 대응, C안). 이미지는 셰입 클리핑이 없어 불필요. */}
-              {item.kind === "note" && (
-                <div
-                  className="absolute inset-0 cursor-move"
-                  onPointerDown={(e) => beginDrag(e, item, "move")}
-                />
-              )}
-              <div
-                className={cn(
-                  "absolute inset-0 overflow-hidden border border-border bg-background shadow-sm",
-                  item.kind === "note" && shapeRadiusClass(item.shape),
-                )}
-                style={
-                  item.kind === "note" && shapeClipPath(item.shape)
-                    ? { clipPath: shapeClipPath(item.shape) }
-                    : undefined
-                }
-              >
-                {item.kind === "image" ? (
-                  <img
-                    src={item.image_url ?? ""}
-                    alt=""
-                    draggable={false}
-                    className="h-full w-full cursor-move object-cover"
+                {item.kind === "note" && (
+                  <div
+                    className="absolute inset-0 cursor-move"
                     onPointerDown={(e) => beginDrag(e, item, "move")}
                   />
-                ) : (
-                  <div className="flex h-full flex-col" style={noteBackgroundStyle(item)}>
-                    <div
-                      className={cn(
-                        "shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5",
-                        colorPickerItemId === item.id ? "flex" : "hidden group-hover:flex",
-                      )}
+                )}
+                <div
+                  className={cn(
+                    "absolute inset-0 overflow-hidden border border-border bg-background shadow-sm",
+                    item.kind === "note" && shapeRadiusClass(item.shape),
+                  )}
+                  style={
+                    item.kind === "note" && shapeClipPath(item.shape)
+                      ? { clipPath: shapeClipPath(item.shape) }
+                      : undefined
+                  }
+                >
+                  {item.kind === "image" ? (
+                    <img
+                      src={item.image_url ?? ""}
+                      alt=""
+                      draggable={false}
+                      className="h-full w-full cursor-move object-cover"
                       onPointerDown={(e) => beginDrag(e, item, "move")}
-                    >
-                      {/* 셰입(모양) 선택 — 2026-10-14 사용자 요청: "메모 카드 모양을 동그라미 등으로 바꿀 수 있게" */}
+                    />
+                  ) : (
+                    <div className="flex h-full flex-col" style={noteBackgroundStyle(item)}>
                       <div
-                        className="flex items-center gap-1"
-                        onPointerDown={(e) => e.stopPropagation()}
+                        className={cn(
+                          "shrink-0 cursor-move flex-wrap items-center justify-between gap-1 px-1 py-0.5",
+                          colorPickerItemId === item.id ? "flex" : "hidden group-hover:flex",
+                        )}
+                        onPointerDown={(e) => beginDrag(e, item, "move")}
                       >
-                        {NOTE_SHAPES.map((s) => (
-                          <button
-                            key={s.value}
-                            type="button"
-                            title={s.label}
-                            onClick={() => {
-                              // 정사각형은 이름값대로 실제 1:1 비율이어야 하므로 선택 즉시
-                              // 현재 폭/높이 중 작은 쪽으로 맞춰 리사이즈한다.
-                              if (s.forceSquare) {
-                                const side = Math.min(item.width, item.height);
+                        {/* 셰입(모양) 선택 — 2026-10-14 사용자 요청: "메모 카드 모양을 동그라미 등으로 바꿀 수 있게" */}
+                        <div
+                          className="flex items-center gap-1"
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          {NOTE_SHAPES.map((s) => (
+                            <button
+                              key={s.value}
+                              type="button"
+                              title={s.label}
+                              onClick={() => {
+                                // 정사각형은 이름값대로 실제 1:1 비율이어야 하므로 선택 즉시
+                                // 현재 폭/높이 중 작은 쪽으로 맞춰 리사이즈한다.
+                                if (s.forceSquare) {
+                                  const side = Math.min(item.width, item.height);
+                                  pushUndo({
+                                    type: "update",
+                                    id: item.id,
+                                    before: {
+                                      shape: item.shape ?? "rect",
+                                      width: item.width,
+                                      height: item.height,
+                                    },
+                                  });
+                                  update.mutate({
+                                    id: item.id,
+                                    patch: { shape: s.value, width: side, height: side },
+                                  });
+                                } else {
+                                  pushUndo({
+                                    type: "update",
+                                    id: item.id,
+                                    before: { shape: item.shape ?? "rect" },
+                                  });
+                                  update.mutate({ id: item.id, patch: { shape: s.value } });
+                                }
+                              }}
+                              className={cn(
+                                "flex h-3.5 w-3.5 shrink-0 items-center justify-center border",
+                                (item.shape ?? "rect") === s.value
+                                  ? "border-foreground"
+                                  : "border-black/20",
+                              )}
+                            >
+                              <span
+                                className={cn("block h-2 w-2 bg-foreground/70", s.radiusClass)}
+                                style={s.clipPath ? { clipPath: s.clipPath } : undefined}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        {/* 자유 컬러 피커 — 2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정" */}
+                        <label
+                          className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
+                          style={{ backgroundColor: item.color ?? "#fde68a" }}
+                          title="Pick any colour"
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="color"
+                            value={item.color ?? "#fde68a"}
+                            onChange={(e) => commitUpdate(item, { color: e.target.value })}
+                            onFocus={() => setColorPickerItemId(item.id)}
+                            onBlur={() =>
+                              setColorPickerItemId((cur) => (cur === item.id ? null : cur))
+                            }
+                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                          />
+                        </label>
+                        {/* 패턴(배경 꾸미기) — 단색/그라데이션/물결/지그재그 중 선택
+                          (2026-10-15 사용자 요청: "메모도형 컬러 그라데이션이랑 패턴-물결패턴
+                          지그재그패턴(두가지색상선택) 기능 추가"). 단색이 아닌 패턴을 고르면 2번째
+                          색상 피커가 나타난다 — 아직 color2가 없으면 흰색을 기본값으로 채워준다. */}
+                        <div
+                          className="flex items-center gap-1"
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          {NOTE_PATTERNS.map((p) => (
+                            <button
+                              key={p.value}
+                              type="button"
+                              title={p.label}
+                              onClick={() => {
                                 pushUndo({
                                   type: "update",
                                   id: item.id,
                                   before: {
-                                    shape: item.shape ?? "rect",
-                                    width: item.width,
-                                    height: item.height,
+                                    pattern: item.pattern ?? "solid",
+                                    color2: item.color2 ?? null,
                                   },
                                 });
                                 update.mutate({
                                   id: item.id,
-                                  patch: { shape: s.value, width: side, height: side },
+                                  patch: {
+                                    pattern: p.value,
+                                    ...(p.value !== "solid" && !item.color2
+                                      ? { color2: "#ffffff" }
+                                      : {}),
+                                  },
                                 });
-                              } else {
-                                pushUndo({
-                                  type: "update",
-                                  id: item.id,
-                                  before: { shape: item.shape ?? "rect" },
-                                });
-                                update.mutate({ id: item.id, patch: { shape: s.value } });
-                              }
-                            }}
-                            className={cn(
-                              "flex h-3.5 w-3.5 shrink-0 items-center justify-center border",
-                              (item.shape ?? "rect") === s.value
-                                ? "border-foreground"
-                                : "border-black/20",
-                            )}
-                          >
-                            <span
-                              className={cn("block h-2 w-2 bg-foreground/70", s.radiusClass)}
-                              style={s.clipPath ? { clipPath: s.clipPath } : undefined}
+                              }}
+                              className={cn(
+                                "h-3.5 w-3.5 shrink-0 rounded-full border",
+                                (item.pattern ?? "solid") === p.value
+                                  ? "border-foreground"
+                                  : "border-black/30",
+                              )}
+                              style={noteBackgroundStyle({
+                                color: item.color,
+                                color2: item.color2 ?? "#ffffff",
+                                pattern: p.value,
+                              })}
                             />
-                          </button>
-                        ))}
+                          ))}
+                          {(item.pattern ?? "solid") !== "solid" && item.color2 && (
+                            <label
+                              className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
+                              style={{ backgroundColor: item.color2 }}
+                              title="Second colour"
+                            >
+                              <input
+                                type="color"
+                                value={item.color2}
+                                onChange={(e) => commitUpdate(item, { color2: e.target.value })}
+                                onFocus={() => setColorPickerItemId(item.id)}
+                                onBlur={() =>
+                                  setColorPickerItemId((cur) => (cur === item.id ? null : cur))
+                                }
+                                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                              />
+                            </label>
+                          )}
+                        </div>
                       </div>
-                      {/* 자유 컬러 피커 — 2026-10-13 사용자 요청: "메모 컬러도 자율적으로 수정" */}
-                      <label
-                        className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
-                        style={{ backgroundColor: item.color ?? "#fde68a" }}
-                        title="Pick any colour"
+                      <textarea
+                        // 2026-10-14 사용자 요청: "마찬가지로 '메모' 플레이스홀더도 커서(호버) 뜨면
+                        // 뜨도록" — 헤더처럼 "메모…" 안내문구도 평소엔 숨기고 호버했을 때만 보이게
+                        // 한다(실제로 입력된 내용은 호버 여부와 무관하게 항상 보임).
+                        className="flex-1 resize-none border-0 bg-transparent p-2 text-xs font-mono text-foreground outline-none placeholder:opacity-0 group-hover:placeholder:opacity-100"
+                        defaultValue={item.content ?? ""}
+                        placeholder="Note…"
                         onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="color"
-                          value={item.color ?? "#fde68a"}
-                          onChange={(e) => commitUpdate(item, { color: e.target.value })}
-                          onFocus={() => setColorPickerItemId(item.id)}
-                          onBlur={() =>
-                            setColorPickerItemId((cur) => (cur === item.id ? null : cur))
+                        onBlur={(e) => {
+                          if (e.target.value !== (item.content ?? "")) {
+                            pushUndo({
+                              type: "update",
+                              id: item.id,
+                              before: { content: item.content ?? "" },
+                            });
+                            update.mutate({ id: item.id, patch: { content: e.target.value } });
                           }
-                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                        />
-                      </label>
-                      {/* 패턴(배경 꾸미기) — 단색/그라데이션/물결/지그재그 중 선택
-                          (2026-10-15 사용자 요청: "메모도형 컬러 그라데이션이랑 패턴-물결패턴
-                          지그재그패턴(두가지색상선택) 기능 추가"). 단색이 아닌 패턴을 고르면 2번째
-                          색상 피커가 나타난다 — 아직 color2가 없으면 흰색을 기본값으로 채워준다. */}
-                      <div
-                        className="flex items-center gap-1"
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        {NOTE_PATTERNS.map((p) => (
-                          <button
-                            key={p.value}
-                            type="button"
-                            title={p.label}
-                            onClick={() => {
-                              pushUndo({
-                                type: "update",
-                                id: item.id,
-                                before: {
-                                  pattern: item.pattern ?? "solid",
-                                  color2: item.color2 ?? null,
-                                },
-                              });
-                              update.mutate({
-                                id: item.id,
-                                patch: {
-                                  pattern: p.value,
-                                  ...(p.value !== "solid" && !item.color2
-                                    ? { color2: "#ffffff" }
-                                    : {}),
-                                },
-                              });
-                            }}
-                            className={cn(
-                              "h-3.5 w-3.5 shrink-0 rounded-full border",
-                              (item.pattern ?? "solid") === p.value
-                                ? "border-foreground"
-                                : "border-black/30",
-                            )}
-                            style={noteBackgroundStyle({
-                              color: item.color,
-                              color2: item.color2 ?? "#ffffff",
-                              pattern: p.value,
-                            })}
-                          />
-                        ))}
-                        {(item.pattern ?? "solid") !== "solid" && item.color2 && (
-                          <label
-                            className="relative h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border border-black/30"
-                            style={{ backgroundColor: item.color2 }}
-                            title="Second colour"
-                          >
-                            <input
-                              type="color"
-                              value={item.color2}
-                              onChange={(e) => commitUpdate(item, { color2: e.target.value })}
-                              onFocus={() => setColorPickerItemId(item.id)}
-                              onBlur={() =>
-                                setColorPickerItemId((cur) => (cur === item.id ? null : cur))
-                              }
-                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                            />
-                          </label>
-                        )}
-                      </div>
+                        }}
+                      />
                     </div>
-                    <textarea
-                      // 2026-10-14 사용자 요청: "마찬가지로 '메모' 플레이스홀더도 커서(호버) 뜨면
-                      // 뜨도록" — 헤더처럼 "메모…" 안내문구도 평소엔 숨기고 호버했을 때만 보이게
-                      // 한다(실제로 입력된 내용은 호버 여부와 무관하게 항상 보임).
-                      className="flex-1 resize-none border-0 bg-transparent p-2 text-xs font-mono text-foreground outline-none placeholder:opacity-0 group-hover:placeholder:opacity-100"
-                      defaultValue={item.content ?? ""}
-                      placeholder="Note…"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onBlur={(e) => {
-                        if (e.target.value !== (item.content ?? "")) {
-                          pushUndo({
-                            type: "update",
-                            id: item.id,
-                            before: { content: item.content ?? "" },
-                          });
-                          update.mutate({ id: item.id, patch: { content: e.target.value } });
-                        }
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="absolute -top-2 -right-2 hidden h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex hover:text-destructive"
-                onClick={() => remove.mutate(item)}
-                title="Delete"
-              >
-                <X className="h-3 w-3" />
-              </button>
-              {/* 회전(틸트) 핸들 — 상단 중앙, 드래그하면 아이템 중심 기준으로 회전 */}
-              <div
-                className="absolute -top-2 left-1/2 hidden h-5 w-5 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex active:cursor-grabbing"
-                onPointerDown={(e) => beginRotate(e, item)}
-                title="Rotate"
-              >
-                <RotateCw className="h-3 w-3" />
-              </div>
-              {/* (B) 전용 이동 그립 — 셰입(삼각형 등) 클리핑과 무관하게 항상 확실히 눌리는
-                  그랩 지점(2026-10-14 사용자 리포트 대응, C안). 메모 카드만 대상. */}
-              {item.kind === "note" && (
-                <div
-                  className="absolute -top-2 -left-2 hidden h-5 w-5 cursor-move items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex"
-                  onPointerDown={(e) => beginDrag(e, item, "move")}
-                  title="Move"
-                >
-                  <Move className="h-3 w-3" />
+                  )}
                 </div>
-              )}
-              {/* 2026-10-14 사용자 요청: "무드보드에 이미지 배경지우는거 기능 추가할수있어?" —
-                  이미지 카드 좌상단에 호버하면 나타나는 지우개 버튼. 처리 중엔 스피너로 바뀌고
-                  다른 아이템의 버튼은 비활성화된다(동시에 하나씩만). */}
-              {item.kind === "image" && (
                 <button
                   type="button"
-                  className={cn(
-                    "absolute -top-2 -left-2 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground",
-                    removingBgId === item.id ? "flex" : "hidden group-hover:flex",
-                    removingBgId && removingBgId !== item.id && "pointer-events-none opacity-40",
-                  )}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => void handleRemoveBackground(item)}
-                  disabled={Boolean(removingBgId)}
-                  title="Remove background"
+                  className="absolute -top-2 -right-2 hidden h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex hover:text-destructive"
+                  onClick={() => remove.mutate(item)}
+                  title="Delete"
                 >
-                  {removingBgId === item.id ? (
-                    <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-                  ) : (
-                    <Eraser className="h-3 w-3" />
-                  )}
+                  <X className="h-3 w-3" />
                 </button>
-              )}
-              <div
-                className="absolute -right-1 -bottom-1 h-3 w-3 cursor-nwse-resize border border-border bg-background opacity-0 group-hover:opacity-100"
-                onPointerDown={(e) => beginDrag(e, item, "resize")}
-              />
-            </div>
-          );
-        })}
+                {/* 회전(틸트) 핸들 — 상단 중앙, 드래그하면 아이템 중심 기준으로 회전 */}
+                <div
+                  className="absolute -top-2 left-1/2 hidden h-5 w-5 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex active:cursor-grabbing"
+                  onPointerDown={(e) => beginRotate(e, item)}
+                  title="Rotate"
+                >
+                  <RotateCw className="h-3 w-3" />
+                </div>
+                {/* (B) 전용 이동 그립 — 셰입(삼각형 등) 클리핑과 무관하게 항상 확실히 눌리는
+                  그랩 지점(2026-10-14 사용자 리포트 대응, C안). 메모 카드만 대상. */}
+                {item.kind === "note" && (
+                  <div
+                    className="absolute -top-2 -left-2 hidden h-5 w-5 cursor-move items-center justify-center rounded-full border border-border bg-background text-muted-foreground group-hover:flex"
+                    onPointerDown={(e) => beginDrag(e, item, "move")}
+                    title="Move"
+                  >
+                    <Move className="h-3 w-3" />
+                  </div>
+                )}
+                {/* 2026-10-14 사용자 요청: "무드보드에 이미지 배경지우는거 기능 추가할수있어?" —
+                  이미지 카드 좌상단에 호버하면 나타나는 지우개 버튼. 처리 중엔 스피너로 바뀌고
+                  다른 아이템의 버튼은 비활성화된다(동시에 하나씩만). */}
+                {item.kind === "image" && (
+                  <button
+                    type="button"
+                    className={cn(
+                      "absolute -top-2 -left-2 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground",
+                      removingBgId === item.id ? "flex" : "hidden group-hover:flex",
+                      removingBgId && removingBgId !== item.id && "pointer-events-none opacity-40",
+                    )}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => void handleRemoveBackground(item)}
+                    disabled={Boolean(removingBgId)}
+                    title="Remove background"
+                  >
+                    {removingBgId === item.id ? (
+                      <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                    ) : (
+                      <Eraser className="h-3 w-3" />
+                    )}
+                  </button>
+                )}
+                <div
+                  className="absolute -right-1 -bottom-1 h-3 w-3 cursor-nwse-resize border border-border bg-background opacity-0 group-hover:opacity-100"
+                  onPointerDown={(e) => beginDrag(e, item, "resize")}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div
+          className="absolute bottom-2 right-2 z-[9999] flex items-center border border-border bg-background font-mono text-xs"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="px-2 py-1 hover:bg-muted"
+            onClick={() => zoomCenter(1 / 1.25)}
+            title="축소"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="min-w-[3.5rem] border-x border-border px-2 py-1 hover:bg-muted"
+            onClick={() => setView({ x: 0, y: 0, z: 1 })}
+            title="100%로 되돌리기"
+          >
+            {Math.round(view.z * 100)}%
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 hover:bg-muted"
+            onClick={() => zoomCenter(1.25)}
+            title="확대"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className="border-l border-border px-2 py-1 hover:bg-muted"
+            onClick={fitAll}
+            title="모든 아이템이 보이게 맞춤"
+          >
+            맞춤
+          </button>
+        </div>
       </div>
       {error && <p className={cn("mt-2 font-mono text-xs uppercase text-destructive")}>{error}</p>}
     </SectionCard>

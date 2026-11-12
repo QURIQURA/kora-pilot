@@ -5,6 +5,7 @@ import {
   Background,
   Controls,
   Handle,
+  MarkerType,
   MiniMap,
   NodeResizer,
   Position,
@@ -26,6 +27,7 @@ import { buttonClass } from "./ui";
 /** DESIGN BOARD 마인드맵(2026-11-13) — Miro식 자유 캔버스. 노트(텍스트) 노드를 배치하고 선으로 연결한다.
  * 보드 한 개당 design_moodboards.mindmap(jsonb)에 {nodes, edges, viewport}를 통째로 자동 저장한다. */
 
+const ARROW = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
 const COLORS = ["#fff7c2", "#ffd9e1", "#d6ecff", "#dff5dc", "#e8dcff", "#ffffff"] as const;
 
 type NoteData = { text: string; color: string };
@@ -176,7 +178,15 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           width: n.width,
           height: n.height,
         })),
-        edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+        edges: edges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          type: e.type,
+          label: e.label,
+          markerEnd: e.markerEnd,
+          markerStart: e.markerStart,
+        })),
       };
       void supabase
         .from("design_moodboards")
@@ -188,7 +198,8 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
   }, [nodes, edges, loaded, boardId]);
 
   const onConnect = useCallback(
-    (c: Connection) => setEdges((es) => addEdge({ ...c, type: "smoothstep" }, es)),
+    (c: Connection) =>
+      setEdges((es) => addEdge({ ...c, type: "smoothstep", markerEnd: ARROW }, es)),
     [setEdges],
   );
 
@@ -285,6 +296,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           source: opts.parent!.id,
           target: id,
           type: "smoothstep",
+          markerEnd: ARROW,
         },
       ]);
   };
@@ -295,6 +307,34 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         n.selected && n.type !== "image" ? ({ ...n, data: { ...n.data, color } } as NoteNode) : n,
       ),
     );
+
+  // 선 편집 — 선택한 선의 글자와 화살표(없음 / → / ← / ↔).
+  const selectedEdge = edges.find((e) => e.selected) ?? null;
+  const patchEdge = (patch: Partial<Edge>) =>
+    setEdges((es) => es.map((e) => (e.selected ? { ...e, ...patch } : e)));
+  const setArrows = (mode: "none" | "end" | "start" | "both") =>
+    setEdges((es) =>
+      es.map((e) => {
+        if (!e.selected) return e;
+        const { markerEnd: _me, markerStart: _ms, ...rest } = e;
+        void _me;
+        void _ms;
+        return {
+          ...rest,
+          ...(mode === "end" || mode === "both" ? { markerEnd: ARROW } : {}),
+          ...(mode === "start" || mode === "both" ? { markerStart: ARROW } : {}),
+        };
+      }),
+    );
+  const arrowMode = selectedEdge
+    ? selectedEdge.markerEnd && selectedEdge.markerStart
+      ? "both"
+      : selectedEdge.markerEnd
+        ? "end"
+        : selectedEdge.markerStart
+          ? "start"
+          : "none"
+    : "none";
 
   const removeSelected = () => {
     const ids = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
@@ -389,6 +429,36 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         </button>
         <span className="ml-auto font-mono text-[11px] text-muted-foreground">{statusText}</span>
       </div>
+      {selectedEdge && (
+        <div className="flex flex-wrap items-center gap-2 border border-dashed border-border p-2">
+          <span className="font-mono text-[11px] uppercase">선</span>
+          <input
+            aria-label="선 글자"
+            className="h-8 min-w-[10rem] flex-1 border border-border bg-background px-2 font-mono text-xs"
+            placeholder="선 위에 표시할 글자"
+            value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
+            onChange={(e) => patchEdge({ label: e.target.value })}
+          />
+          {(
+            [
+              ["none", "—"],
+              ["end", "→"],
+              ["start", "←"],
+              ["both", "↔"],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              title="화살표"
+              className={`${buttonClass} !h-8 !min-h-0 px-3 ${arrowMode === mode ? "!bg-foreground !text-background" : ""}`}
+              onClick={() => setArrows(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <p className="font-mono text-[11px] text-muted-foreground">
         드래그로 이동 · 휠로 확대/축소 · 양옆 점을 끌어 연결 · 도형/이미지는 선택하면 모서리로 크기
         조절 · 이미지는 파일을 캔버스에 끌어놓거나 붙여넣기(Ctrl/⌘+V)도 가능 · Delete로 삭제
@@ -417,6 +487,11 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         }}
       >
         <ReactFlow
+          defaultEdgeOptions={{
+            labelStyle: { fontSize: 11, fontFamily: "monospace" },
+            labelBgPadding: [6, 3],
+            labelBgStyle: { fill: "#fff" },
+          }}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
