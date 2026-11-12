@@ -2,6 +2,7 @@ import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addEdge,
+  ConnectionMode,
   Background,
   Controls,
   Handle,
@@ -27,6 +28,31 @@ import { buttonClass } from "./ui";
 /** DESIGN BOARD 마인드맵(2026-11-13) — Miro식 자유 캔버스. 노트(텍스트) 노드를 배치하고 선으로 연결한다.
  * 보드 한 개당 design_moodboards.mindmap(jsonb)에 {nodes, edges, viewport}를 통째로 자동 저장한다. */
 
+/** 사방(위·아래·왼·오른쪽) 연결점 — ConnectionMode.Loose라 어느 점에서 어느 점으로든 연결된다. */
+const SIDES = [
+  { id: "t", position: Position.Top },
+  { id: "r", position: Position.Right },
+  { id: "b", position: Position.Bottom },
+  { id: "l", position: Position.Left },
+] as const;
+function Handles() {
+  return (
+    <>
+      {SIDES.map((h) => (
+        <Handle
+          key={h.id}
+          id={h.id}
+          type="source"
+          position={h.position}
+          style={{ width: 10, height: 10 }}
+        />
+      ))}
+    </>
+  );
+}
+type Dir = "r" | "l" | "t" | "b";
+const DIR_OPPOSITE: Record<Dir, string> = { r: "l", l: "r", t: "b", b: "t" };
+
 const ARROW = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
 const COLORS = ["#fff7c2", "#ffd9e1", "#d6ecff", "#dff5dc", "#e8dcff", "#ffffff"] as const;
 
@@ -51,7 +77,7 @@ function ShapeNodeView({ id, data, selected, width, height }: NodeProps<Node<Sha
   return (
     <div className="relative" style={{ width: w, height: h }}>
       <NodeResizer isVisible={selected} minWidth={70} minHeight={50} />
-      <Handle type="target" position={Position.Left} />
+      <Handles />
       {data.shape === "diamond" ? (
         <svg className="absolute inset-0" width={w} height={h}>
           <polygon
@@ -78,7 +104,6 @@ function ShapeNodeView({ id, data, selected, width, height }: NodeProps<Node<Sha
         value={data.text}
         onChange={(e) => updateNodeData(id, { text: e.target.value })}
       />
-      <Handle type="source" position={Position.Right} />
     </div>
   );
 }
@@ -94,9 +119,8 @@ function ImageNodeView({ data, selected, width }: NodeProps<Node<ImageData, "ima
       }}
     >
       <NodeResizer isVisible={selected} minWidth={80} keepAspectRatio />
-      <Handle type="target" position={Position.Left} />
+      <Handles />
       <img src={data.url} alt="" draggable={false} className="pointer-events-none block w-full" />
-      <Handle type="source" position={Position.Right} />
     </div>
   );
 }
@@ -112,7 +136,7 @@ function NoteNodeView({ id, data, selected }: NodeProps<Node<NoteData, "note">>)
         borderWidth: selected ? 2 : 1,
       }}
     >
-      <Handle type="target" position={Position.Left} />
+      <Handles />
       <textarea
         className="nodrag nowheel block w-full resize-none bg-transparent font-mono text-xs leading-snug text-black outline-none"
         rows={Math.max(
@@ -123,7 +147,6 @@ function NoteNodeView({ id, data, selected }: NodeProps<Node<NoteData, "note">>)
         value={data.text}
         onChange={(e) => updateNodeData(id, { text: e.target.value })}
       />
-      <Handle type="source" position={Position.Right} />
     </div>
   );
 }
@@ -155,7 +178,14 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
       }
       const saved = (data.mindmap ?? {}) as Saved;
       setNodes(saved.nodes ?? []);
-      setEdges(saved.edges ?? []);
+      // 예전(좌→우 고정) 선은 오른쪽→왼쪽 연결점으로 보정한다.
+      setEdges(
+        (saved.edges ?? []).map((e) => ({
+          ...e,
+          sourceHandle: e.sourceHandle ?? "r",
+          targetHandle: e.targetHandle ?? "l",
+        })),
+      );
       setLoaded(true);
       setTimeout(() => void fitView({ padding: 0.2 }), 50);
     })();
@@ -182,6 +212,8 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           id: e.id,
           source: e.source,
           target: e.target,
+          sourceHandle: e.sourceHandle,
+          targetHandle: e.targetHandle,
           type: e.type,
           label: e.label,
           markerEnd: e.markerEnd,
@@ -225,6 +257,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
     };
     setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), node]);
   };
+  const [childDir, setChildDir] = useState<Dir>("r");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -265,10 +298,16 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
     const id = newId();
     let position: { x: number; y: number };
     if (opts?.parent) {
-      const siblings = edges.filter((e) => e.source === opts.parent!.id).length;
+      // 선택한 방향(→ ← ↑ ↓)으로 자식을 놓는다. 같은 방향 형제는 옆으로 나란히 벌린다.
+      const siblings = edges.filter(
+        (e) => e.source === opts.parent!.id && e.sourceHandle === childDir,
+      ).length;
+      const gx = childDir === "r" ? 260 : childDir === "l" ? -260 : 0;
+      const gy = childDir === "b" ? 150 : childDir === "t" ? -150 : 0;
+      const spread = siblings * (childDir === "r" || childDir === "l" ? 90 : 200);
       position = {
-        x: opts.parent.position.x + 260,
-        y: opts.parent.position.y + siblings * 90,
+        x: opts.parent.position.x + gx + (gx === 0 ? spread : 0),
+        y: opts.parent.position.y + gy + (gx === 0 ? 0 : spread),
       };
     } else {
       const rect = wrapRef.current?.getBoundingClientRect();
@@ -295,6 +334,8 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           id: `e-${opts.parent!.id}-${id}`,
           source: opts.parent!.id,
           target: id,
+          sourceHandle: childDir,
+          targetHandle: DIR_OPPOSITE[childDir],
           type: "smoothstep",
           markerEnd: ARROW,
         },
@@ -367,6 +408,17 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         >
           + 하위 노트
         </button>
+        <select
+          aria-label="하위 노트 방향"
+          className="h-9 border border-border bg-background px-2 font-mono text-xs"
+          value={childDir}
+          onChange={(e) => setChildDir(e.target.value as Dir)}
+        >
+          <option value="r">→ 오른쪽</option>
+          <option value="l">← 왼쪽</option>
+          <option value="b">↓ 아래</option>
+          <option value="t">↑ 위</option>
+        </select>
         <select
           aria-label="도형 추가"
           className="h-9 border border-border bg-background px-2 font-mono text-xs"
@@ -460,8 +512,9 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         </div>
       )}
       <p className="font-mono text-[11px] text-muted-foreground">
-        드래그로 이동 · 휠로 확대/축소 · 양옆 점을 끌어 연결 · 도형/이미지는 선택하면 모서리로 크기
-        조절 · 이미지는 파일을 캔버스에 끌어놓거나 붙여넣기(Ctrl/⌘+V)도 가능 · Delete로 삭제
+        드래그로 이동 · 휠로 확대/축소 · 사방의 점(위·아래·좌·우)을 끌어 연결 · 도형/이미지는
+        선택하면 모서리로 크기 조절 · 이미지는 파일을 캔버스에 끌어놓거나 붙여넣기(Ctrl/⌘+V)도 가능
+        · Delete로 삭제
       </p>
       {uploadError && <p className="font-mono text-xs text-destructive">{uploadError}</p>}
       <div
@@ -498,6 +551,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          connectionMode={ConnectionMode.Loose}
           deleteKeyCode={["Delete", "Backspace"]}
           minZoom={0.2}
           maxZoom={2}
