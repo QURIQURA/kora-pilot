@@ -79,6 +79,8 @@ export interface WeighingCell {
    * 곱해서 함께 보여준다. %/계산에는 관여하지 않는다. */
   secondaryAmount: number | null;
   secondaryUnit: string | null;
+  /** 포뮬라 재료 줄에 적어둔 코멘트(예: 유청 분리한 것) — 계량 진행 메모(note)와는 별개 */
+  lineNote: string | null;
 }
 
 export interface WeighingGroup {
@@ -161,6 +163,7 @@ export function buildWeighingGroups(params: {
         note: progress?.note ?? null,
         secondaryAmount: line.secondary_amount != null ? Number(line.secondary_amount) : null,
         secondaryUnit: line.secondary_unit ?? null,
+        lineNote: line.note?.trim() || null,
       });
     }
   }

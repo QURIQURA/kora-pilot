@@ -1543,7 +1543,7 @@ function WeighingMatrixCell({
 
   return (
     <div
-      className={`relative flex min-w-[110px] items-center justify-between gap-2 rounded-sm px-1 py-1 ${STATUS_CELL_TONE[cell.progressStatus]}`}
+      className={`relative flex flex-wrap min-w-[110px] items-center justify-between gap-2 rounded-sm px-1 py-1 ${STATUS_CELL_TONE[cell.progressStatus]}`}
     >
       <button
         type="button"
@@ -1577,6 +1577,14 @@ function WeighingMatrixCell({
       >
         {setProgress.isError ? "⚠" : PROGRESS_STATUS_ICON[cell.progressStatus]}
       </button>
+      {cell.lineNote && (
+        <p
+          className="basis-full text-[11px] leading-tight text-muted-foreground"
+          title={cell.lineNote}
+        >
+          💬 {cell.lineNote}
+        </p>
+      )}
       {setProgress.isError && (
         <p className="absolute z-30 mt-8 w-40 bg-destructive px-1 py-0.5 text-[10px] text-destructive-foreground">
           저장 실패 — 다시 클릭해보세요
