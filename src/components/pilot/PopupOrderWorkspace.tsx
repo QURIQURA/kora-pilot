@@ -8,6 +8,7 @@ import type { Json } from "@/integrations/supabase/types";
 import {
   cakeSizesQuery,
   currentUserId,
+  customersQuery,
   productComponentsQuery,
   productsQuery,
   type OrderListRow,
@@ -119,11 +120,41 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
   // 2026-11-13 (연): 품목 행에서 바로 프리오더(일반 ORDERS 행) 생성. 번호는 "<팝업번호>.N",
   // 제품/픽업 시각은 팝업 품목·시작 시각을 물려받고, 주문자·결제는 열린 오더 상세에서 채운다.
   // 생산은 팝업 세션이 맡으므로 별도 WORK SESSION은 만들지 않는다.
+  // 2026-11-13 (연): 품목 행에서 바로 프리오더(일반 ORDERS 행) 생성 — 케이크 오더 폼으로 보내지 않고
+  // 이 페이지 안의 작은 창에서 고객(기존 선택 또는 새로 추가)·수량만 받는다. 제품은 품목으로 이미 정해져 있다.
+  // 번호는 "<팝업번호>.N", 픽업은 팝업 시작 시각. 생산은 팝업 세션이 맡으므로 별도 WORK SESSION은 만들지 않는다.
+  const [preorderFor, setPreorderFor] = useState<PopupItem | null>(null);
   const addPreorder = useMutation({
-    mutationFn: async (item: PopupItem) => {
+    mutationFn: async ({
+      item,
+      customerId,
+      newCustomer,
+      quantity,
+    }: {
+      item: PopupItem;
+      customerId: string | null;
+      newCustomer: { name: string; phone: string } | null;
+      quantity: number;
+    }) => {
       if (dirty || end !== inputTime(plan.ends_at || null)) await save.mutateAsync();
       const number = baseline.current.state.orderNumber.trim();
       if (!number) throw new Error("팝업 오더 번호를 먼저 저장하세요");
+      const uid = await currentUserId();
+      let customer = customerId;
+      if (!customer && newCustomer) {
+        const { data: created, error: customerError } = await supabase
+          .from("customers")
+          .insert({
+            user_id: uid,
+            name: newCustomer.name.trim(),
+            phone: newCustomer.phone.trim() || null,
+          } as never)
+          .select("id")
+          .single();
+        if (customerError) throw customerError;
+        customer = created.id;
+      }
+      if (!customer) throw new Error("고객을 선택하거나 새로 입력하세요");
       const prefix = `${number}.`;
       const { data: existing, error: existingError } = await supabase
         .from("orders")
@@ -134,24 +165,20 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
         const n = Number((o.order_number ?? "").slice(prefix.length));
         return Number.isInteger(n) && n > m ? n : m;
       }, 0);
-      const uid = await currentUserId();
-      const { data, error } = await supabase
-        .from("orders")
-        .insert({
-          user_id: uid,
-          order_number: `${prefix}${max + 1}`,
-          product_id: item.product_id || null,
-          quantity: 1,
-          pickup_at: isoTime(baseline.current.state.start),
-        } as never)
-        .select("id")
-        .single();
+      const { error } = await supabase.from("orders").insert({
+        user_id: uid,
+        order_number: `${prefix}${max + 1}`,
+        customer_id: customer,
+        product_id: item.product_id || null,
+        quantity: Math.max(1, Math.floor(quantity) || 1),
+        pickup_at: isoTime(baseline.current.state.start),
+      } as never);
       if (error) throw error;
-      return data.id;
     },
-    onSuccess: async (id) => {
+    onSuccess: async () => {
+      setPreorderFor(null);
       await client.invalidateQueries({ queryKey: ["orders"] });
-      void navigate({ to: "/orders/$orderId", params: { orderId: id } });
+      await client.invalidateQueries({ queryKey: ["customers"] });
     },
   });
   const session = useMutation({
@@ -438,8 +465,8 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                     item={item}
                     preorders={preorders.data ?? []}
                     loading={preorders.isLoading}
-                    error={preorders.error?.message ?? addPreorder.error?.message}
-                    onAdd={() => addPreorder.mutate(item)}
+                    error={preorders.error?.message}
+                    onAdd={() => setPreorderFor(item)}
                     addDisabled={
                       pending ||
                       !item.product_id ||
@@ -463,6 +490,19 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
               </p>
             )}
           </SectionCard>
+          {preorderFor && (
+            <PreorderDialog
+              item={preorderFor}
+              popupLabel={`${baseline.current.state.orderNumber} · ${plan.title}`}
+              pending={addPreorder.isPending}
+              error={addPreorder.error?.message}
+              onClose={() => {
+                addPreorder.reset();
+                setPreorderFor(null);
+              }}
+              onSubmit={(v) => addPreorder.mutate({ item: preorderFor, ...v })}
+            />
+          )}
           <PopupChecklistSection plan={plan} onChange={setPlan} />
           <SectionCard title="운영 메모">
             <textarea
@@ -657,6 +697,133 @@ function PopupItemPreorders({
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+/** "+ 프리오더 추가" 작은 창 — 고객(기존 선택 / 새로 입력)과 수량만 받는다. 제품·픽업은 품목·팝업에서 정해진다. */
+function PreorderDialog({
+  item,
+  popupLabel,
+  pending,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  item: PopupItem;
+  popupLabel: string;
+  pending: boolean;
+  error?: string | undefined;
+  onClose: () => void;
+  onSubmit: (v: {
+    customerId: string | null;
+    newCustomer: { name: string; phone: string } | null;
+    quantity: number;
+  }) => void;
+}) {
+  const customers = useQuery(customersQuery());
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [customerId, setCustomerId] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const canSubmit =
+    !pending && quantity >= 1 && (mode === "existing" ? !!customerId : !!name.trim());
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 p-0 sm:items-center sm:p-3">
+      <div className="w-full max-w-md border border-border bg-background" role="dialog" aria-modal="true">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <span className="label-caps">PREORDER · {item.label || "품목"}</span>
+          <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
+            CLOSE
+          </button>
+        </div>
+        <form
+          className="space-y-3 p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!canSubmit) return;
+            onSubmit({
+              customerId: mode === "existing" ? customerId : null,
+              newCustomer: mode === "new" ? { name, phone } : null,
+              quantity,
+            });
+          }}
+        >
+          <p className="text-xs text-muted-foreground">{popupLabel}</p>
+          <div className="flex gap-1">
+            {(["existing", "new"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`${buttonClass} ${mode === m ? "border-foreground" : ""}`}
+                onClick={() => setMode(m)}
+              >
+                {m === "existing" ? "기존 고객" : "새 고객"}
+              </button>
+            ))}
+          </div>
+          {mode === "existing" ? (
+            <Field label="고객">
+              <select
+                className={selectClass}
+                value={customerId}
+                autoFocus
+                onChange={(e) => setCustomerId(e.target.value)}
+              >
+                <option value="">— 선택 —</option>
+                {(customers.data ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name || "(이름 없음)"}
+                    {c.instagram_handle ? ` · @${c.instagram_handle}` : ""}
+                    {c.phone ? ` · ${c.phone}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="이름">
+                <input
+                  className={inputClass}
+                  value={name}
+                  autoFocus
+                  maxLength={120}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
+              <Field label="연락처">
+                <input
+                  className={inputClass}
+                  value={phone}
+                  inputMode="tel"
+                  maxLength={40}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+          <Field label={`수량 (${item.unit})`}>
+            <input
+              className={`${inputClass} !w-24`}
+              type="number"
+              min="1"
+              step="1"
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+            />
+          </Field>
+          {error && <p className="font-mono text-xs uppercase text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" className={buttonClass} onClick={onClose}>
+              취소
+            </button>
+            <button type="submit" className={primaryButtonClass} disabled={!canSubmit}>
+              {pending ? "추가 중…" : "프리오더 추가"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
