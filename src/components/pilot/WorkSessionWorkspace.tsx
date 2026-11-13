@@ -1064,7 +1064,7 @@ function WeighingView({
         >
           <thead>
             <tr>
-              <th className="label-caps sticky left-0 top-0 z-30 relative bg-secondary px-3 py-2 text-right text-xs text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border),inset_-1px_0_0_0_var(--color-border)]">
+              <th className="label-caps sticky left-0 top-0 z-30 bg-secondary px-3 py-2 text-right text-xs text-muted-foreground shadow-[inset_0_-1px_0_0_var(--color-border),inset_-1px_0_0_0_var(--color-border)]">
                 INGREDIENT
                 <div
                   role="separator"
@@ -1267,7 +1267,8 @@ function MatrixColumnHeader({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "sticky top-0 z-20 relative bg-secondary px-3 py-2 text-left align-bottom",
+        // sticky 자체가 absolute 자식의 기준이 되므로 relative를 같이 쓰면 tailwind-merge가 sticky를 지워 헤더가 스크롤로 사라진다.
+        "sticky top-0 z-20 bg-secondary px-3 py-2 text-left align-bottom",
         groupLabel !== undefined
           ? "shadow-[inset_0_3px_0_0_var(--color-foreground),inset_0_-1px_0_0_var(--color-border),inset_1px_0_0_0_var(--color-border)] pt-8"
           : "shadow-[inset_0_-1px_0_0_var(--color-border),inset_1px_0_0_0_var(--color-border)]",
@@ -1368,7 +1369,7 @@ function MatrixBodyRow({
       )}
     >
       <td
-        className="sticky left-0 z-10 relative border-r border-border bg-background px-3 py-1.5 align-middle"
+        className="sticky left-0 z-10 border-r border-border bg-background px-3 py-1.5 align-middle"
         style={{ height }}
       >
         {/* 재료명은 오른쪽(버전 열 쪽)으로 붙이고, 드래그 손잡이는 왼쪽에 고정 */}
