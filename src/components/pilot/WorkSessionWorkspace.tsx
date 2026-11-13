@@ -1130,13 +1130,14 @@ function WeighingView({
           </SortableContext>
         </DndContext>
         <tfoot>
-          {displayColumns.some((c) => c.slot === "SHEET" && c.mouldId) && (
+          {displayColumns.some((c) => c.mouldId) && (
             <tr>
               <th className="label-caps sticky left-0 z-10 border-t border-r border-border bg-secondary px-3 py-1 text-right text-[11px] text-muted-foreground">
                 MOULD
               </th>
               {displayColumns.map((col) => {
-                const m = col.slot === "SHEET" && col.mouldId ? mouldById.get(col.mouldId) : null;
+                // 2026-11-13: 팝업 세션은 slot이 null이라 SHEET 한정이면 몰드 행이 사라졌다 — 몰드가 있으면 슬롯과 무관하게 표시.
+                const m = col.mouldId ? mouldById.get(col.mouldId) : null;
                 const baseM = col.baseMouldId ? mouldById.get(col.baseMouldId) : null;
                 const qty =
                   col.mouldQty ?? (m && baseM ? mouldQty(col.multiplier, baseM, m) : null);
