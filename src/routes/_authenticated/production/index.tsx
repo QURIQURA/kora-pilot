@@ -33,14 +33,6 @@ export const Route = createFileRoute("/_authenticated/production/")({
   component: ProductionDashboardPage,
 });
 
-const STATUS_LABEL: Record<string, string> = {
-  PLANNED: "PLANNED",
-  IN_PROGRESS: "IN PROGRESS",
-  PAUSED: "PAUSED",
-  COMPLETED: "COMPLETED",
-  CANCELLED: "CANCELLED",
-};
-
 /**
  * 2026-10-22 사용자 요청: PRODUCTION 메인보드를 DASHBOARD(작업 대기공간 + 데일리 타임라인)로 바꾸고,
  * 기존 WORK SESSION 목록은 기록 보관용 HISTORY 탭으로 옮긴다. 기존 세션 기록/상세 화면은 그대로.
@@ -126,9 +118,6 @@ function WorkSessionHistory() {
                       CREATED {formatDateTime(session.created_at)}
                     </p>
                   </Link>
-                  <span className="label-caps border border-foreground px-2 py-0.5 text-[11px]">
-                    {STATUS_LABEL[session.status] ?? session.status}
-                  </span>
                   <WorkSessionMergeButton
                     sessionId={session.id}
                     sessionName={session.name}

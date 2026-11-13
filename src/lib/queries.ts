@@ -1169,7 +1169,6 @@ export interface DashboardComponentRow {
   unmodifiedCopy: boolean;
   formulaId: string | null;
   componentId: string | null;
-  sessionStatus: string;
   order: {
     id: string;
     order_number: string;
@@ -1284,7 +1283,6 @@ export const dashboardComponentsQuery = () =>
             (r.formula_versions?.formula_version_ingredients ?? []).every(
               (i) => i.amount_source === "copied",
             ),
-          sessionStatus: r.work_sessions?.status ?? "PLANNED",
           order: {
             id: order.id,
             order_number: order.order_number,

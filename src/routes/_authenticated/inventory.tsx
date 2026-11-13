@@ -301,7 +301,7 @@ function InventoryPage() {
       <p className="font-mono text-xs text-muted-foreground">
         {INV_TABS.find((t) => t.key === tab)?.hint}
         {tab === "PRODUCT" || tab === "COMPONENT"
-          ? " · PRODUCTION 작업 세션을 COMPLETED로 바꾸면 그 자리에서 바로 반영하거나, 여기서 언제든 수정할 수 있습니다."
+          ? " · WORK SESSION 화면 하단에서 바로 반영하거나, 여기서 언제든 수정할 수 있습니다."
           : ""}
       </p>
 

@@ -85,20 +85,6 @@ import {
   selectClass,
 } from "@/components/pilot/ui";
 
-const NEXT_ACTIONS: Record<string, { label: string; nextStatus: string }[]> = {
-  PLANNED: [{ label: "START WORK", nextStatus: "IN_PROGRESS" }],
-  IN_PROGRESS: [
-    { label: "PAUSE", nextStatus: "PAUSED" },
-    { label: "COMPLETE", nextStatus: "COMPLETED" },
-  ],
-  PAUSED: [
-    { label: "RESUME", nextStatus: "IN_PROGRESS" },
-    { label: "CANCEL", nextStatus: "CANCELLED" },
-  ],
-  COMPLETED: [],
-  CANCELLED: [],
-};
-
 /** 세션 하나의 작업 화면(코어/데코/계량/워크플로/노트). 세션 상세 페이지와 PRODUCTION DASHBOARD의
  * 타임라인 아래 박스들이 같이 쓴다. embedded=true면 페이지 전용 요소(브레드크럼, 작업일정 박스)를 숨긴다. */
 export function WorkSessionWorkspace({
@@ -195,24 +181,10 @@ export function WorkSessionWorkspace({
     },
   });
 
-  const setStatus = (nextStatus: string) => {
-    const patch: TablesUpdate<"work_sessions"> = { status: nextStatus };
-    if (nextStatus === "IN_PROGRESS" && !session.data?.started_at) {
-      patch.started_at = new Date().toISOString();
-    }
-    if (nextStatus === "COMPLETED") {
-      patch.completed_at = new Date().toISOString();
-    }
-    updateSession.mutate(patch);
-  };
-
-  /** START WORK를 깜빡 안 눌러도, WORKFLOW에서 TASK 하나라도 시작시각이 기록되면 그 시각으로
-   * 세션을 자동으로 IN_PROGRESS 전환한다(2026-09-30) — PLANNED 상태일 때만 동작, 이미
-   * 시작/일시정지/완료/취소된 세션은 건드리지 않는다. */
+  // 2026-11-13: 세션 상태(PLANNED/IN_PROGRESS/COMPLETED) 기능 제거 — 작업은 DASHBOARD 데일리 타임라인과
+  // 블록·TASK 완료로 관리한다. TASK 시작시각이 처음 기록되면 세션 시작 시각(started_at)만 남긴다.
   const ensureSessionStartedAt = (iso: string) => {
-    if (session.data?.status === "PLANNED") {
-      updateSession.mutate({ status: "IN_PROGRESS", started_at: iso });
-    }
+    if (!session.data?.started_at) updateSession.mutate({ started_at: iso });
   };
 
   const rows = useMemo(() => selections.data ?? [], [selections.data]);
@@ -309,21 +281,7 @@ export function WorkSessionWorkspace({
               {data.completed_at ? ` · COMPLETED ${formatDateTime(data.completed_at)}` : ""}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="label-caps border border-foreground bg-foreground px-3 py-1 text-background">
-              {data.status}
-            </span>
-            {(NEXT_ACTIONS[data.status] ?? []).map((action) => (
-              <button
-                key={action.nextStatus}
-                type="button"
-                className={buttonClass}
-                onClick={() => setStatus(action.nextStatus)}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
+          <div className="flex flex-wrap items-center gap-2"></div>
         </div>
       )}
 
@@ -433,7 +391,7 @@ export function WorkSessionWorkspace({
       </div>
 
       {/* 재고 반영은 작업이 끝난 뒤 하는 일이므로 시퀀스상 맨 마지막(NOTES 다음)에 둔다(2026-09-30). */}
-      {data.status === "COMPLETED" && <StockReflectSection sessionId={sessionId} rows={rows} />}
+      {!embedded && <StockReflectSection sessionId={sessionId} rows={rows} />}
 
       {editingColumn && (
         <EditFormulaVersionModal
@@ -678,7 +636,6 @@ export function AddFormulaVersionForm({
     return resolveSlotGroup(techniqueCategories.data ?? [], catId) === slot;
   });
   const [formulaId, setFormulaId] = useState("");
-  const [versionId, setVersionId] = useState("");
   // 추가는 ×1로 하고, 배수·몰드·재료 기준 설정은 추가 직후 열리는 수정 창에서 한다.
   const planMultiplier = "1";
   const planTarget = "";
@@ -686,7 +643,9 @@ export function AddFormulaVersionForm({
   const versionOptions = [...(formula?.formula_versions ?? [])].sort(
     (a, b) => b.version_number - a.version_number,
   );
-  const selectedVersion = versionOptions.find((v) => v.id === versionId) ?? null;
+  // 2026-11-13: 레시피 버전은 고르지 않는다 — 항상 버전 번호가 가장 높은 것.
+  const versionId = versionOptions[0]?.id ?? "";
+  const selectedVersion = versionOptions[0] ?? null;
   const scalingMode = formula?.components?.scaling_mode ?? null;
   // 2026-11-06: 배수를 정할 때 기준이 되도록 이 버전의 ×1 총 중량과(SHEET면) 기본 몰드·기준중량을 보여준다.
   const baseIngredients = useQuery(versionIngredientsQuery(versionId || null));
@@ -774,32 +733,13 @@ export function AddFormulaVersionForm({
           <select
             className={selectClass}
             value={formulaId}
-            onChange={(e) => {
-              setFormulaId(e.target.value);
-              setVersionId("");
-            }}
+            onChange={(e) => setFormulaId(e.target.value)}
             required
           >
             <option value="">SELECT FORMULA…</option>
             {formulaList.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.components?.name ?? f.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="VERSION">
-          <select
-            className={selectClass}
-            value={versionId}
-            disabled={!formulaId}
-            onChange={(e) => setVersionId(e.target.value)}
-            required
-          >
-            <option value="">SELECT VERSION…</option>
-            {versionOptions.map((v) => (
-              <option key={v.id} value={v.id}>
-                {versionLabel(v.version_number)} · {v.status}
               </option>
             ))}
           </select>
@@ -3257,7 +3197,7 @@ function EditFormulaVersionModal({
   );
 }
 
-/** PRODUCTION 세션이 COMPLETED로 바뀌면 나타남 — 이 세션에서 만든 Component들을 냉동 재고/판매전환으로 즉시 반영 가능(선택) */
+/** 세션 상세 화면 하단(2026-11-13부터 상태와 무관하게 항상 표시) — 이 세션에서 만든 Component들을 냉동 재고/판매전환으로 즉시 반영 가능(선택) */
 function StockReflectSection({
   sessionId,
   rows,

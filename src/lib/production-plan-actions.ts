@@ -8,13 +8,11 @@ export async function removePlannedComponent(row: WorkSessionFormulaVersionRow) 
   if (row.user_id !== uid) throw new Error("작업 항목에 접근할 수 없습니다");
   const { data: session, error: sessionError } = await supabase
     .from("work_sessions")
-    .select("status,order_id")
+    .select("order_id")
     .eq("id", row.work_session_id)
     .eq("user_id", uid)
     .single();
   if (sessionError) throw sessionError;
-  if (["COMPLETED", "CANCELLED"].includes(session.status))
-    throw new Error("완료·취소된 작업은 변경할 수 없습니다");
   if (session.order_id) {
     const { data: order, error } = await supabase
       .from("orders")

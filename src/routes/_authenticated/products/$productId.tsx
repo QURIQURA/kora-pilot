@@ -1357,12 +1357,24 @@ function ComponentUsageEditor({
   onSave: (patch: { formula_version_id?: string | null; quantity_g?: number | null }) => void;
 }) {
   const formulas = useQuery(formulasByComponentQuery(link.component_id ?? ""));
-  const versionOptions = (formulas.data ?? []).flatMap((formula) =>
-    formula.formula_versions.map((version) => ({
-      id: version.id,
-      label: `${formula.name} · V${version.version_number}${version.status !== "DRAFT" ? ` (${version.status})` : ""}`,
-    })),
-  );
+  // 2026-11-13: 버전은 고르지 않는다 — 포뮬라마다 번호가 가장 높은 버전이 항상 적용된다.
+  const versionOptions = (formulas.data ?? []).flatMap((formula) => {
+    const latest = [...formula.formula_versions].sort(
+      (a, b) => b.version_number - a.version_number,
+    )[0];
+    return latest ? [{ id: latest.id, label: `${formula.name} · V${latest.version_number}` }] : [];
+  });
+  const linkedFormulaLabel = (formulas.data ?? []).find((f) =>
+    f.formula_versions.some((v) => v.id === link.formula_version_id),
+  )?.name;
+  const latestOfLinked = versionOptions.find((o) => o.label.startsWith(`${linkedFormulaLabel} · `));
+  const wantedVersionId =
+    latestOfLinked?.id ?? (link.formula_version_id ? null : versionOptions[0]?.id);
+  useEffect(() => {
+    if (wantedVersionId && wantedVersionId !== link.formula_version_id)
+      onSave({ formula_version_id: wantedVersionId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantedVersionId, link.formula_version_id]);
 
   // 실사용량 입력 시 해당 FORMULA VERSION의 총량(g)을 바로 옆에 보여줘서 "전체 중 몇 g을 쓰는지" 비교하며 입력하기 쉽게 함
   const versionIngredients = useQuery(versionIngredientsQuery(link.formula_version_id ?? null));
@@ -1389,23 +1401,13 @@ function ComponentUsageEditor({
     );
   }
 
-  const selectedLabel = versionOptions.find((opt) => opt.id === link.formula_version_id)?.label;
+  const selectedLabel = latestOfLinked?.label ?? versionOptions[0]?.label ?? "—";
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select
-        className="min-h-[32px] w-full truncate border border-input bg-background px-2 py-1 font-body text-sm text-foreground outline-none focus:border-foreground sm:w-64"
-        value={link.formula_version_id ?? ""}
-        onChange={(e) => onSave({ formula_version_id: e.target.value || null })}
-        title={selectedLabel}
-      >
-        <option value="">FORMULA VERSION 미지정</option>
-        {versionOptions.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      <span className="font-mono text-xs text-muted-foreground" title={selectedLabel}>
+        {selectedLabel} (최신)
+      </span>
       <UsageQuantityInput
         quantityG={link.quantity_g}
         onSave={(quantity_g) => onSave({ quantity_g })}

@@ -42,7 +42,7 @@ export async function followLatestVersions(): Promise<number> {
   };
   for (const r of (sel.data ?? []) as unknown as Sel[]) {
     const ws = r.work_sessions;
-    if (!ws || ["COMPLETED", "CANCELLED"].includes(ws.status)) continue;
+    if (!ws) continue;
     if (ws.orders && ["COMPLETED", "CANCELLED"].includes(ws.orders.status)) continue;
     if (ws.orders?.dietary_build_id) continue; // 식이 Build가 버전을 지정하므로 건드리지 않는다
     const next = target(r.formula_version_id);

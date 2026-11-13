@@ -106,8 +106,9 @@ export function OrderComponentPlanRow({
       if (!(dur >= 15)) throw new Error("작업 시간은 15분 이상으로 입력하세요");
       const s = minOf(sched.start);
       const e = s + dur;
-      if (s < 6 * 60 || e > 22 * 60)
-        throw new Error("타임라인은 06:00–22:00 안에서만 배정할 수 있어요");
+      // 2026-11-13: 시간대 제한 없음 — 하루(00:00–24:00) 안이면 어느 시간이든 배정한다.
+      if (s < 0 || e > 24 * 60)
+        throw new Error("작업이 자정을 넘길 수 없어요 — 시작/작업 시간을 조정하세요");
       const t = (m: number) =>
         `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}:00`;
       if (oneBlock) {
@@ -165,6 +166,11 @@ export function OrderComponentPlanRow({
       return data;
     },
   });
+  // 2026-11-13: 버전을 고르지 않는다 — 컴포넌트를 교체하면 새 포뮬라의 최신(번호 가장 높은) 버전을 자동 선택한다.
+  useEffect(() => {
+    const latest = versions.data?.[0];
+    if (!draft.version && latest) setDraft((d) => ({ ...d, version: latest.id, pinned: false }));
+  }, [draft.version, versions.data]);
   const ingredients = useQuery(versionIngredientsQuery(draft.version));
   const base = sumBaseGrams(ingredients.data ?? []);
   // 몰드 기준: 레시피 기본 몰드(예: 6인치)와 이 주문에서 만들 목표 몰드(예: 8인치)의 기준중량 비율로 배수를 정한다.
@@ -367,9 +373,7 @@ export function OrderComponentPlanRow({
   });
   // 저장된 계획의 텍스트 요약 — 입력한 내용(재료/몰드/기준중량/배수)을 그대로 보여준다.
   const savedVersion = (versions.data ?? []).find((v) => v.id === draft.version);
-  const versionText = `V${savedVersion?.version_number ?? row.formula_versions.version_number}${
-    savedVersion ? ` · ${savedVersion.status}` : ""
-  }`;
+  const versionText = `V${savedVersion?.version_number ?? row.formula_versions.version_number}${""}`;
   const productionText =
     ingredients.isSuccess && preview ? ` · 생산 ${fmtNumber(preview.production)}g` : "";
   let planText: string;
@@ -444,31 +448,10 @@ export function OrderComponentPlanRow({
               </select>
             </label>
           )}
-          <label className="block text-[11px]">
-            레시피 버전
-            <select
-              aria-label="주문 레시피 버전"
-              className={selectClass}
-              value={draft.version}
-              onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value, pinned: true }))}
-            >
-              {!draft.version && <option value="">버전 선택…</option>}
-              {versions.isLoading && draft.version && (
-                <option value={draft.version}>V{row.formula_versions.version_number}</option>
-              )}
-              {(versions.data ?? [])
-                .filter(
-                  (v) =>
-                    !["ARCHIVED", "SUPERSEDED"].includes(v.status) ||
-                    v.id === row.formula_version_id,
-                )
-                .map((v) => (
-                  <option key={v.id} value={v.id}>
-                    V{v.version_number} · {v.status}
-                  </option>
-                ))}
-            </select>
-          </label>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            레시피는 항상 최신 버전(V
+            {savedVersion?.version_number ?? row.formula_versions.version_number})이 적용돼요.
+          </p>
           {specChoices.length > 0 && (
             <div className="flex flex-wrap items-center gap-1 text-[11px]">
               <span className="label-caps text-muted-foreground">규격 스펙</span>

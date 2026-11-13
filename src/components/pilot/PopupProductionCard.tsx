@@ -77,12 +77,7 @@ export function PopupItemProduction({
   const client = useQueryClient();
   const rows = useQuery(workSessionFormulaVersionsQuery(sessionId));
   const session = useQuery(workSessionQuery(sessionId));
-  const locked =
-    readOnly ||
-    session.isLoading ||
-    session.isError ||
-    session.data?.status === "COMPLETED" ||
-    session.data?.status === "CANCELLED";
+  const locked = readOnly || session.isLoading || session.isError;
   const [adding, setAdding] = useState(false);
   // 제품이 연결된 품목은 제품에 저장된 하위 컴포넌트를 세션에 불러온다 — 세션이 비어 있으면 자동으로 한 번,
   // 이후엔 "제품 컴포넌트 불러오기" 버튼으로(이미 있는 건 건너뜀).

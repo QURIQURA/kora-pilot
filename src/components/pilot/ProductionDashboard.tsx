@@ -57,13 +57,16 @@ import { buttonClass, inputClass } from "./ui";
  * 기존 WORK SESSION 기록/화면은 건드리지 않고, 블록은 컴포넌트 행을 참조만 한다.
  */
 
-const DAY_START_MIN = 6 * 60;
-const DAY_END_MIN = 22 * 60;
+const DAY_START_MIN = 0;
+const DAY_END_MIN = 24 * 60;
 const PX_PER_HOUR = 56;
 const PX_PER_MIN = PX_PER_HOUR / 60;
 const SNAP_MIN = 15;
 const DEFAULT_DURATION_MIN = 60;
-const HOURS = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 }, (_, i) => i + 6);
+const HOURS = Array.from(
+  { length: (DAY_END_MIN - DAY_START_MIN) / 60 },
+  (_, i) => i + DAY_START_MIN / 60,
+);
 
 // 오더별 구분색 — 상태 색상처럼 채도를 낮춘 톤(배경/강조선/글자).
 const ORDER_PALETTE = [
@@ -199,9 +202,7 @@ export function ProductionDashboard() {
   }, [rows]);
 
   const isActive = (r: DashboardComponentRow) =>
-    r.order.status !== "COMPLETED" &&
-    r.sessionStatus !== "COMPLETED" &&
-    r.sessionStatus !== "CANCELLED";
+    r.order.status !== "COMPLETED" && r.order.status !== "CANCELLED";
 
   const poolGroups = useMemo(() => {
     const groups = new Map<
@@ -611,13 +612,13 @@ export function ProductionDashboard() {
     },
   });
 
-  // TASK 시작시각이 기록되면 세션이 PLANNED일 때 IN_PROGRESS로 올린다(예전 WORKFLOW와 같은 규칙).
+  // TASK 시작시각이 처음 기록되면 세션 시작 시각만 남긴다(세션 상태 기능은 2026-11-13에 제거).
   const ensureSessionStarted = async (sessionId: string, iso: string) => {
     await supabase
       .from("work_sessions")
-      .update({ status: "IN_PROGRESS", started_at: iso })
+      .update({ started_at: iso })
       .eq("id", sessionId)
-      .eq("status", "PLANNED");
+      .is("started_at", null);
     await queryClient.invalidateQueries({ queryKey: ["work_sessions"] });
     await queryClient.invalidateQueries({ queryKey: ["dashboard_components"] });
   };

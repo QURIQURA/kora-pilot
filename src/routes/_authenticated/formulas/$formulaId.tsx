@@ -974,34 +974,9 @@ function FormulaDetailPage() {
           >
             {versionList.map((v) => (
               <option key={v.id} value={v.id}>
-                {`${versionLabel(v.version_number)} · ${v.status}`}
+                {versionLabel(v.version_number)}
               </option>
             ))}
-          </select>
-          {version && <StatusBadge status={version.status} />}
-          <select
-            className={`${compactSelectClass} w-auto`}
-            value=""
-            onChange={(e) => {
-              const next = e.target.value as FormulaStatus;
-              if (!next || !versionId) return;
-              supabase
-                .from("formula_versions")
-                .update({ status: next })
-                .eq("id", versionId)
-                .then(({ error }) => {
-                  if (error) throw error;
-                  return invalidate();
-                });
-            }}
-          >
-            <option value="">SET…</option>
-            <option value="CURRENT" disabled={version?.status === "CURRENT"}>
-              SET CURRENT
-            </option>
-            <option value="ARCHIVED" disabled={version?.status === "ARCHIVED"}>
-              ARCHIVE
-            </option>
           </select>
           <button
             type="button"
@@ -2142,28 +2117,11 @@ function VersionHistory({
 }) {
   const queryClient = useQueryClient();
 
-  /* "이 시점 배합이 지금보다 나았다" — 과거 스냅샷을 지우지 않고 CURRENT로 되돌린다.
-   * enforce_single_current_version 트리거가 기존 CURRENT를 자동으로 SUPERSEDED 처리한다. */
-  const makeCurrent = useMutation({
-    mutationFn: async (versionId: string) => {
-      const { error } = await supabase
-        .from("formula_versions")
-        .update({ status: "CURRENT" })
-        .eq("id", versionId);
-      if (error) throw error;
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["formula_versions", formulaId] });
-      await queryClient.invalidateQueries({ queryKey: ["formulas_by_component"] });
-      await queryClient.invalidateQueries({ queryKey: ["formulas"] });
-    },
-  });
-
   return (
     <SectionCard title="SNAPSHOT HISTORY">
       <p className="mb-3 font-mono text-[11px] text-muted-foreground">
-        Development Entry가 만든 배합 스냅샷들입니다 — 지워지지 않습니다. 예전 스냅샷이 더 나았다면
-        MAKE CURRENT로 되돌릴 수 있습니다.
+        Development Entry가 만든 배합 스냅샷들입니다 — 지워지지 않습니다. 항상 번호가 가장 높은
+        버전이 적용됩니다.
       </p>
       <ul className="divide-y divide-border border border-border">
         {versions.map((version) => (
@@ -2175,28 +2133,10 @@ function VersionHistory({
             >
               {versionLabel(version.version_number)}
             </button>
-            <StatusBadge status={version.status} />
             <span className="flex-1 text-sm">{version.change_summary || "—"}</span>
             <span className="font-mono text-xs text-muted-foreground">
               {formatDateTime(version.created_at)}
             </span>
-            {version.status !== "CURRENT" && (
-              <button
-                type="button"
-                className="label-caps border border-foreground px-2 py-1 text-[10px] hover:bg-secondary disabled:opacity-40"
-                disabled={makeCurrent.isPending}
-                onClick={() => {
-                  if (
-                    confirm(
-                      `${versionLabel(version.version_number)}을(를) CURRENT로 되돌릴까요? 지금의 CURRENT는 SUPERSEDED로 바뀌고 기록은 남습니다.`,
-                    )
-                  )
-                    makeCurrent.mutate(version.id);
-                }}
-              >
-                MAKE CURRENT
-              </button>
-            )}
           </li>
         ))}
       </ul>
