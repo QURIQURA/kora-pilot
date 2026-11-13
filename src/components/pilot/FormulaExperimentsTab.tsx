@@ -409,10 +409,6 @@ function NewExperimentModal({
   const [hypothesis, setHypothesis] = useState("");
 
   const formula = formulas.find((f) => f.id === formulaId);
-  const versions = [...(formula?.formula_versions ?? [])]
-    .filter((v) => v.status !== "ARCHIVED")
-    .sort((a, b) => b.version_number - a.version_number);
-
   const pickFormula = (id: string) => {
     setFormulaId(id);
     const vs = formulas.find((f) => f.id === id)?.formula_versions ?? [];
@@ -467,20 +463,6 @@ function NewExperimentModal({
               {formulas.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="기준 버전">
-            <select
-              className={selectClass}
-              required
-              value={baseId}
-              onChange={(ev) => setBaseId(ev.target.value)}
-            >
-              {versions.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {versionLabel(v.version_number)} · {v.status}
                 </option>
               ))}
             </select>

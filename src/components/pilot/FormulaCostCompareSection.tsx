@@ -14,7 +14,7 @@ import { costPerGram, fmtCurrency } from "@/lib/cost";
 import { ingredientDisplayName } from "@/lib/pilot";
 import { leafTechniques, techniquePathLabel } from "@/lib/technique";
 import { cn } from "@/lib/utils";
-import { Field, inputClass, primaryButtonClass, selectClass, StatusBadge } from "./ui";
+import { Field, inputClass, primaryButtonClass, selectClass } from "./ui";
 
 /**
  * COST 탭 — "포뮬라 단가 비교"(2026-10-13, 사용자 요청: "White Whipping Ganache"와
@@ -99,7 +99,9 @@ export function FormulaCostCompareSection() {
   const [baseWeightInput, setBaseWeightInput] = useState("1000");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [extraCostsByFormula, setExtraCostsByFormula] = useState<Record<string, ExtraCostLine[]>>({});
+  const [extraCostsByFormula, setExtraCostsByFormula] = useState<Record<string, ExtraCostLine[]>>(
+    {},
+  );
 
   const baseWeightG = Number(baseWeightInput) > 0 ? Number(baseWeightInput) : 0;
 
@@ -144,13 +146,22 @@ export function FormulaCostCompareSection() {
   const addExtraCostLine = (formulaId: string) => {
     setExtraCostsByFormula((prev) => ({
       ...prev,
-      [formulaId]: [...(prev[formulaId] ?? []), { id: nextExtraCostId(), label: "", amount: "", basis: "TARGET" }],
+      [formulaId]: [
+        ...(prev[formulaId] ?? []),
+        { id: nextExtraCostId(), label: "", amount: "", basis: "TARGET" },
+      ],
     }));
   };
-  const updateExtraCostLine = (formulaId: string, lineId: string, patch: Partial<ExtraCostLine>) => {
+  const updateExtraCostLine = (
+    formulaId: string,
+    lineId: string,
+    patch: Partial<ExtraCostLine>,
+  ) => {
     setExtraCostsByFormula((prev) => ({
       ...prev,
-      [formulaId]: (prev[formulaId] ?? []).map((line) => (line.id === lineId ? { ...line, ...patch } : line)),
+      [formulaId]: (prev[formulaId] ?? []).map((line) =>
+        line.id === lineId ? { ...line, ...patch } : line,
+      ),
     }));
   };
   const removeExtraCostLine = (formulaId: string, lineId: string) => {
@@ -166,9 +177,14 @@ export function FormulaCostCompareSection() {
   const computed = selectedRows.map((row) => {
     const lines = extraCostsByFormula[row.formulaId] ?? [];
     const blockingIssue = row.issues.find(
-      (i) => i.code === "NO_VERSION" || i.code === "ZERO_WEIGHT" || i.code === "UNIT_CONVERSION" || i.code === "CALC_ERROR",
+      (i) =>
+        i.code === "NO_VERSION" ||
+        i.code === "ZERO_WEIGHT" ||
+        i.code === "UNIT_CONVERSION" ||
+        i.code === "CALC_ERROR",
     );
-    const convertedCost = row.costPerGram != null && baseWeightG > 0 ? row.costPerGram * baseWeightG : null;
+    const convertedCost =
+      row.costPerGram != null && baseWeightG > 0 ? row.costPerGram * baseWeightG : null;
 
     let extraCostAtTarget = 0;
     let extraCostUnresolved = false;
@@ -185,15 +201,29 @@ export function FormulaCostCompareSection() {
     }
 
     const hasAnyExtraCost = lines.some((l) => Number(l.amount) !== 0 && l.amount.trim() !== "");
-    const finalCost = !blockingIssue && convertedCost != null && !extraCostUnresolved ? convertedCost + extraCostAtTarget : null;
+    const finalCost =
+      !blockingIssue && convertedCost != null && !extraCostUnresolved
+        ? convertedCost + extraCostAtTarget
+        : null;
     const eligibleForMin = row.issues.length === 0 && finalCost != null;
 
-    return { row, convertedCost, extraCostAtTarget, extraCostUnresolved, hasAnyExtraCost, finalCost, eligibleForMin };
+    return {
+      row,
+      convertedCost,
+      extraCostAtTarget,
+      extraCostUnresolved,
+      hasAnyExtraCost,
+      finalCost,
+      eligibleForMin,
+    };
   });
 
   const minFinalCost = computed
     .filter((c) => c.eligibleForMin)
-    .reduce((min, c) => (min == null || (c.finalCost as number) < min ? (c.finalCost as number) : min), null as number | null);
+    .reduce(
+      (min, c) => (min == null || (c.finalCost as number) < min ? (c.finalCost as number) : min),
+      null as number | null,
+    );
 
   // 재료 행 — 선택된 포뮬라들의 effective version 재료를 ingredient_id로 병합(동일 재료 = 동일 행)
   const ingredientRows = useMemo<IngredientRowData[]>(() => {
@@ -244,7 +274,8 @@ export function FormulaCostCompareSection() {
   }, [ingredientRows, selectedRows, baseWeightG]);
 
   const colCount = selectedRows.length;
-  const visibleWidth = INGREDIENT_COL_WIDTH + Math.min(colCount, VISIBLE_FORMULA_COLS) * FORMULA_COL_WIDTH + 2;
+  const visibleWidth =
+    INGREDIENT_COL_WIDTH + Math.min(colCount, VISIBLE_FORMULA_COLS) * FORMULA_COL_WIDTH + 2;
   const totalWidth = INGREDIENT_COL_WIDTH + colCount * FORMULA_COL_WIDTH;
 
   return (
@@ -276,7 +307,9 @@ export function FormulaCostCompareSection() {
               title="제거"
             >
               {row.formulaName}
-              {row.versionNumber != null && <span className="opacity-70">{versionLabel(row.versionNumber)}</span>}
+              {row.versionNumber != null && (
+                <span className="opacity-70">{versionLabel(row.versionNumber)}</span>
+              )}
               <span>×</span>
             </button>
           ))}
@@ -339,7 +372,10 @@ export function FormulaCostCompareSection() {
         <p className="font-mono text-xs uppercase text-muted-foreground">LOADING…</p>
       ) : (
         <div className="overflow-x-auto border border-border" style={{ maxWidth: visibleWidth }}>
-          <table className="border-collapse text-sm" style={{ tableLayout: "fixed", minWidth: totalWidth }}>
+          <table
+            className="border-collapse text-sm"
+            style={{ tableLayout: "fixed", minWidth: totalWidth }}
+          >
             <colgroup>
               <col style={{ width: INGREDIENT_COL_WIDTH }} />
               {selectedRows.map((row) => (
@@ -350,7 +386,10 @@ export function FormulaCostCompareSection() {
               <tr className="border-b border-border bg-secondary/40 text-left">
                 <th className="label-caps px-2 py-2 text-[10px] text-muted-foreground">포뮬라</th>
                 {computed.map(({ row, eligibleForMin, finalCost }) => (
-                  <th key={row.formulaId} className="border-l border-dashed border-border px-2 py-2 align-top">
+                  <th
+                    key={row.formulaId}
+                    className="border-l border-dashed border-border px-2 py-2 align-top"
+                  >
                     <div className="flex items-start justify-between gap-1">
                       <div className="space-y-0.5">
                         <p className="text-sm leading-tight">{row.formulaName}</p>
@@ -360,10 +399,11 @@ export function FormulaCostCompareSection() {
                               {versionLabel(row.versionNumber)}
                             </span>
                           )}
-                          {row.versionStatus && <StatusBadge status={row.versionStatus} />}
                         </div>
                         {row.categoryName && (
-                          <p className="label-caps text-[9px] text-muted-foreground">{row.categoryName}</p>
+                          <p className="label-caps text-[9px] text-muted-foreground">
+                            {row.categoryName}
+                          </p>
                         )}
                         {eligibleForMin && finalCost != null && finalCost === minFinalCost && (
                           <span className="label-caps inline-block border border-foreground bg-foreground px-1 py-0.5 text-[9px] text-background">
@@ -389,13 +429,19 @@ export function FormulaCostCompareSection() {
               {computed.some((c) => c.row.issues.length > 0) && (
                 <StatRow label="이슈">
                   {computed.map(({ row }) => (
-                    <td key={row.formulaId} className="border-l border-dashed border-border px-2 py-1.5 align-top">
+                    <td
+                      key={row.formulaId}
+                      className="border-l border-dashed border-border px-2 py-1.5 align-top"
+                    >
                       {row.issues.length === 0 ? (
                         <span className="font-mono text-[10px] text-muted-foreground">—</span>
                       ) : (
                         <ul className="space-y-0.5">
                           {row.issues.map((issue, idx) => (
-                            <li key={idx} className="font-mono text-[10px] uppercase text-destructive">
+                            <li
+                              key={idx}
+                              className="font-mono text-[10px] uppercase text-destructive"
+                            >
                               [{ISSUE_LABEL[issue.code]}] {issue.message}
                             </li>
                           ))}
@@ -423,17 +469,24 @@ export function FormulaCostCompareSection() {
 
               <StatRow label={`총원가(${fmtNumber(baseWeightG)}g 기준)`}>
                 {computed.map(({ row, convertedCost }) => (
-                  <ValueCell key={row.formulaId}>{convertedCost != null ? fmtCurrency(convertedCost) : "—"}</ValueCell>
+                  <ValueCell key={row.formulaId}>
+                    {convertedCost != null ? fmtCurrency(convertedCost) : "—"}
+                  </ValueCell>
                 ))}
               </StatRow>
 
               <StatRow label="추가 비용">
                 {computed.map(({ row }) => (
-                  <td key={row.formulaId} className="border-l border-dashed border-border px-2 py-1.5 align-top">
+                  <td
+                    key={row.formulaId}
+                    className="border-l border-dashed border-border px-2 py-1.5 align-top"
+                  >
                     <ExtraCostEditor
                       lines={extraCostsByFormula[row.formulaId] ?? []}
                       onAdd={() => addExtraCostLine(row.formulaId)}
-                      onUpdate={(lineId, patch) => updateExtraCostLine(row.formulaId, lineId, patch)}
+                      onUpdate={(lineId, patch) =>
+                        updateExtraCostLine(row.formulaId, lineId, patch)
+                      }
                       onRemove={(lineId) => removeExtraCostLine(row.formulaId, lineId)}
                     />
                   </td>
@@ -450,8 +503,12 @@ export function FormulaCostCompareSection() {
 
               <StatRow label="최저 대비 차이">
                 {computed.map(({ row, finalCost, eligibleForMin }) => {
-                  const diff = finalCost != null && minFinalCost != null ? finalCost - minFinalCost : null;
-                  const diffPct = diff != null && minFinalCost != null && minFinalCost > 0 ? (diff / minFinalCost) * 100 : null;
+                  const diff =
+                    finalCost != null && minFinalCost != null ? finalCost - minFinalCost : null;
+                  const diffPct =
+                    diff != null && minFinalCost != null && minFinalCost > 0
+                      ? (diff / minFinalCost) * 100
+                      : null;
                   return (
                     <ValueCell key={row.formulaId}>
                       {diff == null
@@ -473,20 +530,26 @@ export function FormulaCostCompareSection() {
                   className="border-t-2 border-foreground bg-secondary/60 px-2 py-1.5 font-mono text-[10px] uppercase text-muted-foreground"
                 >
                   재료별 비율·비용({fmtNumber(baseWeightG)}g 기준, 참고용 — 정확한 계량 확인용이
-                  아니라 어느 재료가 포뮬라 간 가격 차이를 만드는지 보기 위한 것) · 가격 차이가
-                  가장 큰 재료 2개는 빨간색
+                  아니라 어느 재료가 포뮬라 간 가격 차이를 만드는지 보기 위한 것) · 가격 차이가 가장
+                  큰 재료 2개는 빨간색
                 </td>
               </tr>
 
               {ingredientsByVersion.isLoading ? (
                 <tr>
-                  <td colSpan={colCount + 1} className="px-2 py-2 font-mono text-[11px] uppercase text-muted-foreground">
+                  <td
+                    colSpan={colCount + 1}
+                    className="px-2 py-2 font-mono text-[11px] uppercase text-muted-foreground"
+                  >
                     LOADING…
                   </td>
                 </tr>
               ) : ingredientRows.length === 0 ? (
                 <tr>
-                  <td colSpan={colCount + 1} className="px-2 py-2 font-mono text-[11px] uppercase text-muted-foreground">
+                  <td
+                    colSpan={colCount + 1}
+                    className="px-2 py-2 font-mono text-[11px] uppercase text-muted-foreground"
+                  >
                     등록된 재료가 없습니다.
                   </td>
                 </tr>
@@ -542,7 +605,15 @@ const ISSUE_LABEL: Record<FormulaCostCompareIssue["code"], string> = {
   CALC_ERROR: "원가 계산 오류",
 };
 
-function StatRow({ label, emphasis, children }: { label: string; emphasis?: boolean; children: React.ReactNode }) {
+function StatRow({
+  label,
+  emphasis,
+  children,
+}: {
+  label: string;
+  emphasis?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <tr className="border-b border-border">
       <td
@@ -608,13 +679,21 @@ function ExtraCostEditor({
               <option value="TARGET">기준중량 금액</option>
               <option value="BATCH">배치 전체 금액</option>
             </select>
-            <button type="button" className="shrink-0 font-mono text-[11px] text-muted-foreground hover:text-destructive" onClick={() => onRemove(line.id)}>
+            <button
+              type="button"
+              className="shrink-0 font-mono text-[11px] text-muted-foreground hover:text-destructive"
+              onClick={() => onRemove(line.id)}
+            >
               ×
             </button>
           </div>
         </div>
       ))}
-      <button type="button" className={`${primaryButtonClass} h-6 w-full text-[10px]`} onClick={onAdd}>
+      <button
+        type="button"
+        className={`${primaryButtonClass} h-6 w-full text-[10px]`}
+        onClick={onAdd}
+      >
         + ADD COST
       </button>
     </div>

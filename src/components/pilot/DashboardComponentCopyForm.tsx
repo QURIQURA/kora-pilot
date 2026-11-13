@@ -242,7 +242,7 @@ export function DashboardComponentCopyForm({
       </select>
       {latest && (
         <p className="font-mono text-[10px] text-muted-foreground">
-          복사할 버전: V{latest.version_number} ({latest.status})
+          복사할 버전: V{latest.version_number}
         </p>
       )}
       <input

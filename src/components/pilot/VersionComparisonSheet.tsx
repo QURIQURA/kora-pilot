@@ -24,7 +24,6 @@ import { fmtNumber, toGrams, versionLabel } from "@/lib/formula";
 import { ingredientDisplayName } from "@/lib/pilot";
 import { costPerGram, fmtCurrency } from "@/lib/cost";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "./ui";
 
 const DEFAULT_COL_WIDTH = 140;
 const MIN_COL_WIDTH = 72;
@@ -218,7 +217,9 @@ export function VersionComparisonSheet({
 
   const displayVersions = useMemo(() => {
     const byId = new Map(baseVersions.map((v) => [v.id, v]));
-    return columnOrder.map((id) => byId.get(id)).filter((v): v is (typeof baseVersions)[number] => !!v);
+    return columnOrder
+      .map((id) => byId.get(id))
+      .filter((v): v is (typeof baseVersions)[number] => !!v);
   }, [baseVersions, columnOrder]);
 
   const displayRows = useMemo(() => {
@@ -226,8 +227,12 @@ export function VersionComparisonSheet({
     return rowOrder.map((id) => byId.get(id)).filter((r): r is SheetRow => !!r);
   }, [baseRows, rowOrder]);
 
-  const colSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-  const rowSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const colSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+  const rowSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
 
   const handleColumnDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -318,66 +323,76 @@ export function VersionComparisonSheet({
         </p>
       )}
       <div className="overflow-x-auto border border-border">
-      <table className="w-full border-collapse text-sm" style={{ tableLayout: "auto", minWidth: dataWidth }}>
-        <colgroup>
-          <col style={{ width: ingredientColWidth }} />
-          <col style={{ width: PRICE_COL_WIDTH }} />
-          {displayVersions.map((v) => (
-            <col key={v.id} style={{ width: colWidths[v.id] ?? DEFAULT_COL_WIDTH }} />
-          ))}
-          <col />
-        </colgroup>
-        <DndContext sensors={colSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
-          <thead>
-            <tr className="border-b border-border bg-secondary/40 text-left">
-              <th className="label-caps relative px-3 py-2 text-right text-xs text-muted-foreground">
-                INGREDIENT
-                {/* INGREDIENT 열도 다른 열들처럼 너비 조절 가능 */}
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    startIngredientColResize(e.clientX);
-                  }}
-                />
-              </th>
-              <th className="label-caps whitespace-nowrap border-l border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                PRICE
-              </th>
-              <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
-                {displayVersions.map((v) => (
-                  <SheetColumnHeader
-                    key={v.id}
-                    id={v.id}
-                    label={versionLabel(v.version_number)}
-                    status={v.status}
-                    onResizeStart={(clientX) => startColumnResize(v.id, clientX)}
+        <table
+          className="w-full border-collapse text-sm"
+          style={{ tableLayout: "auto", minWidth: dataWidth }}
+        >
+          <colgroup>
+            <col style={{ width: ingredientColWidth }} />
+            <col style={{ width: PRICE_COL_WIDTH }} />
+            {displayVersions.map((v) => (
+              <col key={v.id} style={{ width: colWidths[v.id] ?? DEFAULT_COL_WIDTH }} />
+            ))}
+            <col />
+          </colgroup>
+          <DndContext
+            sensors={colSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleColumnDragEnd}
+          >
+            <thead>
+              <tr className="border-b border-border bg-secondary/40 text-left">
+                <th className="label-caps relative px-3 py-2 text-right text-xs text-muted-foreground">
+                  INGREDIENT
+                  {/* INGREDIENT 열도 다른 열들처럼 너비 조절 가능 */}
+                  <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none hover:bg-foreground/20"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      startIngredientColResize(e.clientX);
+                    }}
+                  />
+                </th>
+                <th className="label-caps whitespace-nowrap border-l border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                  PRICE
+                </th>
+                <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
+                  {displayVersions.map((v) => (
+                    <SheetColumnHeader
+                      key={v.id}
+                      id={v.id}
+                      label={versionLabel(v.version_number)}
+                      onResizeStart={(clientX) => startColumnResize(v.id, clientX)}
+                    />
+                  ))}
+                </SortableContext>
+                <th key={FILLER_COL_ID} className="border-l border-dashed border-border" />
+              </tr>
+            </thead>
+          </DndContext>
+          <DndContext
+            sensors={rowSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleRowDragEnd}
+          >
+            <SortableContext items={rowOrder} strategy={verticalListSortingStrategy}>
+              <tbody>
+                {displayRows.map((row) => (
+                  <SheetBodyRow
+                    key={row.id}
+                    row={row}
+                    versions={displayVersions}
+                    height={rowHeights[row.id] ?? DEFAULT_ROW_HEIGHT}
+                    onResizeStart={(clientY) => startRowResize(row.id, clientY)}
                   />
                 ))}
-              </SortableContext>
-              <th key={FILLER_COL_ID} className="border-l border-dashed border-border" />
-            </tr>
-          </thead>
-        </DndContext>
-        <DndContext sensors={rowSensors} collisionDetection={closestCenter} onDragEnd={handleRowDragEnd}>
-          <SortableContext items={rowOrder} strategy={verticalListSortingStrategy}>
-            <tbody>
-              {displayRows.map((row) => (
-                <SheetBodyRow
-                  key={row.id}
-                  row={row}
-                  versions={displayVersions}
-                  height={rowHeights[row.id] ?? DEFAULT_ROW_HEIGHT}
-                  onResizeStart={(clientY) => startRowResize(row.id, clientY)}
-                />
-              ))}
-            </tbody>
-          </SortableContext>
-        </DndContext>
-      </table>
+              </tbody>
+            </SortableContext>
+          </DndContext>
+        </table>
       </div>
     </div>
   );
@@ -386,15 +401,15 @@ export function VersionComparisonSheet({
 function SheetColumnHeader({
   id,
   label,
-  status,
   onResizeStart,
 }: {
   id: string;
   label: string;
-  status: string;
   onResizeStart: (clientX: number) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
   return (
     <th
       ref={setNodeRef}
@@ -415,7 +430,6 @@ function SheetColumnHeader({
           <GripVertical className="h-3 w-3" />
         </button>
         <span className="whitespace-nowrap">{label}</span>
-        <StatusBadge status={status} />
       </div>
       {/* 열 너비 조절 손잡이 — 오른쪽 경계를 드래그 */}
       <div

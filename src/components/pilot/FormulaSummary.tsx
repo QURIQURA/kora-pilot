@@ -10,7 +10,7 @@ import {
 } from "@/lib/queries";
 import { versionLabel } from "@/lib/formula";
 import { formatDateTime } from "@/lib/datetime";
-import { Field, SectionCard, StatusBadge, buttonClass, inputClass, primaryButtonClass } from "./ui";
+import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass } from "./ui";
 
 export function currentVersion(formula: FormulaListRow) {
   const versions = formula.formula_versions ?? [];
@@ -33,7 +33,6 @@ function FormulaRow({ formula }: { formula: FormulaListRow }) {
           {versionLabel(version.version_number)}
         </span>
       )}
-      {version && <StatusBadge status={version.status} />}
       <span className="font-mono text-xs text-muted-foreground">
         {formatDateTime(formula.updated_at)}
       </span>

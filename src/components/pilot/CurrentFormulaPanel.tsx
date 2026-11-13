@@ -17,7 +17,7 @@ import { computeLineCosts, fmtCurrency } from "@/lib/cost";
 import { formatDateTime } from "@/lib/datetime";
 import { VersionComparisonSheet } from "./VersionComparisonSheet";
 import { mouldOptionLabel } from "./MouldSelect";
-import { SectionCard, StatusBadge, buttonClass, primaryButtonClass } from "./ui";
+import { SectionCard, buttonClass, primaryButtonClass } from "./ui";
 
 export function CurrentFormulaPanel({
   componentId,
@@ -241,7 +241,6 @@ export function CurrentFormulaPanel({
               {versionLabel(version.version_number)}
             </span>
           )}
-          {version && <StatusBadge status={version.status} />}
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

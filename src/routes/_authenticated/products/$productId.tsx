@@ -971,9 +971,6 @@ function ProductDetailPage() {
                         {entries.map((e, i) => (
                           <li key={i} className="py-1.5 text-sm">
                             {e.formulaName} — v{e.versionNumber}
-                            {e.status !== "DRAFT" && (
-                              <span className="text-muted-foreground"> ({e.status})</span>
-                            )}
                           </li>
                         ))}
                       </ul>

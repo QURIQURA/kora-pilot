@@ -5,7 +5,7 @@ import { archivedVersionsQuery, formulaExperimentsQuery } from "@/lib/queries";
 import { versionLabel } from "@/lib/formula";
 import { formatDateTime } from "@/lib/datetime";
 import { EmptyState } from "@/components/EmptyState";
-import { StatusBadge, buttonClass } from "@/components/pilot/ui";
+import { buttonClass } from "@/components/pilot/ui";
 
 /** 보관 탭 — 이전 버전(SUPERSEDED), 옛 초안·실험 기록·폐기(ARCHIVED). ARCHIVED는 DRAFT로 되살릴 수 있다. */
 export function FormulaArchiveTab() {
@@ -73,7 +73,6 @@ export function FormulaArchiveTab() {
                 {v.formulas?.components?.name ?? ""}
               </span>
               <span className="label-caps text-[10px] text-muted-foreground">{kind}</span>
-              <StatusBadge status={v.status} />
               <span className="font-mono text-xs text-muted-foreground">
                 {formatDateTime(v.updated_at)}
               </span>

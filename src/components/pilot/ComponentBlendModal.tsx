@@ -30,11 +30,13 @@ export function ComponentBlendModal({ onClose }: { onClose: () => void }) {
         .order("name");
       if (error) throw error;
       return data.flatMap((f) =>
-        f.formula_versions
-          .filter((v) => !["ARCHIVED", "SUPERSEDED"].includes(v.status))
+        // 2026-11-13: 포뮬라마다 번호가 가장 높은 버전만 쓴다.
+        [...f.formula_versions]
+          .sort((x, y) => y.version_number - x.version_number)
+          .slice(0, 1)
           .map((v) => ({
             ...v,
-            label: `${f.components.name} · ${f.name} · V${v.version_number} (${v.status})`,
+            label: `${f.components.name} · ${f.name} · V${v.version_number}`,
           })),
       );
     },
