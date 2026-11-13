@@ -620,7 +620,14 @@ function OrderRow({
               timeZone: "Australia/Sydney",
               dateStyle: "medium",
               timeStyle: "short",
-            })}{" "}
+            })}
+            {/* 팝업은 시작–종료로 표기 (종료 = popup_plan.ends_at, 2026-11-13) */}
+            {o.order_kind === "POPUP" && readPopupPlan(o.popup_plan).ends_at
+              ? ` – ${new Date(readPopupPlan(o.popup_plan).ends_at).toLocaleTimeString("en-AU", {
+                  timeZone: "Australia/Sydney",
+                  timeStyle: "short",
+                })}`
+              : ""}{" "}
             ({koreanWeekdayShort(toLocalDateString(new Date(o.pickup_at)))})
           </>
         ) : o.event_date ? (

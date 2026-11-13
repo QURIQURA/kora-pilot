@@ -17,10 +17,19 @@ begin
       nullif(p_project->>'date','')::date,nullif(p_project->>'end_date','')::date,p_project->>'product_line')
     on conflict(id) do update set name=excluded.name,end_date=excluded.end_date,
       product_line=excluded.product_line,updated_at=now();
-  insert into public.planner_tasks(id,user_id,title,multiple_task_id,category_id,link_url)
+  -- 2026-11-13: 링크 태스크가 팝업 점유 시간(due_date/due_time/end_time)도 받는다 → WANN Daily 타임라인에 바로 표시.
+  -- 세 키는 선택 사항: 안 보내는 예전 호출자는 기존 일정 값을 그대로 둔다.
+  insert into public.planner_tasks(id,user_id,title,multiple_task_id,category_id,link_url,due_date,due_time,end_time)
     values((p_order_link_task->>'id')::uuid,uid,p_order_link_task->>'title',pid,
-      (p_order_link_task->>'category_id')::uuid,p_order_link_task->>'link_url')
-    on conflict(id) do update set title=excluded.title,link_url=excluded.link_url,updated_at=now();
+      (p_order_link_task->>'category_id')::uuid,p_order_link_task->>'link_url',
+      nullif(p_order_link_task->>'due_date','')::date,
+      nullif(p_order_link_task->>'due_time','')::time,
+      nullif(p_order_link_task->>'end_time','')::time)
+    on conflict(id) do update set title=excluded.title,link_url=excluded.link_url,
+      due_date=case when p_order_link_task ? 'due_date' then excluded.due_date else public.planner_tasks.due_date end,
+      due_time=case when p_order_link_task ? 'due_time' then excluded.due_time else public.planner_tasks.due_time end,
+      end_time=case when p_order_link_task ? 'end_time' then excluded.end_time else public.planner_tasks.end_time end,
+      updated_at=now();
   -- Move already-synced popup production tasks without changing checks or schedules.
   update public.planner_tasks set multiple_task_id=pid,updated_at=now()
     where id=any(p_production_task_ids) and user_id=uid
