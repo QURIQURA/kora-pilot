@@ -272,7 +272,8 @@ Deno.serve(async (req: Request) => {
       !body.daily_task_id &&
       !body.remove_daily_task_id &&
       !completeOrderId &&
-      !pullDeliveries
+      !pullDeliveries &&
+      !body.mindmap
     )
       return json({ error: "work_session_id required" }, 400);
 
@@ -285,6 +286,131 @@ Deno.serve(async (req: Request) => {
       return json({ error: "WANN_OS_SERVICE_ROLE_KEY secret이 설정되지 않았습니다." }, 500);
     }
     const wann = createClient(WANN_OS_URL, wannServiceKey);
+
+    // 2026-11-13 마인드맵 노드 ↔ 플래너 TASK. body.mindmap = { op, ... }
+    // - get{ids}: TASK 상태 조회(원천은 플래너) / search{q}: 기존 TASK 검색(연결용)
+    // - create{board_id,node_id,title,due_date?,notes?}: "Mindmap — 보드명" 프로젝트 하위에 TASK 생성.
+    //   같은 보드·노드·제목(link_url+title)이 이미 있으면 새로 만들지 않고 duplicate:true 로 기존 것을 돌려준다.
+    // - complete{id,completed}: 완료 체크. 모든 조회·수정은 WANN 소유자(WANN_USER_ID)의 TASK로 한정한다.
+    if (body.mindmap) {
+      const m = body.mindmap as Record<string, unknown>;
+      const toRef = async (rows: Record<string, unknown>[]) => {
+        const pids = [...new Set(rows.map((r) => r.multiple_task_id).filter(Boolean))] as string[];
+        const names = new Map<string, string>();
+        if (pids.length > 0) {
+          const { data: ps } = await wann
+            .from("planner_multiple_tasks")
+            .select("id, name")
+            .in("id", pids);
+          for (const p of ps ?? []) names.set(p.id as string, p.name as string);
+        }
+        return rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          completed: Boolean(r.completed),
+          due_date: (r.due_date as string | null) ?? null,
+          project_id: (r.multiple_task_id as string | null) ?? null,
+          project_name: r.multiple_task_id
+            ? (names.get(r.multiple_task_id as string) ?? null)
+            : null,
+        }));
+      };
+      const cols = "id, title, completed, due_date, multiple_task_id";
+      if (m.op === "get") {
+        const ids = Array.isArray(m.ids)
+          ? m.ids.filter((x) => typeof x === "string").slice(0, 200)
+          : [];
+        const { data, error } = await wann
+          .from("planner_tasks")
+          .select(cols)
+          .eq("user_id", WANN_USER_ID)
+          .in("id", ids);
+        if (error) return json({ error: error.message }, 500);
+        return json({ tasks: await toRef(data ?? []) });
+      }
+      if (m.op === "search") {
+        const q = String(m.q ?? "")
+          .trim()
+          .replace(/[%,()]/g, " ");
+        let query = wann
+          .from("planner_tasks")
+          .select(cols)
+          .eq("user_id", WANN_USER_ID)
+          .order("completed", { ascending: true })
+          .order("created_at", { ascending: false })
+          .limit(15);
+        if (q) query = query.ilike("title", `%${q}%`);
+        const { data, error } = await query;
+        if (error) return json({ error: error.message }, 500);
+        return json({ tasks: await toRef(data ?? []) });
+      }
+      if (m.op === "complete") {
+        const completed = Boolean(m.completed);
+        const { error } = await wann
+          .from("planner_tasks")
+          .update({ completed, completed_at: completed ? new Date().toISOString() : null })
+          .eq("id", String(m.id ?? ""))
+          .eq("user_id", WANN_USER_ID);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+      if (m.op === "create") {
+        const boardId = String(m.board_id ?? "");
+        const nodeId = String(m.node_id ?? "");
+        const title = String(m.title ?? "").trim();
+        if (!boardId || !nodeId || !title)
+          return json({ error: "board_id, node_id, title 필요" }, 400);
+        const linkUrl = `pilot-mindmap://${boardId}/${nodeId}`;
+        const { data: dup } = await wann
+          .from("planner_tasks")
+          .select(cols)
+          .eq("user_id", WANN_USER_ID)
+          .eq("link_url", linkUrl)
+          .ilike("title", title.replace(/[%_]/g, "\\$&"))
+          .limit(1);
+        if (dup && dup.length > 0) return json({ task: (await toRef(dup))[0], duplicate: true });
+        const { data: board } = await kora
+          .from("design_moodboards")
+          .select("title")
+          .eq("id", boardId)
+          .maybeSingle();
+        const projName = `Mindmap — ${board?.title ?? "보드"}`;
+        let projectId: string | null = null;
+        const { data: pj } = await wann
+          .from("planner_multiple_tasks")
+          .select("id")
+          .eq("user_id", WANN_USER_ID)
+          .eq("name", projName)
+          .limit(1);
+        projectId = (pj?.[0]?.id as string | undefined) ?? null;
+        if (!projectId) {
+          const { data: created, error: pErr } = await wann
+            .from("planner_multiple_tasks")
+            .insert({ user_id: WANN_USER_ID, name: projName, category_id: WANN_SHCO_CATEGORY_ID })
+            .select("id")
+            .single();
+          if (pErr) return json({ error: pErr.message }, 500);
+          projectId = created.id as string;
+        }
+        const { data: ins, error: iErr } = await wann
+          .from("planner_tasks")
+          .insert({
+            user_id: WANN_USER_ID,
+            title,
+            notes: typeof m.notes === "string" && m.notes ? m.notes : null,
+            due_date: typeof m.due_date === "string" && m.due_date ? m.due_date : null,
+            category_id: WANN_SHCO_CATEGORY_ID,
+            multiple_task_id: projectId,
+            link_url: linkUrl,
+            completed: false,
+          })
+          .select(cols)
+          .single();
+        if (iErr) return json({ error: iErr.message }, 500);
+        return json({ task: (await toRef([ins]))[0], duplicate: false });
+      }
+      return json({ error: "unknown mindmap op" }, 400);
+    }
 
     // 2026-11-09 오더 완료 ↔ 플래너 Delivery 양방향 동기화.
     // - order_delivery { order_id, completed }: 오더 상태가 COMPLETED로 바뀌면 그 오더 WANN 프로젝트

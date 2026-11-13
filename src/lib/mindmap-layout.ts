@@ -134,7 +134,9 @@ interface Sub {
   items: Map<string, { m: number; c: number }>;
 }
 const SIB_GAP = 28;
-const PRIMARY_GAP = 170;
+/** 위·아래로 뻗는 가지는 형제가 가로로 늘어서서 선 글자가 서로 겹치기 쉬워 더 벌린다. */
+const SIB_GAP_V = 104;
+const PRIMARY_GAP = 110;
 const childGap = (depth: number) => (depth <= 2 ? 110 : 80);
 
 /** main축(가지가 뻗는 방향)·cross축(형제가 늘어서는 방향)으로 서브트리를 촘촘하게 배치한다. */
@@ -146,13 +148,14 @@ function buildTree(id: string, dir: Dir, depth: number, ctx: Ctx): Sub {
   const kids = ctx.kids.get(id) ?? [];
   if (kids.length === 0) return { extent: C, items: new Map([[id, { m: 0, c: 0 }]]) };
   const subs = kids.map((k) => buildTree(k, dir, depth + 1, ctx));
-  const total = subs.reduce((s, x) => s + x.extent, 0) + SIB_GAP * (kids.length - 1);
+  const gap = horizontal ? SIB_GAP : SIB_GAP_V;
+  const total = subs.reduce((s, x) => s + x.extent, 0) + gap * (kids.length - 1);
   const items = new Map<string, { m: number; c: number }>([[id, { m: 0, c: 0 }]]);
   let start = -total / 2;
   const off = M + childGap(depth + 1);
   subs.forEach((sub) => {
     const cc = start + sub.extent / 2;
-    start += sub.extent + SIB_GAP;
+    start += sub.extent + gap;
     for (const [kid, it] of sub.items) items.set(kid, { m: it.m + off, c: it.c + cc });
   });
   return { extent: Math.max(C, total), items };

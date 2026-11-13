@@ -9,6 +9,7 @@ import {
   MarkerType,
   MiniMap,
   NodeResizer,
+  Panel,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -20,6 +21,38 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
+import {
+  ChevronDown,
+  ChevronUp,
+  CircleHelp,
+  CornerDownRight,
+  Focus,
+  Image as ImageIcon,
+  LayoutGrid,
+  LocateFixed,
+  Map as MapIcon,
+  Maximize,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Shapes,
+  Wand2,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { getMeta, type NodeMeta } from "@/lib/mindmap-node-meta";
+import { fetchPlannerTasks } from "@/lib/mindmap-planner";
+import { MindmapDetailPanel, type RelNode } from "./MindmapDetailPanel";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { currentUserId } from "@/lib/queries";
@@ -34,7 +67,6 @@ import {
   type LEdge,
   type LNode,
 } from "@/lib/mindmap-layout";
-import { buttonClass } from "./ui";
 
 /** DESIGN BOARD 마인드맵(2026-11-13) — Miro식 자유 캔버스. 노트(텍스트) 노드를 배치하고 선으로 연결한다.
  * 보드 한 개당 design_moodboards.mindmap(jsonb)에 {nodes, edges, viewport}를 통째로 자동 저장한다. */
@@ -80,6 +112,10 @@ type Extra = {
   _path?: boolean;
   _depth?: number;
   _auto?: string;
+  _prog?: string;
+  _autoEdit?: boolean;
+  /** 상세 패널 데이터(설명·우선순위·상태·실행 항목·링크·연결 작업 id) — 없어도 정상 동작 */
+  meta?: NodeMeta;
 };
 
 /** 1차 가지 파스텔 색(자동 배색) — 노트에 색을 직접 지정하지 않았을 때 */
@@ -131,8 +167,14 @@ function ShapeNodeView({ id, data, selected, width, height }: NodeProps<Node<Sha
   const w = width ?? 180;
   const h = height ?? 110;
   const stroke = selected ? "#111" : "rgba(0,0,0,0.45)";
+  const ed = useInlineEdit(id, data._autoEdit);
   return (
-    <div className="relative" style={{ width: w, height: h, ...searchStyle(data) }}>
+    <div
+      className="relative"
+      style={{ width: w, height: h, ...searchStyle(data) }}
+      onDoubleClick={ed.start}
+    >
+      <ProgressPill prog={data._prog} />
       <NodeResizer isVisible={selected} minWidth={70} minHeight={50} />
       <Handles />
       <CollapseButton id={id} data={data} />
@@ -156,7 +198,9 @@ function ShapeNodeView({ id, data, selected, width, height }: NodeProps<Node<Sha
         />
       )}
       <textarea
-        className="nodrag nowheel absolute left-1/2 top-1/2 block w-[70%] -translate-x-1/2 -translate-y-1/2 resize-none bg-transparent text-center font-mono text-xs leading-snug text-black outline-none"
+        ref={ed.ref}
+        {...ed.areaProps}
+        className={`${ed.areaClass} absolute left-1/2 top-1/2 block w-[70%] -translate-x-1/2 -translate-y-1/2 resize-none bg-transparent text-center font-mono text-xs leading-snug text-black outline-none`}
         rows={Math.min(5, Math.max(1, (data.text.match(/\n/g)?.length ?? 0) + 1))}
         placeholder="텍스트"
         value={data.text}
@@ -180,8 +224,54 @@ function ImageNodeView({ id, data, selected, width }: NodeProps<Node<ImageData, 
       <NodeResizer isVisible={selected} minWidth={80} keepAspectRatio />
       <Handles />
       <CollapseButton id={id} data={data} />
+      <ProgressPill prog={data._prog} />
       <img src={data.url} alt="" draggable={false} className="pointer-events-none block w-full" />
     </div>
+  );
+}
+
+/** 더블클릭으로 제목 편집(2026-11-13) — 평소에는 글자 위에서도 노드가 드래그/선택되고, 더블클릭하면 편집 모드. */
+function useInlineEdit(id: string, autoEdit?: boolean) {
+  const { updateNodeData } = useReactFlow();
+  const [editing, setEditing] = useState(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (autoEdit) {
+      setEditing(true);
+      updateNodeData(id, { _autoEdit: false });
+    }
+  }, [autoEdit, id, updateNodeData]);
+  useEffect(() => {
+    if (!editing) return;
+    const el = ref.current;
+    if (el) {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, [editing]);
+  return {
+    editing,
+    ref,
+    start: () => setEditing(true),
+    areaProps: {
+      readOnly: !editing,
+      onBlur: () => setEditing(false),
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.key === "Escape") (e.target as HTMLElement).blur();
+        e.stopPropagation();
+      },
+    },
+    areaClass: editing ? "nodrag nowheel" : "pointer-events-none select-none",
+  };
+}
+
+/** 연결된 작업 진행 표시 — 작업이 있는 노드에만 보인다(예: 2/5). */
+function ProgressPill({ prog }: { prog?: string | undefined }) {
+  if (!prog) return null;
+  return (
+    <span className="pointer-events-none absolute -bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-black/40 bg-white px-1.5 font-mono text-[10px] leading-4 text-black shadow-sm">
+      ✓ {prog}
+    </span>
   );
 }
 
@@ -204,8 +294,10 @@ function NoteNodeView({ id, data, selected }: NodeProps<Node<NoteData, "note">>)
   const longest = Math.max(...lines.map((l) => textUnits(l, fs)), 0);
   const inner = Math.min(maxInner, Math.max(minInner, longest + 4));
   const rows = lines.reduce((n, l) => n + Math.max(1, Math.ceil(textUnits(l, fs) / inner)), 0);
+  const ed = useInlineEdit(id, data._autoEdit);
   return (
     <div
+      onDoubleClick={ed.start}
       className="relative border shadow-sm"
       style={{
         background: bg,
@@ -219,8 +311,11 @@ function NoteNodeView({ id, data, selected }: NodeProps<Node<NoteData, "note">>)
       <Handles />
       <CollapseButton id={id} data={data} />
       {data.locked && <span className="absolute -left-2 -top-3 text-[11px]">🔒</span>}
+      <ProgressPill prog={data._prog} />
       <textarea
-        className="nodrag nowheel block resize-none bg-transparent text-center leading-snug outline-none"
+        ref={ed.ref}
+        {...ed.areaProps}
+        className={`${ed.areaClass} block resize-none bg-transparent text-center leading-snug outline-none`}
         style={{
           width: inner,
           fontSize: fs,
@@ -270,7 +365,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const { screenToFlowPosition, fitView, setCenter, zoomTo } = useReactFlow();
+  const { screenToFlowPosition, fitView, setCenter, zoomTo, zoomIn, zoomOut } = useReactFlow();
   const wrapRef = useRef<HTMLDivElement>(null);
   const pendingArrange = useRef(false);
   const metaRef = useRef<{ v: number; arranged: boolean }>({ v: 2, arranged: false });
@@ -442,6 +537,49 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
     return set;
   }, [nodes, edges, focusMode, graph]);
 
+  // ── 연결된 플래너 작업 진행(완료/전체) — 상태의 원천은 플래너라 열 때·1분마다·변경 시 다시 읽는다 ──
+  const [taskDone, setTaskDone] = useState<Map<string, boolean>>(new Map());
+  const allTaskIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const n of nodes) for (const id of getMeta(n.data).taskIds ?? []) set.add(id);
+    return [...set].sort();
+  }, [nodes]);
+  const taskKey = allTaskIds.join(",");
+  useEffect(() => {
+    if (!loaded || !taskKey) {
+      setTaskDone(new Map());
+      return;
+    }
+    let alive = true;
+    const run = () => {
+      if (document.visibilityState === "hidden") return;
+      fetchPlannerTasks(taskKey.split(","))
+        .then((ts) => alive && setTaskDone(new Map(ts.map((t) => [t.id, t.completed]))))
+        .catch(() => undefined);
+    };
+    run();
+    const t = setInterval(run, 60_000);
+    window.addEventListener("mm-tasks-changed", run);
+    document.addEventListener("visibilitychange", run);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      window.removeEventListener("mm-tasks-changed", run);
+      document.removeEventListener("visibilitychange", run);
+    };
+  }, [loaded, taskKey]);
+  const progressOf = useCallback(
+    (id: string) => {
+      const n = nodes.find((x) => x.id === id);
+      const ids = n ? (getMeta(n.data).taskIds ?? []) : [];
+      if (ids.length === 0) return undefined;
+      const known = ids.filter((t) => taskDone.has(t));
+      if (known.length === 0) return undefined;
+      return `${known.filter((t) => taskDone.get(t)).length}/${known.length}`;
+    },
+    [nodes, taskDone],
+  );
+
   const viewNodes = useMemo(
     () =>
       nodes.map((n) => {
@@ -454,6 +592,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           _path: pathNodes.has(n.id),
           _depth: graph.depth.get(n.id) ?? 2,
           _auto: BRANCH_COLORS[(graph.branch.get(n.id) ?? 0) % BRANCH_COLORS.length],
+          _prog: progressOf(n.id),
           _dim:
             (q !== "" && !matchSet.has(n.id) && !pathNodes.has(n.id)) ||
             (focusSet !== null && !focusSet.has(n.id)),
@@ -465,7 +604,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           draggable: !d.locked,
         } as NoteNode;
       }),
-    [nodes, graph, matchSet, pathNodes, q, focusSet],
+    [nodes, graph, matchSet, pathNodes, q, focusSet, progressOf],
   );
   const viewEdges = useMemo(
     () =>
@@ -747,6 +886,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
       data: {
         text: "",
         color: (opts?.parent && "color" in opts.parent.data && opts.parent.data.color) || COLORS[0],
+        _autoEdit: true,
       },
       selected: true,
     };
@@ -807,6 +947,155 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
     setEdges((es) => es.filter((e) => !ids.has(e.source) && !ids.has(e.target) && !e.selected));
   };
 
+  // ── 상세 패널 · 우클릭 메뉴 · 연결 모드 · 미니맵 ──
+  const [panelId, setPanelId] = useState<string | null>(null);
+  const [panelFolded, setPanelFolded] = useState(false);
+  const [taskRequest, setTaskRequest] = useState(0);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [connectFrom, setConnectFrom] = useState<string | null>(null);
+  const [mapMode, setMapMode] = useState<"open" | "folded" | "hidden">(() => {
+    try {
+      const v = localStorage.getItem("mm-minimap");
+      return v === "folded" || v === "hidden" ? v : "open";
+    } catch {
+      return "open";
+    }
+  });
+  const setMap = (m: "open" | "folded" | "hidden") => {
+    setMapMode(m);
+    try {
+      localStorage.setItem("mm-minimap", m);
+    } catch {
+      /* 저장소를 못 쓰는 환경 — 무시 */
+    }
+  };
+  const panelNode = panelId ? (nodes.find((n) => n.id === panelId) ?? null) : null;
+  useEffect(() => {
+    if (panelId && !panelNode) setPanelId(null);
+  }, [panelId, panelNode]);
+  const titleOf = useCallback(
+    (id: string) => {
+      const n = nodes.find((x) => x.id === id);
+      const t = n ? (n.data as { text?: string }).text : "";
+      return n?.type === "image" ? "🖼 이미지" : (t ?? "").replace(/\n/g, " ");
+    },
+    [nodes],
+  );
+  const patchNodeData = (id: string, patch: Record<string, unknown>) =>
+    setNodes((ns) =>
+      ns.map((n) => (n.id === id ? ({ ...n, data: { ...n.data, ...patch } } as NoteNode) : n)),
+    );
+  const patchMeta = (id: string, patch: Partial<NodeMeta>) =>
+    setNodes((ns) =>
+      ns.map((n) =>
+        n.id === id
+          ? ({ ...n, data: { ...n.data, meta: { ...getMeta(n.data), ...patch } } } as NoteNode)
+          : n,
+      ),
+    );
+  const deleteNode = (id: string) => {
+    setNodes((ns) => ns.filter((n) => n.id !== id));
+    setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
+    setPanelId((p) => (p === id ? null : p));
+  };
+  const duplicateNode = (id: string) => {
+    const src = nodes.find((n) => n.id === id);
+    if (!src) return;
+    const meta = { ...getMeta(src.data) };
+    delete meta.taskIds; // 같은 작업이 두 노드에 중복 연결되지 않게
+    const copy = {
+      ...src,
+      id: newId(),
+      position: { x: src.position.x + 36, y: src.position.y + 36 },
+      selected: true,
+      data: { ...src.data, collapsed: false, locked: false, meta },
+    } as NoteNode;
+    setNodes((ns) => [...ns.map((n) => ({ ...n, selected: false })), copy]);
+  };
+  const connectNodes = (fromId: string, toId: string) => {
+    const a = nodes.find((n) => n.id === fromId);
+    const b = nodes.find((n) => n.id === toId);
+    if (!a || !b || fromId === toId) return;
+    if (edges.some((e) => e.source === fromId && e.target === toId)) return;
+    const c = (n: NoteNode) => {
+      const sz = nodeSize(
+        {
+          id: n.id,
+          type: n.type,
+          position: n.position,
+          data: n.data as Record<string, unknown>,
+          width: n.width,
+          height: n.height,
+          measured: n.measured,
+        },
+        graph.depth.get(n.id) ?? 2,
+      );
+      return { cx: n.position.x + sz.w / 2, cy: n.position.y + sz.h / 2 };
+    };
+    const h = nearestHandles(c(a), c(b));
+    setEdges((es) => [
+      ...es,
+      {
+        id: `e-${fromId}-${toId}-${Date.now().toString(36)}`,
+        source: fromId,
+        target: toId,
+        sourceHandle: h.s,
+        targetHandle: h.t,
+        type: "smoothstep",
+        markerEnd: ARROW,
+      },
+    ]);
+  };
+  const openPanel = (id: string) => {
+    setPanelId(id);
+    setPanelFolded(false);
+  };
+  // Esc: 우클릭 메뉴 → 연결 모드 → 패널 순서로 닫는다(입력 중에는 입력만 빠져나옴).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("textarea,input,select")) return;
+      if (menu) setMenu(null);
+      else if (connectFrom) setConnectFrom(null);
+      else if (panelId) setPanelId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu, connectFrom, panelId]);
+
+  const rels = (id: string) => {
+    const mk = (e: Edge, other: string): RelNode => ({
+      id: other,
+      title: titleOf(other),
+      edgeId: e.id,
+      label: typeof e.label === "string" ? e.label : "",
+    });
+    return {
+      parents: edges.filter((e) => e.target === id).map((e) => mk(e, e.source)),
+      children: edges.filter((e) => e.source === id).map((e) => mk(e, e.target)),
+    };
+  };
+  const editEdgeLabel = (edgeId: string, label: string) =>
+    setEdges((es) => es.map((e) => (e.id === edgeId ? { ...e, label } : e)));
+  const gotoNode = (id: string) => {
+    setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === id })));
+    setPanelId(id);
+    void fitView({ nodes: [{ id }], duration: 350, maxZoom: 1.2, padding: 0.8 });
+  };
+  const levelItems: [string, number | "all"][] = [
+    ["0단계 (최상위만)", 0],
+    ["1단계까지", 1],
+    ["2단계까지", 2],
+    ["3단계까지", 3],
+    ["전체 펼치기", "all"],
+  ];
+  const cycleFocus = () =>
+    setFocusMode((m) => (m === "off" ? "near" : m === "near" ? "branch" : "off"));
+  const toggleCollapseSelected = () =>
+    selected && patchNodeData(selected.id, { collapsed: !(selected.data as Extra).collapsed });
+  const mapShift = panelId && !panelFolded ? 348 : 8;
+
   const statusText = useMemo(
     () =>
       ({
@@ -818,52 +1107,114 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
     [status],
   );
 
+  const tb =
+    "inline-flex h-8 w-8 shrink-0 items-center justify-center border border-input bg-background text-foreground transition-colors hover:bg-secondary disabled:opacity-40";
+  const tbOn = "!bg-foreground !text-background";
+  const sep = <span className="mx-0.5 hidden h-5 w-px bg-border md:inline-block" />;
+  const selCls = "h-8 border border-input bg-background px-1.5 font-mono text-xs";
+  const fitAll = () => void fitView({ padding: 0.15, minZoom: 0.55, maxZoom: 1.1, duration: 300 });
+  const askArrange = () => {
+    if (window.confirm("노드 위치를 자동으로 다시 배치할까요? (🔒 고정한 노드는 그대로 둡니다)"))
+      runArrange();
+  };
+  const panelOpen = panelNode !== null && !panelFolded;
+
   return (
-    <div className="mm space-y-2">
+    <div className="mm space-y-1.5">
       <style>{`.mm .react-flow__handle{opacity:0;transition:opacity .12s}.mm .react-flow__node:hover .react-flow__handle,.mm .react-flow__node.selected .react-flow__handle,.mm .react-flow__handle.connectingfrom,.mm .react-flow__handle.connectingto{opacity:1}`}</style>
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={buttonClass} onClick={() => addNote()}>
-          + 노트
+      <div className="flex flex-wrap items-center gap-1">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+          <input
+            aria-label="마인드맵 검색"
+            className="h-8 w-36 border border-input bg-background pl-7 pr-2 font-mono text-xs sm:w-48"
+            placeholder="검색 (Enter=다음)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") goToMatch(e.shiftKey ? -1 : 1);
+              if (e.key === "Escape") setQuery("");
+            }}
+          />
+        </div>
+        {q && (
+          <>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {matchIds.length === 0
+                ? "0"
+                : `${matchIdx >= 0 ? matchIdx + 1 : "-"}/${matchIds.length}`}
+            </span>
+            <button type="button" className={tb} title="이전 결과" onClick={() => goToMatch(-1)}>
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <button type="button" className={tb} title="다음 결과" onClick={() => goToMatch(1)}>
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            <button type="button" className={tb} title="검색 지우기" onClick={() => setQuery("")}>
+              <X className="h-4 w-4" />
+            </button>
+          </>
+        )}
+        {sep}
+        <button
+          type="button"
+          className={tb}
+          title="노트 추가"
+          aria-label="노트 추가"
+          onClick={() => addNote()}
+        >
+          <Plus className="h-4 w-4" />
         </button>
         <button
           type="button"
-          className={buttonClass}
+          className={tb}
+          title="선택한 노드의 하위 노트 추가"
+          aria-label="하위 노트 추가"
           disabled={!selected || selected.type === "image"}
           onClick={() => selected && addNote({ parent: selected })}
         >
-          + 하위 노트
+          <CornerDownRight className="h-4 w-4" />
         </button>
         <select
           aria-label="하위 노트 방향"
-          className="h-9 border border-border bg-background px-2 font-mono text-xs"
+          title="하위 노트 방향"
+          className={`${selCls} w-12`}
           value={childDir}
           onChange={(e) => setChildDir(e.target.value as Dir)}
         >
-          <option value="r">→ 오른쪽</option>
-          <option value="l">← 왼쪽</option>
-          <option value="b">↓ 아래</option>
-          <option value="t">↑ 위</option>
+          <option value="r">→</option>
+          <option value="l">←</option>
+          <option value="b">↓</option>
+          <option value="t">↑</option>
         </select>
-        <select
-          aria-label="도형 추가"
-          className="h-9 border border-border bg-background px-2 font-mono text-xs"
-          value=""
-          onChange={(e) => e.target.value && addShape(e.target.value as ShapeKind)}
-        >
-          <option value="">+ 도형</option>
-          {SHAPES.map((sh) => (
-            <option key={sh.kind} value={sh.kind}>
-              {sh.label}
-            </option>
-          ))}
-        </select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={`${tb} max-md:hidden`}
+              title="도형 추가"
+              aria-label="도형 추가"
+            >
+              <Shapes className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {SHAPES.map((sh) => (
+              <DropdownMenuItem key={sh.kind} onSelect={() => addShape(sh.kind)}>
+                {sh.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <button
           type="button"
-          className={buttonClass}
+          className={`${tb} max-md:hidden`}
+          title={uploading ? "업로드 중…" : "이미지 추가"}
+          aria-label="이미지 추가"
           disabled={uploading}
           onClick={() => fileRef.current?.click()}
         >
-          {uploading ? "업로드 중…" : "+ 이미지"}
+          <ImageIcon className="h-4 w-4" />
         </button>
         <input
           ref={fileRef}
@@ -876,191 +1227,214 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
             e.target.value = "";
           }}
         />
-        <span className="flex items-center gap-1">
-          {COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              title="선택한 노트 색상"
-              disabled={!selected}
-              onClick={() => setColor(c)}
-              className="h-6 w-6 border border-black/30 disabled:opacity-40"
-              style={{ background: c }}
-            />
-          ))}
-        </span>
-        <button
-          type="button"
-          className={buttonClass}
-          disabled={!nodes.some((n) => n.selected) && !edges.some((e) => e.selected)}
-          onClick={removeSelected}
-        >
-          선택 삭제
-        </button>
-        <button
-          type="button"
-          className={buttonClass}
-          onClick={() =>
-            void fitView({ padding: 0.15, minZoom: 0.55, maxZoom: 1.1, duration: 300 })
-          }
-        >
-          전체 보기
-        </button>
-        <span className="ml-auto font-mono text-[11px] text-muted-foreground">{statusText}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          aria-label="마인드맵 검색"
-          className="h-8 min-w-[12rem] flex-1 border border-border bg-background px-2 font-mono text-xs"
-          placeholder="🔍 노드·선 글자 검색 (Enter = 다음 결과)"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") goToMatch(e.shiftKey ? -1 : 1);
-          }}
-        />
-        {q && (
-          <>
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {matchIds.length === 0
-                ? "결과 없음"
-                : `${matchIdx >= 0 ? matchIdx + 1 : "-"}/${matchIds.length}`}
-            </span>
-            <button
-              type="button"
-              className={`${buttonClass} !h-8 !min-h-0 px-2`}
-              onClick={() => goToMatch(-1)}
-            >
-              ▲
-            </button>
-            <button
-              type="button"
-              className={`${buttonClass} !h-8 !min-h-0 px-2`}
-              onClick={() => goToMatch(1)}
-            >
-              ▼
-            </button>
-            <button
-              type="button"
-              className={`${buttonClass} !h-8 !min-h-0 px-2`}
-              onClick={() => setQuery("")}
-            >
-              ✕
-            </button>
-          </>
-        )}
-        <select
-          aria-label="단계별 보기"
-          className="h-8 border border-border bg-background px-2 font-mono text-xs"
-          value=""
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v) showLevel(v === "all" ? "all" : Number(v));
-          }}
-        >
-          <option value="">단계별 보기…</option>
-          <option value="0">0단계 (최상위만)</option>
-          <option value="1">1단계까지</option>
-          <option value="2">2단계까지</option>
-          <option value="3">3단계까지</option>
-          <option value="all">전체 펼치기</option>
-        </select>
+        {sep}
         <select
           aria-label="자동 정렬 방식"
-          className="h-8 border border-border bg-background px-2 font-mono text-xs"
+          title="자동 정렬 방식"
+          className={`${selCls} max-md:hidden`}
           value={layoutMode}
           onChange={(e) => setLayoutMode(e.target.value as LayoutMode)}
         >
-          <option value="compact">컴팩트 (4방향)</option>
+          <option value="compact">컴팩트</option>
           <option value="radial">방사형</option>
-          <option value="flow">플로우차트 (→)</option>
+          <option value="flow">플로우</option>
         </select>
         <button
           type="button"
-          className={`${buttonClass} !h-8 !min-h-0 px-3`}
-          title="노드 위치를 선택한 방식으로 다시 배치합니다(🔒 고정한 노드는 그대로)"
-          onClick={() => {
-            if (
-              window.confirm(
-                "노드 위치를 자동으로 다시 배치할까요? (🔒 고정한 노드는 그대로 둡니다)",
-              )
-            )
-              runArrange();
-          }}
+          className={tb}
+          title="자동 정렬 (🔒 고정 노드 제외)"
+          aria-label="자동 정렬"
+          onClick={askArrange}
         >
-          자동 정렬
+          <Wand2 className="h-4 w-4" />
+        </button>
+        {sep}
+        <button
+          type="button"
+          className={`${tb} max-lg:hidden`}
+          title="축소"
+          aria-label="축소"
+          onClick={() => void zoomOut({ duration: 150 })}
+        >
+          <ZoomOut className="h-4 w-4" />
         </button>
         <button
           type="button"
-          className={`${buttonClass} !h-8 !min-h-0 px-3`}
-          disabled={!selected}
-          onClick={toggleLock}
-          title="선택한 노드 위치 고정/해제 (자동 정렬·드래그 제외)"
-        >
-          🔒 위치 고정
-        </button>
-        <button
-          type="button"
-          className={`${buttonClass} !h-8 !min-h-0 px-3`}
+          className={`${tb} max-lg:hidden !w-auto px-1.5 font-mono text-[11px]`}
+          title="100%"
           onClick={() => void zoomTo(1, { duration: 250 })}
         >
           100%
         </button>
         <button
           type="button"
-          className={`${buttonClass} !h-8 !min-h-0 px-3`}
+          className={`${tb} max-lg:hidden`}
+          title="확대"
+          aria-label="확대"
+          onClick={() => void zoomIn({ duration: 150 })}
+        >
+          <ZoomIn className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className={tb}
+          title="전체 보기"
+          aria-label="전체 보기"
+          onClick={fitAll}
+        >
+          <Maximize className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className={`${tb} max-md:hidden`}
+          title="루트로 이동"
+          aria-label="루트로 이동"
           onClick={centerOnRoot}
         >
-          루트로 이동
+          <LocateFixed className="h-4 w-4" />
         </button>
-        <select
+        <button
+          type="button"
+          className={`${tb} max-lg:hidden ${focusMode !== "off" ? tbOn : ""}`}
+          title={`포커스 모드: ${focusMode === "off" ? "끔" : focusMode === "near" ? "연결된 노드" : "하위 전체"} (클릭=전환)`}
           aria-label="포커스 모드"
-          className="h-8 border border-border bg-background px-2 font-mono text-xs"
-          value={focusMode}
-          onChange={(e) => setFocusMode(e.target.value as "off" | "near" | "branch")}
-          title="노드를 선택하면 연결된 노드만 밝게 보여 줍니다"
+          onClick={cycleFocus}
         >
-          <option value="off">포커스 끔</option>
-          <option value="near">포커스: 연결된 노드</option>
-          <option value="branch">포커스: 하위 전체</option>
-        </select>
-        <button
-          type="button"
-          className={`${buttonClass} !h-8 !min-h-0 px-3`}
-          title="선 글자 표시: 의미 있는 글자만 / 전부 / 숨김"
-          onClick={() =>
-            setLabelMode((m) => (m === "smart" ? "all" : m === "all" ? "none" : "smart"))
-          }
-        >
-          선 글자: {labelMode === "smart" ? "핵심만" : labelMode === "all" ? "전부" : "숨김"}
+          <Focus className="h-4 w-4" />
         </button>
-        <button
-          type="button"
-          className={`${buttonClass} !h-8 !min-h-0 px-3`}
-          disabled={!selected || !graph.kids.get(selected.id)?.length}
-          onClick={() =>
-            selected &&
-            setNodes((ns) =>
-              ns.map((n) =>
-                n.id === selected.id
-                  ? ({
-                      ...n,
-                      data: { ...n.data, collapsed: !(n.data as Extra).collapsed },
-                    } as NoteNode)
-                  : n,
-              ),
-            )
-          }
-        >
-          선택 노드 접기/펼치기
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={`${tb} max-lg:hidden`}
+              title="단계별 접기/펼치기"
+              aria-label="단계별 보기"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {levelItems.map(([label, v]) => (
+              <DropdownMenuItem key={label} onSelect={() => showLevel(v)}>
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <span className="ml-auto font-mono text-[11px] text-muted-foreground">{statusText}</span>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button type="button" className={tb} title="도움말" aria-label="도움말">
+              <CircleHelp className="h-4 w-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            className="w-80 space-y-1 p-3 font-mono text-[11px] leading-relaxed"
+          >
+            <p className="font-semibold">사용법</p>
+            <p>· 노드 클릭 = 선택 + 상세 패널 / 더블클릭 = 제목 편집 / 우클릭 = 메뉴</p>
+            <p>· 드래그 = 이동 · 휠 = 확대/축소 · 빈 곳 드래그 = 화면 이동</p>
+            <p>· 노드 사방의 점을 끌어 연결(위·아래·좌·우) · 선을 클릭하면 글자·화살표 편집</p>
+            <p>· 도형/이미지는 선택 후 모서리로 크기 조절 · 이미지는 끌어놓기/붙여넣기(Ctrl/⌘+V)</p>
+            <p>· 우측 ⋯ 메뉴: 접기/펼치기, 위치 고정, 선 글자, 미니맵, 삭제</p>
+            <p>· Esc = 메뉴/패널 닫기 · Delete = 삭제</p>
+          </PopoverContent>
+        </Popover>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={tb} title="더보기" aria-label="더보기">
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem
+              disabled={!selected || !graph.kids.get(selected.id)?.length}
+              onSelect={toggleCollapseSelected}
+            >
+              선택 노드 접기/펼치기
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!selected} onSelect={toggleLock}>
+              🔒 선택 노드 위치 고정/해제
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
+                setLabelMode((m) => (m === "smart" ? "all" : m === "all" ? "none" : "smart"))
+              }
+            >
+              선 글자: {labelMode === "smart" ? "핵심만" : labelMode === "all" ? "전부" : "숨김"}{" "}
+              (전환)
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setMap(mapMode === "hidden" ? "open" : "hidden")}>
+              <MapIcon className="mr-2 h-4 w-4" /> 미니맵{" "}
+              {mapMode === "hidden" ? "보이기" : "숨기기"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <div className="md:hidden">
+              <DropdownMenuLabel className="text-[10px]">모바일</DropdownMenuLabel>
+              {SHAPES.map((sh) => (
+                <DropdownMenuItem key={sh.kind} onSelect={() => addShape(sh.kind)}>
+                  도형 추가 {sh.label}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuItem onSelect={() => fileRef.current?.click()}>
+                이미지 추가
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={centerOnRoot}>루트로 이동</DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() =>
+                  setLayoutMode((m) =>
+                    m === "compact" ? "radial" : m === "radial" ? "flow" : "compact",
+                  )
+                }
+              >
+                정렬 방식:{" "}
+                {layoutMode === "compact"
+                  ? "컴팩트"
+                  : layoutMode === "radial"
+                    ? "방사형"
+                    : "플로우"}{" "}
+                (전환)
+              </DropdownMenuItem>
+            </div>
+            <div className="lg:hidden">
+              <DropdownMenuItem onSelect={() => void zoomOut({ duration: 150 })}>
+                축소
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void zoomIn({ duration: 150 })}>
+                확대
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void zoomTo(1, { duration: 250 })}>
+                100%
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={cycleFocus}>
+                포커스:{" "}
+                {focusMode === "off" ? "끔" : focusMode === "near" ? "연결된 노드" : "하위 전체"}{" "}
+                (전환)
+              </DropdownMenuItem>
+              {levelItems.map(([label, v]) => (
+                <DropdownMenuItem key={label} onSelect={() => showLevel(v)}>
+                  {label}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+            </div>
+            <DropdownMenuItem
+              className="text-destructive"
+              disabled={!nodes.some((n) => n.selected) && !edges.some((e) => e.selected)}
+              onSelect={removeSelected}
+            >
+              선택 삭제
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {selectedEdge && (
-        <div className="flex flex-wrap items-center gap-2 border border-dashed border-border p-2">
+        <div className="flex flex-wrap items-center gap-1 border border-dashed border-border p-1.5">
           <span className="font-mono text-[11px] uppercase">선</span>
           <input
             aria-label="선 글자"
-            className="h-8 min-w-[10rem] flex-1 border border-border bg-background px-2 font-mono text-xs"
+            className="h-8 min-w-[10rem] flex-1 border border-input bg-background px-2 font-mono text-xs"
             placeholder="선 위에 표시할 글자"
             value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
             onChange={(e) => patchEdge({ label: e.target.value })}
@@ -1077,7 +1451,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
               key={mode}
               type="button"
               title="화살표"
-              className={`${buttonClass} !h-8 !min-h-0 px-3 ${arrowMode === mode ? "!bg-foreground !text-background" : ""}`}
+              className={`${tb} ${arrowMode === mode ? tbOn : ""}`}
               onClick={() => setArrows(mode)}
             >
               {label}
@@ -1085,16 +1459,11 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           ))}
         </div>
       )}
-      <p className="font-mono text-[11px] text-muted-foreground">
-        드래그로 이동 · 휠로 확대/축소 · 사방의 점(위·아래·좌·우)을 끌어 연결 · 도형/이미지는
-        선택하면 모서리로 크기 조절 · 이미지는 파일을 캔버스에 끌어놓거나 붙여넣기(Ctrl/⌘+V)도 가능
-        · Delete로 삭제
-      </p>
       {uploadError && <p className="font-mono text-xs text-destructive">{uploadError}</p>}
       <div
         ref={wrapRef}
         tabIndex={-1}
-        className="h-[70vh] min-h-[420px] border border-border bg-card outline-none"
+        className="relative h-[72vh] min-h-[420px] overflow-hidden border border-border bg-card outline-none"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           if (e.dataTransfer.files.length === 0) return;
@@ -1113,6 +1482,11 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           }
         }}
       >
+        {connectFrom && (
+          <div className="absolute left-1/2 top-2 z-30 -translate-x-1/2 border border-foreground bg-background px-3 py-1 font-mono text-xs shadow">
+            연결할 노드를 클릭하세요 · Esc 취소
+          </div>
+        )}
         <ReactFlow
           defaultEdgeOptions={{
             labelStyle: { fontSize: 11, fontFamily: "monospace" },
@@ -1125,16 +1499,167 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeClick={(_, node) => {
+            setMenu(null);
+            if (connectFrom) {
+              connectNodes(connectFrom, node.id);
+              setConnectFrom(null);
+              return;
+            }
+            openPanel(node.id);
+          }}
+          onNodeContextMenu={(e, node) => {
+            e.preventDefault();
+            const r = wrapRef.current?.getBoundingClientRect();
+            setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === node.id })));
+            setMenu({ id: node.id, x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+          }}
+          onPaneClick={() => setMenu(null)}
+          onMoveStart={() => setMenu(null)}
           connectionMode={ConnectionMode.Loose}
           deleteKeyCode={["Delete", "Backspace"]}
+          zoomOnDoubleClick={false}
           minZoom={0.2}
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={20} />
-          <MiniMap pannable zoomable />
-          <Controls showInteractive={false} />
+          {mapMode !== "hidden" && (
+            <>
+              <Panel
+                position="bottom-right"
+                style={{
+                  margin: 8,
+                  marginRight: mapShift,
+                  marginBottom: mapMode === "open" ? 100 : 8,
+                }}
+              >
+                <button
+                  type="button"
+                  className="inline-flex h-6 items-center gap-1 border border-input bg-background/90 px-1.5 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                  onClick={() => setMap(mapMode === "open" ? "folded" : "open")}
+                  title={mapMode === "open" ? "미니맵 접기" : "미니맵 펼치기"}
+                >
+                  <MapIcon className="h-3 w-3" /> 지도 {mapMode === "open" ? "▾" : "▴"}
+                </button>
+              </Panel>
+              {mapMode === "open" && (
+                <MiniMap
+                  pannable
+                  zoomable
+                  position="bottom-right"
+                  style={{
+                    width: 132,
+                    height: 88,
+                    margin: 8,
+                    marginRight: mapShift,
+                    background: "rgba(255,255,255,0.8)",
+                    border: "1px solid rgba(100,116,139,0.35)",
+                  }}
+                />
+              )}
+            </>
+          )}
+          <Controls showInteractive={false} position="bottom-left" />
         </ReactFlow>
+
+        {menu && (
+          <div
+            className="absolute z-40 w-44 border border-border bg-popover py-1 font-mono text-xs shadow-lg"
+            style={{
+              left: Math.min(menu.x, (wrapRef.current?.clientWidth ?? 400) - 180),
+              top: Math.min(menu.y, (wrapRef.current?.clientHeight ?? 300) - 230),
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {(
+              [
+                ["하위 노트 추가", "child"],
+                ["연결하기", "connect"],
+                ["상세 편집", "details"],
+                ["작업 만들기", "task"],
+                ["복제", "dup"],
+                [
+                  nodes.find((n) => n.id === menu.id) &&
+                  (nodes.find((n) => n.id === menu.id)!.data as Extra).locked
+                    ? "위치 고정 해제"
+                    : "위치 고정",
+                  "lock",
+                ],
+                ["삭제", "del"],
+              ] as const
+            ).map(([label, act]) => {
+              const node = nodes.find((n) => n.id === menu.id);
+              const disabled = act === "child" && node?.type === "image";
+              return (
+                <button
+                  key={act}
+                  type="button"
+                  disabled={disabled}
+                  className={`block w-full px-3 py-1.5 text-left hover:bg-secondary disabled:opacity-40 ${act === "del" ? "text-destructive" : ""}`}
+                  onClick={() => {
+                    const id = menu.id;
+                    setMenu(null);
+                    if (act === "child" && node) addNote({ parent: node });
+                    else if (act === "connect") setConnectFrom(id);
+                    else if (act === "details") openPanel(id);
+                    else if (act === "task") {
+                      openPanel(id);
+                      setTaskRequest((n) => n + 1);
+                    } else if (act === "dup") duplicateNode(id);
+                    else if (act === "lock")
+                      patchNodeData(id, { locked: !(node?.data as Extra | undefined)?.locked });
+                    else if (act === "del") {
+                      if (window.confirm("이 노드를 삭제할까요?")) deleteNode(id);
+                    }
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {panelNode && panelFolded && (
+          <button
+            type="button"
+            onClick={() => setPanelFolded(false)}
+            className="absolute right-0 top-16 z-20 border border-r-0 border-border bg-card px-1 py-3 font-mono text-[11px] shadow [writing-mode:vertical-rl]"
+            title="상세 패널 펼치기"
+          >
+            ‹ 상세
+          </button>
+        )}
+        {panelNode && panelOpen && (
+          <MindmapDetailPanel
+            boardId={boardId}
+            node={{
+              id: panelNode.id,
+              type: panelNode.type ?? "note",
+              title:
+                titleOf(panelNode.id) === "🖼 이미지"
+                  ? ""
+                  : ((panelNode.data as { text?: string }).text ?? ""),
+              color: (panelNode.data as { color?: string }).color ?? "",
+              data: panelNode.data as Record<string, unknown>,
+            }}
+            {...rels(panelNode.id)}
+            others={[]}
+            colors={COLORS}
+            taskRequest={taskRequest}
+            onTitle={(t) => patchNodeData(panelNode.id, { text: t })}
+            onColor={(c) => patchNodeData(panelNode.id, { color: c })}
+            onMeta={(m) => patchMeta(panelNode.id, m)}
+            onEdgeLabel={editEdgeLabel}
+            onGoto={gotoNode}
+            onDelete={() => {
+              if (window.confirm("이 노드를 삭제할까요?")) deleteNode(panelNode.id);
+            }}
+            onClose={() => setPanelId(null)}
+            onCollapse={() => setPanelFolded(true)}
+          />
+        )}
       </div>
     </div>
   );
