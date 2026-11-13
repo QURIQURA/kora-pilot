@@ -15,6 +15,12 @@ import {
 import { formatDateTime, formatTime, localDateTimeToISO, toLocalDateString } from "@/lib/datetime";
 import { readPopupPlan, validatePopupPlan, type PopupItem } from "@/lib/popup";
 import { invalidateProductionSync } from "@/lib/production-sync";
+import {
+  paymentLabel,
+  popupPreordersQuery,
+  preordersForItem,
+  type PopupPreorder,
+} from "@/lib/popup-preorders";
 import { ProductSelect } from "./ProductSelect";
 import { OrderMoodboardSection } from "./OrderMoodboardSection";
 import { OrderResultPhotosSection } from "./OrderResultPhotosSection";
@@ -57,6 +63,16 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
   const standards = useQuery(cakeSizesQuery());
   const products = useQuery(productsQuery());
   const plan = draft.plan;
+  // 저장된 값 기준으로 프리오더를 찾는다(입력 중인 미저장 값마다 다시 조회하지 않도록).
+  const savedPlan = baseline.current.state.plan;
+  const preorders = useQuery(
+    popupPreordersQuery({
+      id: order.id,
+      order_number: baseline.current.state.orderNumber,
+      pickup_at: isoTime(baseline.current.state.start),
+      ends_at: savedPlan.ends_at,
+    }),
+  );
   const validation = validatePopupPlan(plan);
   const save = useMutation({
     mutationFn: async () => {
@@ -213,7 +229,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
             </div>
           </SectionCard>
           <SectionCard
-            title={`생산 품목 · ${plan.items.length}개`}
+            title={`생산 품목 & PREORDER · ${plan.items.length}개`}
             action={
               <button
                 type="button"
@@ -241,138 +257,150 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
               </button>
             }
           >
-            {/* 품목은 2열 — 1개뿐이어도 카드 폭은 같게(절반) 가운데 배치, 홀수 개의 마지막 카드도 가운데 */}
-            <div className="flex flex-wrap justify-center gap-2">
-              {plan.items.map((item) => (
-                <div
-                  key={item.id}
-                  className="w-full space-y-2 border border-border p-2.5 lg:w-[calc(50%-0.25rem)]"
-                >
-                  <div className="grid items-end gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                    <Field label="제품">
-                      <ProductSelect
-                        value={item.product_id}
-                        emptyLabel="제품 선택 (없으면 오른쪽에 직접 입력)"
-                        onChange={(id) => {
-                          const product = products.data?.find((p) => p.id === id);
-                          changeItem(item.id, {
-                            product_id: id,
-                            ...(product ? { label: product.name } : {}),
-                          });
-                        }}
-                      />
-                    </Field>
-                    <Field label="품목 이름">
-                      <input
-                        className={inputClass}
-                        value={item.label}
-                        maxLength={300}
-                        placeholder="예: 커스타드 프로피테롤"
-                        onChange={(e) => changeItem(item.id, { label: e.target.value })}
-                      />
-                    </Field>
-                    <button
-                      type="button"
-                      className={buttonClass}
-                      onClick={() => {
-                        if (
-                          !item.work_session_id ||
-                          confirm("품목을 목록에서 제거할까요? 연결된 생산 기록은 유지됩니다.")
-                        )
-                          setPlan({ items: plan.items.filter((i) => i.id !== item.id) });
-                      }}
-                    >
-                      제거
-                    </button>
-                  </div>
-                  {item.product_id && <PopupItemComponents productId={item.product_id} />}
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1.6fr)_6rem_6rem_5rem]">
-                    <Field label="공용 완성 규격">
-                      <select
-                        className={selectClass}
-                        value={item.standard_id}
-                        onChange={(e) => changeItem(item.id, { standard_id: e.target.value })}
-                      >
-                        <option value="">해당 없음 / 미지정</option>
-                        {(standards.data ?? []).map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="계획 수량">
-                      <input
-                        aria-label={`${item.label || "품목"} 계획 수량`}
-                        className={inputClass}
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={Number.isNaN(item.quantity) ? "" : item.quantity}
-                        onChange={(e) =>
-                          changeItem(item.id, {
-                            quantity: e.target.value === "" ? NaN : Number(e.target.value),
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field label="준비 완료 수량">
-                      <input
-                        aria-label={`${item.label || "품목"} 준비 수량`}
-                        className={inputClass}
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={Number.isNaN(item.ready_quantity) ? "" : item.ready_quantity}
-                        onChange={(e) =>
-                          changeItem(item.id, {
-                            ready_quantity: e.target.value === "" ? NaN : Number(e.target.value),
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field label="단위">
-                      <input
-                        className={inputClass}
-                        value={item.unit}
-                        maxLength={40}
-                        placeholder="개 / 박스 / 세트"
-                        onChange={(e) => changeItem(item.id, { unit: e.target.value })}
-                      />
-                    </Field>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      준비 {Number.isFinite(item.ready_quantity) ? item.ready_quantity : 0} /{" "}
-                      {Number.isFinite(item.quantity) ? item.quantity : 0} {item.unit} ·{" "}
-                      {item.work_session_id
-                        ? "생산 세션 연결됨"
-                        : "생산 배수는 세션에서 별도로 설정합니다."}
-                    </p>
-                    {item.work_session_id ? (
-                      <Link
-                        className={buttonClass}
-                        to="/production/$sessionId"
-                        params={{ sessionId: item.work_session_id }}
-                      >
-                        생산 세션 열기
-                      </Link>
-                    ) : (
+            {/* 2026-11-13 (연): 품목당 한 행 — 왼쪽은 기존 생산 품목, 오른쪽은 그 품목의 프리오더(기존 ORDERS) */}
+            <div className="space-y-2">
+              {plan.items.length > 0 && (
+                <div className="label-caps hidden text-xs text-muted-foreground lg:grid lg:grid-cols-2">
+                  <span className="px-2.5">생산 품목</span>
+                  <span className="px-2.5">PREORDER</span>
+                </div>
+              )}
+              {plan.items.map((item, index) => (
+                <div key={item.id} className="grid border border-border lg:grid-cols-2">
+                  <div className="min-w-0 space-y-2 p-2.5">
+                    <p className="label-caps text-xs text-muted-foreground">#{index + 1}</p>
+                    <div className="grid items-end gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                      <Field label="제품">
+                        <ProductSelect
+                          value={item.product_id}
+                          emptyLabel="제품 선택 (없으면 오른쪽에 직접 입력)"
+                          onChange={(id) => {
+                            const product = products.data?.find((p) => p.id === id);
+                            changeItem(item.id, {
+                              product_id: id,
+                              ...(product ? { label: product.name } : {}),
+                            });
+                          }}
+                        />
+                      </Field>
+                      <Field label="품목 이름">
+                        <input
+                          className={inputClass}
+                          value={item.label}
+                          maxLength={300}
+                          placeholder="예: 커스타드 프로피테롤"
+                          onChange={(e) => changeItem(item.id, { label: e.target.value })}
+                        />
+                      </Field>
                       <button
                         type="button"
                         className={buttonClass}
-                        disabled={
-                          pending ||
-                          draft.status === "COMPLETED" ||
-                          (changed && (!!validation || conflict || !draft.orderNumber.trim()))
-                        }
-                        title={changed ? "저장한 뒤 생산 세션을 만듭니다" : undefined}
-                        onClick={() => session.mutate(item)}
+                        onClick={() => {
+                          if (
+                            !item.work_session_id ||
+                            confirm("품목을 목록에서 제거할까요? 연결된 생산 기록은 유지됩니다.")
+                          )
+                            setPlan({ items: plan.items.filter((i) => i.id !== item.id) });
+                        }}
                       >
-                        {changed ? "저장 후 생산 세션 만들기" : "생산 세션 만들기"}
+                        제거
                       </button>
-                    )}
+                    </div>
+                    {item.product_id && <PopupItemComponents productId={item.product_id} />}
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1.6fr)_6rem_6rem_5rem]">
+                      <Field label="공용 완성 규격">
+                        <select
+                          className={selectClass}
+                          value={item.standard_id}
+                          onChange={(e) => changeItem(item.id, { standard_id: e.target.value })}
+                        >
+                          <option value="">해당 없음 / 미지정</option>
+                          {(standards.data ?? []).map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="계획 수량">
+                        <input
+                          aria-label={`${item.label || "품목"} 계획 수량`}
+                          className={inputClass}
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={Number.isNaN(item.quantity) ? "" : item.quantity}
+                          onChange={(e) =>
+                            changeItem(item.id, {
+                              quantity: e.target.value === "" ? NaN : Number(e.target.value),
+                            })
+                          }
+                        />
+                      </Field>
+                      <Field label="준비 완료 수량">
+                        <input
+                          aria-label={`${item.label || "품목"} 준비 수량`}
+                          className={inputClass}
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={Number.isNaN(item.ready_quantity) ? "" : item.ready_quantity}
+                          onChange={(e) =>
+                            changeItem(item.id, {
+                              ready_quantity: e.target.value === "" ? NaN : Number(e.target.value),
+                            })
+                          }
+                        />
+                      </Field>
+                      <Field label="단위">
+                        <input
+                          className={inputClass}
+                          value={item.unit}
+                          maxLength={40}
+                          placeholder="개 / 박스 / 세트"
+                          onChange={(e) => changeItem(item.id, { unit: e.target.value })}
+                        />
+                      </Field>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        준비 {Number.isFinite(item.ready_quantity) ? item.ready_quantity : 0} /{" "}
+                        {Number.isFinite(item.quantity) ? item.quantity : 0} {item.unit} ·{" "}
+                        {item.work_session_id
+                          ? "생산 세션 연결됨"
+                          : "생산 배수는 세션에서 별도로 설정합니다."}
+                      </p>
+                      {item.work_session_id ? (
+                        <Link
+                          className={buttonClass}
+                          to="/production/$sessionId"
+                          params={{ sessionId: item.work_session_id }}
+                        >
+                          생산 세션 열기
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          className={buttonClass}
+                          disabled={
+                            pending ||
+                            draft.status === "COMPLETED" ||
+                            (changed && (!!validation || conflict || !draft.orderNumber.trim()))
+                          }
+                          title={changed ? "저장한 뒤 생산 세션을 만듭니다" : undefined}
+                          onClick={() => session.mutate(item)}
+                        >
+                          {changed ? "저장 후 생산 세션 만들기" : "생산 세션 만들기"}
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  <PopupItemPreorders
+                    item={item}
+                    preorders={preorders.data ?? []}
+                    loading={preorders.isLoading}
+                    error={preorders.error?.message}
+                  />
                 </div>
               ))}
             </div>
@@ -468,6 +496,96 @@ function PopupItemComponents({ productId }: { productId: string }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** 품목 행 오른쪽 칸 — 이 품목의 프리오더 오더를 항상 펼친 채로 보여준다(2026-11-13). 누르면 오더 상세로 이동. */
+function PopupItemPreorders({
+  item,
+  preorders,
+  loading,
+  error,
+}: {
+  item: PopupItem;
+  preorders: PopupPreorder[];
+  loading: boolean;
+  error?: string | undefined;
+}) {
+  const rows = preordersForItem(item, preorders);
+  const total = rows.reduce((sum, o) => sum + (o.quantity ?? 1), 0);
+  return (
+    <div className="min-w-0 space-y-1.5 border-t border-border p-2.5 lg:border-t-0 lg:border-l">
+      <p className="label-caps text-xs text-muted-foreground lg:hidden">PREORDER</p>
+      {error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : loading ? (
+        <p className="text-xs text-muted-foreground">불러오는 중…</p>
+      ) : rows.length === 0 ? null : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[30rem] text-xs">
+              <thead>
+                <tr className="label-caps border-b border-border text-left text-muted-foreground">
+                  <th className="py-1 pr-2 font-normal">주문번호</th>
+                  <th className="py-1 pr-2 font-normal">주문자</th>
+                  <th className="py-1 pr-2 font-normal">연락처</th>
+                  <th className="py-1 pr-2 text-right font-normal">수량</th>
+                  <th className="py-1 pr-2 font-normal">픽업</th>
+                  <th className="py-1 font-normal">결제</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((o) => (
+                  <tr
+                    key={o.id}
+                    className="border-b border-border last:border-b-0 hover:bg-secondary"
+                  >
+                    <td className="py-1 pr-2">
+                      <Link
+                        to="/orders/$orderId"
+                        params={{ orderId: o.id }}
+                        className="label-caps underline-offset-2 hover:underline"
+                      >
+                        {o.order_number || "—"}
+                      </Link>
+                    </td>
+                    <td className="py-1 pr-2">{o.customers?.name || "—"}</td>
+                    <td className="py-1 pr-2 font-mono tabular-nums">
+                      {o.customers?.phone ? (
+                        <a href={`tel:${o.customers.phone}`}>{o.customers.phone}</a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="py-1 pr-2 text-right font-mono tabular-nums">
+                      {o.quantity ?? 1} {item.unit}
+                    </td>
+                    <td className="py-1 pr-2 font-mono tabular-nums">
+                      {o.pickup_at ? formatTime(o.pickup_at) : "—"}
+                    </td>
+                    <td className="py-1">
+                      <span
+                        className={`label-caps inline-block border px-1.5 text-[10px] ${o.payment_status === "Paid in Full" ? "border-foreground" : "border-dashed border-border text-muted-foreground"}`}
+                      >
+                        {paymentLabel(o.payment_status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="font-mono text-xs tabular-nums text-muted-foreground">
+            PREORDER {total} {item.unit}
+            {Number.isFinite(item.quantity) &&
+              ` · 현장 판매 ${Math.max(item.quantity - total, 0)} ${item.unit}`}
+            {Number.isFinite(item.quantity) && total > item.quantity && (
+              <span className="text-destructive"> · 계획 수량 초과</span>
+            )}
+          </p>
+        </>
+      )}
     </div>
   );
 }
