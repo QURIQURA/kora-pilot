@@ -284,7 +284,11 @@ export function ProductionDashboard() {
     if (m) parts.push(`${mouldAbbr(m)}${r.mouldQty ? ` ×${r.mouldQty}` : ""}`);
     const bw = r.baseWeightId ? baseWeightById.get(r.baseWeightId) : null;
     if (bw) parts.push(`${bw.name}${r.baseWeightQty ? ` ×${r.baseWeightQty}` : ""}`);
-    if (r.targetQuantityG) parts.push(`${Math.round(r.targetQuantityG)}g`);
+    // 중량: 저장된 목표 중량이 없으면 몰드 기준중량 × 개수로 채운다.
+    const g =
+      r.targetQuantityG ||
+      (m?.reference_weight_g && r.mouldQty ? Number(m.reference_weight_g) * r.mouldQty : 0);
+    if (g) parts.push(`${Math.round(g)}g`);
     if (r.multiplier && r.multiplier !== 1)
       parts.push(`배수 ×${Math.round(r.multiplier * 100) / 100}`);
     return parts.join(" · ");
@@ -445,10 +449,11 @@ export function ProductionDashboard() {
   };
   const blockTitle = (b: WorkBlock, row: DashboardComponentRow) => {
     const siblings = blocksByRow.get(row.id) ?? [];
-    if (siblings.length <= 1) return row.componentName;
-    return b.step_name
-      ? `${row.componentName} — ${b.step_name}`
-      : `${row.componentName} (${b.part_no}차)`;
+    // 같은 포뮬라를 두 번 만드는 경우를 구분하도록 몰드 · 수량 · 중량을 이름 옆에 붙인다.
+    const size = sizeText(row);
+    const name = size ? `${row.componentName} · ${size}` : row.componentName;
+    if (siblings.length <= 1) return name;
+    return b.step_name ? `${name} — ${b.step_name}` : `${name} (${b.part_no}차)`;
   };
 
   const createBlock = useMutation({
@@ -1350,7 +1355,7 @@ export function ProductionDashboard() {
                 <div
                   key={h}
                   className="absolute left-0 right-0 border-t border-border"
-                  style={{ top: (h - 6) * PX_PER_HOUR }}
+                  style={{ top: (h - DAY_START_MIN / 60) * PX_PER_HOUR }}
                 >
                   <span className="absolute left-2 top-0.5 font-mono text-[11px] text-muted-foreground">
                     {String(h).padStart(2, "0")}:00
