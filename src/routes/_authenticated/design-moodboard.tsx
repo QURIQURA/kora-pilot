@@ -29,7 +29,12 @@ function DesignMoodboardPage() {
   const boards = useQuery(designMoodboardsQuery());
   // Figma처럼 목적별 탭 — MOODBOARD(이미지·색·메모) / MINDMAP(자유 캔버스). 보드는 만들 때 종류가 정해진다.
   const [tab, setTab] = useState<"MOOD" | "MIND">("MOOD");
-  const rows = (boards.data ?? []).filter((b) => b.kind === tab);
+  // 제목 앞 숫자 기준 자연 정렬(01, 02, … 10) — 숫자 없는 제목은 그 뒤에 가나다/알파벳 순.
+  const rows = (boards.data ?? [])
+    .filter((b) => b.kind === tab)
+    .sort((x, y) =>
+      x.title.localeCompare(y.title, undefined, { numeric: true, sensitivity: "base" }),
+    );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
