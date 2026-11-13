@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import {
   cakeSizesQuery,
+  currentUserId,
   productComponentsQuery,
   productsQuery,
   type OrderListRow,
@@ -115,6 +116,44 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
       await invalidateProductionSync(client);
     },
   });
+  // 2026-11-13 (연): 품목 행에서 바로 프리오더(일반 ORDERS 행) 생성. 번호는 "<팝업번호>.N",
+  // 제품/픽업 시각은 팝업 품목·시작 시각을 물려받고, 주문자·결제는 열린 오더 상세에서 채운다.
+  // 생산은 팝업 세션이 맡으므로 별도 WORK SESSION은 만들지 않는다.
+  const addPreorder = useMutation({
+    mutationFn: async (item: PopupItem) => {
+      if (dirty || end !== inputTime(plan.ends_at || null)) await save.mutateAsync();
+      const number = baseline.current.state.orderNumber.trim();
+      if (!number) throw new Error("팝업 오더 번호를 먼저 저장하세요");
+      const prefix = `${number}.`;
+      const { data: existing, error: existingError } = await supabase
+        .from("orders")
+        .select("order_number")
+        .like("order_number", `${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+      if (existingError) throw existingError;
+      const max = (existing ?? []).reduce((m, o) => {
+        const n = Number((o.order_number ?? "").slice(prefix.length));
+        return Number.isInteger(n) && n > m ? n : m;
+      }, 0);
+      const uid = await currentUserId();
+      const { data, error } = await supabase
+        .from("orders")
+        .insert({
+          user_id: uid,
+          order_number: `${prefix}${max + 1}`,
+          product_id: item.product_id || null,
+          quantity: 1,
+          pickup_at: isoTime(baseline.current.state.start),
+        } as never)
+        .select("id")
+        .single();
+      if (error) throw error;
+      return data.id;
+    },
+    onSuccess: async (id) => {
+      await client.invalidateQueries({ queryKey: ["orders"] });
+      void navigate({ to: "/orders/$orderId", params: { orderId: id } });
+    },
+  });
   const session = useMutation({
     mutationFn: async (item: PopupItem) => {
       // 새로 추가한 품목처럼 미저장 변경이 있으면 먼저 저장한 뒤(2026-11-09) 세션을 만든다.
@@ -132,7 +171,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
       void navigate({ to: "/production", search: { tab: "ORDERS" } });
     },
   });
-  const pending = save.isPending || session.isPending;
+  const pending = save.isPending || session.isPending || addPreorder.isPending;
   const changeItem = (id: string, patch: Partial<PopupItem>) =>
     setDraft((d) => ({
       ...d,
@@ -399,7 +438,21 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                     item={item}
                     preorders={preorders.data ?? []}
                     loading={preorders.isLoading}
-                    error={preorders.error?.message}
+                    error={preorders.error?.message ?? addPreorder.error?.message}
+                    onAdd={() => addPreorder.mutate(item)}
+                    addDisabled={
+                      pending ||
+                      !item.product_id ||
+                      draft.status === "COMPLETED" ||
+                      (changed && (!!validation || conflict || !draft.orderNumber.trim()))
+                    }
+                    addLabel={
+                      !item.product_id
+                        ? "제품 선택 후 프리오더 추가"
+                        : changed
+                          ? "저장 후 프리오더 추가"
+                          : "+ 프리오더 추가"
+                    }
                   />
                 </div>
               ))}
@@ -506,17 +559,35 @@ function PopupItemPreorders({
   preorders,
   loading,
   error,
+  onAdd,
+  addDisabled,
+  addLabel,
 }: {
   item: PopupItem;
   preorders: PopupPreorder[];
   loading: boolean;
   error?: string | undefined;
+  /** "+ 프리오더 추가" — 이 품목의 제품·팝업 시작 시각을 물려받은 새 오더를 만들고 상세로 이동(2026-11-13). */
+  onAdd: () => void;
+  addDisabled: boolean;
+  addLabel: string;
 }) {
   const rows = preordersForItem(item, preorders);
   const total = rows.reduce((sum, o) => sum + (o.quantity ?? 1), 0);
   return (
     <div className="min-w-0 space-y-1.5 border-t border-border p-2.5 lg:border-t-0 lg:border-l">
-      <p className="label-caps text-xs text-muted-foreground lg:hidden">PREORDER</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="label-caps text-xs text-muted-foreground lg:hidden">PREORDER</p>
+        <button
+          type="button"
+          className={`${buttonClass} ml-auto`}
+          disabled={addDisabled}
+          title="이 품목의 프리오더 오더를 만들고 주문자 정보를 입력합니다"
+          onClick={onAdd}
+        >
+          {addLabel}
+        </button>
+      </div>
       {error ? (
         <p className="text-xs text-destructive">{error}</p>
       ) : loading ? (
