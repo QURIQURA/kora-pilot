@@ -11,7 +11,7 @@ import { SectionCard } from "./ui";
 export function CakeSizeMouldPairs() {
   const sizes = useQuery(cakeSizesQuery());
   const moulds = useQuery(mouldsQuery());
-  const sizeRows = sizes.data ?? [];
+  const sizeRows = (sizes.data ?? []).filter((s) => s.kind !== "FREE");
   const mouldRows = moulds.data ?? [];
   const linked = new Set(sizeRows.map((s) => s.sheet_mould_id).filter(Boolean));
   const orphanMoulds = mouldRows.filter((m) => !linked.has(m.id));

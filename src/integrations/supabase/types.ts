@@ -134,6 +134,8 @@ export type Database = {
           updated_at: string;
           user_id: string;
           width_mm: number | null;
+          kind: string;
+          weight_g: number | null;
         };
         Insert: {
           cream_g?: number | null;
@@ -152,6 +154,8 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
           width_mm?: number | null;
+          kind?: string;
+          weight_g?: number | null;
         };
         Update: {
           cream_g?: number | null;
@@ -170,6 +174,8 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
           width_mm?: number | null;
+          kind?: string;
+          weight_g?: number | null;
         };
         Relationships: [
           {

@@ -199,11 +199,13 @@ export function ProductionOrderSizeEditor({
               }}
             >
               <option value="">미지정</option>
-              {(standards.data ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {sizeText(s)} · #{s.id.slice(0, 8)}
-                </option>
-              ))}
+              {(standards.data ?? [])
+                .filter((s) => s.kind !== "FREE" || s.id === draft.standard)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {sizeText(s)} · #{s.id.slice(0, 8)}
+                  </option>
+                ))}
             </select>
           </label>
           <label className="block">

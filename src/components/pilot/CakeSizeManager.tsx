@@ -47,8 +47,21 @@ export function CakeSizeManager() {
   };
 
   const create = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (kind: "CAKE" | "FREE") => {
       const user_id = await currentUserId();
+      // 프리폼(케이크 아닌 품목): 모양·치수 없이 이름 + 중량(g) + 인분수로만 정의한다.
+      if (kind === "FREE") {
+        const { error } = await supabase.from("cake_sizes").insert({
+          kind: "FREE",
+          name: "New free form",
+          shape: null,
+          size_inch: null,
+          user_id,
+          sort_order: (sizes.data?.length ?? 0) + 1,
+        });
+        if (error) throw error;
+        return;
+      }
       const base = {
         shape: "ROUND",
         size_inch: 8,
@@ -78,9 +91,12 @@ export function CakeSizeManager() {
       }
       const merged = { ...current, ...patch };
       // 사이즈/모양/치수가 바뀌면 이름을 자동으로 다시 만든다.
-      const touchesName = ["shape", "size_inch", "length_mm", "width_mm", "height_mm"].some(
-        (k) => k in patch,
-      );
+      const touchesName =
+        current.kind !== "FREE" &&
+        ["shape", "size_inch", "length_mm", "width_mm", "height_mm"].some((k) => k in patch);
+      if (patch.weight_g != null && (!Number.isFinite(patch.weight_g) || patch.weight_g <= 0))
+        throw new Error("중량은 0보다 큰 g 값으로 입력하세요.");
+      if (patch.name !== undefined && !patch.name.trim()) throw new Error("이름을 입력하세요.");
       const { error } = await supabase
         .from("cake_sizes")
         .update({
@@ -151,7 +167,7 @@ export function CakeSizeManager() {
   const autoTried = useRef(new Set<string>());
   useEffect(() => {
     for (const size of rows) {
-      if (size.sheet_mould_id || autoTried.current.has(size.id)) continue;
+      if (size.kind === "FREE" || size.sheet_mould_id || autoTried.current.has(size.id)) continue;
       const found = candidateMoulds(size, mouldRows);
       if (found.length === 1) {
         autoTried.current.add(size.id);
@@ -195,18 +211,30 @@ export function CakeSizeManager() {
       <p className="mb-3 font-mono text-[11px] text-muted-foreground">
         인치는 표시용 이름입니다. 실제 완성 지름 또는 가로·세로·높이(cm)를 별도로 확인하세요. 몰드
         치수를 완성 치수로 자동 복사하지 않습니다. CREAM g은 공용 참고값이며 제품별 목표량을
-        대체하지 않습니다.
+        대체하지 않습니다. 케이크가 아닌 품목(프로피테롤·쿠키 등)은 FREE FORM으로 추가해
+        이름·중량(g)· 인분수로 정의하세요.
       </p>
 
       <div className="mb-3">
-        <button
-          type="button"
-          className={buttonClass}
-          disabled={create.isPending}
-          onClick={() => create.mutate()}
-        >
-          + ADD SIZE
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={create.isPending}
+            onClick={() => create.mutate("CAKE")}
+          >
+            + ADD CAKE SIZE
+          </button>
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={create.isPending}
+            title="케이크가 아닌 품목 — 중량(g)과 인분수로 정의"
+            onClick={() => create.mutate("FREE")}
+          >
+            + ADD FREE FORM
+          </button>
+        </div>
       </div>
 
       {rows.length === 0 ? (
@@ -215,6 +243,91 @@ export function CakeSizeManager() {
         <ul className="divide-y divide-border border border-border">
           {rows.map((row, index) => {
             const used = usageMap[row.id] ?? 0;
+            if (row.kind === "FREE")
+              return (
+                <li key={row.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      className="label-caps px-1 text-[10px] leading-none hover:bg-secondary disabled:opacity-30"
+                      disabled={index === 0 || move.isPending}
+                      onClick={() => move.mutate({ index, dir: -1 })}
+                      aria-label="Move up"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      className="label-caps px-1 text-[10px] leading-none hover:bg-secondary disabled:opacity-30"
+                      disabled={index === rows.length - 1 || move.isPending}
+                      onClick={() => move.mutate({ index, dir: 1 })}
+                      aria-label="Move down"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                  <span className="label-caps border border-dashed border-border px-1.5 py-0.5 text-[10px]">
+                    FREE FORM
+                  </span>
+                  <input
+                    aria-label="프리폼 규격 이름"
+                    className={`${inputClass} min-w-[10rem] flex-1`}
+                    defaultValue={row.name}
+                    placeholder="예: 프로피테롤 1 batch"
+                    onBlur={(e) => {
+                      const next = e.target.value.trim();
+                      if (next && next !== row.name)
+                        update.mutate({ id: row.id, patch: { name: next } });
+                    }}
+                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      className={`${inputClass} !w-24 text-right`}
+                      placeholder="중량"
+                      defaultValue={row.weight_g ?? ""}
+                      onBlur={(e) => {
+                        const next = e.target.value.trim() ? Number(e.target.value) : null;
+                        if (next !== (row.weight_g != null ? Number(row.weight_g) : null))
+                          update.mutate({ id: row.id, patch: { weight_g: next } });
+                      }}
+                    />
+                    <span className="label-caps text-[10px] text-muted-foreground">WEIGHT g</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      className={`${inputClass} !w-20 text-right`}
+                      placeholder="servings"
+                      defaultValue={row.servings ?? ""}
+                      onBlur={(e) => {
+                        const next = e.target.value.trim() ? Number(e.target.value) : null;
+                        if (next !== (row.servings ?? null))
+                          update.mutate({ id: row.id, patch: { servings: next } });
+                      }}
+                    />
+                    <span className="label-caps text-[10px] text-muted-foreground">SERVINGS</span>
+                  </div>
+                  <span className="label-caps text-[10px] text-muted-foreground">
+                    {used} ORDERS
+                  </span>
+                  <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={used > 0}
+                    title={used > 0 ? "주문에 사용 중인 규격은 삭제할 수 없습니다." : undefined}
+                    onClick={() => {
+                      if (confirm("Delete this unused size?")) remove.mutate(row.id);
+                    }}
+                  >
+                    DELETE
+                  </button>
+                </li>
+              );
             return (
               <li key={row.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                 <div className="flex flex-col">
