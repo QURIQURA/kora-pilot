@@ -65,7 +65,7 @@ export function PopupProductionCard({ order }: { order: OrderListRow }) {
     </section>
   );
 }
-function PopupItemProduction({
+export function PopupItemProduction({
   sessionId,
   productId,
   readOnly,

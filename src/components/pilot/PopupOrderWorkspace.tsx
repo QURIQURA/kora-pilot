@@ -1,5 +1,6 @@
 import { PopupStagePicker } from "./PopupStageSelect";
 import { PopupChecklistSection } from "./PopupChecklistSection";
+import { PopupItemProduction } from "./PopupProductionCard";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -373,7 +374,22 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
                         제거
                       </button>
                     </div>
-                    {item.product_id && <PopupItemComponents productId={item.product_id} />}
+                    {/* 2026-11-13: 컴포넌트 추가·수정·삭제는 여기(POP UP DETAIL)에서. 세션이 연결돼 있으면 세션의 컴포넌트 행을
+                        그대로 편집하므로 WORK SESSION·DASHBOARD와 같은 데이터다(따로 복사본 없음). */}
+                    {item.work_session_id ? (
+                      <div className="space-y-1">
+                        <p className="label-caps text-[10px] text-muted-foreground">
+                          생산 컴포넌트 · 생산 세션과 동기화
+                        </p>
+                        <PopupItemProduction
+                          sessionId={item.work_session_id}
+                          productId={item.product_id}
+                          readOnly={draft.status === "COMPLETED"}
+                        />
+                      </div>
+                    ) : item.product_id ? (
+                      <PopupItemComponents productId={item.product_id} />
+                    ) : null}
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1.6fr)_6rem_6rem_5rem]">
                       <Field label="공용 완성 규격">
                         <select
@@ -733,7 +749,11 @@ function PreorderDialog({
     !pending && quantity >= 1 && (mode === "existing" ? !!customerId : !!name.trim());
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/20 p-0 sm:items-center sm:p-3">
-      <div className="w-full max-w-md border border-border bg-background" role="dialog" aria-modal="true">
+      <div
+        className="w-full max-w-md border border-border bg-background"
+        role="dialog"
+        aria-modal="true"
+      >
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="label-caps">PREORDER · {item.label || "품목"}</span>
           <button type="button" className="label-caps px-2 py-2" onClick={onClose}>
