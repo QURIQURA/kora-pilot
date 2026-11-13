@@ -13,12 +13,10 @@ import { balanceTotals, compositionTotals } from "@/lib/formula-calc";
 import { formatDateTime } from "@/lib/datetime";
 import { useSetBreadcrumb } from "@/components/layout/breadcrumb-context";
 import { headlineVersion } from "./formulas/index";
-import { SectionCard, StatusBadge } from "@/components/pilot/ui";
+import { SectionCard } from "@/components/pilot/ui";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute(
-  "/_authenticated/settings_/calibration/$techniqueId"
-)({
+export const Route = createFileRoute("/_authenticated/settings_/calibration/$techniqueId")({
   head: () => ({
     meta: [
       { title: "PILOT — Technique Calibration" },
@@ -81,10 +79,7 @@ function CalibrationPage() {
   const ingredientsByFormula = new Map<string, VersionIngredientRow[]>();
   for (const row of rows) {
     const head = headlineVersion(row);
-    ingredientsByFormula.set(
-      row.id,
-      (head ? bulk.data?.[head.id] : undefined) ?? []
-    );
+    ingredientsByFormula.set(row.id, (head ? bulk.data?.[head.id] : undefined) ?? []);
   }
 
   /* ── 지표 계산 — P2가 쓰는 함수를 그대로 사용 (새 계산 없음) ── */
@@ -92,8 +87,7 @@ function CalibrationPage() {
     const ing = ingredientsByFormula.get(row.id) ?? [];
     const comp = compositionTotals(ing, 1);
     const bal = balanceTotals(ing, 1);
-    const pct = (g: number) =>
-      comp.totalWeight > 0 ? (g / comp.totalWeight) * 100 : null;
+    const pct = (g: number) => (comp.totalWeight > 0 ? (g / comp.totalWeight) * 100 : null);
     return {
       formula: row,
       empty: ing.length === 0 || comp.totalWeight <= 0,
@@ -148,9 +142,7 @@ function CalibrationPage() {
             참고 기준 배합 — {technique.suggested_base_formula}
           </p>
         )}
-        {technique.notes && (
-          <p className="font-body text-sm text-foreground">{technique.notes}</p>
-        )}
+        {technique.notes && <p className="font-body text-sm text-foreground">{technique.notes}</p>}
         <Link
           to="/settings"
           className="label-caps inline-block text-xs text-muted-foreground underline"
@@ -176,7 +168,7 @@ function CalibrationPage() {
                     params={{ formulaId: row.id }}
                     className={cn(
                       "grid grid-cols-1 gap-1 px-3 py-2 hover:bg-secondary md:grid-cols-12 md:items-center md:gap-2",
-                      row.is_base_formula && "bg-secondary/60"
+                      row.is_base_formula && "bg-secondary/60",
                     )}
                   >
                     <span className="col-span-4 text-sm">
@@ -189,10 +181,7 @@ function CalibrationPage() {
                     <span className="col-span-1 font-mono text-xs">
                       {head ? versionLabel(head.version_number) : "—"}
                     </span>
-                    <span className="col-span-2">
-                      <StatusBadge status={head?.status ?? "DRAFT"} />
-                    </span>
-                    <span className="col-span-2 font-mono text-xs text-muted-foreground">
+                    <span className="col-span-4 font-mono text-xs text-muted-foreground">
                       {formatDateTime(row.updated_at)}
                     </span>
                   </Link>
@@ -247,7 +236,7 @@ function CalibrationPage() {
                       key={c.formula.id}
                       className={cn(
                         "label-caps px-2 py-2 text-xs",
-                        c.formula.is_base_formula && "bg-secondary"
+                        c.formula.is_base_formula && "bg-secondary",
                       )}
                     >
                       {c.formula.is_base_formula && "⭐ "}
@@ -258,23 +247,21 @@ function CalibrationPage() {
               </thead>
               <tbody className="font-mono text-sm tabular-nums">
                 {metricRows.map((m) => {
-                  const baseValue =
-                    baseIndex >= 0 ? m.values[baseIndex] ?? null : null;
+                  const baseValue = baseIndex >= 0 ? (m.values[baseIndex] ?? null) : null;
                   return (
                     <tr key={m.label} className="border-b border-border">
                       <td className="label-caps sticky left-0 bg-card px-2 py-2 text-xs">
                         {m.label}
                       </td>
                       {m.values.map((value, i) => {
-                        const off =
-                          i !== baseIndex && isOff(value, baseValue, m.label);
+                        const off = i !== baseIndex && isOff(value, baseValue, m.label);
                         return (
                           <td
                             key={columns[i]?.formula.id ?? i}
                             className={cn(
                               "px-2 py-2",
                               columns[i]?.formula.is_base_formula && "bg-secondary",
-                              off && "border border-dashed border-foreground"
+                              off && "border border-dashed border-foreground",
                             )}
                           >
                             {formatMetric(value, m)}
@@ -293,7 +280,7 @@ function CalibrationPage() {
                       key={c.formula.id}
                       className={cn(
                         "px-2 py-2 text-xs",
-                        c.formula.is_base_formula && "bg-secondary"
+                        c.formula.is_base_formula && "bg-secondary",
                       )}
                     >
                       {c.missing > 0 ? `${c.missing}개` : "—"}
@@ -335,11 +322,7 @@ function formatMetric(value: number | null, m: MetricRow): string {
 }
 
 /** 기준 배합과 눈에 띄게 다른 값인지 — 판정이 아니라 표시용 */
-function isOff(
-  value: number | null,
-  base: number | null,
-  label: string
-): boolean {
+function isOff(value: number | null, base: number | null, label: string): boolean {
   if (value == null || base == null) return false;
   if (label.startsWith("총 중량")) return false;
   const diff = Math.abs(value - base);
