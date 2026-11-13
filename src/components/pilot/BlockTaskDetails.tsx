@@ -241,6 +241,11 @@ export function BlockTaskDetails({
         (Math.floor(new Date(started).getTime() / 60_000) + edit.minutes) * 60_000,
       ).toISOString();
     }
+    // 블록을 다른 날짜로 옮기면 예전 날짜의 종료 기록이 남는다 — 새 시작을 입력하면 낡은 종료는 버리고 진행 중으로 둔다.
+    if (edit.start !== undefined && started && done) {
+      const day = (iso: string) => new Date(iso).toLocaleDateString("sv");
+      if (day(done) !== block.block_date && new Date(done) < new Date(started)) done = null;
+    }
     if (started && done && new Date(done) < new Date(started)) {
       setError("종료 시각이 시작보다 빨라요.");
       return;
