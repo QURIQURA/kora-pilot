@@ -374,7 +374,8 @@ Deno.serve(async (req: Request) => {
           .select("title")
           .eq("id", boardId)
           .maybeSingle();
-        const projName = `Mindmap — ${board?.title ?? "보드"}`;
+        const prefix = m.prefix === "Value Matrix" ? "Value Matrix" : "Mindmap";
+        const projName = `${prefix} — ${board?.title ?? "보드"}`;
         let projectId: string | null = null;
         const { data: pj } = await wann
           .from("planner_multiple_tasks")

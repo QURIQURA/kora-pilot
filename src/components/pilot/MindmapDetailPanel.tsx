@@ -34,13 +34,20 @@ export interface PanelNode {
 interface Props {
   boardId: string;
   node: PanelNode;
-  parents: RelNode[];
-  children: RelNode[];
-  others: RelNode[];
-  colors: readonly string[];
+  parents?: RelNode[];
+  children?: RelNode[];
+  others?: RelNode[];
+  colors?: readonly string[];
+  /** 연결 관계 구역(마인드맵 전용) — false면 숨김 */
+  showRelations?: boolean;
+  /** 기본 정보 맨 위에 끼울 추가 입력(예: 매트릭스의 분류 선택) */
+  extra?: ReactNode;
+  plannerPrefix?: "Mindmap" | "Value Matrix";
+  onDuplicate?: () => void;
+  headerTitle?: string;
   taskRequest: number; // 값이 바뀌면 "작업 만들기" 폼을 연다(우클릭 메뉴)
   onTitle: (t: string) => void;
-  onColor: (c: string) => void;
+  onColor?: (c: string) => void;
   onMeta: (patch: Partial<NodeMeta>) => void;
   onEdgeLabel: (edgeId: string, label: string) => void;
   onGoto: (id: string) => void;
@@ -128,7 +135,9 @@ function LinkedWork({
   meta,
   onMeta,
   taskRequest,
+  prefix,
 }: {
+  prefix?: "Mindmap" | "Value Matrix" | undefined;
   boardId: string;
   nodeId: string;
   title: string;
@@ -192,6 +201,7 @@ function LinkedWork({
         title: newTitle.trim(),
         due_date: newDue || null,
         notes: meta.description || null,
+        ...(prefix ? { prefix } : {}),
       });
       link(r.task.id);
       if (r.duplicate) setErr("같은 작업이 이미 있어 새로 만들지 않고 기존 작업을 연결했어요.");
@@ -390,6 +400,10 @@ export function MindmapDetailPanel(p: Props) {
   const isImage = p.node.type === "image";
   const [newItem, setNewItem] = useState("");
 
+  const parents = p.parents ?? [];
+  const kids = p.children ?? [];
+  const others = p.others ?? [];
+  const colors = p.colors ?? [];
   const rel = (title: string, list: RelNode[]) => (
     <div>
       <div className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">{title}</div>
@@ -424,7 +438,9 @@ export function MindmapDetailPanel(p: Props) {
       onKeyDown={(e) => e.stopPropagation()}
     >
       <header className="flex items-center gap-1 border-b border-border px-3 py-2">
-        <span className="font-mono text-[11px] font-semibold uppercase">노드 상세</span>
+        <span className="font-mono text-[11px] font-semibold uppercase">
+          {p.headerTitle ?? "노드 상세"}
+        </span>
         <span className="ml-auto" />
         <button
           type="button"
@@ -445,6 +461,7 @@ export function MindmapDetailPanel(p: Props) {
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <Section title="기본 정보">
+          {p.extra}
           {!isImage && (
             <textarea
               className={`${field} resize-none text-sm font-semibold`}
@@ -494,14 +511,14 @@ export function MindmapDetailPanel(p: Props) {
             </label>
           </div>
           <Tags tags={meta.tags ?? []} onChange={(tags) => p.onMeta({ tags })} />
-          {!isImage && (
+          {!isImage && p.onColor && colors.length > 0 && (
             <div className="flex items-center gap-1">
-              {p.colors.map((c) => (
+              {colors.map((c) => (
                 <button
                   key={c}
                   type="button"
                   title="노드 색상"
-                  onClick={() => p.onColor(c)}
+                  onClick={() => p.onColor?.(c)}
                   className={`h-5 w-5 border ${p.node.color === c ? "border-foreground" : "border-black/30"}`}
                   style={{ background: c }}
                 />
@@ -642,15 +659,17 @@ export function MindmapDetailPanel(p: Props) {
           </div>
         </Section>
 
-        <Section
-          title="연결 관계"
-          defaultOpen={false}
-          badge={`${p.parents.length + p.children.length + p.others.length}`}
-        >
-          {rel("부모", p.parents)}
-          {rel("자식", p.children)}
-          {p.others.length > 0 && rel("기타 연결", p.others)}
-        </Section>
+        {p.showRelations !== false && (
+          <Section
+            title="연결 관계"
+            defaultOpen={false}
+            badge={`${parents.length + kids.length + others.length}`}
+          >
+            {rel("부모", parents)}
+            {rel("자식", kids)}
+            {others.length > 0 && rel("기타 연결", others)}
+          </Section>
+        )}
 
         <Section
           title="연결된 작업"
@@ -663,16 +682,26 @@ export function MindmapDetailPanel(p: Props) {
             meta={meta}
             onMeta={p.onMeta}
             taskRequest={p.taskRequest}
+            prefix={p.plannerPrefix}
           />
         </Section>
       </div>
-      <footer className="border-t border-border px-3 py-2">
+      <footer className="flex items-center gap-4 border-t border-border px-3 py-2">
+        {p.onDuplicate && (
+          <button
+            type="button"
+            onClick={p.onDuplicate}
+            className="font-mono text-[11px] hover:underline"
+          >
+            복제
+          </button>
+        )}
         <button
           type="button"
           onClick={p.onDelete}
           className="inline-flex items-center gap-1 font-mono text-[11px] text-destructive hover:underline"
         >
-          <Trash2 className="h-3 w-3" /> 노드 삭제
+          <Trash2 className="h-3 w-3" /> 삭제
         </button>
       </footer>
     </aside>

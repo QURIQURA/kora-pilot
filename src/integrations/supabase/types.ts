@@ -1749,6 +1749,7 @@ export type Database = {
           created_at: string;
           id: string;
           kind: string;
+          matrix: Json;
           mindmap: Json;
           title: string;
           updated_at: string;
@@ -1758,6 +1759,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           kind?: string;
+          matrix?: Json;
           mindmap?: Json;
           title?: string;
           updated_at?: string;
@@ -1767,6 +1769,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           kind?: string;
+          matrix?: Json;
           mindmap?: Json;
           title?: string;
           updated_at?: string;

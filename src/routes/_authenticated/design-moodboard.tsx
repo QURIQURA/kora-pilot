@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { currentUserId, designMoodboardsQuery } from "@/lib/queries";
 import { DesignMoodboardSection } from "@/components/pilot/OrderMoodboardSection";
 import { DesignMindmap } from "@/components/pilot/DesignMindmap";
+import { DesignValueMatrix } from "@/components/pilot/DesignValueMatrix";
 import { PageHeader, buttonClass, inputClass, primaryButtonClass } from "@/components/pilot/ui";
 import { cn } from "@/lib/utils";
 
@@ -27,8 +28,8 @@ export const Route = createFileRoute("/_authenticated/design-moodboard")({
 function DesignMoodboardPage() {
   const queryClient = useQueryClient();
   const boards = useQuery(designMoodboardsQuery());
-  // Figma처럼 목적별 탭 — MOODBOARD(이미지·색·메모) / MINDMAP(자유 캔버스). 보드는 만들 때 종류가 정해진다.
-  const [tab, setTab] = useState<"MOOD" | "MIND">("MOOD");
+  // Figma처럼 목적별 탭 — MOODBOARD(이미지·색·메모) / MINDMAP(자유 캔버스) / VALUE MATRIX(노력×효과 2×2). 보드는 만들 때 종류가 정해진다.
+  const [tab, setTab] = useState<"MOOD" | "MIND" | "MATRIX">("MOOD");
   // 제목 앞 숫자 기준 자연 정렬(01, 02, … 10) — 숫자 없는 제목은 그 뒤에 가나다/알파벳 순.
   const rows = (boards.data ?? [])
     .filter((b) => b.kind === tab)
@@ -54,7 +55,7 @@ function DesignMoodboardPage() {
         .insert({
           user_id: userId,
           kind: tab,
-          title: `${tab === "MIND" ? "Mindmap" : "Board"} ${rows.length + 1}`,
+          title: `${tab === "MIND" ? "Mindmap" : tab === "MATRIX" ? "Value Matrix" : "Board"} ${rows.length + 1}`,
         })
         .select("id")
         .single();
@@ -77,6 +78,31 @@ function DesignMoodboardPage() {
       if (e) throw e;
     },
     onSuccess: refresh,
+    onError: (e) => setError((e as Error).message),
+  });
+
+  // 복제 — 마인드맵/밸류 매트릭스는 내용(JSON)을 그대로 복사한다. 연결된 플래너 작업 id는 참조만 복사된다.
+  const duplicate = useMutation({
+    mutationFn: async (src: NonNullable<typeof selected>) => {
+      const userId = await currentUserId();
+      const { data, error: e } = await supabase
+        .from("design_moodboards")
+        .insert({
+          user_id: userId,
+          kind: src.kind,
+          title: `${src.title} (복사)`,
+          mindmap: src.mindmap,
+          matrix: src.matrix,
+        })
+        .select("id")
+        .single();
+      if (e) throw e;
+      return data.id;
+    },
+    onSuccess: async (id) => {
+      await refresh();
+      setSelectedId(id);
+    },
     onError: (e) => setError((e as Error).message),
   });
 
@@ -107,6 +133,7 @@ function DesignMoodboardPage() {
           [
             ["MOOD", "MOODBOARD"],
             ["MIND", "MINDMAP"],
+            ["MATRIX", "VALUE MATRIX"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -134,11 +161,12 @@ function DesignMoodboardPage() {
             disabled={create.isPending}
             onClick={() => create.mutate()}
           >
-            + NEW {tab === "MIND" ? "MINDMAP" : "BOARD"}
+            + NEW {tab === "MIND" ? "MINDMAP" : tab === "MATRIX" ? "VALUE MATRIX" : "BOARD"}
           </button>
           {rows.length === 0 && !boards.isLoading && (
             <p className="font-mono text-xs text-muted-foreground">
-              아직 없습니다. 위 NEW 버튼으로 첫 {tab === "MIND" ? "마인드맵" : "컨셉 보드"}를
+              아직 없습니다. 위 NEW 버튼으로 첫{" "}
+              {tab === "MIND" ? "마인드맵" : tab === "MATRIX" ? "밸류 매트릭스" : "컨셉 보드"}를
               만드세요.
             </p>
           )}
@@ -173,6 +201,16 @@ function DesignMoodboardPage() {
                 onBlur={commitTitle}
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
               />
+              {tab !== "MOOD" && (
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={duplicate.isPending}
+                  onClick={() => duplicate.mutate(selected)}
+                >
+                  DUPLICATE
+                </button>
+              )}
               <button
                 type="button"
                 className={buttonClass}
@@ -190,8 +228,10 @@ function DesignMoodboardPage() {
                 boardId={selected.id}
                 title={selected.title}
               />
-            ) : (
+            ) : tab === "MIND" ? (
               <DesignMindmap key={selected.id} boardId={selected.id} />
+            ) : (
+              <DesignValueMatrix key={selected.id} boardId={selected.id} />
             )}
           </div>
         )}

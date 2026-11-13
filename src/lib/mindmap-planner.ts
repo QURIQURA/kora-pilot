@@ -37,6 +37,8 @@ export async function createPlannerTask(input: {
   title: string;
   due_date?: string | null;
   notes?: string | null;
+  /** 플래너 프로젝트 이름 접두어 — 마인드맵은 Mindmap, 밸류 매트릭스는 Value Matrix */
+  prefix?: "Mindmap" | "Value Matrix";
 }): Promise<{ task: PlannerTaskRef; duplicate: boolean }> {
   return call({ op: "create", ...input });
 }
