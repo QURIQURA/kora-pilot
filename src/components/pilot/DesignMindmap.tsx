@@ -23,6 +23,17 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { currentUserId } from "@/lib/queries";
+import {
+  analyze,
+  arrange,
+  DIR_OPPOSITE as OPP,
+  fixEdgeHandles,
+  nearestHandles,
+  nodeSize,
+  type LayoutMode,
+  type LEdge,
+  type LNode,
+} from "@/lib/mindmap-layout";
 import { buttonClass } from "./ui";
 
 /** DESIGN BOARD 마인드맵(2026-11-13) — Miro식 자유 캔버스. 노트(텍스트) 노드를 배치하고 선으로 연결한다.
@@ -44,26 +55,36 @@ function Handles() {
           id={h.id}
           type="source"
           position={h.position}
-          style={{ width: 10, height: 10 }}
+          style={{ width: 9, height: 9 }}
         />
       ))}
     </>
   );
 }
 type Dir = "r" | "l" | "t" | "b";
-const DIR_OPPOSITE: Record<Dir, string> = { r: "l", l: "r", t: "b", b: "t" };
+const DIR_OPPOSITE: Record<Dir, string> = OPP;
 
-const ARROW = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
+const ARROW = { type: MarkerType.ArrowClosed, width: 10, height: 10 } as const;
 const COLORS = ["#fff7c2", "#ffd9e1", "#d6ecff", "#dff5dc", "#e8dcff", "#ffffff"] as const;
+
+const GENERIC_LABELS = new Set(["strategy", "action"]);
 
 /** 접기/펼치기·검색용 값 — collapsed만 저장하고 _로 시작하는 값은 화면 계산용(저장 안 함). */
 type Extra = {
   collapsed?: boolean;
+  locked?: boolean;
   _kids?: number;
   _hidden?: number;
   _match?: boolean;
   _dim?: boolean;
+  _path?: boolean;
+  _depth?: number;
+  _auto?: string;
 };
+
+/** 1차 가지 파스텔 색(자동 배색) — 노트에 색을 직접 지정하지 않았을 때 */
+const BRANCH_COLORS = ["#dbe7ff", "#ffeed6", "#e3f8e5", "#ece6ff", "#ffe0e6", "#d6f1f3", "#fff3c4"];
+const ROOT_BG = "#1b2550";
 type NoteData = { text: string; color: string } & Extra;
 type ShapeKind = "rect" | "round" | "ellipse" | "diamond";
 type ShapeData = { text: string; color: string; shape: ShapeKind } & Extra;
@@ -99,8 +120,8 @@ function CollapseButton({ id, data }: { id: string; data: Extra }) {
 /** 검색 결과 강조/흐림 */
 function searchStyle(d: Extra): React.CSSProperties {
   return {
-    opacity: d._dim ? 0.25 : 1,
-    outline: d._match ? "3px solid #f59e0b" : undefined,
+    opacity: d._dim ? 0.22 : 1,
+    outline: d._match ? "3px solid #f59e0b" : d._path ? "2px dashed #f59e0b" : undefined,
     outlineOffset: 2,
   };
 }
@@ -164,26 +185,50 @@ function ImageNodeView({ id, data, selected, width }: NodeProps<Node<ImageData, 
   );
 }
 
+/** 글자 폭 추정(한글 등 전각은 1em, 영문·숫자는 0.58em) */
+function textUnits(line: string, fs: number) {
+  return [...line].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 255 ? 1.15 : 0.68), 0) * fs;
+}
+
 function NoteNodeView({ id, data, selected }: NodeProps<Node<NoteData, "note">>) {
   const { updateNodeData } = useReactFlow();
+  const depth = data._depth ?? 2;
+  const isRoot = depth === 0;
+  const fs = isRoot ? 22 : depth === 1 ? 18 : 15;
+  const weight = isRoot ? 700 : depth === 1 ? 700 : 500;
+  const maxInner = (isRoot ? 260 : depth === 1 ? 230 : 240) - 28;
+  const minInner = isRoot ? 150 : depth === 1 ? 110 : 90;
+  const bg = data.color || (isRoot ? ROOT_BG : depth === 1 ? (data._auto ?? "#dbe7ff") : "#ffffff");
+  const light = !data.color && isRoot;
+  const lines = data.text.split("\n");
+  const longest = Math.max(...lines.map((l) => textUnits(l, fs)), 0);
+  const inner = Math.min(maxInner, Math.max(minInner, longest + 4));
+  const rows = lines.reduce((n, l) => n + Math.max(1, Math.ceil(textUnits(l, fs) / inner)), 0);
   return (
     <div
-      className="min-h-[56px] min-w-[140px] max-w-[260px] border px-2 py-1.5 shadow-sm"
+      className="relative border shadow-sm"
       style={{
-        background: data.color,
-        borderColor: selected ? "#111" : "rgba(0,0,0,0.25)",
-        borderWidth: selected ? 2 : 1,
+        background: bg,
+        borderRadius: isRoot ? 16 : depth === 1 ? 14 : 10,
+        padding: isRoot ? "16px 14px" : depth === 1 ? "12px 14px" : "8px 14px",
+        borderColor: selected ? "#0f172a" : isRoot ? "#2b3a7a" : "rgba(100,116,139,0.55)",
+        borderWidth: selected ? 3 : isRoot ? 2 : 1.5,
         ...searchStyle(data),
       }}
     >
       <Handles />
       <CollapseButton id={id} data={data} />
+      {data.locked && <span className="absolute -left-2 -top-3 text-[11px]">🔒</span>}
       <textarea
-        className="nodrag nowheel block w-full resize-none bg-transparent font-mono text-xs leading-snug text-black outline-none"
-        rows={Math.max(
-          2,
-          (data.text.match(/\n/g)?.length ?? 0) + 1 + Math.floor(data.text.length / 28),
-        )}
+        className="nodrag nowheel block resize-none bg-transparent text-center leading-snug outline-none"
+        style={{
+          width: inner,
+          fontSize: fs,
+          fontWeight: weight,
+          color: light ? "#ffffff" : "#0f172a",
+          fontFamily: "inherit",
+        }}
+        rows={rows}
         placeholder="텍스트 입력"
         value={data.text}
         onChange={(e) => updateNodeData(id, { text: e.target.value })}
@@ -194,15 +239,41 @@ function NoteNodeView({ id, data, selected }: NodeProps<Node<NoteData, "note">>)
 
 const nodeTypes = { note: NoteNodeView, shape: ShapeNodeView, image: ImageNodeView };
 
-type Saved = { nodes?: NoteNode[]; edges?: Edge[] };
+type Saved = {
+  nodes?: Record<string, unknown>[];
+  edges?: Edge[];
+  meta?: { v?: number; arranged?: boolean };
+};
+
+/** 예전 저장 데이터 정규화 — 외부에서 만든 "default" 타입(data.label) 노드를 노트로 바꾼다.
+ * id·위치·글자(label→text)는 그대로 보존하고 지우는 것은 없다. */
+function normalizeNodes(raw: Record<string, unknown>[]): { nodes: NoteNode[]; legacy: boolean } {
+  let legacy = false;
+  const nodes = raw.map((n) => {
+    const type = n["type"];
+    const d = (n["data"] ?? {}) as Record<string, unknown>;
+    if (type === "shape" || type === "image") return n as unknown as NoteNode;
+    if (type !== "note") legacy = true;
+    const text = typeof d["text"] === "string" ? d["text"] : String(d["label"] ?? "");
+    return {
+      ...n,
+      type: "note",
+      position: (n["position"] as { x: number; y: number }) ?? { x: 0, y: 0 },
+      data: { ...d, text, color: typeof d["color"] === "string" ? d["color"] : "" },
+    } as unknown as NoteNode;
+  });
+  return { nodes, legacy };
+}
 
 function MindmapCanvas({ boardId }: { boardId: string }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<NoteNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, setCenter, zoomTo } = useReactFlow();
   const wrapRef = useRef<HTMLDivElement>(null);
+  const pendingArrange = useRef(false);
+  const metaRef = useRef<{ v: number; arranged: boolean }>({ v: 2, arranged: false });
 
   useEffect(() => {
     let alive = true;
@@ -218,17 +289,30 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         return;
       }
       const saved = (data.mindmap ?? {}) as Saved;
-      setNodes(saved.nodes ?? []);
-      // 예전(좌→우 고정) 선은 오른쪽→왼쪽 연결점으로 보정한다.
-      setEdges(
-        (saved.edges ?? []).map((e) => ({
-          ...e,
-          sourceHandle: e.sourceHandle ?? "r",
-          targetHandle: e.targetHandle ?? "l",
-        })),
-      );
+      const { nodes: loadedNodes, legacy } = normalizeNodes(saved.nodes ?? []);
+      const fixed = fixEdgeHandles(
+        (saved.edges ?? []) as unknown as (Edge & LEdge)[],
+        loadedNodes as unknown as LNode[],
+      ) as Edge[];
+      // 외부에서 만든(예전 형식) 보드는 처음 한 번만 컴팩트 정렬 + 1차 가지까지만 펼쳐 보여 준다.
+      if (legacy && !saved.meta?.arranged && loadedNodes.length > 0) {
+        const g = analyze(loadedNodes, fixed as LEdge[]);
+        const big = loadedNodes.length > 20;
+        setNodes(
+          loadedNodes.map((n) =>
+            big && (g.treeKids.get(n.id)?.length ?? 0) > 0 && (g.depth.get(n.id) ?? 0) >= 1
+              ? ({ ...n, data: { ...n.data, collapsed: true } } as NoteNode)
+              : n,
+          ),
+        );
+        pendingArrange.current = true;
+      } else {
+        setNodes(loadedNodes);
+      }
+      metaRef.current = { v: 2, arranged: Boolean(saved.meta?.arranged) };
+      setEdges(fixed);
       setLoaded(true);
-      setTimeout(() => void fitView({ padding: 0.2 }), 50);
+      setTimeout(() => void fitView({ padding: 0.2, minZoom: 0.6, maxZoom: 1 }), 80);
     })();
     return () => {
       alive = false;
@@ -241,6 +325,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
     setStatus("saving");
     const t = setTimeout(() => {
       const payload = {
+        meta: metaRef.current,
         nodes: nodes.map((n) => ({
           id: n.id,
           type: n.type,
@@ -280,12 +365,8 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
   const [query, setQuery] = useState("");
   const [matchIdx, setMatchIdx] = useState(0);
   const graph = useMemo(() => {
-    const kids = new Map<string, string[]>();
-    const parents = new Map<string, string[]>();
-    for (const e of edges) {
-      kids.set(e.source, [...(kids.get(e.source) ?? []), e.target]);
-      parents.set(e.target, [...(parents.get(e.target) ?? []), e.source]);
-    }
+    const a = analyze(nodes, edges as LEdge[]);
+    const { kids, parents } = a;
     const hidden = new Set<string>();
     const hiddenCount = new Map<string, number>();
     for (const n of nodes) {
@@ -301,45 +382,132 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
       }
       hiddenCount.set(n.id, seen.size - 1);
     }
-    return { kids, parents, hidden, hiddenCount };
+    return { ...a, kids, parents, hidden, hiddenCount };
   }, [nodes, edges]);
 
   const q = query.trim().toLowerCase();
-  const matchIds = useMemo(
-    () =>
-      q
-        ? nodes
-            .filter((n) => {
-              const t = (n.data as { text?: string }).text;
-              return typeof t === "string" && t.toLowerCase().includes(q);
-            })
-            .map((n) => n.id)
-        : [],
-    [nodes, q],
-  );
+  const matchIds = useMemo(() => {
+    if (!q) return [] as string[];
+    const out: string[] = [];
+    for (const n of nodes) {
+      const t = (n.data as { text?: string }).text;
+      if (typeof t === "string" && t.toLowerCase().includes(q)) out.push(n.id);
+    }
+    // 선 글자가 일치하면 그 선이 가리키는(자식) 노드를 결과로 센다.
+    for (const e of edges) {
+      if (
+        typeof e.label === "string" &&
+        e.label.toLowerCase().includes(q) &&
+        !out.includes(e.target)
+      )
+        out.push(e.target);
+    }
+    return out;
+  }, [nodes, edges, q]);
   const matchSet = useMemo(() => new Set(matchIds), [matchIds]);
+  // 현재 결과의 부모 경로 강조
+  const currentMatch = matchIdx >= 0 ? (matchIds[matchIdx] ?? null) : null;
+  const pathNodes = useMemo(() => {
+    const out = new Set<string>();
+    let cur = currentMatch;
+    while (cur) {
+      const p = graph.treeParent.get(cur);
+      if (!p || out.has(p)) break;
+      out.add(p);
+      cur = p;
+    }
+    return out;
+  }, [currentMatch, graph]);
+
+  // ── 포커스 모드: 선택한 노드와 직접 연결된 노드/선만 밝게 ──
+  const [focusMode, setFocusMode] = useState<"off" | "near" | "branch">("off");
+  const [labelMode, setLabelMode] = useState<"smart" | "all" | "none">("smart");
+  const focusSet = useMemo(() => {
+    const sel = nodes.find((n) => n.selected);
+    if (focusMode === "off" || !sel) return null;
+    const set = new Set<string>([sel.id]);
+    for (const e of edges) {
+      if (e.source === sel.id) set.add(e.target);
+      if (e.target === sel.id) set.add(e.source);
+    }
+    if (focusMode === "branch") {
+      const stack = [...(graph.kids.get(sel.id) ?? [])];
+      while (stack.length) {
+        const id = stack.pop()!;
+        if (set.has(id)) continue;
+        set.add(id);
+        stack.push(...(graph.kids.get(id) ?? []));
+      }
+    }
+    return set;
+  }, [nodes, edges, focusMode, graph]);
 
   const viewNodes = useMemo(
     () =>
       nodes.map((n) => {
+        const d = n.data as Extra;
         const data = {
           ...n.data,
           _kids: graph.kids.get(n.id)?.length ?? 0,
           _hidden: graph.hiddenCount.get(n.id) ?? 0,
           _match: matchSet.has(n.id),
-          _dim: q !== "" && !matchSet.has(n.id),
+          _path: pathNodes.has(n.id),
+          _depth: graph.depth.get(n.id) ?? 2,
+          _auto: BRANCH_COLORS[(graph.branch.get(n.id) ?? 0) % BRANCH_COLORS.length],
+          _dim:
+            (q !== "" && !matchSet.has(n.id) && !pathNodes.has(n.id)) ||
+            (focusSet !== null && !focusSet.has(n.id)),
         };
-        return { ...n, data, hidden: graph.hidden.has(n.id) } as NoteNode;
+        return {
+          ...n,
+          data,
+          hidden: graph.hidden.has(n.id),
+          draggable: !d.locked,
+        } as NoteNode;
       }),
-    [nodes, graph, matchSet, q],
+    [nodes, graph, matchSet, pathNodes, q, focusSet],
   );
   const viewEdges = useMemo(
     () =>
-      edges.map((e) => ({
-        ...e,
-        hidden: graph.hidden.has(e.source) || graph.hidden.has(e.target),
-      })),
-    [edges, graph],
+      edges.map((e) => {
+        const onPath =
+          pathNodes.has(e.source) && (pathNodes.has(e.target) || e.target === currentMatch);
+        const inFocus = focusSet === null || (focusSet.has(e.source) && focusSet.has(e.target));
+        const stroke = onPath ? "#f59e0b" : e.selected ? "#0f172a" : "#64748b";
+        const label = typeof e.label === "string" ? e.label : "";
+        const showLabel =
+          labelMode === "all" ||
+          (labelMode === "smart" && !GENERIC_LABELS.has(label.trim().toLowerCase()));
+        const mk = (m: unknown) =>
+          m ? { type: MarkerType.ArrowClosed, width: 10, height: 10, color: stroke } : undefined;
+        const base = {
+          ...e,
+          hidden: graph.hidden.has(e.source) || graph.hidden.has(e.target),
+          zIndex: onPath || e.selected ? 10 : 5,
+          style: {
+            stroke,
+            strokeWidth: e.selected || onPath ? 3.5 : 2.5,
+            opacity: inFocus ? 1 : 0.15,
+          },
+          pathOptions: { borderRadius: 14 },
+          labelStyle: { fontSize: 12, fontWeight: 500, fill: "#0f172a" },
+          labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95, stroke: "#cbd5e1" },
+          labelBgPadding: [8, 4] as [number, number],
+          labelBgBorderRadius: 6,
+          label: showLabel && label ? label : undefined,
+        };
+        const { markerEnd: _me, markerStart: _ms, ...rest } = base;
+        void _me;
+        void _ms;
+        const end = mk(e.markerEnd);
+        const start = mk(e.markerStart);
+        return {
+          ...rest,
+          ...(end ? { markerEnd: end } : {}),
+          ...(start ? { markerStart: start } : {}),
+        } as Edge;
+      }),
+    [edges, graph, pathNodes, currentMatch, focusSet, labelMode],
   );
 
   const patchCollapsed = (fn: (id: string) => boolean) =>
@@ -369,7 +537,10 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         (id) => (depth.get(id) ?? 0) >= level && (graph.kids.get(id)?.length ?? 0) > 0,
       );
     }
-    setTimeout(() => void fitView({ padding: 0.2, duration: 300 }), 80);
+    setTimeout(
+      () => void fitView({ padding: 0.15, minZoom: 0.55, maxZoom: 1.1, duration: 300 }),
+      80,
+    );
   };
 
   // 검색: 다음 결과로 이동 — 접힌 조상은 펼치고 그 노드로 화면을 맞춘다.
@@ -399,6 +570,94 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
     );
   };
   useEffect(() => setMatchIdx(-1), [q]);
+
+  // ── 자동 정렬(컴팩트 4방향 / 방사형 / 플로우차트) — 고정(🔒)한 노드는 그대로 둔다 ──
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("compact");
+  const runArrange = (mode: LayoutMode = layoutMode) => {
+    const ln: LNode[] = nodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      position: n.position,
+      data: n.data as Record<string, unknown>,
+      width: n.width,
+      height: n.height,
+      measured: n.measured,
+    }));
+    const res = arrange(ln, edges as LEdge[], mode);
+    if (!res) return;
+    const sizeOf = new Map(ln.map((n) => [n.id, nodeSize(n, graph.depth.get(n.id) ?? 2)] as const));
+    const centers = new Map<string, { x: number; y: number }>();
+    for (const n of nodes) {
+      const sz = sizeOf.get(n.id)!;
+      const locked = Boolean((n.data as Extra).locked);
+      const c = locked ? undefined : res.centers.get(n.id);
+      centers.set(n.id, c ?? { x: n.position.x + sz.w / 2, y: n.position.y + sz.h / 2 });
+    }
+    setNodes((ns) =>
+      ns.map((n) => {
+        const c = res.centers.get(n.id);
+        if (!c || (n.data as Extra).locked) return n;
+        const sz = sizeOf.get(n.id)!;
+        return { ...n, position: { x: c.x - sz.w / 2, y: c.y - sz.h / 2 } };
+      }),
+    );
+    setEdges((es) =>
+      es.map((e) => {
+        const t = res.handles.get(e.target);
+        if (t && graph.treeParent.get(e.target) === e.source)
+          return { ...e, sourceHandle: t.s, targetHandle: t.t };
+        const a = centers.get(e.source);
+        const b = centers.get(e.target);
+        if (!a || !b) return e;
+        const h = nearestHandles({ cx: a.x, cy: a.y }, { cx: b.x, cy: b.y });
+        return { ...e, sourceHandle: h.s, targetHandle: h.t };
+      }),
+    );
+    metaRef.current = { v: 2, arranged: true };
+    setTimeout(
+      () => void fitView({ padding: 0.15, minZoom: 0.55, maxZoom: 1.1, duration: 400 }),
+      120,
+    );
+  };
+  const arrangeRef = useRef(runArrange);
+  arrangeRef.current = runArrange;
+  useEffect(() => {
+    if (!loaded || !pendingArrange.current) return;
+    const t = setTimeout(() => {
+      if (!pendingArrange.current) return;
+      pendingArrange.current = false;
+      arrangeRef.current("compact");
+    }, 400);
+    return () => clearTimeout(t);
+  }, [loaded, nodes.length]);
+
+  const centerOnRoot = () => {
+    const rid = graph.mainRoot;
+    const n = rid ? nodes.find((x) => x.id === rid) : null;
+    if (!n) return;
+    const sz = nodeSize(
+      {
+        id: n.id,
+        type: n.type,
+        position: n.position,
+        data: n.data as Record<string, unknown>,
+        width: n.width,
+        height: n.height,
+        measured: n.measured,
+      },
+      0,
+    );
+    void setCenter(n.position.x + sz.w / 2, n.position.y + sz.h / 2, { zoom: 1, duration: 400 });
+  };
+
+  const toggleLock = () =>
+    setNodes((ns) =>
+      ns.map((n) => {
+        if (!n.selected) return n;
+        const d = n.data as Extra;
+        return { ...n, data: { ...n.data, locked: !d.locked } } as NoteNode;
+      }),
+    );
 
   const selected = nodes.find((n) => n.selected) ?? null;
   const newId = () => `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -560,7 +819,8 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
   );
 
   return (
-    <div className="space-y-2">
+    <div className="mm space-y-2">
+      <style>{`.mm .react-flow__handle{opacity:0;transition:opacity .12s}.mm .react-flow__node:hover .react-flow__handle,.mm .react-flow__node.selected .react-flow__handle,.mm .react-flow__handle.connectingfrom,.mm .react-flow__handle.connectingto{opacity:1}`}</style>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={buttonClass} onClick={() => addNote()}>
           + 노트
@@ -640,7 +900,9 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         <button
           type="button"
           className={buttonClass}
-          onClick={() => void fitView({ padding: 0.2 })}
+          onClick={() =>
+            void fitView({ padding: 0.15, minZoom: 0.55, maxZoom: 1.1, duration: 300 })
+          }
         >
           전체 보기
         </button>
@@ -650,7 +912,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         <input
           aria-label="마인드맵 검색"
           className="h-8 min-w-[12rem] flex-1 border border-border bg-background px-2 font-mono text-xs"
-          placeholder="🔍 노드 글자 검색 (Enter = 다음 결과)"
+          placeholder="🔍 노드·선 글자 검색 (Enter = 다음 결과)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -703,6 +965,75 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           <option value="3">3단계까지</option>
           <option value="all">전체 펼치기</option>
         </select>
+        <select
+          aria-label="자동 정렬 방식"
+          className="h-8 border border-border bg-background px-2 font-mono text-xs"
+          value={layoutMode}
+          onChange={(e) => setLayoutMode(e.target.value as LayoutMode)}
+        >
+          <option value="compact">컴팩트 (4방향)</option>
+          <option value="radial">방사형</option>
+          <option value="flow">플로우차트 (→)</option>
+        </select>
+        <button
+          type="button"
+          className={`${buttonClass} !h-8 !min-h-0 px-3`}
+          title="노드 위치를 선택한 방식으로 다시 배치합니다(🔒 고정한 노드는 그대로)"
+          onClick={() => {
+            if (
+              window.confirm(
+                "노드 위치를 자동으로 다시 배치할까요? (🔒 고정한 노드는 그대로 둡니다)",
+              )
+            )
+              runArrange();
+          }}
+        >
+          자동 정렬
+        </button>
+        <button
+          type="button"
+          className={`${buttonClass} !h-8 !min-h-0 px-3`}
+          disabled={!selected}
+          onClick={toggleLock}
+          title="선택한 노드 위치 고정/해제 (자동 정렬·드래그 제외)"
+        >
+          🔒 위치 고정
+        </button>
+        <button
+          type="button"
+          className={`${buttonClass} !h-8 !min-h-0 px-3`}
+          onClick={() => void zoomTo(1, { duration: 250 })}
+        >
+          100%
+        </button>
+        <button
+          type="button"
+          className={`${buttonClass} !h-8 !min-h-0 px-3`}
+          onClick={centerOnRoot}
+        >
+          루트로 이동
+        </button>
+        <select
+          aria-label="포커스 모드"
+          className="h-8 border border-border bg-background px-2 font-mono text-xs"
+          value={focusMode}
+          onChange={(e) => setFocusMode(e.target.value as "off" | "near" | "branch")}
+          title="노드를 선택하면 연결된 노드만 밝게 보여 줍니다"
+        >
+          <option value="off">포커스 끔</option>
+          <option value="near">포커스: 연결된 노드</option>
+          <option value="branch">포커스: 하위 전체</option>
+        </select>
+        <button
+          type="button"
+          className={`${buttonClass} !h-8 !min-h-0 px-3`}
+          title="선 글자 표시: 의미 있는 글자만 / 전부 / 숨김"
+          onClick={() =>
+            setLabelMode((m) => (m === "smart" ? "all" : m === "all" ? "none" : "smart"))
+          }
+        >
+          선 글자: {labelMode === "smart" ? "핵심만" : labelMode === "all" ? "전부" : "숨김"}
+        </button>
         <button
           type="button"
           className={`${buttonClass} !h-8 !min-h-0 px-3`}
