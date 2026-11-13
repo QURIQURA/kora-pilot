@@ -1863,6 +1863,22 @@ function UnifiedIngredientRow({
             ⚠ {ing.process_note}
           </p>
         )}
+        {/* 재료별 코멘트(2026-11-13) — 이 포뮬라(버전)에서만 쓰는 메모. 예: 그릭요거트는 유청 분리한 것.
+            재료 마스터의 공정 주의(process_note)와 달리 포뮬라마다 다르게 적을 수 있고, 새 버전/복제 시 같이 복사된다. */}
+        {editing && !locked ? (
+          <input
+            type="text"
+            aria-label="재료 코멘트"
+            className="mt-1 h-6 w-full border border-dashed border-input bg-background px-2 text-xs outline-none focus:border-foreground"
+            placeholder="코멘트 (예: 유청 분리한 것)"
+            value={draft?.note ?? ""}
+            onChange={(e) => onDraftChange({ note: e.target.value })}
+          />
+        ) : (
+          row.note?.trim() && (
+            <p className="mt-1 text-xs text-muted-foreground">💬 {row.note.trim()}</p>
+          )
+        )}
       </td>
 
       {/* BASE ×1 — amount 입력 (EDIT 중에만 실제로 바뀌고, SAVE 전까지 저장되지 않는다) */}

@@ -1611,6 +1611,7 @@ function FormulaView({
       amount: number;
       unit: string;
       ingredient_id: string;
+      note?: string | null;
       ingredients: { name: string; name_en: string | null };
     }[]
   >;
@@ -1637,6 +1638,11 @@ function FormulaView({
                     {line.ingredients.name_en
                       ? `${line.ingredients.name} (${line.ingredients.name_en})`
                       : line.ingredients.name}
+                    {line.note?.trim() && (
+                      <span className="block text-xs text-muted-foreground">
+                        💬 {line.note.trim()}
+                      </span>
+                    )}
                   </span>
                   <span className="text-base tabular-nums">
                     {fmtNumber(workingAmount(Number(line.amount), multiplier), 0)}
