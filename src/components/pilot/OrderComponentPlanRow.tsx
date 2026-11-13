@@ -11,6 +11,7 @@ import {
   mouldsQuery,
   techniqueCategoriesQuery,
   versionIngredientsQuery,
+  workBlocksQuery,
   type WorkSessionFormulaVersionRow,
 } from "@/lib/queries";
 import { openEditorOnMount } from "@/lib/open-editor-on-mount";
@@ -70,6 +71,76 @@ export function OrderComponentPlanRow({
     // Remote refresh must not overwrite a locally edited production plan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row.updated_at]);
+  // 날짜·시간 배정(2026-11-13): 여기서 날짜/시작/길이를 넣고 저장하면 대기공간을 거치지 않고 바로 DASHBOARD 타임라인 블록이 된다.
+  const blocksQ = useQuery(workBlocksQuery());
+  const rowBlocks = (blocksQ.data ?? []).filter(
+    (b) => b.work_session_formula_version_id === row.id,
+  );
+  const oneBlock = rowBlocks.length === 1 && !rowBlocks[0]!.step_name ? rowBlocks[0]! : null;
+  const lockedSched = rowBlocks.length > 1 || (rowBlocks.length === 1 && !oneBlock);
+  const hhmm = (t: string) => t.slice(0, 5);
+  const minOf = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  const schedFrom = () =>
+    oneBlock
+      ? {
+          date: oneBlock.block_date,
+          start: hhmm(oneBlock.start_time),
+          dur: String(minOf(oneBlock.end_time) - minOf(oneBlock.start_time)),
+        }
+      : { date: "", start: "", dur: "60" };
+  const [sched, setSched] = useState(schedFrom);
+  const schedBase = useRef(JSON.stringify(sched));
+  useEffect(() => {
+    if (JSON.stringify(sched) === schedBase.current) {
+      const n = schedFrom();
+      schedBase.current = JSON.stringify(n);
+      setSched(n);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oneBlock?.id, oneBlock?.block_date, oneBlock?.start_time, oneBlock?.end_time]);
+  const schedDirty = JSON.stringify(sched) !== schedBase.current;
+  const saveSched = useMutation({
+    mutationFn: async () => {
+      if (!sched.date || !sched.start) return;
+      const dur = Number(sched.dur);
+      if (!(dur >= 15)) throw new Error("작업 시간은 15분 이상으로 입력하세요");
+      const s = minOf(sched.start);
+      const e = s + dur;
+      if (s < 6 * 60 || e > 22 * 60)
+        throw new Error("타임라인은 06:00–22:00 안에서만 배정할 수 있어요");
+      const t = (m: number) =>
+        `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}:00`;
+      if (oneBlock) {
+        const { error } = await supabase
+          .from("work_blocks")
+          .update({
+            block_date: sched.date,
+            start_time: t(s),
+            end_time: t(e),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", oneBlock.id);
+        if (error) throw error;
+      } else {
+        const user_id = await currentUserId();
+        const { error } = await supabase.from("work_blocks").insert({
+          user_id,
+          work_session_formula_version_id: row.id,
+          block_date: sched.date,
+          start_time: t(s),
+          end_time: t(e),
+          part_no: 1,
+        });
+        if (error) throw error;
+      }
+      await syncWorkSessionToPlanner(row.work_session_id);
+    },
+    onSuccess: async () => {
+      schedBase.current = JSON.stringify(sched);
+      await client.invalidateQueries({ queryKey: ["work_blocks"] });
+      await client.invalidateQueries({ queryKey: ["dashboard_components"] });
+    },
+  });
   const formulas = useQuery({ ...formulasQuery(), enabled: allowFormulaChange });
   const techniques = useQuery({ ...techniqueCategoriesQuery(), enabled: allowFormulaChange });
   const choices = (formulas.data ?? []).filter(
@@ -321,6 +392,8 @@ export function OrderComponentPlanRow({
             <p className="font-mono text-[11px] text-muted-foreground">
               {versionText} · {planText}
               {productionText}
+              {oneBlock &&
+                ` · ${oneBlock.block_date} ${hhmm(oneBlock.start_time)}–${hhmm(oneBlock.end_time)} 타임라인`}
             </p>
           )}
         </div>
@@ -620,13 +693,74 @@ export function OrderComponentPlanRow({
               {fmtNumber(preview.production)}g
             </p>
           )}
+          {lockedSched ? (
+            <p className="text-[11px] text-muted-foreground">
+              이 컴포넌트는 이미 여러 조각(분할/단계)으로 배정돼 있어요 — DASHBOARD 타임라인에서
+              시간을 고치세요.
+            </p>
+          ) : (
+            <div className="space-y-1 border border-dashed border-border p-2">
+              <p className="label-caps text-muted-foreground">
+                날짜 · 시간 배정 {oneBlock ? "(타임라인에 배정됨)" : "(비우면 작업 대기공간에 둠)"}
+              </p>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="text-[11px]">
+                  날짜
+                  <input
+                    type="date"
+                    aria-label="작업 날짜"
+                    className={inputClass}
+                    value={sched.date}
+                    onChange={(e) => setSched((v) => ({ ...v, date: e.target.value }))}
+                  />
+                </label>
+                <label className="text-[11px]">
+                  시작
+                  <input
+                    type="time"
+                    step={300}
+                    aria-label="작업 시작 시각"
+                    className={inputClass}
+                    value={sched.start}
+                    onChange={(e) => setSched((v) => ({ ...v, start: e.target.value }))}
+                  />
+                </label>
+                <label className="text-[11px]">
+                  길이(분)
+                  <input
+                    type="number"
+                    min={15}
+                    step={15}
+                    aria-label="작업 시간(분)"
+                    className={`${inputClass} w-20`}
+                    value={sched.dur}
+                    onChange={(e) => setSched((v) => ({ ...v, dur: e.target.value }))}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
           <button
             type="button"
             className={buttonClass}
-            disabled={!dirty || conflict || versions.isError || ingredients.isError}
-            onClick={() => save.mutate()}
+            disabled={
+              (!dirty && !(schedDirty && sched.date && sched.start)) ||
+              conflict ||
+              versions.isError ||
+              ingredients.isError
+            }
+            onClick={() => {
+              const wantSched = schedDirty && Boolean(sched.date && sched.start);
+              if (dirty)
+                save.mutate(undefined, {
+                  onSuccess: () => {
+                    if (wantSched) saveSched.mutate();
+                  },
+                });
+              else if (wantSched) saveSched.mutate();
+            }}
           >
-            {save.isPending ? "저장 중…" : "생산 계획 저장"}
+            {save.isPending || saveSched.isPending ? "저장 중…" : "생산 계획 저장"}
           </button>{" "}
           <button
             type="button"
@@ -656,9 +790,9 @@ export function OrderComponentPlanRow({
           </button>
         </div>
       )}
-      {(save.isError || versions.isError || ingredients.isError) && (
+      {(save.isError || saveSched.isError || versions.isError || ingredients.isError) && (
         <p role="alert" className="text-xs text-destructive">
-          {save.error?.message ?? "배합을 불러오지 못했습니다."}
+          {save.error?.message ?? saveSched.error?.message ?? "배합을 불러오지 못했습니다."}
         </p>
       )}
     </div>
