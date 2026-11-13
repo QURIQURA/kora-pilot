@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { instagramLabel, instagramUrl } from "@/lib/instagram";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -159,8 +160,29 @@ function CustomerSection({
                   </button>
                 )}
               </div>
-              <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                {[c.instagram_handle, c.phone, c.email].filter(Boolean).join(" · ") || "—"}
+              <p className="mt-1 flex flex-wrap items-center gap-x-1 truncate font-mono text-xs text-muted-foreground">
+                {/* 2026-11-13: 카드 자체가 Link라 <a>를 중첩할 수 없어 버튼으로 새 탭에 연다. */}
+                {instagramUrl(c.instagram_handle) && (
+                  <button
+                    type="button"
+                    className="underline-offset-2 hover:text-foreground hover:underline"
+                    title="인스타그램 열기"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(instagramUrl(c.instagram_handle)!, "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    {instagramLabel(c.instagram_handle)} ↗
+                  </button>
+                )}
+                {[c.phone, c.email].filter(Boolean).map((v) => (
+                  <span key={v as string}>
+                    {instagramUrl(c.instagram_handle) ? " · " : ""}
+                    {v}
+                  </span>
+                ))}
+                {!c.instagram_handle && !c.phone && !c.email && "—"}
               </p>
               <p className="mt-2 font-mono text-[11px] text-muted-foreground">주문 {orderCount}회</p>
               {/* 2026-10-06 사용자 요청: 최근 DELIVERY 날짜(시간 제외)와 어떤 행사였는지(예:

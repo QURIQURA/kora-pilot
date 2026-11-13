@@ -5,17 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { customerOrdersQuery, customerQuery, orderStatusLabel } from "@/lib/queries";
 import { formatDateTime } from "@/lib/datetime";
 import { Field, SectionCard, buttonClass, inputClass, primaryButtonClass } from "@/components/pilot/ui";
-
-// 2026-10-06 사용자 요청: CUSTOMER DETAIL에서 인스타그램을 "바로 열 수 있는 링크"로.
-// instagram_handle 컬럼은 그대로 재사용(새 컬럼 불필요) — @handle, handle, 또는 전체 URL을
-// 그대로 입력받고, 열 때만 정규화해서 instagram.com 링크로 바꿔준다.
-function instagramUrl(value: string): string | null {
-  const v = value.trim();
-  if (!v) return null;
-  if (/^https?:\/\//i.test(v)) return v;
-  const handle = v.replace(/^@/, "");
-  return handle ? `https://instagram.com/${handle}` : null;
-}
+import { instagramUrl } from "@/lib/instagram";
 
 export const Route = createFileRoute("/_authenticated/customers/$customerId")({
   head: () => ({
@@ -124,7 +114,10 @@ function CustomerDetailPage() {
           <Field label="NAME">
             <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="INSTAGRAM">
+          {/* 2026-11-13: 링크를 <label>(Field) 바깥에 둔다 — label 안의 <a>는 Safari/인앱 브라우저에서
+              클릭이 input 포커스로 먹혀 새 탭이 안 열리던 버그. */}
+          <div className="space-y-0.5">
+            <span className="label-caps block text-xs text-muted-foreground">INSTAGRAM</span>
             <div className="flex items-center gap-2">
               <input
                 className={inputClass}
@@ -136,15 +129,16 @@ function CustomerDetailPage() {
                 <a
                   href={instagramUrl(instagramHandle)!}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className={buttonClass + " shrink-0 !px-2"}
                   title="인스타그램 열기"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  ↗
+                  OPEN ↗
                 </a>
               )}
             </div>
-          </Field>
+          </div>
           <Field label="PHONE">
             <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>
