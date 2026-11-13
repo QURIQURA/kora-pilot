@@ -1683,10 +1683,15 @@ export function ProductionDashboard() {
                     onClick={() => {
                       const m = nowMin();
                       const dur = toMin(selectedDaily.end_time) - toMin(selectedDaily.start_time);
-                      if (m < toMin(selectedDaily.end_time))
+                      if (m < toMin(selectedDaily.end_time) && selectedDaily.task_date === todayStr)
                         updateDaily.mutate({ task: selectedDaily, startMin: m });
                       else
-                        updateDaily.mutate({ task: selectedDaily, startMin: m, endMin: m + dur });
+                        updateDaily.mutate({
+                          task: selectedDaily,
+                          day: todayStr,
+                          startMin: m,
+                          endMin: m + dur,
+                        });
                     }}
                   >
                     지금
@@ -1717,7 +1722,7 @@ export function ProductionDashboard() {
                     onClick={() => {
                       const m = nowMin();
                       if (m > toMin(selectedDaily.start_time))
-                        updateDaily.mutate({ task: selectedDaily, endMin: m });
+                        updateDaily.mutate({ task: selectedDaily, day: todayStr, endMin: m });
                       else setWarning("지금 시각이 시작 시각보다 빨라서 END에 적용할 수 없어요.");
                     }}
                   >
@@ -1826,9 +1831,16 @@ export function ProductionDashboard() {
                     onClick={() => {
                       const m = nowMin();
                       const dur = toMin(selected.end_time) - toMin(selected.start_time);
-                      if (m < toMin(selected.end_time))
+                      // "지금"은 시각뿐 아니라 날짜도 오늘로 옮긴다. 날짜가 달라지면 길이를 유지해 종료도 따라간다.
+                      if (m < toMin(selected.end_time) && selected.block_date === todayStr)
                         updateBlock.mutate({ block: selected, startMin: m });
-                      else updateBlock.mutate({ block: selected, startMin: m, endMin: m + dur });
+                      else
+                        updateBlock.mutate({
+                          block: selected,
+                          day: todayStr,
+                          startMin: m,
+                          endMin: m + dur,
+                        });
                     }}
                   >
                     지금
@@ -1858,7 +1870,7 @@ export function ProductionDashboard() {
                     onClick={() => {
                       const m = nowMin();
                       if (m > toMin(selected.start_time))
-                        updateBlock.mutate({ block: selected, endMin: m });
+                        updateBlock.mutate({ block: selected, day: todayStr, endMin: m });
                       else setWarning("지금 시각이 시작 시각보다 빨라서 END에 적용할 수 없어요.");
                     }}
                   >
