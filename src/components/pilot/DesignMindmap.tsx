@@ -56,10 +56,18 @@ const DIR_OPPOSITE: Record<Dir, string> = { r: "l", l: "r", t: "b", b: "t" };
 const ARROW = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
 const COLORS = ["#fff7c2", "#ffd9e1", "#d6ecff", "#dff5dc", "#e8dcff", "#ffffff"] as const;
 
-type NoteData = { text: string; color: string };
+/** 접기/펼치기·검색용 값 — collapsed만 저장하고 _로 시작하는 값은 화면 계산용(저장 안 함). */
+type Extra = {
+  collapsed?: boolean;
+  _kids?: number;
+  _hidden?: number;
+  _match?: boolean;
+  _dim?: boolean;
+};
+type NoteData = { text: string; color: string } & Extra;
 type ShapeKind = "rect" | "round" | "ellipse" | "diamond";
-type ShapeData = { text: string; color: string; shape: ShapeKind };
-type ImageData = { url: string };
+type ShapeData = { text: string; color: string; shape: ShapeKind } & Extra;
+type ImageData = { url: string } & Extra;
 type NoteNode = Node<NoteData, "note"> | Node<ShapeData, "shape"> | Node<ImageData, "image">;
 
 const SHAPES: { kind: ShapeKind; label: string }[] = [
@@ -69,15 +77,44 @@ const SHAPES: { kind: ShapeKind; label: string }[] = [
   { kind: "diamond", label: "◇ 마름모" },
 ];
 
+/** 하위 노드가 있는 노드의 접기/펼치기 버튼 — 접히면 숨겨진 개수를 보여 준다. */
+function CollapseButton({ id, data }: { id: string; data: Extra }) {
+  const { updateNodeData } = useReactFlow();
+  if (!data._kids) return null;
+  return (
+    <button
+      type="button"
+      title={data.collapsed ? "하위 노드 펼치기" : "하위 노드 접기"}
+      className="nodrag absolute -right-3 -top-3 z-10 flex h-6 min-w-6 items-center justify-center rounded-full border border-black/50 bg-white px-1 font-mono text-[10px] text-black shadow hover:bg-neutral-100"
+      onClick={(e) => {
+        e.stopPropagation();
+        updateNodeData(id, { collapsed: !data.collapsed });
+      }}
+    >
+      {data.collapsed ? `+${data._hidden ?? data._kids}` : "−"}
+    </button>
+  );
+}
+
+/** 검색 결과 강조/흐림 */
+function searchStyle(d: Extra): React.CSSProperties {
+  return {
+    opacity: d._dim ? 0.25 : 1,
+    outline: d._match ? "3px solid #f59e0b" : undefined,
+    outlineOffset: 2,
+  };
+}
+
 function ShapeNodeView({ id, data, selected, width, height }: NodeProps<Node<ShapeData, "shape">>) {
   const { updateNodeData } = useReactFlow();
   const w = width ?? 180;
   const h = height ?? 110;
   const stroke = selected ? "#111" : "rgba(0,0,0,0.45)";
   return (
-    <div className="relative" style={{ width: w, height: h }}>
+    <div className="relative" style={{ width: w, height: h, ...searchStyle(data) }}>
       <NodeResizer isVisible={selected} minWidth={70} minHeight={50} />
       <Handles />
+      <CollapseButton id={id} data={data} />
       {data.shape === "diamond" ? (
         <svg className="absolute inset-0" width={w} height={h}>
           <polygon
@@ -108,7 +145,7 @@ function ShapeNodeView({ id, data, selected, width, height }: NodeProps<Node<Sha
   );
 }
 
-function ImageNodeView({ data, selected, width }: NodeProps<Node<ImageData, "image">>) {
+function ImageNodeView({ id, data, selected, width }: NodeProps<Node<ImageData, "image">>) {
   return (
     <div
       className="border bg-white p-1 shadow-sm"
@@ -116,10 +153,12 @@ function ImageNodeView({ data, selected, width }: NodeProps<Node<ImageData, "ima
         width: width ?? 220,
         borderColor: selected ? "#111" : "rgba(0,0,0,0.25)",
         borderWidth: selected ? 2 : 1,
+        ...searchStyle(data),
       }}
     >
       <NodeResizer isVisible={selected} minWidth={80} keepAspectRatio />
       <Handles />
+      <CollapseButton id={id} data={data} />
       <img src={data.url} alt="" draggable={false} className="pointer-events-none block w-full" />
     </div>
   );
@@ -134,9 +173,11 @@ function NoteNodeView({ id, data, selected }: NodeProps<Node<NoteData, "note">>)
         background: data.color,
         borderColor: selected ? "#111" : "rgba(0,0,0,0.25)",
         borderWidth: selected ? 2 : 1,
+        ...searchStyle(data),
       }}
     >
       <Handles />
+      <CollapseButton id={id} data={data} />
       <textarea
         className="nodrag nowheel block w-full resize-none bg-transparent font-mono text-xs leading-snug text-black outline-none"
         rows={Math.max(
@@ -204,7 +245,7 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
           id: n.id,
           type: n.type,
           position: n.position,
-          data: n.data,
+          data: Object.fromEntries(Object.entries(n.data).filter(([k]) => !k.startsWith("_"))),
           width: n.width,
           height: n.height,
         })),
@@ -234,6 +275,130 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
       setEdges((es) => addEdge({ ...c, type: "smoothstep", markerEnd: ARROW }, es)),
     [setEdges],
   );
+
+  // ── 접기/펼치기: 선(source→target)을 따라 내려가는 하위 노드를 숨긴다 ──
+  const [query, setQuery] = useState("");
+  const [matchIdx, setMatchIdx] = useState(0);
+  const graph = useMemo(() => {
+    const kids = new Map<string, string[]>();
+    const parents = new Map<string, string[]>();
+    for (const e of edges) {
+      kids.set(e.source, [...(kids.get(e.source) ?? []), e.target]);
+      parents.set(e.target, [...(parents.get(e.target) ?? []), e.source]);
+    }
+    const hidden = new Set<string>();
+    const hiddenCount = new Map<string, number>();
+    for (const n of nodes) {
+      if (!(n.data as Extra).collapsed) continue;
+      const seen = new Set<string>([n.id]);
+      const stack = [...(kids.get(n.id) ?? [])];
+      while (stack.length) {
+        const id = stack.pop()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        hidden.add(id);
+        stack.push(...(kids.get(id) ?? []));
+      }
+      hiddenCount.set(n.id, seen.size - 1);
+    }
+    return { kids, parents, hidden, hiddenCount };
+  }, [nodes, edges]);
+
+  const q = query.trim().toLowerCase();
+  const matchIds = useMemo(
+    () =>
+      q
+        ? nodes
+            .filter((n) => {
+              const t = (n.data as { text?: string }).text;
+              return typeof t === "string" && t.toLowerCase().includes(q);
+            })
+            .map((n) => n.id)
+        : [],
+    [nodes, q],
+  );
+  const matchSet = useMemo(() => new Set(matchIds), [matchIds]);
+
+  const viewNodes = useMemo(
+    () =>
+      nodes.map((n) => {
+        const data = {
+          ...n.data,
+          _kids: graph.kids.get(n.id)?.length ?? 0,
+          _hidden: graph.hiddenCount.get(n.id) ?? 0,
+          _match: matchSet.has(n.id),
+          _dim: q !== "" && !matchSet.has(n.id),
+        };
+        return { ...n, data, hidden: graph.hidden.has(n.id) } as NoteNode;
+      }),
+    [nodes, graph, matchSet, q],
+  );
+  const viewEdges = useMemo(
+    () =>
+      edges.map((e) => ({
+        ...e,
+        hidden: graph.hidden.has(e.source) || graph.hidden.has(e.target),
+      })),
+    [edges, graph],
+  );
+
+  const patchCollapsed = (fn: (id: string) => boolean) =>
+    setNodes((ns) =>
+      ns.map((n) =>
+        n.type === "image" && !graph.kids.get(n.id)?.length
+          ? n
+          : ({ ...n, data: { ...n.data, collapsed: fn(n.id) } } as NoteNode),
+      ),
+    );
+  // 단계별 보기: 루트(들어오는 선이 없는 노드)=0단계. N단계까지 보이고 그 아래는 접는다.
+  const showLevel = (level: number | "all") => {
+    if (level === "all") patchCollapsed(() => false);
+    else {
+      const depth = new Map<string, number>();
+      const roots = nodes.filter((n) => !graph.parents.get(n.id)?.length).map((n) => n.id);
+      const queue: [string, number][] = (roots.length ? roots : nodes.map((n) => n.id)).map(
+        (id) => [id, 0],
+      );
+      while (queue.length) {
+        const [id, d] = queue.shift()!;
+        if (depth.has(id)) continue;
+        depth.set(id, d);
+        for (const k of graph.kids.get(id) ?? []) queue.push([k, d + 1]);
+      }
+      patchCollapsed(
+        (id) => (depth.get(id) ?? 0) >= level && (graph.kids.get(id)?.length ?? 0) > 0,
+      );
+    }
+    setTimeout(() => void fitView({ padding: 0.2, duration: 300 }), 80);
+  };
+
+  // 검색: 다음 결과로 이동 — 접힌 조상은 펼치고 그 노드로 화면을 맞춘다.
+  const goToMatch = (dir: 1 | -1) => {
+    if (matchIds.length === 0) return;
+    const i = (((matchIdx + dir) % matchIds.length) + matchIds.length) % matchIds.length;
+    setMatchIdx(i);
+    const target = matchIds[i]!;
+    const ancestors = new Set<string>();
+    const stack = [...(graph.parents.get(target) ?? [])];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (ancestors.has(id)) continue;
+      ancestors.add(id);
+      stack.push(...(graph.parents.get(id) ?? []));
+    }
+    setNodes((ns) =>
+      ns.map((n) =>
+        ancestors.has(n.id) && (n.data as Extra).collapsed
+          ? ({ ...n, data: { ...n.data, collapsed: false } } as NoteNode)
+          : n,
+      ),
+    );
+    setTimeout(
+      () => void fitView({ nodes: [{ id: target }], duration: 400, maxZoom: 1.3, padding: 0.6 }),
+      120,
+    );
+  };
+  useEffect(() => setMatchIdx(-1), [q]);
 
   const selected = nodes.find((n) => n.selected) ?? null;
   const newId = () => `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -481,6 +646,84 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
         </button>
         <span className="ml-auto font-mono text-[11px] text-muted-foreground">{statusText}</span>
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          aria-label="마인드맵 검색"
+          className="h-8 min-w-[12rem] flex-1 border border-border bg-background px-2 font-mono text-xs"
+          placeholder="🔍 노드 글자 검색 (Enter = 다음 결과)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") goToMatch(e.shiftKey ? -1 : 1);
+          }}
+        />
+        {q && (
+          <>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {matchIds.length === 0
+                ? "결과 없음"
+                : `${matchIdx >= 0 ? matchIdx + 1 : "-"}/${matchIds.length}`}
+            </span>
+            <button
+              type="button"
+              className={`${buttonClass} !h-8 !min-h-0 px-2`}
+              onClick={() => goToMatch(-1)}
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              className={`${buttonClass} !h-8 !min-h-0 px-2`}
+              onClick={() => goToMatch(1)}
+            >
+              ▼
+            </button>
+            <button
+              type="button"
+              className={`${buttonClass} !h-8 !min-h-0 px-2`}
+              onClick={() => setQuery("")}
+            >
+              ✕
+            </button>
+          </>
+        )}
+        <select
+          aria-label="단계별 보기"
+          className="h-8 border border-border bg-background px-2 font-mono text-xs"
+          value=""
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v) showLevel(v === "all" ? "all" : Number(v));
+          }}
+        >
+          <option value="">단계별 보기…</option>
+          <option value="0">0단계 (최상위만)</option>
+          <option value="1">1단계까지</option>
+          <option value="2">2단계까지</option>
+          <option value="3">3단계까지</option>
+          <option value="all">전체 펼치기</option>
+        </select>
+        <button
+          type="button"
+          className={`${buttonClass} !h-8 !min-h-0 px-3`}
+          disabled={!selected || !graph.kids.get(selected.id)?.length}
+          onClick={() =>
+            selected &&
+            setNodes((ns) =>
+              ns.map((n) =>
+                n.id === selected.id
+                  ? ({
+                      ...n,
+                      data: { ...n.data, collapsed: !(n.data as Extra).collapsed },
+                    } as NoteNode)
+                  : n,
+              ),
+            )
+          }
+        >
+          선택 노드 접기/펼치기
+        </button>
+      </div>
       {selectedEdge && (
         <div className="flex flex-wrap items-center gap-2 border border-dashed border-border p-2">
           <span className="font-mono text-[11px] uppercase">선</span>
@@ -545,8 +788,8 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
             labelBgPadding: [6, 3],
             labelBgStyle: { fill: "#fff" },
           }}
-          nodes={nodes}
-          edges={edges}
+          nodes={viewNodes}
+          edges={viewEdges}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
