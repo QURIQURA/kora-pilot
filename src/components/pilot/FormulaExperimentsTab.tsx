@@ -416,9 +416,7 @@ function NewExperimentModal({
   const pickFormula = (id: string) => {
     setFormulaId(id);
     const vs = formulas.find((f) => f.id === id)?.formula_versions ?? [];
-    const cur =
-      vs.find((v) => v.status === "CURRENT") ??
-      [...vs].sort((a, b) => b.version_number - a.version_number)[0];
+    const cur = [...vs].sort((a, b) => b.version_number - a.version_number)[0];
     setBaseId(cur?.id ?? "");
   };
 

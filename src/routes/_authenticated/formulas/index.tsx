@@ -48,7 +48,7 @@ export function headlineVersion(row: FormulaListRow, hiddenVersionIds?: Set<stri
   const versions = [...(row.formula_versions ?? [])]
     .filter((v) => !hiddenVersionIds?.has(v.id))
     .sort((a, b) => b.version_number - a.version_number);
-  return versions.find((v) => v.status === "CURRENT") ?? versions[0] ?? null;
+  return versions[0] ?? null; // 버전 번호가 가장 높은 것(상태 무관)
 }
 
 function FormulasPage() {

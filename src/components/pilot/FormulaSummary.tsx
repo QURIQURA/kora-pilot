@@ -14,11 +14,7 @@ import { Field, SectionCard, StatusBadge, buttonClass, inputClass, primaryButton
 
 export function currentVersion(formula: FormulaListRow) {
   const versions = formula.formula_versions ?? [];
-  return (
-    versions.find((v) => v.status === "CURRENT") ??
-    [...versions].sort((a, b) => b.version_number - a.version_number)[0] ??
-    null
-  );
+  return [...versions].sort((a, b) => b.version_number - a.version_number)[0] ?? null;
 }
 
 function FormulaRow({ formula }: { formula: FormulaListRow }) {
@@ -46,11 +42,7 @@ function FormulaRow({ formula }: { formula: FormulaListRow }) {
 }
 
 /** COMPONENT DETAIL — CURRENT FORMULA 요약 + FORMULA HISTORY + 새 FORMULA(컴포넌트 자동 연결) */
-export function ComponentFormulasSection({
-  componentId,
-}: {
-  componentId: string;
-}) {
+export function ComponentFormulasSection({ componentId }: { componentId: string }) {
   const formulas = useQuery(formulasByComponentQuery(componentId));
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -66,14 +58,12 @@ export function ComponentFormulasSection({
         .select("id")
         .single();
       if (error) throw error;
-      const { error: versionError } = await supabase
-        .from("formula_versions")
-        .insert({
-          user_id,
-          formula_id: data.id,
-          version_number: 1,
-          status: "DRAFT",
-        });
+      const { error: versionError } = await supabase.from("formula_versions").insert({
+        user_id,
+        formula_id: data.id,
+        version_number: 1,
+        status: "DRAFT",
+      });
       if (versionError) throw versionError;
       return data.id;
     },
@@ -121,18 +111,10 @@ export function ComponentFormulasSection({
             />
           </Field>
           <div className="flex gap-2">
-            <button
-              type="submit"
-              className={primaryButtonClass}
-              disabled={create.isPending}
-            >
+            <button type="submit" className={primaryButtonClass} disabled={create.isPending}>
               CREATE
             </button>
-            <button
-              type="button"
-              className={buttonClass}
-              onClick={() => setCreating(false)}
-            >
+            <button type="button" className={buttonClass} onClick={() => setCreating(false)}>
               CANCEL
             </button>
           </div>
@@ -140,9 +122,7 @@ export function ComponentFormulasSection({
       )}
 
       {rows.length === 0 ? (
-        <p className="font-mono text-xs uppercase text-muted-foreground">
-          NO FORMULAS YET
-        </p>
+        <p className="font-mono text-xs uppercase text-muted-foreground">NO FORMULAS YET</p>
       ) : (
         <ul className="divide-y divide-border border border-border">
           {rows.map((formula) => (
@@ -175,9 +155,7 @@ function ComponentFormulaGroup({
         </Link>
       </div>
       {rows.length === 0 ? (
-        <p className="px-3 py-2 font-mono text-xs uppercase text-muted-foreground">
-          NO FORMULA
-        </p>
+        <p className="px-3 py-2 font-mono text-xs uppercase text-muted-foreground">NO FORMULA</p>
       ) : (
         <ul className="divide-y divide-border">
           {rows.map((formula) => (

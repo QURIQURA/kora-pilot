@@ -184,8 +184,7 @@ export const componentCostsQuery = (componentIds: string[]) =>
         .select(
           "component_id, formula_versions!inner(status, version_number, formula_version_ingredients(amount, unit, ingredients(purchase_price, purchase_qty, purchase_unit)))",
         )
-        .in("component_id", ids)
-        .in("formula_versions.status", ["CURRENT", "DRAFT", "TESTING"]);
+        .in("component_id", ids);
       if (error) throw error;
       const map: Record<string, ComponentCostInfo> = {};
       for (const formula of (data ?? []) as unknown as {
@@ -205,7 +204,7 @@ export const componentCostsQuery = (componentIds: string[]) =>
         }[];
       }[]) {
         if (!formula.component_id) continue;
-        // CURRENT 우선, 없으면 최신 DRAFT/TESTING (2026-09-24 사용자 확정)
+        // 버전 번호가 가장 높은 것(상태 무관, 2026-11-13 사용자 확정)
         const version = pickEffectiveFormulaVersion(formula.formula_versions);
         if (!version) continue;
         const result = computeLineCosts(version.formula_version_ingredients ?? []);

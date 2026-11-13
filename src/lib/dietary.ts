@@ -72,12 +72,8 @@ export function buildDietaryBoard(args: {
         });
       }
     }
-    // CURRENT 먼저, 그다음 높은 버전 순
-    out.sort(
-      (a, b) =>
-        Number(b.versionStatus === "CURRENT") - Number(a.versionStatus === "CURRENT") ||
-        b.versionNumber - a.versionNumber,
-    );
+    // 높은 버전 순(상태 무관)
+    out.sort((a, b) => b.versionNumber - a.versionNumber);
     return out;
   };
 
@@ -107,7 +103,9 @@ export function buildDietaryBoard(args: {
         candidates,
       };
     });
-    const coveredCount = slots.filter((s) => s.status === "READY" || s.status === "ALTERNATIVE").length;
+    const coveredCount = slots.filter(
+      (s) => s.status === "READY" || s.status === "ALTERNATIVE",
+    ).length;
     return { productId, slots, coveredCount, totalCount: slots.length };
   });
 }

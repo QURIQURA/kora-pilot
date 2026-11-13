@@ -10,13 +10,7 @@ export type FormulaVersion = Tables<"formula_versions">;
 export type FormulaVersionIngredient = Tables<"formula_version_ingredients">;
 export type FormulaVersionBatch = Tables<"formula_version_batches">;
 
-export const FORMULA_STATUSES = [
-  "DRAFT",
-  "TESTING",
-  "CURRENT",
-  "SUPERSEDED",
-  "ARCHIVED",
-] as const;
+export const FORMULA_STATUSES = ["DRAFT", "TESTING", "CURRENT", "SUPERSEDED", "ARCHIVED"] as const;
 
 export type FormulaStatus = (typeof FORMULA_STATUSES)[number];
 
@@ -30,19 +24,15 @@ export function versionLabel(versionNumber: number): string {
 }
 
 /**
- * 원가 계산용 "적용 버전" 선택 규칙 (2026-09-24, 사용자 확정): CURRENT가 있으면 그걸 쓰고,
- * 없으면(개발 중이라 아직 CURRENT로 승격 안 한 경우) ARCHIVED/SUPERSEDED를 제외한 버전 중
- * version_number가 가장 높은 것(최신 DRAFT/TESTING)을 대신 쓴다.
+ * "적용 버전" 선택 규칙 (2026-11-13, 사용자 확정): 상태와 무관하게 version_number가 가장 높은 것.
+ * 과거 버전은 COMPONENTS 탭에서 직접 열어야만 보인다.
  */
 export function pickEffectiveFormulaVersion<T extends { status: string; version_number: number }>(
   versions: T[],
 ): T | null {
+  // 2026-11-13 사용자 확정: 상태(DRAFT/CURRENT/ARCHIVED)와 무관하게 버전 번호가 가장 높은 것이 항상 우선.
   if (versions.length === 0) return null;
-  const current = versions.find((v) => v.status === "CURRENT");
-  if (current) return current;
-  const usable = versions.filter((v) => v.status !== "ARCHIVED" && v.status !== "SUPERSEDED");
-  if (usable.length === 0) return null;
-  return usable.reduce((best, v) => (v.version_number > best.version_number ? v : best));
+  return versions.reduce((best, v) => (v.version_number > best.version_number ? v : best));
 }
 
 export const UNITS = ["g", "kg", "ml", "l", "ea", "%"] as const;
@@ -99,11 +89,9 @@ export interface DiffRow {
 /** 두 버전의 배합 차이 */
 export function diffIngredients(
   a: { name: string; amount: number; unit: string }[],
-  b: { name: string; amount: number; unit: string }[]
+  b: { name: string; amount: number; unit: string }[],
 ): DiffRow[] {
-  const keys = Array.from(
-    new Set([...a.map((r) => r.name), ...b.map((r) => r.name)])
-  ).sort();
+  const keys = Array.from(new Set([...a.map((r) => r.name), ...b.map((r) => r.name)])).sort();
   const rows: DiffRow[] = [];
   for (const name of keys) {
     const left = a.find((r) => r.name === name);

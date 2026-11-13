@@ -215,8 +215,9 @@ function FormulaDetailPage() {
   useEffect(() => {
     if (versionList.length === 0) return;
     if (versionId && versionList.some((v) => v.id === versionId)) return;
-    const current =
-      versionList.find((v) => v.status === "CURRENT") ?? versionList[versionList.length - 1];
+    const current = versionList.reduce((best, v) =>
+      v.version_number > best.version_number ? v : best,
+    );
     setVersionId(current?.id ?? null);
   }, [versionList, versionId]);
 

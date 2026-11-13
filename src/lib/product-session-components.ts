@@ -39,12 +39,9 @@ export async function addProductComponentsToSession(
   const have = new Set((existingRes.data ?? []).map((r) => r.formula_version_id));
   let sort = (existingRes.data ?? []).reduce((m, r) => Math.max(m, r.sort_order), -1) + 1;
 
+  // 2026-11-13: 상태와 무관하게 버전 번호가 가장 높은 레시피를 쓴다(제품에 고정된 버전도 따라간다).
   const pickVersion = (f: FormulaListRow) =>
-    f.formula_versions.find((v) => v.status === "CURRENT") ??
-    [...f.formula_versions]
-      .filter((v) => v.status === "DRAFT" || v.status === "TESTING")
-      .sort((a, b) => b.version_number - a.version_number)[0] ??
-    null;
+    [...f.formula_versions].sort((a, b) => b.version_number - a.version_number)[0] ?? null;
 
   let added = 0;
   for (const pc of productRows) {
@@ -57,10 +54,7 @@ export async function addProductComponentsToSession(
       formulas.find((f) => f.component_id === pc.component_id && pickVersion(f)) ??
       null;
     if (!formula) continue;
-    // 제품에 지정된 버전이 보관·대체됐으면 새로 선택할 수 없으므로 CURRENT/최신으로 대신한다.
-    const pinned = formula.formula_versions.find((v) => v.id === pc.formula_version_id);
-    const version =
-      pinned && !["ARCHIVED", "SUPERSEDED"].includes(pinned.status) ? pinned : pickVersion(formula);
+    const version = pickVersion(formula);
     if (!version || have.has(version.id)) continue;
     const catId =
       formula.components?.technique_category_id ?? formula.technique_category_id ?? null;
