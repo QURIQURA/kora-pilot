@@ -18,6 +18,22 @@ export const Route = createFileRoute("/_authenticated/design-moodboard")({
       { property: "og:description", content: "Signature design mood boards" },
     ],
   }),
+  // 2026-11-13: Planner에 연결된 Mindmap/Value Matrix TASK에서 "원본으로 이동" 딥링크용 —
+  // ?board=&node=&tab= 으로 들어오면 그 보드·탭을 열고 해당 노드/카드로 바로 이동한다.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): {
+    board?: string | undefined;
+    node?: string | undefined;
+    tab?: "MOOD" | "MIND" | "MATRIX" | undefined;
+  } => ({
+    board: typeof search["board"] === "string" ? search["board"] : undefined,
+    node: typeof search["node"] === "string" ? search["node"] : undefined,
+    tab:
+      search["tab"] === "MIND" || search["tab"] === "MATRIX" || search["tab"] === "MOOD"
+        ? search["tab"]
+        : undefined,
+  }),
   component: DesignMoodboardPage,
 });
 
@@ -26,21 +42,22 @@ export const Route = createFileRoute("/_authenticated/design-moodboard")({
  * 목록에서 고른다(제목 수정/삭제 가능). 각 보드의 기능은 오더 무드보드와 동일.
  */
 function DesignMoodboardPage() {
+  const search = Route.useSearch();
   const queryClient = useQueryClient();
   const boards = useQuery(designMoodboardsQuery());
   // Figma처럼 목적별 탭 — MOODBOARD(이미지·색·메모) / MINDMAP(자유 캔버스) / VALUE MATRIX(노력×효과 2×2). 보드는 만들 때 종류가 정해진다.
-  const [tab, setTab] = useState<"MOOD" | "MIND" | "MATRIX">("MOOD");
+  const [tab, setTab] = useState<"MOOD" | "MIND" | "MATRIX">(search.tab ?? "MOOD");
   // 제목 앞 숫자 기준 자연 정렬(01, 02, … 10) — 숫자 없는 제목은 그 뒤에 가나다/알파벳 순.
   const rows = (boards.data ?? [])
     .filter((b) => b.kind === tab)
     .sort((x, y) =>
       x.title.localeCompare(y.title, undefined, { numeric: true, sensitivity: "base" }),
     );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(search.board ?? null);
   const [titleDraft, setTitleDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const selected = rows.find((b) => b.id === selectedId) ?? rows[0] ?? null;
+  const selected = rows.find((b) => b.id === selectedId) ?? (search.board ? null : rows[0]) ?? null;
   useEffect(() => {
     setTitleDraft(selected?.title ?? "");
   }, [selected?.id, selected?.title]);
@@ -229,9 +246,17 @@ function DesignMoodboardPage() {
                 title={selected.title}
               />
             ) : tab === "MIND" ? (
-              <DesignMindmap key={selected.id} boardId={selected.id} />
+              <DesignMindmap
+                key={selected.id}
+                boardId={selected.id}
+                focusNodeId={selected.id === search.board ? search.node : undefined}
+              />
             ) : (
-              <DesignValueMatrix key={selected.id} boardId={selected.id} />
+              <DesignValueMatrix
+                key={selected.id}
+                boardId={selected.id}
+                focusCardId={selected.id === search.board ? search.node : undefined}
+              />
             )}
           </div>
         )}

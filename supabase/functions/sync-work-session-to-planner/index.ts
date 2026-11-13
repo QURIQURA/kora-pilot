@@ -360,7 +360,12 @@ Deno.serve(async (req: Request) => {
         const title = String(m.title ?? "").trim();
         if (!boardId || !nodeId || !title)
           return json({ error: "board_id, node_id, title 필요" }, 400);
-        const linkUrl = `pilot-mindmap://${boardId}/${nodeId}`;
+        // 2026-11-13: 예전엔 pilot-mindmap://board/node 라는 가짜 스킴을 썼는데, 이건 실제로
+        // 열리는 URL이 아니라서 Planner에서 클릭해도 원본으로 못 돌아갔다. 오더 링크 TASK가 이미
+        // 쓰는 것과 같은 Lovable preview 도메인으로 실제 딥링크를 만든다(design-moodboard 라우트가
+        // ?board=&node=&tab= 을 읽어 그 보드/탭을 열고 해당 노드·카드로 바로 이동).
+        const tabParam = m.prefix === "Value Matrix" ? "MATRIX" : "MIND";
+        const linkUrl = `https://id-preview--e2009f44-8619-4e71-8a9f-20dc744ceeb9.lovable.app/design-moodboard?board=${boardId}&node=${nodeId}&tab=${tabParam}`;
         const { data: dup } = await wann
           .from("planner_tasks")
           .select(cols)

@@ -360,7 +360,7 @@ function normalizeNodes(raw: Record<string, unknown>[]): { nodes: NoteNode[]; le
   return { nodes, legacy };
 }
 
-function MindmapCanvas({ boardId }: { boardId: string }) {
+function MindmapCanvas({ boardId, focusNodeId }: { boardId: string; focusNodeId?: string | undefined }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<NoteNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [loaded, setLoaded] = useState(false);
@@ -1083,6 +1083,16 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
     setPanelId(id);
     void fitView({ nodes: [{ id }], duration: 350, maxZoom: 1.2, padding: 0.8 });
   };
+  // 2026-11-13: Planner에서 연결된 원본 TASK를 클릭해 돌아올 때(design-moodboard 라우트의
+  // ?node= 파라미터) 해당 노드로 바로 이동 — 보드가 로드된 뒤 한 번만 실행.
+  const focusedOnce = useRef(false);
+  useEffect(() => {
+    if (!loaded || !focusNodeId || focusedOnce.current) return;
+    if (!nodes.some((n) => n.id === focusNodeId)) return;
+    focusedOnce.current = true;
+    setTimeout(() => gotoNode(focusNodeId), 200);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, focusNodeId, nodes]);
   const levelItems: [string, number | "all"][] = [
     ["0단계 (최상위만)", 0],
     ["1단계까지", 1],
@@ -1665,10 +1675,10 @@ function MindmapCanvas({ boardId }: { boardId: string }) {
   );
 }
 
-export function DesignMindmap({ boardId }: { boardId: string }) {
+export function DesignMindmap({ boardId, focusNodeId }: { boardId: string; focusNodeId?: string | undefined }) {
   return (
     <ReactFlowProvider>
-      <MindmapCanvas boardId={boardId} />
+      <MindmapCanvas boardId={boardId} focusNodeId={focusNodeId} />
     </ReactFlowProvider>
   );
 }

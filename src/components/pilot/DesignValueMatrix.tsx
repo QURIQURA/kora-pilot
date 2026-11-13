@@ -317,7 +317,7 @@ function applyGeometry(nodes: MNode[], geo: Geometry, unOpen: boolean): MNode[] 
 
 const newId = () => `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
-function MatrixCanvas({ boardId }: { boardId: string }) {
+function MatrixCanvas({ boardId, focusCardId }: { boardId: string; focusCardId?: string | undefined }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<MNode>([]);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -612,6 +612,22 @@ function MatrixCanvas({ boardId }: { boardId: string }) {
   useEffect(() => {
     if (panelId && loaded && !panelNode) setPanelId(null);
   }, [panelId, panelNode, loaded]);
+  // 2026-11-13: Planner에서 연결된 원본 TASK를 클릭해 돌아올 때(design-moodboard 라우트의
+  // ?node= 파라미터) 해당 카드로 바로 이동 — 보드가 로드된 뒤 한 번만 실행.
+  const focusedOnce = useRef(false);
+  useEffect(() => {
+    if (!loaded || !focusCardId || focusedOnce.current) return;
+    const card = cards.find((n) => n.id === focusCardId);
+    if (!card) return;
+    focusedOnce.current = true;
+    if (cd(card).quad === "unassigned" && !unOpen) setUnOpen(true);
+    setPanelId(focusCardId);
+    setTimeout(
+      () => void fitView({ nodes: [{ id: focusCardId }], duration: 350, maxZoom: 1.3, padding: 1.4 }),
+      200,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, focusCardId, cards]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -894,10 +910,16 @@ function MatrixCanvas({ boardId }: { boardId: string }) {
   );
 }
 
-export function DesignValueMatrix({ boardId }: { boardId: string }) {
+export function DesignValueMatrix({
+  boardId,
+  focusCardId,
+}: {
+  boardId: string;
+  focusCardId?: string | undefined;
+}) {
   return (
     <ReactFlowProvider>
-      <MatrixCanvas boardId={boardId} />
+      <MatrixCanvas boardId={boardId} focusCardId={focusCardId} />
     </ReactFlowProvider>
   );
 }
