@@ -637,10 +637,12 @@ function MoodboardBoard({
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      if (e.ctrlKey || e.metaKey) {
-        zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+      // Miro식: 휠 = 커서 기준 확대/축소(핀치는 더 민감하게), Shift+휠 = 이동.
+      if (e.shiftKey) {
+        setView((v) => ({ ...v, x: v.x - (e.deltaX || e.deltaY), y: v.y }));
       } else {
-        setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+        const k = e.ctrlKey || e.metaKey ? 0.01 : 0.0015;
+        zoomAt(Math.exp(-e.deltaY * k), e.clientX - r.left, e.clientY - r.top);
       }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
