@@ -133,7 +133,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
     }: {
       item: PopupItem;
       customerId: string | null;
-      newCustomer: { name: string; phone: string } | null;
+      newCustomer: { name: string; phone: string; instagram: string } | null;
       quantity: number;
     }) => {
       if (dirty || end !== inputTime(plan.ends_at || null)) await save.mutateAsync();
@@ -148,6 +148,7 @@ export function PopupOrderWorkspace({ order }: { order: OrderListRow }) {
             user_id: uid,
             name: newCustomer.name.trim(),
             phone: newCustomer.phone.trim() || null,
+            instagram_handle: newCustomer.instagram.trim().replace(/^@/, "") || null,
           } as never)
           .select("id")
           .single();
@@ -717,7 +718,7 @@ function PreorderDialog({
   onClose: () => void;
   onSubmit: (v: {
     customerId: string | null;
-    newCustomer: { name: string; phone: string } | null;
+    newCustomer: { name: string; phone: string; instagram: string } | null;
     quantity: number;
   }) => void;
 }) {
@@ -726,6 +727,7 @@ function PreorderDialog({
   const [customerId, setCustomerId] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [instagram, setInstagram] = useState("");
   const [quantity, setQuantity] = useState(1);
   const canSubmit =
     !pending && quantity >= 1 && (mode === "existing" ? !!customerId : !!name.trim());
@@ -745,7 +747,7 @@ function PreorderDialog({
             if (!canSubmit) return;
             onSubmit({
               customerId: mode === "existing" ? customerId : null,
-              newCustomer: mode === "new" ? { name, phone } : null,
+              newCustomer: mode === "new" ? { name, phone, instagram } : null,
               quantity,
             });
           }}
@@ -799,6 +801,15 @@ function PreorderDialog({
                   inputMode="tel"
                   maxLength={40}
                   onChange={(e) => setPhone(e.target.value)}
+                />
+              </Field>
+              <Field label="인스타그램">
+                <input
+                  className={inputClass}
+                  value={instagram}
+                  placeholder="@handle"
+                  maxLength={120}
+                  onChange={(e) => setInstagram(e.target.value)}
                 />
               </Field>
             </div>
